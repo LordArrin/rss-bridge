@@ -1,9 +1,14 @@
-version: '2'
 services:
   rss-bridge:
-    image: rssbridge/rss-bridge:latest
+    image: lordarrin/rss-bridge:1.0.0
+    container_name: rss-bridge2
     volumes:
-      - ./config:/config
+      - /home/lordarrin/rssbridge2/config:/config
     ports:
-      - 3000:80
+      - "9999:80"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1'
