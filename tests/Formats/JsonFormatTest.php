@@ -7,8 +7,6 @@
 
 namespace RssBridge\Tests\Formats;
 
-use PHPUnit\Framework\Attributes\DataProvider;
-
 require_once __DIR__ . '/BaseFormatTest.php';
 
 use PHPUnit\Framework\TestCase;
@@ -17,7 +15,10 @@ class JsonFormatTest extends BaseFormatTest
 {
     private const PATH_EXPECTED = self::PATH_SAMPLES . 'expectedJsonFormat/';
 
-    #[DataProvider('providerOutput')]
+    /**
+     * @dataProvider sampleProvider
+     * @runInSeparateProcess
+     */
     public function testOutput(string $name, string $path)
     {
         $data = $this->formatData('Json', $this->loadSample($path));

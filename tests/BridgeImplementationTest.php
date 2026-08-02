@@ -1,7 +1,6 @@
 <?php
 
 namespace RssBridge\Tests;
-use PHPUnit\Framework\Attributes\DataProvider;
 
 use BridgeAbstract;
 use FeedExpander;
@@ -12,8 +11,10 @@ class BridgeImplementationTest extends TestCase
     private string $className;
     private BridgeAbstract $bridge;
 
-    #[DataProvider('providerClassName')]
-    public static function testClassName($path)
+    /**
+     * @dataProvider dataBridgesProvider
+     */
+    public function testClassName($path)
     {
         $this->setBridge($path);
         $this->assertTrue($this->className === ucfirst($this->className), 'class name must start with uppercase character');
@@ -21,15 +22,19 @@ class BridgeImplementationTest extends TestCase
         $this->assertStringEndsWith('Bridge', $this->className, 'class name must end with "Bridge"');
     }
 
-    #[DataProvider('providerClassName')]
-    public static function testClassType($path)
+    /**
+     * @dataProvider dataBridgesProvider
+     */
+    public function testClassType($path)
     {
         $this->setBridge($path);
         $this->assertInstanceOf(BridgeAbstract::class, $this->bridge);
     }
 
-    #[DataProvider('providerClassName')]
-    public static function testConstants($path)
+    /**
+     * @dataProvider dataBridgesProvider
+     */
+    public function testConstants($path)
     {
         $this->setBridge($path);
 
@@ -47,8 +52,10 @@ class BridgeImplementationTest extends TestCase
         $this->assertGreaterThanOrEqual(0, $this->bridge::CACHE_TIMEOUT, 'class::CACHE_TIMEOUT');
     }
 
-    #[DataProvider('providerClassName')]
-    public static function testParameters($path)
+    /**
+     * @dataProvider dataBridgesProvider
+     */
+    public function testParameters($path)
     {
         $this->setBridge($path);
 
@@ -150,8 +157,10 @@ class BridgeImplementationTest extends TestCase
         }
     }
 
-    #[DataProvider('providerClassName')]
-    public static function testMethodValues($path)
+    /**
+     * @dataProvider dataBridgesProvider
+     */
+    public function testMethodValues($path)
     {
         $this->setBridge($path);
 
@@ -175,8 +184,10 @@ class BridgeImplementationTest extends TestCase
         $this->assertIsString($value, '$class->getIcon()');
     }
 
-    #[DataProvider('providerClassName')]
-    public static function testUri($path)
+    /**
+     * @dataProvider dataBridgesProvider
+     */
+    public function testUri($path)
     {
         $this->setBridge($path);
 
@@ -184,7 +195,7 @@ class BridgeImplementationTest extends TestCase
         $this->assertNotFalse(filter_var($this->bridge->getURI(), FILTER_VALIDATE_URL));
     }
 
-    public static function dataBridgesProvider()
+    public function dataBridgesProvider()
     {
         $bridges = [];
         foreach (glob(__DIR__ . '/../bridges/*Bridge.php') as $path) {
@@ -193,7 +204,7 @@ class BridgeImplementationTest extends TestCase
         return $bridges;
     }
 
-    public static function setBridge($path)
+    private function setBridge($path)
     {
         $this->className = '\\' . basename($path, '.php');
         $this->assertTrue(class_exists($this->className), 'class ' . $this->className . ' doesn\'t exist');

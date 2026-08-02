@@ -1,14 +1,15 @@
 <?php
 
 use PHPUnit\Framework\TestCase;
-use PHPUnit\Framework\Attributes\DataProvider;
 
 class FormatImplementationTest extends TestCase
 {
     private $class;
     private $obj;
 
-    #[DataProvider('providerClassName')]
+    /**
+     * @dataProvider dataFormatsProvider
+     */
     public function testClassName($path)
     {
         $this->setFormat($path);
@@ -17,7 +18,9 @@ class FormatImplementationTest extends TestCase
         $this->assertStringEndsWith('Format', $this->class, 'class name must end with "Format"');
     }
 
-    #[DataProvider('providerClassType')]
+    /**
+     * @dataProvider dataFormatsProvider
+     */
     public function testClassType($path)
     {
         $this->setFormat($path);
