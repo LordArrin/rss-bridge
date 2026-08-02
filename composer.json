@@ -1,6 +1,6 @@
 {
-    "name": "rss-bridge/rss-bridge",
-    "description": "RSS-Bridge — generate feeds for websites that don't have one",
+    "name": "lordarrin/rss-bridge",
+    "description": "RSS-Bridge - generate feeds for websites that don't have one",
     "license": "AGPL-3.0",
     "require": {
         "php": ">=8.5",
@@ -21,6 +21,7 @@
     "scripts": {
         "test": "phpunit",
         "lint": "phpcs . --standard=phpcs.xml --warning-severity=0 --extensions=php -p",
+        "lint:fix": "phpcbf . --standard=phpcs.xml --extensions=php -p",
         "stan": "phpstan analyse --no-progress"
     },
     "config": {
