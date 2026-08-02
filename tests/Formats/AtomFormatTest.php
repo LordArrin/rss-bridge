@@ -18,7 +18,7 @@ class AtomFormatTest extends BaseFormatTest
     private const PATH_EXPECTED = self::PATH_SAMPLES . 'expectedAtomFormat/';
 
     #[DataProvider('providerOutput')]
-    public function testOutput(string $name, string $path)
+    public static function testOutput(string $name, string $path)
     {
         $data = $this->formatData('Atom', $this->loadSample($path));
         $this->assertNotFalse(simplexml_load_string($data));

@@ -18,7 +18,7 @@ class CacheImplementationTest extends TestCase
     }
 
     #[DataProvider('providerClassName')]
-    public function testClassName($path)
+    public static function testClassName($path)
     {
         $this->assertTrue($path === ucfirst($path), 'class name must start with uppercase character');
         $this->assertEquals(0, substr_count($path, ' '), 'class name must not contain spaces');
@@ -26,7 +26,7 @@ class CacheImplementationTest extends TestCase
     }
 
     #[DataProvider('providerClassType')]
-    public function testClassType($path)
+    public static function testClassType($path)
     {
         $this->assertTrue(is_subclass_of($path, CacheInterface::class), 'class must be subclass of CacheInterface');
     }

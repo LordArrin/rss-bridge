@@ -8,6 +8,8 @@
 
 namespace RssBridge\Tests\Formats;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 require_once __DIR__ . '/BaseFormatTest.php';
 
 use PHPUnit\Framework\TestCase;
@@ -16,10 +18,7 @@ class MrssFormatTest extends BaseFormatTest
 {
     private const PATH_EXPECTED = self::PATH_SAMPLES . 'expectedMrssFormat/';
 
-    /**
-     * @dataProvider sampleProvider
-     * @runInSeparateProcess
-     */
+    #[DataProvider('providerOutput')]
     public function testOutput(string $name, string $path)
     {
         $data = $this->formatData('Mrss', $this->loadSample($path));
