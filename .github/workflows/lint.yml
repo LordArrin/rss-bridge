@@ -1,0 +1,127 @@
+name: Lint
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  # ─── Syntax check: every .php file must parse on PHP 8.5 ───
+  syntax:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - name: php -l on all PHP files
+        run: |
+          errors=0
+          while IFS= read -r -d '' file; do
+            if ! php -l "$file" > /dev/null 2>&1; then
+              echo "::error file=${file}::Syntax error"
+              php -l "$file" 2>&1
+              errors=$((errors + 1))
+            fi
+          done < <(find . -name '*.php' \
+            -not -path './vendor/*' \
+            -not -path './static/*' \
+            -print0)
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::${errors} file(s) have syntax errors"
+            exit 1
+          fi
+          echo "✓ All PHP files pass syntax check"
+
+  # ─── Code style: phpcs ───
+  phpcs:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          tools: phpcs
+          coverage: none
+      - run: phpcs . --standard=phpcs.xml --warning-severity=0 --extensions=php -p
+
+  # ─── PHP 8.5 compatibility check ───
+  phpcompatibility:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - run: composer global config --no-plugins allow-plugins.dealerdirect/phpcodesniffer-composer-installer true
+      - run: composer global require dealerdirect/phpcodesniffer-composer-installer phpcompatibility/php-compatibility
+      - run: ~/.composer/vendor/bin/phpcs . --standard=phpcompatibility.xml --warning-severity=0 --extensions=php -p
+
+  # ─── Static analysis: PHPStan ───
+  phpstan:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - run: composer install --no-interaction --quiet
+      - run: vendor/bin/phpstan analyse --no-progress --error-format=github
+
+  # ─── No executable .php files ───
+  executable_check:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - run: |
+          if find . -name '*.php' -not -path './vendor/*' -executable -type f -print -exec false {} +; then
+            echo '✓ No executable PHP files found'
+          else
+            echo '::error::PHP files above are marked executable — run chmod -x'
+            exit 1
+          fi
+
+  # ─── PHP 8.5 specific deprecation grep ───
+  deprecations:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check for known PHP 8.5 incompatibilities
+        run: |
+          errors=0
+
+          echo "--- curl_close() (deprecated 8.5) ---"
+          if grep -rn "curl_close\s*(" bridges/ lib/ actions/ --include='*.php'; then
+            echo "::warning::curl_close() is deprecated in PHP 8.5 — remove these calls"
+          fi
+
+          echo "--- \$http_response_header (deprecated 8.5) ---"
+          if grep -rn '\$http_response_header' bridges/ lib/ actions/ --include='*.php'; then
+            echo "::error::\$http_response_header is deprecated — use http_get_last_response_headers()"
+            errors=$((errors + 1))
+          fi
+
+          echo "--- utf8_encode/utf8_decode (removed) ---"
+          if grep -rn 'utf8_encode\s*(\|utf8_decode\s*(' bridges/ lib/ actions/ --include='*.php'; then
+            echo "::error::utf8_encode/utf8_decode removed — use mb_convert_encoding()"
+            errors=$((errors + 1))
+          fi
+
+          echo "--- create_function() (removed) ---"
+          if grep -rn 'create_function\s*(' bridges/ lib/ actions/ --include='*.php'; then
+            echo "::error::create_function() removed — use closures"
+            errors=$((errors + 1))
+          fi
+
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::${errors} critical incompatibility(ies) found"
+            exit 1
+          fi
+          echo "✓ No critical PHP 8.5 incompatibilities"

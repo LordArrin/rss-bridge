@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<ruleset name="PHPCompatibility">
+    <description>PHP 8.5 compatibility check for RSS-Bridge</description>
+
+    <!-- Check for compatibility with PHP 8.5 and above -->
+    <config name="testVersion" value="8.5-"/>
+
+    <rule ref="PHPCompatibility"/>
+
+    <!-- Exclude non-PHP or third-party code -->
+    <exclude-pattern>./static/*</exclude-pattern>
+    <exclude-pattern>./vendor/*</exclude-pattern>
+    <exclude-pattern>./lib/parsedown/*</exclude-pattern>
+    <exclude-pattern>./lib/php-urljoin/*</exclude-pattern>
+    <exclude-pattern>./lib/simplehtmldom/*</exclude-pattern>
+</ruleset>

@@ -1,0 +1,23 @@
+parameters:
+    level: 5
+    phpVersion: 80500
+
+    paths:
+        - bridges/
+        - lib/
+        - actions/
+        - formats/
+        - middlewares/
+        - caches/
+
+    excludePaths:
+        - lib/parsedown/
+        - lib/php-urljoin/
+        - lib/simplehtmldom/
+
+    # RSS-Bridge uses dynamic patterns that PHPStan can't infer
+    ignoreErrors:
+        - identifier: missingType.iterableValue
+        - identifier: missingType.return
+
+    treatPhpDocTypesAsCertain: false
