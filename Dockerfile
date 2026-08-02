@@ -1,5 +1,10 @@
 FROM alpine:latest AS rssbridge
 
+LABEL org.opencontainers.image.title="RSS Bridge" \
+      org.opencontainers.image.description="RSS-Bridge - generate feeds for websites that don't have one" \
+      org.opencontainers.image.version="1.0.2" \
+      org.opencontainers.image.source="https://github.com/LordArrin/rss-bridge"
+
 RUN set -xe && \
     apk add --no-cache \
       bash \

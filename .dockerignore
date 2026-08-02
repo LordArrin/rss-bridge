@@ -7,5 +7,6 @@
 cache/*
 Dockerfile
 docs/*
+docker-compose.yml
 phpcs.xml
 tests/*
