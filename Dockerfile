@@ -1,4 +1,4 @@
-FROM alpine:3.24 AS rssbridge
+FROM alpine:latest AS rssbridge
 
 RUN set -xe && \
     apk add --no-cache \
@@ -52,6 +52,7 @@ COPY ./config/php-fpm.conf /etc/php85/php-fpm.conf
 COPY ./config/php-fpm-pool.conf /etc/php85/php-fpm.d/rss-bridge.conf
 COPY ./config/php.ini /etc/php85/conf.d/90-rss-bridge.ini
 COPY ./config/nginx.conf /etc/nginx/http.d/default.conf
+COPY LICENSE ./
 
 COPY --chown=nginx:nginx ./ /app/
 RUN chmod +x /app/docker-entrypoint.sh
