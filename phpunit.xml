@@ -6,30 +6,23 @@
          failOnDeprecation="false"
          failOnWarning="false"
          failOnNotice="false"
-         displayDetailsOnTestsThatTriggerDeprecations="true"
-         displayDetailsOnTestsThatTriggerWarnings="true"
          cacheDirectory=".phpunit.cache">
+
     <testsuites>
         <testsuite name="unit">
-            <directory>tests</directory>
-            <exclude>tests/RedditBridgeTest.php</exclude>
-            <exclude>tests/UberEngineeringBridgeTest.php</exclude>
-            <exclude>tests/YouTubeFeedExpanderBridgeTest.php</exclude>
+            <directory>tests/Unit</directory>
         </testsuite>
         <testsuite name="integration">
-            <file>tests/RedditBridgeTest.php</file>
-            <file>tests/UberEngineeringBridgeTest.php</file>
-            <file>tests/YouTubeFeedExpanderBridgeTest.php</file>
+            <directory>tests/Integration</directory>
         </testsuite>
     </testsuites>
+
     <source>
         <include>
             <directory suffix=".php">lib</directory>
             <directory suffix=".php">bridges</directory>
             <directory suffix=".php">formats</directory>
-            <directory suffix=".php">actions</directory>
             <directory suffix=".php">caches</directory>
-            <directory suffix=".php">middlewares</directory>
         </include>
         <exclude>
             <directory>lib/parsedown</directory>
