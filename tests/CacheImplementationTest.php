@@ -2,6 +2,7 @@
 
 namespace RssBridge\Tests;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use CacheInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -16,9 +17,7 @@ class CacheImplementationTest extends TestCase
         return $caches;
     }
 
-    /**
-     * @dataProvider getCacheClassNames
-     */
+    #[DataProvider('providerClassName')]
     public function testClassName($path)
     {
         $this->assertTrue($path === ucfirst($path), 'class name must start with uppercase character');
@@ -26,9 +25,7 @@ class CacheImplementationTest extends TestCase
         $this->assertStringEndsWith('Cache', $path, 'class name must end with "Cache"');
     }
 
-    /**
-     * @dataProvider getCacheClassNames
-     */
+    #[DataProvider('providerClassType')]
     public function testClassType($path)
     {
         $this->assertTrue(is_subclass_of($path, CacheInterface::class), 'class must be subclass of CacheInterface');

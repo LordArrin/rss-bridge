@@ -1,6 +1,7 @@
 <?php
 
 namespace RssBridge\Tests;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 use BridgeAbstract;
 use FeedExpander;
@@ -11,9 +12,7 @@ class BridgeImplementationTest extends TestCase
     private string $className;
     private BridgeAbstract $bridge;
 
-    /**
-     * @dataProvider dataBridgesProvider
-     */
+    #[DataProvider('providerClassName')]
     public function testClassName($path)
     {
         $this->setBridge($path);
@@ -22,18 +21,14 @@ class BridgeImplementationTest extends TestCase
         $this->assertStringEndsWith('Bridge', $this->className, 'class name must end with "Bridge"');
     }
 
-    /**
-     * @dataProvider dataBridgesProvider
-     */
+    #[DataProvider('providerClassName')]
     public function testClassType($path)
     {
         $this->setBridge($path);
         $this->assertInstanceOf(BridgeAbstract::class, $this->bridge);
     }
 
-    /**
-     * @dataProvider dataBridgesProvider
-     */
+    #[DataProvider('providerClassName')]
     public function testConstants($path)
     {
         $this->setBridge($path);
@@ -52,9 +47,7 @@ class BridgeImplementationTest extends TestCase
         $this->assertGreaterThanOrEqual(0, $this->bridge::CACHE_TIMEOUT, 'class::CACHE_TIMEOUT');
     }
 
-    /**
-     * @dataProvider dataBridgesProvider
-     */
+    #[DataProvider('providerClassName')]
     public function testParameters($path)
     {
         $this->setBridge($path);
@@ -157,9 +150,7 @@ class BridgeImplementationTest extends TestCase
         }
     }
 
-    /**
-     * @dataProvider dataBridgesProvider
-     */
+    #[DataProvider('providerClassName')]
     public function testMethodValues($path)
     {
         $this->setBridge($path);
@@ -184,9 +175,7 @@ class BridgeImplementationTest extends TestCase
         $this->assertIsString($value, '$class->getIcon()');
     }
 
-    /**
-     * @dataProvider dataBridgesProvider
-     */
+    #[DataProvider('providerClassName')]
     public function testUri($path)
     {
         $this->setBridge($path);
