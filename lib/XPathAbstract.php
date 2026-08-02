@@ -292,16 +292,6 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * Fix encoding
-     * @return bool
-     */
-    protected function fixEncoding($input)
-    {
-        return $this->getParam('fix_encoding')
-            ? mb_convert_encoding($input, 'ISO-8859-1', 'UTF-8')
-            : $input;
-    }
-    /**
      * Use raw item content
      * @return bool
      */
@@ -650,9 +640,7 @@ abstract class XPathAbstract extends BridgeAbstract
      */
     protected function fixEncoding($input)
     {
-        return $this->getParam('fix_encoding')
-            ? mb_convert_encoding($input, 'ISO-8859-1', 'UTF-8')
-            : $input;
+        return $this->getParam('fix_encoding') ? mb_convert_encoding($input, 'ISO-8859-1', 'UTF-8') : $input;
     }
 
     /**
