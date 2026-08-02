@@ -1,11 +1,11 @@
 services:
   rss-bridge:
-    image: lordarrin/rss-bridge:latest
-    container_name: rss-bridge
+    image: lordarrin/rss-bridge:1.0.1
+    container_name: rss-bridge2
     volumes:
-      - /home/user/rssbridge/config:/config
+      - /home/lordarrin/rssbridge2/config:/config
     ports:
-      - "80:80"
+      - "9999:80"
     restart: unless-stopped
     deploy:
       resources:
