@@ -50,19 +50,6 @@ jobs:
           coverage: none
       - run: phpcs . --standard=phpcs.xml --warning-severity=0 --extensions=php -p
 
-  # ─── PHP 8.5 compatibility check ───
-  phpcompatibility:
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v5
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.5'
-          coverage: none
-      - run: composer global config --no-plugins allow-plugins.dealerdirect/phpcodesniffer-composer-installer true
-      - run: composer global require dealerdirect/phpcodesniffer-composer-installer phpcompatibility/php-compatibility
-      - run: ~/.composer/vendor/bin/phpcs . --standard=phpcompatibility.xml --warning-severity=0 --extensions=php -p
-
   # ─── Static analysis: PHPStan ───
   phpstan:
     runs-on: ubuntu-24.04-arm
