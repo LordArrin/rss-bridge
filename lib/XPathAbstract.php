@@ -295,11 +295,12 @@ abstract class XPathAbstract extends BridgeAbstract
      * Fix encoding
      * @return bool
      */
-    protected function getSettingFixEncoding(): bool
+    protected function fixEncoding($input)
     {
-        return static::SETTING_FIX_ENCODING;
+        return $this->getParam('fix_encoding')
+            ? mb_convert_encoding($input, 'ISO-8859-1', 'UTF-8')
+            : $input;
     }
-
     /**
      * Use raw item content
      * @return bool
@@ -640,16 +641,18 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * Fixes feed encoding by invoking PHP's utf8_decode function on extracted texts.
+     * Fixes feed encoding by converting extracted texts from UTF-8 to ISO-8859-1.
      * Useful in case of "broken" or "weird" characters in the feed where you'd normally
-     * expect umlauts.
+     * expect umlauts or other non-ASCII characters.
      *
-     * @param $input
+     * @param string $input
      * @return string
      */
     protected function fixEncoding($input)
     {
-        return $this->getParam('fix_encoding') ? utf8_decode($input) : $input;
+        return $this->getParam('fix_encoding')
+            ? mb_convert_encoding($input, 'ISO-8859-1', 'UTF-8')
+            : $input;
     }
 
     /**

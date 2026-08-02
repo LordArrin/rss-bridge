@@ -148,8 +148,9 @@ class FilterBridge extends FeedExpander
             }
             $keep_item |= boolval($result);
             if ($this->getInput('fix_encoding')) {
-                $keep_item |= boolval(preg_match($regex, utf8_decode($field)));
-                $keep_item |= boolval(preg_match($regex, utf8_encode($field)));
+                // Try matching in both directions: UTF-8>Latin1 and Latin1>UTF-8
+                $keep_item |= boolval(preg_match($regex, mb_convert_encoding($field, 'ISO-8859-1', 'UTF-8')));
+                $keep_item |= boolval(preg_match($regex, mb_convert_encoding($field, 'UTF-8', 'ISO-8859-1')));
             }
         }
 
