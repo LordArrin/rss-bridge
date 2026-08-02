@@ -151,7 +151,7 @@ EOL,
             'fix_encoding' => [
                 'name' => 'Fix encoding',
                 'title' => <<<'EOL'
-Check this to fix feed encoding by invoking PHP's utf8_decode
+Check this to fix feed encoding by converting from UTF-8 to ISO-8859-1
 function on all extracted texts. Try this in case you see "broken" or
 "weird" characters in your feed where you'd normally expect umlauts
 or any other non-ascii characters.

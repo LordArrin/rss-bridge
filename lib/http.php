@@ -195,7 +195,6 @@ final class CurlHttpClient implements HttpClient
         }
 
         $statusCode = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        curl_close($ch);
         return new Response($body, $statusCode, $responseHeaders);
     }
 }

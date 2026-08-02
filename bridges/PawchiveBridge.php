@@ -457,7 +457,6 @@ class PawchiveBridge extends BridgeAbstract
             ]);
             curl_exec($ch);
             $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-            curl_close($ch);
             return $code >= 200 && $code < 400;
         }
         return false;
