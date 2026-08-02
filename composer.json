@@ -29,18 +29,6 @@
             "actions/",
             "caches/",
             "middlewares/"
-        ],
-        "files": [
-            "lib/bootstrap.php",
-            "lib/config.php",
-            "lib/contents.php",
-            "lib/html.php",
-            "lib/http.php",
-            "lib/logger.php",
-            "lib/url.php",
-            "lib/utils.php",
-            "lib/seotags.php",
-            "lib/php8backports.php"
         ]
     },
     "autoload-dev": {
