@@ -10,18 +10,29 @@ permissions:
   contents: read
 
 jobs:
-  phpunit:
+  unit:
     runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        php-versions: ['8.5']
     steps:
       - uses: actions/checkout@v5
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: ${{ matrix.php-versions }}
+          php-version: '8.5'
+          extensions: curl, mbstring, intl, xml, simplexml, sqlite3, zip, dom, ctype, filter
           coverage: none
-        env:
-          update: true
-      - run: composer install --no-interaction
-      - run: composer test
+      - run: composer install --no-interaction --quiet
+      - run: mkdir -p cache
+      - run: vendor/bin/phpunit --testsuite=unit
+
+  integration:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: curl, mbstring, intl, xml, simplexml, sqlite3, zip, dom, ctype, filter
+          coverage: none
+      - run: composer install --no-interaction --quiet
+      - run: mkdir -p cache
+      - run: vendor/bin/phpunit --testsuite=integration
