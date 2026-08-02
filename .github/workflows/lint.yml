@@ -43,13 +43,47 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Важно: нужен токен с правами на запись, чтобы сделать коммит
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           tools: phpcs
           coverage: none
-      - run: phpcs . --standard=phpcs.xml --warning-severity=0 --extensions=php -p
 
+      - name: Install dependencies
+        run: composer install --no-interaction --quiet
+
+      # 1. First, we try to automatically fix everything that can be done
+      - name: Auto-fix coding standards
+        run: vendor/bin/phpcbf . --standard=phpcs.xml --extensions=php -p || true
+
+      # 2. Check if there are any errors left after this
+      - name: Check coding standards
+        id: phpcs-check
+        run: |
+          if ! vendor/bin/phpcs . --standard=phpcs.xml --warning-severity=0 --extensions=php -p; then
+            echo "failed=true" >> $GITHUB_OUTPUT
+          fi
+
+      # 3. If there were any fixes, commit and push (only for branches of the main repo)
+      - name: Commit and push PHPCBF fixes
+        if: steps.phpcs-check.outputs.failed == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: "style: auto-fix PHPCS violations"
+          commit_options: "--no-verify"
+          file_pattern: "*.php"
+          
+      # 4. If PHPCBF couldn't fix something, fail the build
+      - name: Fail if unfixable errors remain
+        if: steps.phpcs-check.outputs.failed == 'true'
+        run: |
+          echo "::error::PHPCS errors remain after PHPCBF auto-fix. Please run 'vendor/bin/phpcbf .' locally and push."
+          exit 1
+          
   # ─── Static analysis: PHPStan ───
   phpstan:
     runs-on: ubuntu-24.04-arm
