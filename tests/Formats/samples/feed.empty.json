@@ -1,0 +1,13 @@
+{
+	"server": {
+		"HTTPS": "on",
+		"HTTP_HOST": "example.com",
+		"REQUEST_URI": "/feed"
+	},
+	"meta": {
+		"name": "Sample feed with minimum data",
+		"uri": "https://github.com/RSS-Bridge/rss-bridge/",
+		"icon": ""
+	},
+	"items": []
+}

@@ -1,0 +1,60 @@
+name: Build Container Image
+
+on:
+  push:
+    branches:
+      - 'master'
+    tags:
+      - '20*'
+  pull_request:
+    branches:
+      - 'master'
+    paths:
+      - .github/workflows/**
+      - Dockerfile
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  bake:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Docker meta
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.DOCKER_PASSWORD && 'rssbridge/rss-bridge' || '' }}
+            ghcr.io/${{github.repository_owner}}/${{github.event.repository.name}}
+          tags: |
+            type=raw,value=latest,enable=${{ github.event_name != 'pull_request' }}
+            type=sha
+            type=ref,event=tag,enable=${{ startsWith(github.ref, 'refs/tags/20') }}
+            type=raw,value=stable,enable=${{ startsWith(github.ref, 'refs/tags/20') }}
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        if: ${{ github.repository == 'rss-bridge/rss-bridge' && github.event_name != 'pull_request' }}
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        if: ${{ github.event_name != 'pull_request' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/bake-action@v6
+        with:
+          files: |
+            ./docker-bake.hcl
+            cwd://${{ steps.docker_meta.outputs.bake-file }}
+          targets: image-all
+          push: ${{ github.event_name != 'pull_request' }}
