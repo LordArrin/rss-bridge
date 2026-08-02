@@ -1,6 +1,6 @@
 {
     "name": "rss-bridge/rss-bridge",
-    "description": "RSS-Bridge — generate feeds for websites that don't have one",
+    "description": "RSS-Bridge - generate feeds for websites that don't have one",
     "license": "AGPL-3.0",
     "require": {
         "php": ">=8.5",

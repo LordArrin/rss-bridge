@@ -42,30 +42,31 @@ final class BridgeContractTest extends TestCase
         $bridge = $this->instantiate($class);
 
         $this->assertIsString($bridge::NAME);
-        $this->assertNotEmpty($bridge::NAME, "$class::NAME is empty");
+        $this->assertNotEmpty($bridge::NAME, sprintf('%s::NAME is empty', $class));
 
         $this->assertIsString($bridge::URI);
-        $this->assertNotEmpty($bridge::URI, "$class::URI is empty");
+        $this->assertNotEmpty($bridge::URI, sprintf('%s::URI is empty', $class));
 
         $this->assertIsString($bridge::DESCRIPTION);
-        $this->assertNotEmpty($bridge::DESCRIPTION, "$class::DESCRIPTION is empty");
+        $this->assertNotEmpty($bridge::DESCRIPTION, sprintf('%s::DESCRIPTION is empty', $class));
 
         $this->assertIsString($bridge::MAINTAINER);
-        $this->assertNotEmpty($bridge::MAINTAINER, "$class::MAINTAINER is empty");
+        $this->assertNotEmpty($bridge::MAINTAINER, sprintf('%s::MAINTAINER is empty', $class));
 
         $this->assertIsArray($bridge::PARAMETERS);
 
         $this->assertIsInt($bridge::CACHE_TIMEOUT);
-        $this->assertGreaterThanOrEqual(0, $bridge::CACHE_TIMEOUT, "$class::CACHE_TIMEOUT < 0");
+        $this->assertGreaterThanOrEqual(0, $bridge::CACHE_TIMEOUT, sprintf('%s::CACHE_TIMEOUT < 0', $class));
     }
 
     #[DataProvider('bridges')]
     public function testUriIsValid(string $class): void
     {
         $bridge = $this->instantiate($class);
+        $uri = $bridge::URI;
         $this->assertNotFalse(
-            filter_var($bridge::URI, FILTER_VALIDATE_URL),
-            "$class::URI is not a valid URL: {$bridge::URI}"
+            filter_var($uri, FILTER_VALIDATE_URL),
+            sprintf('%s::URI is not a valid URL: %s', $class, $uri)
         );
     }
 
