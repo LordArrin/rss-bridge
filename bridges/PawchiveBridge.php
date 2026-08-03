@@ -109,6 +109,52 @@ class PawchiveBridge extends BridgeAbstract
         'attachments-item' => 'margin:4px 0',
     ];
 
+    private const SANITIZE_TAGS_TO_REMOVE = [
+        'script',
+        'iframe',
+        'input',
+        'form',
+        'head',
+        'title',
+        'meta',
+        'link',
+        'style',
+        'object',
+        'embed',
+        'applet',
+        'noscript',
+    ];
+
+    private const SANITIZE_ATTRIBUTES_TO_KEEP = [
+        'title',
+        'href',
+        'src',
+        'alt',
+        'style',
+        'class',
+        'id',
+        'width',
+        'height',
+        'controls',
+        'poster',
+        'type',
+        'target',
+        'rel',
+        'loading',
+        'decoding',
+        'srcset',
+        'sizes',
+        'data-src',
+        'data-srcset',
+        'data-lazy-src',
+        'data-orig-file',
+        'autoplay',
+        'loop',
+        'muted',
+        'playsinline',
+        'preload',
+    ];
+
     const CONFIGURATION = [
         'session' => [
             'required' => true,
@@ -117,7 +163,6 @@ class PawchiveBridge extends BridgeAbstract
 
     private const HTTP_HEADERS = [
         'Accept: application/json, text/css, */*',
-        'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36'
     ];
 
     private const DOMAINS = ['pawchive.pw', 'pawchive.st'];
@@ -132,12 +177,12 @@ class PawchiveBridge extends BridgeAbstract
     {
         if ($this->activeDomainHost === null) {
             $cached = $this->loadCacheValue(self::CACHE_KEY_ACTIVE_DOMAIN);
-            if (is_string($cached) && in_array($cached, self::DOMAINS, true)) {
-                $this->activeDomainHost = $cached;
-            } else {
-                $this->activeDomainHost = self::DOMAINS[0];
-            }
+            $this->activeDomainHost = match (true) {
+                is_string($cached) && in_array($cached, self::DOMAINS, true) => $cached,
+                default => self::DOMAINS[0],
+            };
         }
+
         return $this->activeDomainHost;
     }
 
@@ -165,6 +210,7 @@ class PawchiveBridge extends BridgeAbstract
     private function getFileUrl(string $path, ?string $filename = null): string
     {
         $url = $this->getFileDomain() . '/data' . $path;
+
         return $filename !== null ? $url . '?f=' . urlencode($filename) : $url;
     }
 
@@ -181,6 +227,7 @@ class PawchiveBridge extends BridgeAbstract
     private function normalizeUrls(string $content): string
     {
         $activeHost = $this->getActiveDomainHost();
+
         foreach (self::DOMAINS as $host) {
             if ($host !== $activeHost) {
                 $content = str_replace('https://file.' . $host, 'https://file.' . $activeHost, $content);
@@ -188,6 +235,7 @@ class PawchiveBridge extends BridgeAbstract
                 $content = str_replace('https://' . $host, 'https://' . $activeHost, $content);
             }
         }
+
         return $content;
     }
 
@@ -196,23 +244,28 @@ class PawchiveBridge extends BridgeAbstract
         if ($html === '') {
             return '';
         }
+
         $base = rtrim($this->baseURI(), '/');
         $fileBase = $this->getFileDomain();
-        $html = preg_replace('/\b(src|href)="(\/data\/[^"]+)"/i', '$1="' . $fileBase . '$2"', $html);
-        $html = preg_replace('/\b(src|href)="(\/(?!\/)[^"]+)"/i', '$1="' . $base . '$2"', $html);
+
+        $html = (string)preg_replace('/\b(src|href)="(\/data\/[^"]+)"/i', '$1="' . $fileBase . '$2"', $html);
+        $html = (string)preg_replace('/\b(src|href)="(\/(?!\/)[^"]+)"/i', '$1="' . $base . '$2"', $html);
+
         return $html;
     }
 
     private function getMimeType(string $filename): string
     {
         $ext = $this->getExtension($filename);
+
         return $this->mimeCache[$ext] ??= self::MIME_TYPES[$ext] ?? 'application/octet-stream';
     }
 
     private function getExtension(string $filename): string
     {
-        $cleanFilename = preg_replace('/[^\x20-\x7E]/', '', $filename);
+        $cleanFilename = (string)preg_replace('/[^\x20-\x7E]/', '', $filename);
         $cleanFilename = trim($cleanFilename);
+
         return strtolower(trim(pathinfo($cleanFilename, PATHINFO_EXTENSION)));
     }
 
@@ -228,38 +281,50 @@ class PawchiveBridge extends BridgeAbstract
 
     private function isMediaByExtension(string $filename): bool
     {
-        return $this->isImageByExtension($filename) || $this->isVideoByExtension($filename);
+        return match (true) {
+            $this->isImageByExtension($filename), $this->isVideoByExtension($filename) => true,
+            default => false,
+        };
     }
 
     private function hasMedia(array $post): bool
     {
         if (!empty($post['file']['path'])) {
             $name = $post['file']['name'] ?? basename($post['file']['path']);
+
             if ($this->isMediaByExtension((string)$name)) {
                 return true;
             }
         }
+
         if (!empty($post['attachments']) && is_array($post['attachments'])) {
             foreach ($post['attachments'] as $file) {
                 if (!empty($file['path'])) {
                     $name = $file['name'] ?? basename($file['path']);
+
                     if ($this->isMediaByExtension((string)$name)) {
                         return true;
                     }
                 }
             }
         }
+
         return false;
     }
 
     private function cleanUnicodeCharacters(string $text): string
     {
-        $text = preg_replace_callback(
+        $text = (string)preg_replace_callback(
             '/[\x{10000}-\x{10FFFF}]/u',
-            fn(): string => '',
+            fn() => '',
             $text
         );
-        return preg_replace(['/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '/[\x{FFFE}\x{FEFF}]/u'], '', $text);
+
+        return (string)preg_replace(
+            ['/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '/[\x{FFFE}\x{FEFF}]/u'],
+            '',
+            $text
+        );
     }
 
     private function formatUrlsInText(string $text): string
@@ -268,25 +333,28 @@ class PawchiveBridge extends BridgeAbstract
         $inAnchor = false;
         $result = '';
         $style = self::CSS['url-link'];
+
         foreach ($parts as $part) {
             if (preg_match('/^<a\b/i', $part)) {
                 $inAnchor = true;
             } elseif (preg_match('/^<\/a>$/i', $part)) {
                 $inAnchor = false;
-            } elseif (!$inAnchor && trim($part) !== '' && strpos(ltrim($part), '<') !== 0) {
-                $part = preg_replace_callback(
+            } elseif (!$inAnchor && trim($part) !== '' && !str_starts_with(ltrim($part), '<')) {
+                $part = (string)preg_replace_callback(
                     '/(https?:\/\/[^\s<>\"]+)/i',
                     fn(array $matches): string => sprintf(
                         '<a href="%s" style="%s">%s</a>',
-                        htmlspecialchars($matches[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                        htmlspecialchars($matches[1], ENT_QUOTES | ENT_HTML5),
                         $style,
-                        htmlspecialchars($matches[1], ENT_QUOTES | ENT_HTML5, 'UTF-8')
+                        htmlspecialchars($matches[1], ENT_QUOTES | ENT_HTML5)
                     ),
                     $part
                 );
             }
+
             $result .= $part;
         }
+
         return $result;
     }
 
@@ -295,7 +363,18 @@ class PawchiveBridge extends BridgeAbstract
         if ($html === '') {
             return '';
         }
+
         $html = $this->cleanUnicodeCharacters($html);
+
+        $dom = sanitize(
+            $html,
+            self::SANITIZE_TAGS_TO_REMOVE,
+            self::SANITIZE_ATTRIBUTES_TO_KEEP,
+            []
+        );
+
+        $html = trim((string)($dom->innertext ?? ''));
+
         $replacements = [
             '/<p>\s*<\/p>/i' => '',
             '/<div>\s*<\/div>/i' => '',
@@ -303,7 +382,8 @@ class PawchiveBridge extends BridgeAbstract
             '/(<br\s*\/?>\s*){3,}/i' => '<br><br>',
             '/&nbsp;/i' => ' ',
         ];
-        return trim(preg_replace(array_keys($replacements), array_values($replacements), $html));
+
+        return trim((string)preg_replace(array_keys($replacements), array_values($replacements), $html));
     }
 
     private function sanitizeText(string $text): string
@@ -311,21 +391,24 @@ class PawchiveBridge extends BridgeAbstract
         if ($text === '') {
             return '';
         }
+
         $text = $this->cleanUnicodeCharacters($text);
+
         $replacements = [
             '/\h+/' => ' ',
             '/^\s*\n/m' => '',
             '/\n{3,}/' => "\n\n",
         ];
-        return trim(preg_replace(array_keys($replacements), array_values($replacements), $text));
+
+        return trim((string)preg_replace(array_keys($replacements), array_values($replacements), $text));
     }
 
     private function renderImage(string $url, string $alt): string
     {
         return sprintf(
             '<img src="%s" alt="%s" style="%s">',
-            htmlspecialchars($url, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
-            htmlspecialchars($alt, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+            htmlspecialchars($url, ENT_QUOTES | ENT_HTML5),
+            htmlspecialchars($alt, ENT_QUOTES | ENT_HTML5),
             self::CSS['image']
         );
     }
@@ -335,14 +418,15 @@ class PawchiveBridge extends BridgeAbstract
         return sprintf(
             '<video controls style="%s"><source src="%s" type="%s">Your browser does not support the video tag.</video>',
             self::CSS['video'],
-            htmlspecialchars($url, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+            htmlspecialchars($url, ENT_QUOTES | ENT_HTML5),
             $mimeType
         );
     }
 
     private function renderExternalLink(string $url): string
     {
-        $escapedUrl = htmlspecialchars($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $escapedUrl = htmlspecialchars($url, ENT_QUOTES | ENT_HTML5);
+
         return sprintf(
             '<div style="%s"><strong>External Link:</strong><br><a href="%s" style="%s">%s</a></div>',
             self::CSS['external-link-container'],
@@ -355,9 +439,7 @@ class PawchiveBridge extends BridgeAbstract
     private function getJson(string $endpoint): array
     {
         $service = $this->getInput('service');
-        $headers = array_merge(self::HTTP_HEADERS, [
-            'Cookie: session=' . $this->getOption('session')
-        ]);
+        $headers = [...self::HTTP_HEADERS, 'Cookie: session=' . (string)$this->getOption('session')];
         $curlOptions = [
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_MAXREDIRS => 0,
@@ -365,6 +447,7 @@ class PawchiveBridge extends BridgeAbstract
 
         $activeHost = $this->getActiveDomainHost();
         $hostsToTry = [$activeHost];
+
         foreach (self::DOMAINS as $host) {
             if ($host !== $activeHost) {
                 $hostsToTry[] = $host;
@@ -375,13 +458,22 @@ class PawchiveBridge extends BridgeAbstract
 
         foreach ($hostsToTry as $host) {
             $url = 'https://' . $host . '/' . self::API_PREFIX . $service . $endpoint;
+
             try {
                 $apiResponse = getContents($url, $headers, $curlOptions);
+
+                if (!is_string($apiResponse)) {
+                    $lastException = new \Exception(
+                        sprintf('getContents() returned non-string (%s) from %s', get_debug_type($apiResponse), $host)
+                    );
+                    continue;
+                }
+
                 $data = Json::decode($apiResponse);
 
                 if (!is_array($data)) {
                     $lastException = new \Exception(
-                        sprintf('Unexpected JSON type from %s: %s', $host, gettype($data))
+                        sprintf('Unexpected JSON type from %s: %s', $host, get_debug_type($data))
                     );
                     continue;
                 }
@@ -394,6 +486,7 @@ class PawchiveBridge extends BridgeAbstract
                 }
 
                 $this->setActiveDomainHost($host);
+
                 return $data;
             } catch (\Exception $e) {
                 $lastException = $e;
@@ -420,24 +513,32 @@ class PawchiveBridge extends BridgeAbstract
 
         if (!empty($post['file']['path'])) {
             $file = $post['file'];
-            $file['name'] = isset($file['name']) ? trim(preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
-            $file['path'] = trim(preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
+            $file['name'] = isset($file['name'])
+                ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name']))
+                : null;
+            $file['path'] = trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
             $seenPaths[$file['path']] = true;
             $files[] = $file;
         }
+
         if (!empty($post['attachments']) && is_array($post['attachments'])) {
             foreach ($post['attachments'] as $file) {
                 if (!empty($file['path'])) {
-                    $file['name'] = isset($file['name']) ? trim(preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
-                    $file['path'] = trim(preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
+                    $file['name'] = isset($file['name'])
+                        ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name']))
+                        : null;
+                    $file['path'] = trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
+
                     if (isset($seenPaths[$file['path']])) {
                         continue;
                     }
+
                     $seenPaths[$file['path']] = true;
                     $files[] = $file;
                 }
             }
         }
+
         return $files;
     }
 
@@ -445,9 +546,11 @@ class PawchiveBridge extends BridgeAbstract
     {
         foreach ($files as $file) {
             $fileName = trim($file['name'] ?? basename($file['path']));
+
             if ($fileName === '' || !$this->isImageByExtension($fileName)) {
                 continue;
             }
+
             $ch = curl_init($this->getThumbnailUrl($file['path']));
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
@@ -457,8 +560,10 @@ class PawchiveBridge extends BridgeAbstract
             ]);
             curl_exec($ch);
             $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+
             return $code >= 200 && $code < 400;
         }
+
         return false;
     }
 
@@ -470,34 +575,51 @@ class PawchiveBridge extends BridgeAbstract
         foreach ($files as $file) {
             $fileName = $file['name'] ?? basename($file['path']);
             $fileName = trim($fileName);
+
             if ($fileName === '') {
                 continue;
             }
+
             $fullUrl = $this->getFileUrl($file['path'], $fileName);
 
-            if ($this->isImageByExtension($fileName)) {
+            $fileType = match (true) {
+                $this->isImageByExtension($fileName) => 'image',
+                $this->isVideoByExtension($fileName) => 'video',
+                default => 'file',
+            };
+
+            if ($fileType === 'image') {
                 $imageUrl = $useThumbnails ? $this->getThumbnailUrl($file['path']) : $fullUrl;
+
                 $contentHtml .= sprintf(
                     '<div style="%s">%s</div>',
                     $containerStyle,
                     $this->renderImage($imageUrl, $fileName)
                 );
+
                 if (!$hideAttachments) {
                     $downloadLinks[] = ['url' => $fullUrl, 'name' => $fileName];
                 }
-            } elseif ($this->isVideoByExtension($fileName)) {
+
+                continue;
+            }
+
+            if ($fileType === 'video') {
                 if (!$hideAttachments) {
                     $contentHtml .= sprintf(
                         '<div style="%s">%s</div>',
                         $containerStyle,
                         $this->renderVideo($fullUrl, $this->getMimeType($fileName))
                     );
+
                     $downloadLinks[] = ['url' => $fullUrl, 'name' => $fileName];
                 }
-            } else {
-                if (!$hideAttachments) {
-                    $downloadLinks[] = ['url' => $fullUrl, 'name' => $fileName];
-                }
+
+                continue;
+            }
+
+            if (!$hideAttachments) {
+                $downloadLinks[] = ['url' => $fullUrl, 'name' => $fileName];
             }
         }
     }
@@ -507,18 +629,21 @@ class PawchiveBridge extends BridgeAbstract
         if (empty($downloadLinks)) {
             return '';
         }
+
         $itemsHtml = '';
         $linkStyle = self::CSS['file-link'];
         $itemStyle = self::CSS['attachments-item'];
+
         foreach ($downloadLinks as $link) {
             $itemsHtml .= sprintf(
                 '<li style="%s"><a href="%s" style="%s" download>%s</a></li>',
                 $itemStyle,
-                htmlspecialchars($link['url'], ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                htmlspecialchars($link['url'], ENT_QUOTES | ENT_HTML5),
                 $linkStyle,
-                htmlspecialchars($link['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8')
+                htmlspecialchars($link['name'], ENT_QUOTES | ENT_HTML5)
             );
         }
+
         return sprintf(
             '<div style="%s"><h4 style="%s">Attachments</h4><ul style="%s">%s</ul></div>',
             self::CSS['attachments-container'],
@@ -531,6 +656,7 @@ class PawchiveBridge extends BridgeAbstract
     public function getIcon(): string
     {
         $icon = $this->authorAvatarUrl ?? parent::getIcon();
+
         return $this->normalizeUrls($icon);
     }
 
@@ -539,6 +665,7 @@ class PawchiveBridge extends BridgeAbstract
         $service = $this->getInput('service');
         $user = $this->getInput('user');
         $uri = $this->baseURI() . $service . '/user/' . $user;
+
         return $this->normalizeUrls($uri);
     }
 
@@ -559,9 +686,11 @@ class PawchiveBridge extends BridgeAbstract
 
         $queryParams = [];
         $q = $this->getInput('q');
+
         if ($q !== null && $q !== '') {
             $queryParams['q'] = $q;
         }
+
         $queryString = $queryParams !== [] ? '?' . http_build_query($queryParams) : '';
 
         $json = $this->getJson("{$userPath}{$queryString}");
@@ -571,12 +700,15 @@ class PawchiveBridge extends BridgeAbstract
         $limit = $this->getInput('limit');
 
         $count = 0;
+
         foreach ($json as $post) {
             if ($hideEmpty && !$this->hasMedia($post)) {
                 continue;
             }
+
             $this->items[] = $this->createItem($post, $hideAttachments);
             $count++;
+
             if ($limit !== null && $count >= $limit) {
                 break;
             }
@@ -591,23 +723,28 @@ class PawchiveBridge extends BridgeAbstract
         $content = $this->sanitizeHtml($content);
 
         $files = $this->collectFiles($post);
+
         foreach ($files as $file) {
             $fileName = $file['name'] ?? basename($file['path']);
             $fileName = trim($fileName);
+
             if ($fileName !== '') {
-                $content = preg_replace(
+                $content = (string)preg_replace(
                     '/(?<![a-zA-Z0-9])' . preg_quote($fileName, '/') . '(?![a-zA-Z0-9])/i',
                     '',
                     $content
                 );
             }
         }
+
         $content = $this->formatUrlsInText($content);
 
         $timestamp = null;
         $dateStr = $post['published'] ?? $post['added'] ?? null;
+
         if ($dateStr !== null) {
             $parsed = strtotime((string)$dateStr);
+
             if ($parsed !== false) {
                 $timestamp = $parsed;
             }
@@ -633,21 +770,26 @@ class PawchiveBridge extends BridgeAbstract
         $contentHtml .= $this->renderAttachmentsBlock($downloadLinks);
 
         $item['content'] = $contentHtml;
+
         return $item;
     }
 
     public function getItems(): array
     {
         $items = parent::getItems();
+
         foreach ($items as &$item) {
             if (isset($item['content'])) {
                 $item['content'] = $this->normalizeUrls($item['content']);
             }
+
             if (isset($item['uri'])) {
                 $item['uri'] = $this->normalizeUrls($item['uri']);
             }
         }
+
         unset($item);
+
         return $items;
     }
 }
