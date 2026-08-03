@@ -513,9 +513,7 @@ class PawchiveBridge extends BridgeAbstract
 
         if (!empty($post['file']['path'])) {
             $file = $post['file'];
-            $file['name'] = isset($file['name'])
-                ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name']))
-                : null;
+            $file['name'] = isset($file['name']) ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
             $file['path'] = trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
             $seenPaths[$file['path']] = true;
             $files[] = $file;
@@ -524,9 +522,7 @@ class PawchiveBridge extends BridgeAbstract
         if (!empty($post['attachments']) && is_array($post['attachments'])) {
             foreach ($post['attachments'] as $file) {
                 if (!empty($file['path'])) {
-                    $file['name'] = isset($file['name'])
-                        ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name']))
-                        : null;
+                    $file['name'] = isset($file['name']) ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
                     $file['path'] = trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
 
                     if (isset($seenPaths[$file['path']])) {
