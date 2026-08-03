@@ -205,6 +205,12 @@ $item = [
 
 * `Atom` - Atom feed
 * `Html` - Simple HTML page
+* `Json` - JSON
+* `Mrss` - MRSS feed
+* `Plaintext` - Raw text
+* `Sfeed` - TAB-separated text
+
+## Cache backends
 
 * `File`
 * `SQLite`
@@ -212,13 +218,8 @@ $item = [
 * `Array`
 * `Null`
 
-### Licenses
+## License
 
-The source code for RSS-Bridge is [Public Domain](UNLICENSE).
-
-RSS-Bridge uses third party libraries with their own license:
-
-  * [`Parsedown`](https://github.com/erusev/parsedown) licensed under the [MIT License](https://opensource.org/licenses/MIT)
 This fork is licensed under the [GNU Affero General Public License v3.0](LICENSE).
 
 RSS-Bridge uses third-party libraries with their own licenses:
