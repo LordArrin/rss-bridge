@@ -299,6 +299,14 @@ abstract class XPathAbstract extends BridgeAbstract
     {
         return static::SETTING_USE_RAW_ITEM_CONTENT;
     }
+    /**
+     * Fix encoding
+     * @return bool
+     */
+    protected function getSettingFixEncoding(): bool
+    {
+        return static::SETTING_FIX_ENCODING;
+    }
 
     /**
      * Internal helper method for quickly accessing all the user defined constants

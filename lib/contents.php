@@ -53,9 +53,8 @@ function getContents(
         'useragent'     => Configuration::getConfig('http', 'useragent'),
         'timeout'       => Configuration::getConfig('http', 'timeout'),
         'retries'       => Configuration::getConfig('http', 'retries'),
-        'curl_options'  => $curlOptions,
+        'curl_options'  => $curlOptions + [CURLOPT_ENCODING => ''],
     ];
-
     $httpHeadersNormalized = [];
     foreach ($httpHeaders as $httpHeader) {
         $parts = explode(':', $httpHeader);

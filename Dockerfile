@@ -2,7 +2,7 @@ FROM alpine:latest AS rssbridge
 
 LABEL org.opencontainers.image.title="RSS Bridge" \
       org.opencontainers.image.description="RSS-Bridge - generate feeds for websites that don't have one" \
-      org.opencontainers.image.version="1.0.2" \
+      org.opencontainers.image.version="1.0.3" \
       org.opencontainers.image.source="https://github.com/LordArrin/rss-bridge"
 
 RUN set -xe && \
@@ -11,25 +11,26 @@ RUN set -xe && \
       ca-certificates \
       nginx \
       php85 \
-      php85-fpm \
       php85-ctype \
       php85-curl \
+      php85-dom \
+      php85-fileinfo \
+      php85-fpm \
       php85-iconv \
       php85-intl \
       php85-mbstring \
-      php85-pecl-memcached \
       php85-openssl \
-      php85-sqlite3 \
       php85-pdo_sqlite \
-      php85-xml \
+      php85-pecl-memcached \
       php85-simplexml \
-      php85-dom \
+      php85-sqlite3 \
+      php85-xml \
       php85-zip \
       curl \
       patchelf \
     && \
-    # --- curl-impersonate v1.2.5 (v2.0.0 musl is broken) ---
-    curlimpersonate_version=1.2.5 && \
+    # --- curl-impersonate v1.5.6 (v2.0.0 musl is broken) ---
+    curlimpersonate_version=1.5.6 && \
     arch="$(uname -m)" && \
     archive="libcurl-impersonate-v${curlimpersonate_version}.${arch}-linux-musl.tar.gz" && \
     curl -fSLo "/tmp/${archive}" \
@@ -49,8 +50,8 @@ RUN set -xe && \
     mkdir -p /run/php85 /app/cache && \
     chown nginx:nginx /run/php85 /app/cache
 
-# Browser fingerprint (v1.2.5 supports chrome120, not chrome150)
-ENV CURL_IMPERSONATE=chrome120
+# Browser fingerprint 
+ENV CURL_IMPERSONATE=firefox147
 
 RUN ln -sfT /dev/stderr /var/log/nginx/error.log && \
     ln -sfT /dev/stdout /var/log/nginx/access.log
