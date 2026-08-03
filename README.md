@@ -1,5 +1,4 @@
-```markdown
-# RSS-Bridge
+RSS-Bridge
 
 ![RSS-Bridge](static/logo_600px.png)
 
@@ -228,5 +227,3 @@ RSS-Bridge uses third-party libraries with their own licenses:
 * [`PHP Simple HTML DOM Parser`](https://simplehtmldom.sourceforge.io/docs/1.9/index.html) - MIT
 * [`php-urljoin`](https://github.com/fluffy-critter/php-urljoin) - MIT
 ```
-
----
