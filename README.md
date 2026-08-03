@@ -1,5 +1,3 @@
-RSS-Bridge
-
 ![RSS-Bridge](static/logo_600px.png)
 
 RSS-Bridge is a PHP web application.
@@ -8,8 +6,8 @@ It generates web feeds for websites that don't have one.
 
 Requires PHP 8.5.
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)]
-[![Docker Image](https://img.shields.io/badge/docker-lordarrin%2Frss--bridge-blue.svg?logo=docker)]
+[![LICENSE](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![Docker Image](https://img.shields.io/badge/docker-lordarrin%2Frss--bridge-blue.svg?logo=docker)](https://hub.docker.com/r/lordarrin/rss-bridge)
 
 ## A subset of bridges (15/447)
 
