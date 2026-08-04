@@ -10,9 +10,9 @@ max_file_size = 20000000
 
 [http]
 
-; curl-impersonate v1.2.5: TLS 1.3 + HTTP/2 handshake.
-; 15s covers slow upstreams without hanging forever.
-timeout = 15
+; curl-impersonate v1.5.6
+; 20s covers slow upstreams without hanging forever.
+timeout = 20
 
 ; 2 retries is enough for transient DNS/TLS errors.
 retries = 2
@@ -28,6 +28,15 @@ max_filesize = 20
 type = "sqlite"
 custom_timeout = false
 
+[proxy]
+
+url = ""
+name = "Hidden proxy name"
+by_bridge = false
+
+[browser_proxy]
+# Nothing specified - DirectProxy will be used
+
 [logging]
 ; Disabled — errors captured by PHP-FPM error_log > docker logs
 ;file_path = "/dev/stderr"
@@ -38,12 +47,6 @@ custom_timeout = false
 email = ""
 telegram = ""
 donations = false
-
-[proxy]
-
-url = ""
-name = "Hidden proxy name"
-by_bridge = false
 
 [webdriver]
 

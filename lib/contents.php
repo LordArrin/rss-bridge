@@ -248,3 +248,70 @@ function getSimpleHTMLDOMCached(
         $defaultSpanText
     );
 }
+/**
+ * Checks if the proxy is configured and accessible
+ */
+function isProxyAvailable(): bool
+{
+    try {
+        $proxy = ProxyFactory::fromConfig();
+        return $proxy !== null && $proxy->isAvailable();
+    } catch (\Exception $e) {
+        return false;
+    }
+}
+/**
+ * Retrieves HTML via a browser proxy (FlareSolverr, Camoufox, Direct).
+ *
+ * IMPORTANT: This function uses the [browser_proxy] section from config.ini.php,
+ * rather than the standard [proxy]. This allows you to use both proxy types simultaneously:
+ * - [proxy] for a regular HTTP proxy (e.g., SOCKS5)
+ * - [browser_proxy] for an anti-bot proxy (FlareSolverr)
+ *
+ * @param string $url URL for request
+ * @param array $options Options: cookies, timeout, wait, use_cache, cache_ttl
+ * @return string HTML content
+ * @throws \Exception If the proxy is not configured or the request fails
+ */
+function getProtectedContents(string $url, array $options = []): string
+{
+    $proxy = ProxyFactory::fromConfig();
+
+    try {
+        return $proxy->getHtml($url, $options);
+    } catch (\RuntimeException $e) {
+        if ($proxy instanceof DirectProxy) {
+            throwClientException(
+                "Failed to fetch {$url}: " . $e->getMessage() . "\n\n" .
+                "If this site is protected by Cloudflare, configure [browser_proxy]:\n" .
+            );
+        }
+        
+        throwClientException('Browser proxy failed: ' . $e->getMessage());
+    }
+}
+/**
+ * Retrieves HTML via proxy as a simple_html_dom object
+ */
+function getProtectedSimpleHTMLDOM(string $url, array $options = []): \simple_html_dom
+{
+    $html = getProtectedContents($url, $options);
+    
+    if (empty($html)) {
+        throwClientException(
+            'Proxy returned empty HTML for: ' . $url . '. ' .
+            'The page may be blocked or the proxy is misconfigured.'
+        );
+    }
+    
+    $dom = str_get_html($html);
+    
+    if (!$dom) {
+        throwClientException(
+            'Failed to parse HTML from proxy for: ' . $url . '. ' .
+            'The response may be corrupted or in an unexpected format.'
+        );
+    }
+    
+    return $dom;
+}
