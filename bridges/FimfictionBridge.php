@@ -72,7 +72,6 @@ class FimfictionBridge extends BridgeAbstract
         $options = $this->buildProxyOptions();
 
         try {
-            // ќдна строка Ч всЄ остальное делает прокси!
             $dom = getProtectedSimpleHTMLDOM($storyUrl, $options);
         } catch (\Exception $e) {
             throwClientException('Failed to load story: ' . $e->getMessage());
@@ -89,9 +88,11 @@ class FimfictionBridge extends BridgeAbstract
         $chaptersData = $this->extractChaptersList($dom, self::FETCH_LIMIT);
 
         foreach ($chaptersData as $data) {
-            $content = $this->getInput('full_content')
-                ? $this->buildFullContent($data['uri'], $options)
-                : $this->buildLinkContent($data['uri']);
+            if ($this->getInput('full_content')) {
+                $content = $this->buildFullContent($data['uri'], $options);
+            } else {
+                $content = $this->buildLinkContent($data['uri']);
+            }
 
             $this->items[] = [
                 'title'     => $data['title'],
