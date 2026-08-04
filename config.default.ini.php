@@ -10,15 +10,14 @@ max_file_size = 20000000
 
 [http]
 
-; curl-impersonate v1.5.6
+; curl-impersonate
 ; 20s covers slow upstreams without hanging forever.
 timeout = 20
 
 ; 2 retries is enough for transient DNS/TLS errors.
 retries = 2
 
-; DO NOT set useragent — curl-impersonate v1.2.5 sets it automatically
-; based on CURL_IMPERSONATE=chrome120 env var. Overriding breaks fingerprint.
+; DO NOT set useragent - curl-impersonate sets it automatically
 ;useragent = ""
 
 max_filesize = 20
@@ -37,8 +36,15 @@ by_bridge = false
 [proxy_profile_direct]
 type = "Direct"
 
+[proxy_profile_tgws]
+type = "TgWS"
+socks_url = ""
+connect_timeout = 30
+request_timeout = 120
+retries = 3
+
 [logging]
-; Disabled — errors captured by PHP-FPM error_log > docker logs
+; Disabled - errors captured by PHP-FPM error_log > docker logs
 ;file_path = "/dev/stderr"
 ;file_level = "WARNING"
 
@@ -82,8 +88,8 @@ enable_purge = true
 timeout = 5000
 
 [MemcachedCache]
-
-host = "localhost"
+; Using typical container name by default
+host = "memcached"
 port = 11211
 
 [TelegramBridge]

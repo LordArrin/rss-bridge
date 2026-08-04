@@ -1,15 +1,5 @@
 <?php
 
-if (version_compare(\PHP_VERSION, '7.4.0') === -1) {
-    http_response_code(500);
-    exit("RSS-Bridge requires minimum PHP version 7.4\n");
-}
-
-if (!extension_loaded('curl')) {
-    http_response_code(500);
-    exit("RSS-Bridge requires curl (apt install php-curl)\n");
-}
-
 require __DIR__ . '/lib/bootstrap.php';
 require __DIR__ . '/lib/config.php';
 

@@ -1,4 +1,4 @@
-![RSS-Bridge](static/logo_600px.png)
+![RSS-Bridge](static/not_boring_logo.png)
 
 RSS-Bridge is a PHP web application.
 
@@ -30,7 +30,7 @@ Requires PHP 8.5.
 
 ## Installation
 
-RSS-Bridge is distributed exclusively as a Docker image: `lordarrin/rss-bridge`.
+This fork of RSS-Bridge is distributed as a Docker image based on Alpine Linux: `lordarrin/rss-bridge`.
 
 ### Quick start
 

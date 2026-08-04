@@ -405,8 +405,7 @@ class Telegram2Bridge extends BridgeAbstract
             }
         }
 
-        $videoNotSupported = $messageDiv->find('a.tgme_widget_message_video_player.not_supported', 0)
-            ?: $messageDiv->find('div.tgme_widget_message_video_player.not_supported', 0);
+        $videoNotSupported = $messageDiv->find('a.tgme_widget_message_video_player.not_supported', 0) ?: $messageDiv->find('div.tgme_widget_message_video_player.not_supported', 0);
 
         if (!$videoNotSupported && $messageDiv->find('video', 0)) {
             $pos = strpos($inner, '<video');
@@ -528,11 +527,11 @@ class Telegram2Bridge extends BridgeAbstract
             $el = $messageDiv->find($sel, 0);
             if ($el && preg_match(self::BG_IMG_RE, $el->style, $m)) {
                 $poster = $m[1];
-                break;            }
+                break;
+            }
         }
 
-        $player = $messageDiv->find('a.tgme_widget_message_video_player', 0)
-            ?: $messageDiv->find('div.tgme_widget_message_video_player', 0);
+        $player = $messageDiv->find('a.tgme_widget_message_video_player', 0) ?: $messageDiv->find('div.tgme_widget_message_video_player', 0);
 
         $postHref = '';
         if ($player?->href) {
@@ -551,9 +550,7 @@ class Telegram2Bridge extends BridgeAbstract
 
         $href = $postHref ?: '#';
 
-        $channel = $this->feedName !== ''
-            ? htmlspecialchars($this->feedName, ENT_QUOTES)
-            : ('@' . $this->normalizeUsername());
+        $channel = $this->feedName !== '' ? htmlspecialchars($this->feedName, ENT_QUOTES) : ('@' . $this->normalizeUsername());
 
         $duration = $this->getPlaintext($messageDiv, 'time.tgme_widget_message_video_duration');
         if ($duration === '') {
@@ -923,8 +920,7 @@ class Telegram2Bridge extends BridgeAbstract
 
     private function detectNotSupported(\simple_html_dom_node $message): ?array
     {
-        $videoPlayer = $message->find('a.tgme_widget_message_video_player.not_supported', 0)
-            ?: $message->find('div.tgme_widget_message_video_player.not_supported', 0);
+        $videoPlayer = $message->find('a.tgme_widget_message_video_player.not_supported', 0) ?: $message->find('div.tgme_widget_message_video_player.not_supported', 0);
 
         if ($videoPlayer) {
             return ['type' => 'video', 'element' => $videoPlayer];

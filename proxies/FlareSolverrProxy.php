@@ -219,8 +219,6 @@ class FlareSolverrProxy extends ProxyAbstract
         
         $body = (string)$response['solution']['response'];
         
-        // FlareSolverr не возвращает content-type для бинарных файлов,
-        // поэтому определяем по расширению URL
         $extension = pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION);
         $type = 'application/octet-stream';
         
