@@ -6,37 +6,90 @@ final class ProxyFactory
 {
     private static array $instances = [];
 
-    public static function fromConfig(): ProxyInterface
+    public static function fromProfile(string $profileName): ProxyInterface
     {
-        $proxyType = getenv('RSS_BRIDGE_BROWSER_PROXY_TYPE') 
-            ?: Configuration::getConfig('browser_proxy', 'type');
-        
-        if (!$proxyType || $proxyType === 'none' || $proxyType === 'direct') {
-            return self::create('Direct', []);
+        if (isset(self::$instances[$profileName])) {
+            return self::$instances[$profileName];
         }
 
-        $config = [
-            'url' => getenv('FLARESOLVERR_URL') 
-                ?: Configuration::getConfig('browser_proxy', 'url'),
-            'session_name' => getenv('FLARESOLVERR_SESSION_NAME') 
-                ?: Configuration::getConfig('browser_proxy', 'session_name'),
-        ];
+        $section = 'proxy_profile_' . $profileName;
+        $type = Configuration::getConfig($section, 'type');
 
-        return self::create($proxyType, $config);
+        if (!$type) {
+            global $container;
+            if (isset($container['logger'])) {
+                $container['logger']->error(
+                    "Proxy profile '{$profileName}' not found: section [{$section}] has no 'type' in config.ini.php"
+                );
+            }
+            throw new \RuntimeException(
+                "Proxy profile '{$profileName}' not found in config.ini.php. " .
+                "Expected section [{$section}] with 'type' parameter."
+            );
+        }
+
+        $config = self::loadProfileConfig($section);
+        
+        global $container;
+        if (isset($container['logger'])) {
+            $container['logger']->info(sprintf(
+                "Loading proxy profile '%s': type=%s, config_keys=[%s]",
+                $profileName,
+                $type,
+                implode(', ', array_keys($config))
+            ));
+        }
+        
+        $proxy = self::create($type, $config);
+        
+        self::$instances[$profileName] = $proxy;
+        
+        return $proxy;
     }
 
     public static function create(string $type, array $config = []): ProxyInterface
     {
-        if (!isset(self::$instances[$type])) {
-            $className = ucfirst($type) . 'Proxy';
-            
-            if (!class_exists($className)) {
-                throw new \RuntimeException("Proxy class not found: {$className}");
-            }
-
-            self::$instances[$type] = new $className($config);
+        $className = ucfirst($type) . 'Proxy';
+        
+        if (!class_exists($className)) {
+            throw new \RuntimeException("Proxy class not found: {$className}");
         }
 
-        return self::$instances[$type];
+        return new $className($config);
+    }
+
+    public static function safeFromProfile(string $profileName): ProxyInterface
+    {
+        try {
+            return self::fromProfile($profileName);
+        } catch (\Exception $e) {
+            global $container;
+            if (isset($container['logger'])) {
+                $container['logger']->warning(
+                    "Failed to load proxy profile '{$profileName}': {$e->getMessage()}. Falling back to DirectProxy."
+                );
+            }
+            return self::create('Direct', []);
+        }
+    }
+
+    private static function loadProfileConfig(string $section): array
+    {
+        $config = [];
+        
+        $keys = [
+            'url', 'session_name', 
+            'socks_url', 'socks_user', 'socks_pass',
+            'connect_timeout', 'request_timeout', 'retries'
+        ];
+
+        foreach ($keys as $key) {
+            $value = Configuration::getConfig($section, $key);
+            if ($value !== null) {
+                $config[$key] = $value;
+            }
+        }
+
+        return $config;
     }
 }

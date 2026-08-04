@@ -10,6 +10,8 @@ class FimfictionBridge extends BridgeAbstract
     const DESCRIPTION = 'Returns chapter updates for stories on Fimfiction';
     const CACHE_TIMEOUT = 3600;
 
+    private const PROXY_PROFILE = 'flaresolverr';
+
     const CONFIGURATION = [
         'session_token' => ['required' => false],
         'signing_key' => ['required' => false],
@@ -32,8 +34,6 @@ class FimfictionBridge extends BridgeAbstract
     ];
 
     const FETCH_LIMIT = 3;
-    const CHAPTER_CACHE_TTL = 86400;
-    const STORY_CACHE_TTL = 900;
 
     private const CSS = [
         'wrapper'      => 'font-size:14px; line-height:1.6; word-wrap:break-word;',
@@ -71,10 +71,13 @@ class FimfictionBridge extends BridgeAbstract
         $storyUrl = self::URI . 'story/' . $storyId . '/';
         $options = $this->buildProxyOptions();
 
-        try {
-            $dom = getProtectedSimpleHTMLDOM($storyUrl, $options);
-        } catch (\Exception $e) {
-            throwClientException('Failed to load story: ' . $e->getMessage());
+        $dom = getProtectedSimpleHTMLDOM($storyUrl, self::PROXY_PROFILE, $options);
+
+        if (!$this->validateStoryPage($dom)) {
+            throwClientException(
+                'Received invalid story page structure. The story may be private, ' .
+                'deleted, or the proxy returned unexpected content.'
+            );
         }
 
         $storyError = $this->detectStoryError($dom);
@@ -88,11 +91,9 @@ class FimfictionBridge extends BridgeAbstract
         $chaptersData = $this->extractChaptersList($dom, self::FETCH_LIMIT);
 
         foreach ($chaptersData as $data) {
-            if ($this->getInput('full_content')) {
-                $content = $this->buildFullContent($data['uri'], $options);
-            } else {
-                $content = $this->buildLinkContent($data['uri']);
-            }
+            $content = $this->getInput('full_content')
+                ? $this->buildFullContent($data['uri'], $options)
+                : $this->buildLinkContent($data['uri']);
 
             $this->items[] = [
                 'title'     => $data['title'],
@@ -111,6 +112,7 @@ class FimfictionBridge extends BridgeAbstract
             'cookies' => [
                 ['name' => 'view_mature', 'value' => 'true', 'domain' => 'www.fimfiction.net'],
             ],
+            'cache_ttl' => 900,
         ];
 
         $sessionToken = $this->getOption('session_token');
@@ -124,26 +126,27 @@ class FimfictionBridge extends BridgeAbstract
         return $options;
     }
 
+    private function validateStoryPage(\simple_html_dom $dom): bool
+    {
+        $storyName = $dom->find('a.story_name', 0);
+        $chapters = $dom->find('ul.chapters', 0);
+
+        return $storyName !== null || $chapters !== null;
+    }
+
     private function detectStoryError(\simple_html_dom $dom): ?string
     {
         $errorMessages = [
-            'Story not found'         => 'This story has been deleted or does not exist.',
+            'Story not found'             => 'This story has been deleted or does not exist.',
             'This story is not available' => 'This story is not available in your region.',
-            'You must be logged in'   => 'This story requires login to view.',
-            'Mature Content'          => 'This story contains mature content and requires authentication.',
+            'You must be logged in'       => 'This story requires login to view.',
+            'Mature Content'              => 'This story contains mature content and requires authentication.',
         ];
 
         foreach ($errorMessages as $pattern => $message) {
             if (stripos($dom->plaintext, $pattern) !== false) {
                 return $message;
             }
-        }
-
-        $storyName = $dom->find('a.story_name', 0);
-        $chapters = $dom->find('ul.chapters', 0);
-
-        if (!$storyName && !$chapters) {
-            return 'Story page loaded but no story content found. The story may be private or restricted.';
         }
 
         return null;
@@ -237,10 +240,13 @@ class FimfictionBridge extends BridgeAbstract
 
     private function buildFullContent(string $uri, array $options): string
     {
+        $options['cache_ttl'] = 604800; // 7 дней
+
         try {
-            $dom = getProtectedSimpleHTMLDOM($uri, $options);
+            $dom = getProtectedSimpleHTMLDOM($uri, self::PROXY_PROFILE, $options);
         } catch (\Exception $e) {
-            return '<p style="' . self::CSS['error'] . '">Error loading chapter: ' . htmlspecialchars($e->getMessage()) . '</p>';
+            return '<p style="' . self::CSS['error'] . '">Error loading chapter: '
+                . htmlspecialchars($e->getMessage()) . '</p>';
         }
 
         $content = '<div style="' . self::CSS['wrapper'] . '">';

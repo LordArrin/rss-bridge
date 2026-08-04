@@ -2,6 +2,14 @@
 
 declare(strict_types=1);
 
+/**
+ * Telegram2Bridge — fetches recent posts from public Telegram channels.
+ * 
+ * Proxy behavior:
+ *   - Checkbox 'use_proxy' OFF: direct HTTP requests, no proxy at all
+ *   - Checkbox 'use_proxy' ON: tries TgWSProxy profile 'tgws' first,
+ *     falls back to direct HTTP with CURLOPT_PROXY if profile unavailable
+ */
 class Telegram2Bridge extends BridgeAbstract
 {
     const NAME = 'Telegram2';
@@ -9,6 +17,12 @@ class Telegram2Bridge extends BridgeAbstract
     const DESCRIPTION = 'Returns the recent publications from a public Telegram channel. Supports embedded media content and socks proxy, hides ads and unsupported content.';
     const MAINTAINER = 'LordArrin';
     const CACHE_TIMEOUT = 3600;
+
+    /**
+     * Proxy profile name for TgWSProxy (SOCKS5 via Cloudflare Worker).
+     * Only used when 'use_proxy' checkbox is enabled.
+     */
+    private const PROXY_PROFILE = 'tgws';
 
     private const C = '';
 
@@ -1151,14 +1165,50 @@ class Telegram2Bridge extends BridgeAbstract
         return 'data:' . $data['type'] . ';base64,' . base64_encode($data['body']);
     }
 
+    /**
+     * Fetches media from Telegram CDN.
+     * 
+     * Logic follows the same rules as fetchPage():
+     *   - use_proxy OFF: direct HTTP requests, no proxy at all
+     *   - use_proxy ON: tries TgWSProxy (profile 'tgws') first,
+     *     falls back to CURLOPT_PROXY via legacy proxy_url config
+     */
     private function fetchMediaCached(string $url): ?array
     {
         if (array_key_exists($url, $this->mediaCache)) {
             return $this->mediaCache[$url];
         }
 
-        $opts = $this->getProxyOpts();
+        // Checkbox OFF — direct HTTP, no proxy involvement
+        if (!$this->getInput('use_proxy')) {
+            return $this->fetchMediaDirect($url, []);
+        }
 
+        // Checkbox ON — try TgWSProxy profile first
+        try {
+            $data = getProtectedBinary($url, self::PROXY_PROFILE);
+            if ($data !== null) {
+                $this->mediaCache[$url] = $data;
+                return $data;
+            }
+        } catch (\Throwable $e) {
+            $this->logger->debug(sprintf(
+                'TgWSProxy unavailable for %s, falling back to legacy: %s',
+                $url,
+                $e->getMessage()
+            ));
+        }
+
+        // TgWSProxy failed — fall back to legacy CURLOPT_PROXY logic
+        return $this->fetchMediaDirect($url, $this->getProxyOpts());
+    }
+
+    /**
+     * Fetches media via direct HTTP with given curl options.
+     * Shared by both 'no proxy' and 'legacy proxy_url' paths.
+     */
+    private function fetchMediaDirect(string $url, array $opts): ?array
+    {
         for ($i = 0; $i < self::PROXY_RETRIES; $i++) {
             try {
                 $response = getContents($url, [], $opts, true);

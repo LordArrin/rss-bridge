@@ -76,11 +76,10 @@ abstract class ProxyAbstract implements ProxyInterface
      * Retrieves binary data via a proxy.
      * Not supported by default - overridden in child classes.
      */
-    public function getBinary(string $url, array $options = []): string
+    public function getBinary(string $url, array $options = []): array
     {
         throw new \RuntimeException('Binary downloads not supported by ' . $this->getName());
     }
-
     /**
      * Basic response validation.
      * Overridden in child classes for specific logic (e.g. Cloudflare check).
@@ -96,7 +95,7 @@ abstract class ProxyAbstract implements ProxyInterface
     }
 
     /**
-     * Logger.
+     * Logger
      */
     protected function log(string $level, string $message, array $context = []): void
     {

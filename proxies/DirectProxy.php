@@ -41,4 +41,37 @@ class DirectProxy extends ProxyAbstract
     {
         throw new \RuntimeException('DirectProxy does not use executeRequest()');
     }
+    /**
+     * Fetches binary content via direct HTTP.
+     * 
+     * @return array{body: string, type: string}
+     */
+    public function getBinary(string $url, array $options = []): array
+    {
+        $curlOptions = [];
+        
+        if (isset($options['timeout'])) {
+            $curlOptions[CURLOPT_TIMEOUT] = (int)($options['timeout'] / 1000);
+        }
+        
+        try {
+            /** @var \Response $response */
+            $response = getContents($url, [], $curlOptions, true);
+            
+            $body = $response->getBody();
+            $headers = $response->getHeaders();
+            $contentType = $headers['content-type'][0] ?? 'application/octet-stream';
+            $type = trim(explode(';', $contentType)[0]);
+            
+            if ($body === '' || $body === null) {
+                throw new \RuntimeException("Empty response for {$url}");
+            }
+            
+            return ['body' => $body, 'type' => $type];
+        } catch (\Throwable $e) {
+            throw new \RuntimeException(
+                "Direct binary fetch failed for {$url}: " . $e->getMessage()
+            );
+        }
+    }
 }

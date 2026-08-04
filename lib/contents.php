@@ -248,16 +248,30 @@ function getSimpleHTMLDOMCached(
         $defaultSpanText
     );
 }
-/**
- * Checks if the proxy is configured and accessible
- */
-function isProxyAvailable(): bool
+function getProtectedBinary(string $url, string $profileName, array $options = []): ?array
 {
     try {
-        $proxy = ProxyFactory::fromConfig();
-        return $proxy !== null && $proxy->isAvailable();
-    } catch (\Exception $e) {
-        return false;
+        $proxy = ProxyFactory::safeFromProfile($profileName);
+    } catch (\Throwable $e) {
+        global $container;
+        if (isset($container['logger'])) {
+            $container['logger']->error("Failed to load proxy profile '{$profileName}': " . $e->getMessage());
+        }
+        return null;
+    }
+    
+    $proxyName = $proxy->getName();
+    
+    try {
+        return $proxy->getBinary($url, $options);
+    } catch (\Throwable $e) {
+        global $container;
+        if (isset($container['logger'])) {
+            $container['logger']->error(
+                "Proxy [{$proxyName}] failed to fetch binary {$url}: " . $e->getMessage()
+            );
+        }
+        return null;
     }
 }
 /**
@@ -273,34 +287,40 @@ function isProxyAvailable(): bool
  * @return string HTML content
  * @throws \Exception If the proxy is not configured or the request fails
  */
-function getProtectedContents(string $url, array $options = []): string
+function getProtectedContents(string $url, string $profileName, array $options = []): string
 {
-    $proxy = ProxyFactory::fromConfig();
+    $proxy = ProxyFactory::safeFromProfile($profileName);
 
     try {
         return $proxy->getHtml($url, $options);
     } catch (\RuntimeException $e) {
-        if ($proxy instanceof DirectProxy) {
+        $message = $e->getMessage();
+        
+        if ($proxy instanceof DirectProxy && stripos($message, 'invalid response') !== false) {
             throwClientException(
-                "Failed to fetch {$url}: " . $e->getMessage() . "\n\n" .
-                "If this site is protected by Cloudflare, configure [browser_proxy]:\n"
+                "Site '{$url}' is protected by Cloudflare or similar anti-bot system.\n\n" .
+                "Configure a browser proxy profile in config.ini.php:\n\n" .
+                "  [proxy_profile_flaresolverr]\n" .
+                "  type = \"FlareSolverr\"\n" .
+                "  url = \"http://localhost:8191\"\n\n" .
+                "Then use profile 'flaresolverr' in your bridge.\n\n" .
+                "Original error: {$message}"
             );
         }
         
-        throwClientException('Browser proxy failed: ' . $e->getMessage());
+        throwClientException("Proxy profile '{$profileName}' failed: {$message}");
     }
 }
 /**
  * Retrieves HTML via proxy as a simple_html_dom object
  */
-function getProtectedSimpleHTMLDOM(string $url, array $options = []): \simple_html_dom
+function getProtectedSimpleHTMLDOM(string $url, string $profileName, array $options = []): \simple_html_dom
 {
-    $html = getProtectedContents($url, $options);
+    $html = getProtectedContents($url, $profileName, $options);
     
     if (empty($html)) {
         throwClientException(
-            'Proxy returned empty HTML for: ' . $url . '. ' .
-            'The page may be blocked or the proxy is misconfigured.'
+            "Proxy profile '{$profileName}' returned empty HTML for: {$url}"
         );
     }
     
@@ -308,8 +328,7 @@ function getProtectedSimpleHTMLDOM(string $url, array $options = []): \simple_ht
     
     if (!$dom) {
         throwClientException(
-            'Failed to parse HTML from proxy for: ' . $url . '. ' .
-            'The response may be corrupted or in an unexpected format.'
+            "Failed to parse HTML from proxy profile '{$profileName}' for: {$url}"
         );
     }
     
