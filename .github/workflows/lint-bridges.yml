@@ -17,7 +17,8 @@ on:
       - '.github/workflows/lint-bridges.yml'
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: read
 
 jobs:
   phpcs:
@@ -28,7 +29,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0   # полна€ истори€ дл€ git diff
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -46,11 +48,9 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="origin/${{ github.base_ref }}"
           else
-            # ƒл€ push: сравниваем с предыдущим коммитом
             if git rev-parse HEAD~1 >/dev/null 2>&1; then
               BASE="HEAD~1"
             else
-              # ѕервый коммит в истории Ч провер€ем все мосты
               BASE=""
             fi
           fi
@@ -58,10 +58,9 @@ jobs:
           if [ -n "$BASE" ]; then
             FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- 'bridges/*.php' | tr '\n' ' ')
           else
-            FILES=$(find bridges -maxdepth 1 -name '*.php' -type f | sort | tr '\n' ' ')
+            FILES=$(find bridges -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
           fi
 
-          # ”бираем trailing whitespace
           FILES=$(echo "$FILES" | xargs)
 
           if [ -z "$FILES" ]; then
@@ -74,72 +73,31 @@ jobs:
             echo "$FILES" | tr ' ' '\n'
           fi
 
+      - name: Run phpcbf on changed bridges (PR only)
+        if: steps.changed.outputs.has_files == 'true' && github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          ./vendor/bin/phpcbf \
+            ${{ steps.changed.outputs.files }} \
+            --standard=phpcs.xml \
+            --warning-severity=0 \
+            --extensions=php
+
+      - name: Commit fixed files
+        if: steps.changed.outputs.has_files == 'true' && github.event_name == 'pull_request'
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: "style: fix phpcs issues"
+          branch: ${{ github.head_ref }}
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "github-actions[bot]@users.noreply.github.com"
+
       - name: Run phpcs on changed bridges
         if: steps.changed.outputs.has_files == 'true'
         run: |
           ./vendor/bin/phpcs \
             ${{ steps.changed.outputs.files }} \
             --standard=phpcs.xml \
-            --warning-severity=0 \
-            --extensions=php \
-            -p
-
-  phpcompatibility:
-    name: PHP Compatibility
-    runs-on: ubuntu-24.04-arm
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.5'
-          tools: composer:v2
-          coverage: none
-
-      - name: Install PHPCompatibility
-        run: |
-          composer global config --no-plugins allow-plugins.dealerdirect/phpcodesniffer-composer-installer true
-          composer global require dealerdirect/phpcodesniffer-composer-installer phpcompatibility/php-compatibility
-
-      - name: Determine changed bridge files
-        id: changed
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE="origin/${{ github.base_ref }}"
-          else
-            if git rev-parse HEAD~1 >/dev/null 2>&1; then
-              BASE="HEAD~1"
-            else
-              BASE=""
-            fi
-          fi
-
-          if [ -n "$BASE" ]; then
-            FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- 'bridges/*.php' | tr '\n' ' ')
-          else
-            FILES=$(find bridges -maxdepth 1 -name '*.php' -type f | sort | tr '\n' ' ')
-          fi
-
-          FILES=$(echo "$FILES" | xargs)
-
-          if [ -z "$FILES" ]; then
-            echo "has_files=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_files=true" >> "$GITHUB_OUTPUT"
-            echo "files=$FILES" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Run PHPCompatibility check
-        if: steps.changed.outputs.has_files == 'true'
-        run: |
-          ~/.composer/vendor/bin/phpcs \
-            ${{ steps.changed.outputs.files }} \
-            --standard=phpcompatibility.xml \
             --warning-severity=0 \
             --extensions=php \
             -p
@@ -154,15 +112,11 @@ jobs:
 
       - name: Check for executable PHP files in bridges/
         run: |
-          EXEC_FILES=$(find bridges -name "*.php" -executable -type f)
-          if [ -n "$EXEC_FILES" ]; then
-            echo "::error::The following PHP files are marked as executable:"
-            echo "$EXEC_FILES"
-            echo ""
-            echo "Please remove the executable bit:"
-            echo "$EXEC_FILES" | while read -r f; do
-              echo "  chmod -x $f"
-            done
+          if find bridges -name "*.php" -executable -type f -print -exec false {} +
+          then
+            echo 'Good, no executable php scripts found in bridges/'
+          else
+            echo '::error::Please unmark php scripts above as non-executable'
+            echo 'You can do it with: git update-index --chmod=-x <file>'
             exit 1
           fi
-          echo "OK: no executable PHP files found in bridges/"

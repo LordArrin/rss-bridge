@@ -6,7 +6,7 @@ class Telegram2Bridge extends BridgeAbstract
 {
     const NAME = 'Telegram2';
     const URI = 'https://t.me';
-    const DESCRIPTION = 'Returns the recent publications from a public Telegram channel. Supports embedded media contens and socks proxy, hides ads and unsupported content.';
+    const DESCRIPTION = 'Returns the recent publications from a public Telegram channel. Supports embedded media content and socks proxy, hides ads and unsupported content.';
     const MAINTAINER = 'LordArrin';
     const CACHE_TIMEOUT = 3600;
 

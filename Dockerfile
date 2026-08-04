@@ -1,9 +1,15 @@
-FROM alpine:latest AS rssbridge
+ARG ALPINE_VERSION=3.24
+FROM alpine:${ALPINE_VERSION}
+
+ARG IMAGE_VERSION=1.0.5
+ARG CURL_IMPERSONATE_VERSION=1.5.6
 
 LABEL org.opencontainers.image.title="RSS Bridge" \
       org.opencontainers.image.description="RSS-Bridge - generate feeds for websites that don't have one" \
-      org.opencontainers.image.version="1.0.3" \
+      org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.source="https://github.com/LordArrin/rss-bridge"
+
+ENV CURL_IMPERSONATE=firefox147
 
 RUN set -xe && \
     apk add --no-cache \
@@ -49,9 +55,6 @@ RUN set -xe && \
     rm -f /etc/php85/php-fpm.d/www.conf && \
     mkdir -p /run/php85 /app/cache && \
     chown nginx:nginx /run/php85 /app/cache
-
-# Browser fingerprint 
-ENV CURL_IMPERSONATE=firefox147
 
 RUN ln -sfT /dev/stderr /var/log/nginx/error.log && \
     ln -sfT /dev/stdout /var/log/nginx/access.log
