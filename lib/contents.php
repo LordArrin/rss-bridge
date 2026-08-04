@@ -283,7 +283,7 @@ function getProtectedContents(string $url, array $options = []): string
         if ($proxy instanceof DirectProxy) {
             throwClientException(
                 "Failed to fetch {$url}: " . $e->getMessage() . "\n\n" .
-                "If this site is protected by Cloudflare, configure [browser_proxy]:\n" .
+                "If this site is protected by Cloudflare, configure [browser_proxy]:\n"
             );
         }
         
