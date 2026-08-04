@@ -2,56 +2,72 @@
 
 declare(strict_types=1);
 
+/**
+ * TgWSProxy — SOCKS5 proxy for Telegram via tg-ws-proxy-docker.
+ * 
+ * Uses getContents() with CURLOPT_PROXY in the same format as legacy code:
+ * "socks5h://user:pass@host:port" — this works with curl-impersonate.
+ */
 class TgWSProxy extends ProxyAbstract
 {
     private const TG_HOSTS_PATTERN = '/\.(?:t\.me|telegram\.org|telesco\.pe|telegram\.me)$/i';
 
-    private ?string $socksUrl = null;
-    private ?string $socksUser = null;
-    private ?string $socksPass = null;
-    private int $connectTimeout = 30;
-    private int $requestTimeout = 120;
+    private ?string $proxyUrl = null;
 
     protected function initialize(): void
     {
-        $this->socksUrl = $this->config['socks_url'] ?? null;
-        $this->socksUser = !empty($this->config['socks_user']) ? $this->config['socks_user'] : null;
-        $this->socksPass = !empty($this->config['socks_pass']) ? $this->config['socks_pass'] : null;
-        $this->connectTimeout = (int)($this->config['connect_timeout'] ?? 30);
-        $this->requestTimeout = (int)($this->config['request_timeout'] ?? 120);
+        $socksUrl = $this->config['socks_url'] ?? '';
         
-        $this->timeout = $this->requestTimeout + 10;
-        $this->maxRetries = (int)($this->config['retries'] ?? 3);
+        // If socks_url already contains full URL with credentials, use as-is
+        if (preg_match('#^socks5h?://#', $socksUrl)) {
+            $this->proxyUrl = $socksUrl;
+        } else {
+            // Build URL from separate fields
+            $user = $this->config['socks_user'] ?? '';
+            $pass = $this->config['socks_pass'] ?? '';
+            $auth = '';
+            
+            if ($user !== '' && $pass !== '') {
+                $auth = $user . ':' . $pass . '@';
+            } elseif ($user !== '') {
+                $auth = $user . '@';
+            }
+            
+            // Extract host:port from socks_url if it's just host:port
+            $hostPort = $socksUrl;
+            if (preg_match('#(?:socks5h?://)?([^/]+)$#', $socksUrl, $m)) {
+                $hostPort = $m[1];
+            }
+            
+            $this->proxyUrl = 'socks5h://' . $auth . $hostPort;
+        }
+        
+        $this->log('info', sprintf(
+            "TgWSProxy initialized: %s",
+            preg_replace('#://([^:@]+):([^@]+)@#', '://***:***@', $this->proxyUrl ?? 'null')
+        ));
     }
 
     public function getName(): string
     {
-        return 'TgWS (SOCKS5 via Cloudflare Worker)';
+        return 'TgWS (SOCKS5)';
     }
 
     public function isAvailable(): bool
     {
-        if (empty($this->socksUrl)) {
+        if (!$this->proxyUrl) {
             return false;
         }
 
         try {
-            $ch = curl_init('https://t.me/');
-            curl_setopt_array($ch, $this->buildCurlOptions([
+            $opts = [
+                CURLOPT_PROXY => $this->proxyUrl,
                 CURLOPT_NOBODY => true,
                 CURLOPT_TIMEOUT => 10,
                 CURLOPT_CONNECTTIMEOUT => 5,
-            ]));
+            ];
             
-            curl_exec($ch);
-            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $errno = curl_errno($ch);
-            
-            if ($errno !== 0 || $code >= 500) {
-                $this->log('warning', "TgWS proxy unavailable: errno={$errno}, http={$code}");
-                return false;
-            }
-            
+            getContents('https://t.me/', [], $opts);
             return true;
         } catch (\Throwable $e) {
             $this->log('warning', 'TgWS availability check failed: ' . $e->getMessage());
@@ -63,20 +79,23 @@ class TgWSProxy extends ProxyAbstract
     {
         $useProxy = $this->shouldUseProxy($url);
         
-        $curlOptions = $this->buildCurlOptions([
-            CURLOPT_CONNECTTIMEOUT => (int)(($options['connect_timeout'] ?? $this->connectTimeout)),
-            CURLOPT_TIMEOUT        => (int)(($options['timeout'] ?? $this->requestTimeout)),
-        ], $useProxy);
+        $curlOpts = [
+            CURLOPT_CONNECTTIMEOUT => (int)($options['connect_timeout'] ?? $this->config['connect_timeout'] ?? 30),
+            CURLOPT_TIMEOUT        => (int)($options['timeout'] ?? $this->config['request_timeout'] ?? 120),
+        ];
         
-        $headers = $options['headers'] ?? [];
+        if ($useProxy && $this->proxyUrl) {
+            $curlOpts[CURLOPT_PROXY] = $this->proxyUrl;
+        }
         
         try {
-            return (string) getContents($url, $headers, $curlOptions);
+            return (string) getContents($url, [], $curlOpts);
         } catch (\Throwable $e) {
-            throw new \RuntimeException(
-                "TgWS request failed for {$url} (proxy=" . ($useProxy ? 'yes' : 'no') . "): " . 
+            throw new \RuntimeException(sprintf(
+                "TgWS request failed for %s: %s",
+                $url,
                 $e->getMessage()
-            );
+            ));
         }
     }
 
@@ -84,14 +103,18 @@ class TgWSProxy extends ProxyAbstract
     {
         $useProxy = $this->shouldUseProxy($url);
         
-        $curlOptions = $this->buildCurlOptions([
-            CURLOPT_CONNECTTIMEOUT => (int)($options['connect_timeout'] ?? $this->connectTimeout),
-            CURLOPT_TIMEOUT        => (int)($options['timeout'] ?? $this->requestTimeout),
-        ], $useProxy);
+        $curlOpts = [
+            CURLOPT_CONNECTTIMEOUT => (int)($options['connect_timeout'] ?? $this->config['connect_timeout'] ?? 30),
+            CURLOPT_TIMEOUT        => (int)($options['timeout'] ?? $this->config['request_timeout'] ?? 120),
+        ];
+        
+        if ($useProxy && $this->proxyUrl) {
+            $curlOpts[CURLOPT_PROXY] = $this->proxyUrl;
+        }
         
         try {
             /** @var \Response $response */
-            $response = getContents($url, [], $curlOptions, true);
+            $response = getContents($url, [], $curlOpts, true);
             
             $body = $response->getBody();
             $headers = $response->getHeaders();
@@ -104,9 +127,11 @@ class TgWSProxy extends ProxyAbstract
             
             return ['body' => $body, 'type' => $type];
         } catch (\Throwable $e) {
-            throw new \RuntimeException(
-                "TgWS binary fetch failed for {$url}: " . $e->getMessage()
-            );
+            throw new \RuntimeException(sprintf(
+                "TgWS binary fetch failed for %s: %s",
+                $url,
+                $e->getMessage()
+            ));
         }
     }
 
@@ -118,22 +143,6 @@ class TgWSProxy extends ProxyAbstract
         }
         
         return (bool)preg_match(self::TG_HOSTS_PATTERN, $host);
-    }
-
-    private function buildCurlOptions(array $extra = [], bool $useProxy = true): array
-    {
-        $options = $extra;
-        
-        if ($useProxy && $this->socksUrl) {
-            $options[CURLOPT_PROXY] = $this->socksUrl;
-            $options[CURLOPT_PROXYTYPE] = CURLPROXY_SOCKS5_HOSTNAME;
-            
-            if ($this->socksUser !== null && $this->socksPass !== null) {
-                $options[CURLOPT_PROXYUSERPWD] = $this->socksUser . ':' . $this->socksPass;
-            }
-        }
-        
-        return $options;
     }
 
     protected function executeRequest(string $method, string $url, array $payload, array $headers): array

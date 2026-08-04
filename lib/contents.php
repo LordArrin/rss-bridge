@@ -248,6 +248,70 @@ function getSimpleHTMLDOMCached(
         $defaultSpanText
     );
 }
+/**
+ * Retrieves HTML via a named proxy profile.
+ *
+ * @param string $url URL for request
+ * @param string $profileName Profile name from config.ini.php (e.g. 'flaresolverr', 'tgws', 'direct')
+ * @param array $options Options: cookies, timeout, wait, use_cache, cache_ttl
+ * @return string HTML content
+ */
+function getProtectedContents(string $url, string $profileName, array $options = []): string
+{
+    $proxy = ProxyFactory::safeFromProfile($profileName);
+
+    try {
+        return $proxy->getHtml($url, $options);
+    } catch (\Throwable $e) {
+        if ($proxy instanceof DirectProxy) {
+            throwClientException(
+                "Failed to fetch {$url} via DirectProxy: " . $e->getMessage() . "\n\n" .
+                "If this site is protected by Cloudflare, configure a profile in config.ini.php:\n\n" .
+                "  [proxy_profile_flaresolverr]\n" .
+                "  type = \"FlareSolverr\"\n" .
+                "  url = \"http://localhost:8191\""
+            );
+        }
+        throwClientException("Proxy profile '{$profileName}' failed: " . $e->getMessage());
+    }
+}
+
+/**
+ * Retrieves HTML via a named proxy profile as a simple_html_dom object.
+ *
+ * @param string $url URL for request
+ * @param string $profileName Profile name from config.ini.php
+ * @param array $options Options: cookies, timeout, wait, use_cache, cache_ttl
+ * @return \simple_html_dom
+ */
+function getProtectedSimpleHTMLDOM(string $url, string $profileName, array $options = []): \simple_html_dom
+{
+    $html = getProtectedContents($url, $profileName, $options);
+
+    if (empty($html)) {
+        throwClientException(
+            "Proxy profile '{$profileName}' returned empty HTML for: {$url}"
+        );
+    }
+
+    $dom = str_get_html($html);
+    if (!$dom) {
+        throwClientException(
+            "Failed to parse HTML from proxy profile '{$profileName}' for: {$url}"
+        );
+    }
+
+    return $dom;
+}
+
+/**
+ * Retrieves binary content (images, videos, etc.) via a named proxy profile.
+ *
+ * @param string $url URL for request
+ * @param string $profileName Profile name from config.ini.php
+ * @param array $options Options: timeout, connect_timeout
+ * @return array{body: string, type: string}|null
+ */
 function getProtectedBinary(string $url, string $profileName, array $options = []): ?array
 {
     try {
@@ -259,78 +323,16 @@ function getProtectedBinary(string $url, string $profileName, array $options = [
         }
         return null;
     }
-    
-    $proxyName = $proxy->getName();
-    
+
     try {
         return $proxy->getBinary($url, $options);
     } catch (\Throwable $e) {
         global $container;
         if (isset($container['logger'])) {
-            $container['logger']->error(
-                "Proxy [{$proxyName}] failed to fetch binary {$url}: " . $e->getMessage()
+            $container['logger']->warning(
+                "Proxy [{$proxy->getName()}] failed to fetch binary {$url}: " . $e->getMessage()
             );
         }
         return null;
     }
-}
-/**
- * Retrieves HTML via a browser proxy (FlareSolverr, Camoufox, Direct).
- *
- * IMPORTANT: This function uses the [browser_proxy] section from config.ini.php,
- * rather than the standard [proxy]. This allows you to use both proxy types simultaneously:
- * - [proxy] for a regular HTTP proxy (e.g., SOCKS5)
- * - [browser_proxy] for an anti-bot proxy (FlareSolverr)
- *
- * @param string $url URL for request
- * @param array $options Options: cookies, timeout, wait, use_cache, cache_ttl
- * @return string HTML content
- * @throws \Exception If the proxy is not configured or the request fails
- */
-function getProtectedContents(string $url, string $profileName, array $options = []): string
-{
-    $proxy = ProxyFactory::safeFromProfile($profileName);
-
-    try {
-        return $proxy->getHtml($url, $options);
-    } catch (\RuntimeException $e) {
-        $message = $e->getMessage();
-        
-        if ($proxy instanceof DirectProxy && stripos($message, 'invalid response') !== false) {
-            throwClientException(
-                "Site '{$url}' is protected by Cloudflare or similar anti-bot system.\n\n" .
-                "Configure a browser proxy profile in config.ini.php:\n\n" .
-                "  [proxy_profile_flaresolverr]\n" .
-                "  type = \"FlareSolverr\"\n" .
-                "  url = \"http://localhost:8191\"\n\n" .
-                "Then use profile 'flaresolverr' in your bridge.\n\n" .
-                "Original error: {$message}"
-            );
-        }
-        
-        throwClientException("Proxy profile '{$profileName}' failed: {$message}");
-    }
-}
-/**
- * Retrieves HTML via proxy as a simple_html_dom object
- */
-function getProtectedSimpleHTMLDOM(string $url, string $profileName, array $options = []): \simple_html_dom
-{
-    $html = getProtectedContents($url, $profileName, $options);
-    
-    if (empty($html)) {
-        throwClientException(
-            "Proxy profile '{$profileName}' returned empty HTML for: {$url}"
-        );
-    }
-    
-    $dom = str_get_html($html);
-    
-    if (!$dom) {
-        throwClientException(
-            "Failed to parse HTML from proxy profile '{$profileName}' for: {$url}"
-        );
-    }
-    
-    return $dom;
 }

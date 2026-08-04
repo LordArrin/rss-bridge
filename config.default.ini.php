@@ -34,8 +34,8 @@ url = ""
 name = "Hidden proxy name"
 by_bridge = false
 
-[browser_proxy]
-# Nothing specified - DirectProxy will be used
+[proxy_profile_direct]
+type = "Direct"
 
 [logging]
 ; Disabled — errors captured by PHP-FPM error_log > docker logs
@@ -88,6 +88,9 @@ port = 11211
 
 [TelegramBridge]
 max_pages = 20
+
+[Telegram2Bridge]
+embed_max_size = 20m
 
 [DiscogsBridge]
 personal_access_token = ""
