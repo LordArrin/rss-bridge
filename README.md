@@ -9,7 +9,7 @@ Requires PHP 8.5.
 [![LICENSE](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Docker Image](https://img.shields.io/badge/docker-lordarrin%2Frss--bridge-blue.svg?logo=docker)](https://hub.docker.com/r/lordarrin/rss-bridge)
 
-## A subset of bridges (15/447)
+## A subset of bridges (15/524)
 
 * `CssSelectorBridge`: [Scrape out a feed using CSS selectors](https://rss-bridge.org/bridge01/#bridge-CssSelectorBridge)
 * `FeedMergeBridge`: [Combine multiple feeds into one](https://rss-bridge.org/bridge01/#bridge-FeedMergeBridge)
