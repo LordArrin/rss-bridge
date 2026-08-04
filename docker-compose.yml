@@ -5,7 +5,7 @@ services:
     volumes:
       - /home/user/rssbridge/config:/config
     ports:
-      - "80:80"
+      - "3000:80"
     restart: unless-stopped
     deploy:
       resources:
