@@ -1,4 +1,4 @@
-![RSS-Bridge](static/not_boring_logo.png)
+![RSS-Bridge](static/not_boring_logo_blank.png)
 
 RSS-Bridge is a PHP web application.
 
