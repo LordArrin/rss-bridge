@@ -47,8 +47,6 @@ Browse http://localhost:3000/
 ### Docker Compose
 
 ```yaml
-version: "3.8"
-
 services:
   rss-bridge:
     image: lordarrin/rss-bridge
