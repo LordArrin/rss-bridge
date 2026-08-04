@@ -77,11 +77,13 @@ jobs:
         if: steps.changed.outputs.has_files == 'true' && github.event_name == 'pull_request'
         continue-on-error: true
         run: |
-          ./vendor/bin/phpcbf \
-            ${{ steps.changed.outputs.files }} \
-            --standard=phpcs.xml \
-            --warning-severity=0 \
-            --extensions=php
+          echo "Attempting to fix files: ${{ steps.changed.outputs.files }}"
+          ./vendor/bin/phpcbf ${{ steps.changed.outputs.files }} --standard=phpcs.xml --extensions=php -v || echo "phpcbf exited with code $?"
+          
+          echo "Git status after phpcbf:"
+          git status
+          echo "Git diff stat:"
+          git diff --stat
 
       - name: Commit fixed files
         if: steps.changed.outputs.has_files == 'true' && github.event_name == 'pull_request'
@@ -91,6 +93,7 @@ jobs:
           branch: ${{ github.head_ref }}
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_options: '--no-verify'
 
       - name: Run phpcs on changed bridges
         if: steps.changed.outputs.has_files == 'true'
