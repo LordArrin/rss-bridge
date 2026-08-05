@@ -2,6 +2,46 @@
 
 declare(strict_types=1);
 
+enum VkApiError: int
+{
+    case UnknownMethod = 3;
+    case RateLimit = 6;
+    case CaptchaNeeded = 14;
+    case AccessDenied = 15;
+    case UserDeleted = 18;
+    case RateLimitExtended = 29;
+}
+
+enum VkBridgeError: string
+{
+    case OwnerNotFound = 'owner_not_found';
+    case InvalidApiResponse = 'invalid_api_response';
+    case MissingAccessToken = 'missing_access_token';
+    case InvalidJson = 'invalid_json';
+    case ApiError = 'api_error';
+    case NoPostsFound = 'no_posts_found';
+    case CaptchaNeeded = 'captcha_needed';
+    case AccessDenied = 'access_denied';
+    case UserDeleted = 'user_deleted';
+    case UnknownMethod = 'unknown_method';
+
+    public function message(): string
+    {
+        return match ($this) {
+            self::OwnerNotFound => 'Could not detect owner id. Check the short name.',
+            self::InvalidApiResponse => 'Invalid API response from',
+            self::MissingAccessToken => 'Access token is required.',
+            self::InvalidJson => 'Invalid JSON response from VK API.',
+            self::ApiError => 'API returned error:',
+            self::NoPostsFound => 'Feed is empty:',
+            self::CaptchaNeeded => 'Captcha required:',
+            self::AccessDenied => 'Access denied. The wall or group might be private.',
+            self::UserDeleted => 'User was deleted or banned.',
+            self::UnknownMethod => 'Unknown API method.',
+        };
+    }
+}
+
 class Vk2Bridge extends BridgeAbstract
 {
     const NAME = 'VK';
@@ -10,44 +50,31 @@ class Vk2Bridge extends BridgeAbstract
     const MAINTAINER = 'LordArrin';
     const CACHE_TIMEOUT = 900;
 
-    private const VK_API_VER = 5.199;
-    private const VK_API_MAX_COUNT = 100;
-    private const DEFAULT_POST_LIMIT = 20;
-    private const MAX_TITLE_LENGTH = 60;
-    private const MAX_PREVIEW_LENGTH = 200;
-    private const MIN_TITLE_SPACE_POS = 30;
-    private const MAX_PAGES = 5;
-    private const MAX_RETRIES = 3;
-    private const RETRY_DELAY_US = 500_000;
+    private const float VK_API_VER = 5.199;
+    private const int VK_API_MAX_COUNT = 100;
+    private const int DEFAULT_POST_LIMIT = 20;
+    private const int MAX_TITLE_LENGTH = 60;
+    private const int MAX_PREVIEW_LENGTH = 200;
+    private const int MIN_TITLE_SPACE_POS = 30;
+    private const int MAX_PAGES = 5;
+    private const int MAX_RETRIES = 3;
+    private const int RETRY_DELAY_US = 500_000;
 
-    private const URL_REGEX = '/^https?:\/\/(?:www\.|m\.)?vk\.ru\/([a-zA-Z0-9_.]+)\/?$/i';
+    private const string URL_REGEX = '/^https?:\/\/(?:www\.|m\.)?vk\.ru\/([a-zA-Z0-9_.]+)\/?$/i';
 
-    private const SYSTEM_PAGES = [
+    private const array SYSTEM_PAGES = [
         'video', 'audio', 'photos', 'messages', 'feed', 'friends', 'groups', 'settings',
         'login', 'reg', 'restore', 'im', 'mail', 'news', 'search', 'apps', 'games',
         'gifts', 'support', 'write', 'wall', 'board', 'albums', 'docs', 'topics',
         'public', 'event', 'market', 'contacts', 'about', 'reviews', 'edit',
     ];
 
-    private const ERROR_MESSAGES = [
-        'owner_not_found' => 'Could not detect owner id. Check the short name.',
-        'invalid_api_response' => 'Invalid API response from',
-        'missing_access_token' => 'Access token is required.',
-        'invalid_json' => 'Invalid JSON response from VK API.',
-        'api_error' => 'API returned error:',
-        'no_posts_found' => 'Feed is empty:',
-        'captcha_needed' => 'Captcha required:',
-        'access_denied' => 'Access denied. The wall or group might be private.',
-        'user_deleted' => 'User was deleted or banned.',
-        'unknown_method' => 'Unknown API method.',
-    ];
-
-    private const RATE_LIMIT_ERRORS = [
+    private const array RATE_LIMIT_DELAYS = [
         6 => 15,
         29 => 1800,
     ];
 
-    private const CSS = [
+    private const array CSS = [
         'poll'     => 'background:#f9f9f9;padding:15px;margin:10px 0;border-left:4px solid #4a76a8',
         'poll_t'   => 'margin:0 0 10px 0;font-weight:bold',
         'poll_o'   => 'margin:8px 0',
@@ -89,15 +116,15 @@ class Vk2Bridge extends BridgeAbstract
         'https://vk.ru/rebel_jack' => ['u' => 'rebel_jack'],
     ];
 
-    protected array $ownerNames = [];
-    protected ?string $pageName = null;
-    protected ?string $iconUrl = null;
-    protected array $photoDescriptions = [];
+    private array $ownerNames = [];
+    private ?string $pageName = null;
+    private ?string $iconUrl = null;
+    private array $photoDescriptions = [];
 
     public function getURI(): string
     {
         $u = $this->getInput('u');
-        return !empty($u) ? static::URI . '/' . $u : parent::getURI();
+        return $u !== null && $u !== '' ? static::URI . '/' . $u : parent::getURI();
     }
 
     public function getName(): string
@@ -107,19 +134,19 @@ class Vk2Bridge extends BridgeAbstract
 
     public function getIcon(): string
     {
-        return $this->iconUrl ? $this->proxyImage($this->iconUrl) : parent::getIcon();
+        return $this->iconUrl !== null ? $this->proxyImage($this->iconUrl) : parent::getIcon();
     }
 
-    public function detectParameters($url): ?array
+    public function detectParameters(string $url): ?array
     {
-        if (preg_match(self::URL_REGEX, $url, $m)) {
-            $name = strtolower($m[1]);
-            if (in_array($name, self::SYSTEM_PAGES, true)) {
-                return null;
-            }
-            return ['u' => $m[1]];
+        if (!preg_match(self::URL_REGEX, $url, $m)) {
+            return null;
         }
-        return null;
+        $name = strtolower($m[1]);
+        if (in_array($name, self::SYSTEM_PAGES, true)) {
+            return null;
+        }
+        return ['u' => $m[1]];
     }
 
     public function collectData(): void
@@ -129,8 +156,9 @@ class Vk2Bridge extends BridgeAbstract
         }
 
         $ownerId = $this->detectOwnerId($this->getInput('u'));
-        $targetCount = max(1, min(self::VK_API_MAX_COUNT, (int)($this->getInput('limit') ?: self::DEFAULT_POST_LIMIT)));
-        $hideReposts = (bool)$this->getInput('hide_reposts');
+        $limitInput = $this->getInput('limit');
+        $targetCount = max(1, min(self::VK_API_MAX_COUNT, (int) ($limitInput ?: self::DEFAULT_POST_LIMIT)));
+        $hideReposts = (bool) $this->getInput('hide_reposts');
         $filteredPosts = [];
         $offset = 0;
 
@@ -146,13 +174,13 @@ class Vk2Bridge extends BridgeAbstract
             ]);
 
             if (!isset($r['response']['items'])) {
-                $this->handleError('invalid_api_response', 'wall.get');
+                $this->handleError(VkBridgeError::InvalidApiResponse, 'wall.get');
             }
 
             $this->cacheOwnerData($r['response'], $ownerId);
             $items = $r['response']['items'];
 
-            if (empty($items)) {
+            if ($items === []) {
                 break;
             }
 
@@ -180,9 +208,11 @@ class Vk2Bridge extends BridgeAbstract
             }
         }
 
-        if (empty($filteredPosts)) {
-            $reason = $hideReposts ? 'No original posts found after filtering reposts.' : 'No posts found in the feed.';
-            $this->handleError('no_posts_found', $reason);
+        if ($filteredPosts === []) {
+            $reason = $hideReposts
+                ? 'No original posts found after filtering reposts.'
+                : 'No posts found in the feed.';
+            $this->handleError(VkBridgeError::NoPostsFound, $reason);
         }
 
         $this->generateFeed(array_slice($filteredPosts, 0, $targetCount), $ownerId);
@@ -190,18 +220,21 @@ class Vk2Bridge extends BridgeAbstract
 
     protected function getPostURI(array $post): string
     {
-        $r = 'https://vk.ru/wall' . ($post['owner_id'] ?? 0) . '_' . ($post['id'] ?? 0);
-        if (isset($post['reply_post_id'])) {
-            $threadId = $post['parents_stack'][0] ?? $post['reply_post_id'];
-            $r .= '?reply=' . ($post['id'] ?? 0) . '&thread=' . $threadId;
+        $uri = sprintf(
+            'https://vk.ru/wall%d_%d',
+            $post['owner_id'] ?? 0,
+            $post['id'] ?? 0
+        );
+        if (!isset($post['reply_post_id'])) {
+            return $uri;
         }
-        return $r;
+        $threadId = $post['parents_stack'][0] ?? $post['reply_post_id'];
+        return sprintf('%s?reply=%d&thread=%d', $uri, $post['id'] ?? 0, $threadId);
     }
 
     protected function generateContentFromPost(array $post, bool $extractTitle = true): string
     {
         $text = $post['text'] ?? '';
-
         if ($extractTitle) {
             [, $text] = $this->splitFirstLine($text);
         }
@@ -218,9 +251,7 @@ class Vk2Bridge extends BridgeAbstract
                 $placeholders,
                 $counter,
                 '/\[([^\]|]+)\|([^\]]+)\]/u',
-                function (array $m): string {
-                    return $this->resolveVkLink(trim($m[1]), $m[2]);
-                }
+                fn(array $m): string => $this->resolveVkLink(trim($m[1]), $m[2])
             );
 
             $text = $this->applyPlaceholders(
@@ -228,9 +259,7 @@ class Vk2Bridge extends BridgeAbstract
                 $placeholders,
                 $counter,
                 '/#([\p{L}0-9_]+(?:@[\p{L}0-9_.]+)?)/u',
-                function (array $m): string {
-                    return $this->safeLink('https://vk.ru/feed?q=%23' . urlencode($m[1]), '#' . $m[1]);
-                }
+                fn(array $m): string => $this->safeLink('https://vk.ru/feed?q=%23' . urlencode($m[1]), '#' . $m[1])
             );
 
             $text = $this->applyPlaceholders(
@@ -250,7 +279,7 @@ class Vk2Bridge extends BridgeAbstract
             );
 
             $ret = $this->e($text);
-            if (!empty($placeholders)) {
+            if ($placeholders !== []) {
                 $ret = str_replace(array_keys($placeholders), array_values($placeholders), $ret);
             }
             $ret = '<p>' . nl2br($ret) . '</p>';
@@ -268,28 +297,19 @@ class Vk2Bridge extends BridgeAbstract
         $type = $attachment['type'] ?? '';
         $d = $attachment[$type] ?? [];
 
-        switch ($type) {
-            case 'photo':
+        return match ($type) {
+            'photo' => (function () use ($d): string {
                 $key = ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0);
                 $alt = $d['text'] ?? ($this->photoDescriptions[$key] ?? '');
                 return "<p>{$this->image($this->getLargestImageUrl($d['sizes'] ?? []), $alt)}</p>";
-
-            case 'video':
-                return $this->renderVideo($d);
-
-            case 'clip':
-                return $this->renderClip($d);
-
-            case 'audio':
-                return $this->renderAudio($d);
-
-            case 'doc':
-                if (($d['ext'] ?? '') === 'gif') {
-                    return "<p>{$this->image($this->proxyImage($d['url'] ?? ''), $d['title'] ?? 'Document')}</p>";
-                }
-                return "<p>{$this->link($d['url'] ?? '#', 'Document: ' . ($d['title'] ?? 'Document'))}</p>";
-
-            case 'link':
+            })(),
+            'video' => $this->renderVideo($d),
+            'clip' => $this->renderClip($d),
+            'audio' => $this->renderAudio($d),
+            'doc' => (($d['ext'] ?? '') === 'gif')
+                ? "<p>{$this->image($this->proxyImage($d['url'] ?? ''), $d['title'] ?? 'Document')}</p>"
+                : "<p>{$this->link($d['url'] ?? '#', 'Document: ' . ($d['title'] ?? 'Document'))}</p>",
+            'link' => (function () use ($d): string {
                 $url = str_replace('https://m.vk.ru', 'https://vk.ru', $d['url'] ?? '#');
                 $normalized = $this->normalizePlaylistUrl($url);
                 $isPlaylist = $normalized !== $url;
@@ -297,98 +317,77 @@ class Vk2Bridge extends BridgeAbstract
                 $img = (!$isPlaylist && isset($d['photo']['sizes'])) ? $this->getLargestImageUrl($d['photo']['sizes']) : '';
                 $title = $isPlaylist ? 'Playlist: ' . ($d['title'] ?? $url) : ($d['title'] ?? $url);
                 return $this->renderLinkCard($url, $title, $img);
-
-            case 'note':
-                return $this->renderLinkCard($d['view_url'] ?? '#', $d['title'] ?? 'Note');
-
-            case 'poll':
-                return $this->renderPoll($d);
-
-            case 'album':
-                $url = 'https://vk.ru/album' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0);
-                return $this->renderLinkCard($url, 'Album: ' . ($d['title'] ?? ''), $this->getLargestImageUrl($d['thumb']['sizes'] ?? []));
-
-            case 'article':
-                return $this->renderLinkCard($d['view_url'] ?? '#', $d['title'] ?? 'Article', $this->getLargestImageUrl($d['photo']['sizes'] ?? []));
-
-            case 'wall':
-                return $this->renderWall($d);
-
-            case 'market':
+            })(),
+            'note' => $this->renderLinkCard($d['view_url'] ?? '#', $d['title'] ?? 'Note'),
+            'poll' => $this->renderPoll($d),
+            'album' => $this->renderLinkCard(
+                'https://vk.ru/album' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0),
+                'Album: ' . ($d['title'] ?? ''),
+                $this->getLargestImageUrl($d['thumb']['sizes'] ?? [])
+            ),
+            'article' => $this->renderLinkCard(
+                $d['view_url'] ?? '#',
+                $d['title'] ?? 'Article',
+                $this->getLargestImageUrl($d['photo']['sizes'] ?? [])
+            ),
+            'wall' => $this->renderWall($d),
+            'market' => (function () use ($d): string {
                 $price = $d['price']['text'] ?? '';
                 $display = $price !== '' ? ($d['title'] ?? 'Product') . ' - ' . $price : ($d['title'] ?? 'Product');
                 $img = ($d['thumb_photo'] ?? '') !== '' ? $this->proxyImage($d['thumb_photo']) : '';
                 return $this->renderLinkCard($d['url'] ?? '#', $display, $img);
-
-            case 'audio_playlist':
-                $url = 'https://vk.ru/music/playlist/' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0);
-                $title = 'Playlist: ' . ($d['title'] ?? '') . ' (' . ($d['count'] ?? 0) . ' tracks)';
-                return $this->renderLinkCard($url, $title);
-
-            case 'video_playlist':
-                $url = 'https://vk.ru/video/playlist/' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0);
-                return $this->renderLinkCard($url, 'Video playlist: ' . ($d['title'] ?? '') . ' (' . ($d['count'] ?? 0) . ')', $this->getLargestImageUrl($d['photo'] ?? []));
-
-            case 'podcast':
-                return $this->renderPodcast($d);
-
-            case 'event':
-                return $this->renderEvent($d);
-
-            case 'graffiti':
-                $url = $d['photo_586'] ?? $d['photo_200'] ?? '';
-                return $url !== '' ? "<p>{$this->image($this->proxyImage($url), 'Graffiti')}</p>" : '';
-
-            case 'group':
-                $url = ($d['screen_name'] ?? '') !== '' ? 'https://vk.ru/' . $d['screen_name'] : '#';
-                $img = $d['photo_200'] ?? $d['photo_100'] ?? $d['photo_50'] ?? '';
-                return $this->renderLinkCard($url, $d['name'] ?? 'Group', $img !== '' ? $this->proxyImage($img) : '');
-
-            case 'donut_link':
-                return $this->renderLinkCard($d['url'] ?? '#', $d['text'] ?? 'VK Donut');
-
-            case 'textlive':
-            case 'textpost':
-            case 'textpost_publish':
+            })(),
+            'audio_playlist' => $this->renderLinkCard(
+                'https://vk.ru/music/playlist/' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0),
+                'Playlist: ' . ($d['title'] ?? '') . ' (' . ($d['count'] ?? 0) . ' tracks)'
+            ),
+            'video_playlist' => $this->renderLinkCard(
+                'https://vk.ru/video/playlist/' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0),
+                'Video playlist: ' . ($d['title'] ?? '') . ' (' . ($d['count'] ?? 0) . ')',
+                $this->getLargestImageUrl($d['photo'] ?? [])
+            ),
+            'podcast' => $this->renderPodcast($d),
+            'event' => $this->renderEvent($d),
+            'graffiti' => (($url = $d['photo_586'] ?? $d['photo_200'] ?? '') !== '')
+                ? "<p>{$this->image($this->proxyImage($url), 'Graffiti')}</p>"
+                : '',
+            'group' => $this->renderLinkCard(
+                ($d['screen_name'] ?? '') !== '' ? 'https://vk.ru/' . $d['screen_name'] : '#',
+                $d['name'] ?? 'Group',
+                ($img = $d['photo_200'] ?? $d['photo_100'] ?? $d['photo_50'] ?? '') !== '' ? $this->proxyImage($img) : ''
+            ),
+            'donut_link' => $this->renderLinkCard($d['url'] ?? '#', $d['text'] ?? 'VK Donut'),
+            'textlive', 'textpost', 'textpost_publish' => (function () use ($d): string {
                 $preview = mb_substr($d['text'] ?? '', 0, self::MAX_PREVIEW_LENGTH);
                 $extra = $preview !== '' ? "<p><small>{$this->e($preview)}</small></p>" : '';
                 return $this->renderLinkCard($d['url'] ?? '#', $d['title'] ?? 'Text broadcast', '', $extra);
-
-            case 'situational_theme':
-                return $this->renderLinkCard($d['url'] ?? '#', $d['title'] ?? '');
-
-            case 'sticker':
-                return $this->renderSticker($d);
-
-            default:
-                return "<p>Unknown attachment type: {$this->e($type)}</p>";
-        }
+            })(),
+            'situational_theme' => $this->renderLinkCard($d['url'] ?? '#', $d['title'] ?? ''),
+            'sticker' => $this->renderSticker($d),
+            default => "<p>Unknown attachment type: {$this->e($type)}</p>",
+        };
     }
 
     protected function getTitle(array $post): string
     {
         [$title] = $this->splitFirstLine($post['text'] ?? '');
-
         if ($title !== '') {
             return $title;
         }
-
         foreach ($post['attachments'] ?? [] as $attachment) {
             $t = $this->getAttachmentTitle($attachment);
             if ($t !== '') {
                 return $t;
             }
         }
-
         return 'untitled';
     }
 
     protected function api(string $method, array $params, array $expectedErrorCodes = []): array
     {
         $accessToken = $this->getOption('access_token');
-
-        if (!$accessToken) {
-            $this->handleError('missing_access_token');
+        if ($accessToken === null || $accessToken === '') {
+            $this->handleError(VkBridgeError::MissingAccessToken);
         }
 
         $params['v'] = self::VK_API_VER;
@@ -404,13 +403,17 @@ class Vk2Bridge extends BridgeAbstract
                     $retryDelayUs *= 2;
                     continue;
                 }
-                $this->handleError('api_error', 'Network error: ' . $e->getMessage());
+                $this->handleError(VkBridgeError::ApiError, 'Network error: ' . $e->getMessage());
+            }
+
+            if (!json_validate($response)) {
+                $this->handleError(VkBridgeError::InvalidJson);
             }
 
             $r = json_decode($response, true);
 
             if (!is_array($r)) {
-                $this->handleError('invalid_json');
+                $this->handleError(VkBridgeError::InvalidJson);
             }
 
             if (!isset($r['error'])) {
@@ -418,39 +421,43 @@ class Vk2Bridge extends BridgeAbstract
             }
 
             $errorCode = $r['error']['error_code'] ?? 0;
+            $apiError = VkApiError::tryFrom($errorCode);
 
-            if ($errorCode === 6 && $attempt < self::MAX_RETRIES) {
+            if ($apiError === VkApiError::RateLimit && $attempt < self::MAX_RETRIES) {
                 usleep($retryDelayUs);
                 $retryDelayUs *= 2;
                 continue;
             }
 
-            if ($errorCode === 14) {
+            if ($apiError === VkApiError::CaptchaNeeded) {
                 $this->cache->set($this->getRateLimitCacheKey(), true, 300);
-                $this->handleError('captcha_needed', $r['error']['error_msg'] ?? 'Captcha needed');
+                $this->handleError(VkBridgeError::CaptchaNeeded, $r['error']['error_msg'] ?? 'Captcha needed');
             }
 
-            if ($errorCode === 15) {
-                $this->handleError('access_denied', $r['error']['error_msg'] ?? 'Access denied');
+            if ($apiError === VkApiError::AccessDenied) {
+                $this->handleError(VkBridgeError::AccessDenied, $r['error']['error_msg'] ?? 'Access denied');
             }
 
-            if ($errorCode === 18) {
-                $this->handleError('user_deleted', $r['error']['error_msg'] ?? 'User deleted or banned');
+            if ($apiError === VkApiError::UserDeleted) {
+                $this->handleError(VkBridgeError::UserDeleted, $r['error']['error_msg'] ?? 'User deleted or banned');
             }
 
-            if ($errorCode === 3) {
-                $this->handleError('unknown_method', $r['error']['error_msg'] ?? 'Unknown method');
+            if ($apiError === VkApiError::UnknownMethod) {
+                $this->handleError(VkBridgeError::UnknownMethod, $r['error']['error_msg'] ?? 'Unknown method');
             }
 
             if (in_array($errorCode, $expectedErrorCodes, true)) {
                 return $r;
             }
 
-            if (isset(self::RATE_LIMIT_ERRORS[$errorCode])) {
-                $this->cache->set($this->getRateLimitCacheKey(), true, self::RATE_LIMIT_ERRORS[$errorCode]);
+            if (isset(self::RATE_LIMIT_DELAYS[$errorCode])) {
+                $this->cache->set($this->getRateLimitCacheKey(), true, self::RATE_LIMIT_DELAYS[$errorCode]);
             }
 
-            $this->handleError('api_error', ($r['error']['error_msg'] ?? 'Unknown error') . " ({$errorCode})");
+            $this->handleError(
+                VkBridgeError::ApiError,
+                ($r['error']['error_msg'] ?? 'Unknown error') . " ({$errorCode})"
+            );
         }
 
         throw new \RuntimeException('VK API: max retries exceeded for ' . $method);
@@ -475,7 +482,7 @@ class Vk2Bridge extends BridgeAbstract
             }
 
             $fromId = $displayPost['from_id'] ?? $displayPost['owner_id'] ?? 0;
-            $author = ($fromId !== $ownerId) ? ($this->ownerNames[$fromId] ?? 'Unknown') : '';
+            $author = $fromId !== $ownerId ? ($this->ownerNames[$fromId] ?? 'Unknown') : '';
             $isDeleted = ($displayPost['is_deleted'] ?? false) === true;
 
             $content = $this->generateContentFromPost($displayPost, true);
@@ -489,7 +496,7 @@ class Vk2Bridge extends BridgeAbstract
                 'author' => $author,
                 'title' => ($isDeleted ? '[Deleted] ' : '') . $this->getTitle($displayPost),
                 'uri' => $uri,
-                'uid' => 'vk:wall' . ($displayPost['owner_id'] ?? 0) . '_' . ($displayPost['id'] ?? 0),
+                'uid' => sprintf('vk:wall%d_%d', $displayPost['owner_id'] ?? 0, $displayPost['id'] ?? 0),
             ];
 
             $this->cache->set($cacheKey, $item, self::CACHE_TIMEOUT);
@@ -519,11 +526,15 @@ class Vk2Bridge extends BridgeAbstract
             }
         }
 
-        if (empty($photoKeys)) {
+        if ($photoKeys === []) {
             return;
         }
 
-        $r = $this->api('photos.getById', ['photos' => implode(',', array_unique($photoKeys))], [100, 20, 15]);
+        $r = $this->api(
+            'photos.getById',
+            ['photos' => implode(',', array_unique($photoKeys))],
+            [VkApiError::RateLimit->value, VkApiError::RateLimitExtended->value]
+        );
 
         foreach ($r['response'] ?? [] as $photo) {
             $key = ($photo['owner_id'] ?? 0) . '_' . ($photo['id'] ?? 0);
@@ -541,7 +552,7 @@ class Vk2Bridge extends BridgeAbstract
         }
 
         foreach ($response['groups'] ?? [] as $group) {
-            $id = -(int)$group['id'];
+            $id = -(int) $group['id'];
             $this->ownerNames[$id] = $group['name'] ?? 'Unknown';
             if ($id === $ownerId) {
                 $this->iconUrl = $group['photo_200'] ?? $group['photo_100'] ?? $group['photo_50'] ?? $this->iconUrl;
@@ -559,7 +570,6 @@ class Vk2Bridge extends BridgeAbstract
         if (preg_match('/^(club|public)(\d+)$/', $u, $m)) {
             return -intval($m[2]);
         }
-
         if (preg_match('/^id(\d+)$/', $u, $m)) {
             return intval($m[1]);
         }
@@ -569,14 +579,14 @@ class Vk2Bridge extends BridgeAbstract
 
         if (is_array($cached) && isset($cached['ownerId'])) {
             $this->iconUrl = $cached['iconUrl'] ?? null;
-            return (int)$cached['ownerId'];
+            return (int) $cached['ownerId'];
         }
 
-        $r = $this->api('groups.getById', ['group_ids' => $u, 'fields' => 'photo_200,photo_100,photo_50'], [100]);
+        $r = $this->api('groups.getById', ['group_ids' => $u, 'fields' => 'photo_200,photo_100,photo_50'], [VkApiError::RateLimit->value]);
         $group = $r['response']['groups'][0] ?? $r['response'][0] ?? null;
 
         if ($group !== null && isset($group['id'])) {
-            $ownerId = -(int)$group['id'];
+            $ownerId = -(int) $group['id'];
             $this->iconUrl = $group['photo_200'] ?? $group['photo_100'] ?? $group['photo_50'] ?? null;
             $this->cache->set($cacheKey, ['ownerId' => $ownerId, 'iconUrl' => $this->iconUrl], 86400);
             return $ownerId;
@@ -591,13 +601,12 @@ class Vk2Bridge extends BridgeAbstract
             return $user['id'];
         }
 
-        $this->handleError('owner_not_found', "Short name '{$u}'");
+        $this->handleError(VkBridgeError::OwnerNotFound, "Short name '{$u}'");
     }
 
     private function renderVideo(array $d): string
     {
         $title = $d['title'] ?? 'Video';
-
         if (mb_stripos($title, 'Клип ') === 0) {
             return $this->renderClip($d);
         }
@@ -668,8 +677,8 @@ class Vk2Bridge extends BridgeAbstract
         $h .= '<p' . $s('poll_t') . '>Poll: ' . $this->e($d['question'] ?? '') . '</p>';
 
         foreach ($d['answers'] ?? [] as $a) {
-            $c = (int)($a['votes'] ?? 0);
-            $f = max(0.0, min(100.0, (float)($a['rate'] ?? 0)));
+            $c = (int) ($a['votes'] ?? 0);
+            $f = max(0.0, min(100.0, (float) ($a['rate'] ?? 0)));
             $fd = rtrim(rtrim(number_format($f, 1, '.', ''), '0'), '.');
             $h .= '<div' . $s('poll_o') . '>';
             $h .= '<span>' . $this->e($a['text'] ?? '') . '</span> ';
@@ -683,7 +692,7 @@ class Vk2Bridge extends BridgeAbstract
             $h .= '</div>';
         }
 
-        $h .= '<p' . $s('poll_f') . '>Total votes: ' . (int)($d['votes'] ?? 0);
+        $h .= '<p' . $s('poll_f') . '>Total votes: ' . (int) ($d['votes'] ?? 0);
         if (!empty($d['anonymous'])) {
             $h .= ' &#183; Anonymous';
         }
@@ -712,7 +721,7 @@ class Vk2Bridge extends BridgeAbstract
     private function renderSticker(array $d): string
     {
         $images = $d['images'] ?? [];
-        if (empty($images)) {
+        if ($images === []) {
             return '';
         }
         usort($images, fn($a, $b) => ($b['width'] ?? 0) <=> ($a['width'] ?? 0));
@@ -746,6 +755,7 @@ class Vk2Bridge extends BridgeAbstract
         foreach ($d['podcast_cover'] ?? [] as $img) {
             if (isset($img['url'])) {
                 $cover = $img['url'];
+                break;
             }
         }
 
@@ -767,7 +777,7 @@ class Vk2Bridge extends BridgeAbstract
         $type = $attachment['type'] ?? '';
         $d = $attachment[$type] ?? [];
 
-        $titles = [
+        return match ($type) {
             'video' => (mb_stripos($d['title'] ?? '', 'Клип ') === 0) ? 'Clip: ' . $this->cleanClipTitle($d['title']) : 'Video: ' . ($d['title'] ?? ''),
             'clip' => 'Clip: ' . $this->cleanClipTitle($d['title'] ?? ''),
             'audio' => 'Music: ' . ($d['artist'] ?? '') . ' - ' . ($d['title'] ?? ''),
@@ -786,14 +796,11 @@ class Vk2Bridge extends BridgeAbstract
             'graffiti' => 'Graffiti',
             'group' => 'Group: ' . ($d['name'] ?? ''),
             'donut_link' => 'VK Donut',
-            'textlive' => 'Text: ' . ($d['title'] ?? ''),
-            'textpost' => 'Text: ' . ($d['title'] ?? ''),
-            'textpost_publish' => 'Text: ' . ($d['title'] ?? ''),
+            'textlive', 'textpost', 'textpost_publish' => 'Text: ' . ($d['title'] ?? ''),
             'situational_theme' => $d['title'] ?? '',
             'sticker' => 'Sticker',
-        ];
-
-        return $titles[$type] ?? '';
+            default => '',
+        };
     }
 
     private function splitFirstLine(string $text): array
@@ -886,7 +893,7 @@ class Vk2Bridge extends BridgeAbstract
         if ($line === '') {
             return false;
         }
-        return (bool)preg_match('~^(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?)$~i', $line);
+        return (bool) preg_match('~^(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?)$~i', $line);
     }
 
     private function applyPlaceholders(string $text, array &$placeholders, int &$counter, string $pattern, callable $resolver): string
@@ -918,16 +925,20 @@ class Vk2Bridge extends BridgeAbstract
 
     private function getLargestImageUrl(array $sizes): string
     {
-        if (empty($sizes)) {
+        if ($sizes === []) {
             return '';
         }
-        usort($sizes, fn($a, $b) => ($b['width'] ?? 0) <=> ($a['width'] ?? 0));
-        return $this->proxyImage($sizes[0]['url'] ?? '');
+        $largest = array_reduce(
+            $sizes,
+            static fn(array $carry, array $item): array => ($item['width'] ?? 0) > ($carry['width'] ?? 0) ? $item : $carry,
+            []
+        );
+        return $this->proxyImage($largest['url'] ?? '');
     }
 
     private function e(?string $value): string
     {
-        return htmlspecialchars($value ?? '', ENT_QUOTES, 'UTF-8');
+        return htmlspecialchars($value ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
     private function safeLink(string $url, string $text = ''): string
@@ -970,9 +981,9 @@ class Vk2Bridge extends BridgeAbstract
         return 'vk2_rate_limit_' . md5($this->getOption('access_token') ?? '');
     }
 
-    private function handleError(string $code, string $details = ''): void
+    private function handleError(VkBridgeError $code, string $details = ''): never
     {
-        $message = self::ERROR_MESSAGES[$code] ?? 'Unknown error';
+        $message = $code->message();
         if ($details !== '') {
             $message .= ' ' . $details;
         }
