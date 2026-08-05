@@ -153,7 +153,7 @@ class Telegram2Bridge extends BridgeAbstract
         $done = false;
         $seen = [];
 
-        while ($pages < self::MAX_PAGES && !$done) {
+        while ($pages < self::MAX_PAGES && $done === false) {
             $pages++;
 
             if ($pages > 1) {
@@ -167,15 +167,18 @@ class Telegram2Bridge extends BridgeAbstract
 
             if ($this->feedName === '') {
                 $el = $dom->find('div.tgme_channel_info_header_title span', 0);
-                $this->feedName = htmlspecialchars_decode($el?->plaintext ?? '', ENT_QUOTES);
+                $this->feedName = htmlspecialchars_decode(
+                    (string)($el?->plaintext ?? ''),
+                    ENT_QUOTES
+                );
             }
 
-            if ($this->feedIcon === '' && !$this->getInput('use_proxy')) {
+            if ($this->feedIcon === '' && $this->getInput('use_proxy') === false) {
                 $this->feedIcon = $this->extractChannelIcon($dom);
             }
 
             $messages = $dom->find('div.tgme_widget_message_wrap.js-widget_message_wrap');
-            if ($this->feedName === '' && !$messages) {
+            if ($this->feedName === '' && $messages === []) {
                 throwClientException('Unable to find channel. The channel is non-existing or non-public.');
             }
 
@@ -185,48 +188,46 @@ class Telegram2Bridge extends BridgeAbstract
                     break;
                 }
 
-                if ($this->isAd($message)) {
+                if ($this->isAd($message) === true) {
                     continue;
                 }
 
                 $item = $this->parseMessage($message);
-                
-                // ¬ызываем detectNotSupported после parseMessage, как в оригинале
                 $notSupported = $this->detectNotSupported($message);
                 $hasContent = trim(strip_tags($item['content'])) !== ''
                     || trim($item['title']) !== '';
 
-                if (!$hasContent && $notSupported === null) {
+                if ($hasContent === false && $notSupported === null) {
                     continue;
                 }
 
-                if (!$hasContent && $this->getInput('skip_unsupported')) {
+                if ($hasContent === false && $this->getInput('skip_unsupported') === true) {
                     continue;
                 }
 
-                if ($notSupported !== null && $hasContent && $this->isShortPost($item)) {
+                if ($notSupported !== null && $hasContent === true && $this->isShortPost($item) === true) {
                     continue;
                 }
 
-                if ($notSupported !== null && !$this->getInput('skip_unsupported')) {
+                if ($notSupported !== null && $this->getInput('skip_unsupported') === false) {
                     $this->applyNotSupportedStub($item, $message, $notSupported, $hasContent);
                 }
 
-                if ($this->isBlocked($item, $message)) {
+                if ($this->isBlocked($item, $message) === true) {
                     continue;
                 }
 
                 $this->items[] = $item;
             }
 
-            if ($done) {
+            if ($done === true) {
                 break;
             }
 
             $more = $dom->find('> div.tgme_widget_message_centered.js-messages_more_wrap a', 0);
-            if ($more && str_contains($more->href, 'before')) {
-                $next = 'https://t.me' . $more->href;
-                if (isset($seen[$next])) {
+            if ($more !== null && str_contains((string)($more->href ?? ''), 'before') === true) {
+                $next = 'https://t.me' . (string)$more->href;
+                if (isset($seen[$next]) === true) {
                     break;
                 }
                 $seen[$next] = true;
@@ -239,31 +240,97 @@ class Telegram2Bridge extends BridgeAbstract
 
     public function getURI(): string
     {
-        if ($this->getInput('username')) {
+        if ($this->getInput('username') !== null) {
             return self::URI . '/s/' . $this->normalizeUsername();
         }
+
         return parent::getURI();
     }
 
     public function getName(): string
     {
-        return $this->feedName !== '' ? $this->feedName : parent::getName();
+        if ($this->feedName !== '') {
+            return $this->feedName;
+        }
+
+        return parent::getName();
     }
 
     public function getIcon(): string
     {
-        return $this->feedIcon !== '' ? $this->feedIcon : parent::getIcon();
+        if ($this->feedIcon !== '') {
+            return $this->feedIcon;
+        }
+
+        return parent::getIcon();
     }
 
     public function detectParameters($url): ?array
     {
         $re = '/^https?:\/\/(?:(?:t|telegram)\.me\/(?:s\/)?([\w]+)|([\w]+)\.t\.me\/?)$/';
-        if (preg_match($re, $url, $m)) {
+
+        if (preg_match($re, (string)$url, $m) === 1) {
             $username = $m[1] !== '' ? $m[1] : ($m[2] ?? '');
             if ($username !== '') {
                 return ['username' => $username];
             }
         }
+
+        return null;
+    }
+
+    private function fetchPage(string $url): ?\simple_html_dom
+    {
+        $useProxy = (bool) $this->getInput('use_proxy');
+
+        if ($useProxy === true) {
+            for ($i = 0; $i < self::PROXY_RETRIES; $i++) {
+                try {
+                    return getProtectedSimpleHTMLDOM($url, self::PROXY_PROFILE);
+                } catch (\Throwable $e) {
+                    $this->logger->warning(sprintf(
+                        'TgWSProxy page fetch failed (attempt %d/%d): %s Ч %s',
+                        $i + 1,
+                        self::PROXY_RETRIES,
+                        $url,
+                        $e->getMessage()
+                    ));
+
+                    if ($i < self::PROXY_RETRIES - 1) {
+                        usleep(($i + 1) * self::RETRY_BACKOFF_US);
+                    }
+                }
+            }
+
+            $this->logger->warning(sprintf(
+                'TgWSProxy exhausted for %s, falling back to direct HTTP',
+                $url
+            ));
+        }
+
+        return $this->fetchPageDirect($url);
+    }
+
+    private function fetchPageDirect(string $url): ?\simple_html_dom
+    {
+        for ($i = 0; $i < self::PROXY_RETRIES; $i++) {
+            try {
+                return getSimpleHTMLDOM($url);
+            } catch (\Exception $e) {
+                $this->logger->warning(sprintf(
+                    'Direct page fetch failed (attempt %d/%d): %s Ч %s',
+                    $i + 1,
+                    self::PROXY_RETRIES,
+                    $url,
+                    $e->getMessage()
+                ));
+
+                if ($i < self::PROXY_RETRIES - 1) {
+                    usleep(($i + 1) * self::RETRY_BACKOFF_US);
+                }
+            }
+        }
+
         return null;
     }
 
@@ -276,8 +343,8 @@ class Telegram2Bridge extends BridgeAbstract
         $item = [];
 
         $el = $message->find('a.tgme_widget_message_date', 0);
-        if ($el) {
-            $item['uri'] = $el->href;
+        if ($el !== null) {
+            $item['uri'] = (string)($el->href ?? '');
         }
 
         $item['content'] = $this->processContent($message);
@@ -288,14 +355,17 @@ class Telegram2Bridge extends BridgeAbstract
         }
 
         $el = $message->find('span.tgme_widget_message_meta time', 0);
-        if ($el?->datetime) {
-            $item['timestamp'] = $el->datetime;
+        if ($el !== null) {
+            $dt = (string)($el->datetime ?? '');
+            if ($dt !== '') {
+                $item['timestamp'] = $dt;
+            }
         }
 
         $item['content'] = $this->removeViewInTelegram($item['content']);
         $item['content'] = $this->normalizeText($item['content']);
 
-        if (!$this->getInput('hide_hashtags') && !empty($this->hashtags)) {
+        if ($this->getInput('hide_hashtags') === false && $this->hashtags !== []) {
             $item['categories'] = $this->hashtags;
         }
 
@@ -314,24 +384,27 @@ class Telegram2Bridge extends BridgeAbstract
         $html = '';
 
         $fwd = $messageDiv->find('div.tgme_widget_message_forwarded_from', 0);
-        if ($fwd) {
+        if ($fwd !== null) {
             $this->itemAuthor = $this->extractForwardedAuthor($fwd);
         }
 
         $reply = $messageDiv->find('a.tgme_widget_message_reply', 0);
-        if ($reply) {
+        if ($reply !== null) {
             $html .= $this->processReply($reply);
         }
 
-        $inner = $messageDiv->innertext;
+        $inner = (string)($messageDiv->innertext ?? '');
+
         $textPieces = [];
-        $mediaPieces = [];
 
         $textDiv = $messageDiv->find('div.tgme_widget_message_text.js-message_text', 0);
-        if ($textDiv) {
-            $pos = strpos($inner, $textDiv->outertext);
+        if ($textDiv !== null) {
+            $outer = (string)($textDiv->outertext ?? '');
+            $pos = strpos($inner, $outer);
             $textPieces[] = [$pos !== false ? $pos : PHP_INT_MAX, 'processText', $textDiv];
         }
+
+        $mediaPieces = [];
 
         $mediaMarkers = [
             'tgme_widget_message_sticker_wrap'  => 'processSticker',
@@ -344,15 +417,17 @@ class Telegram2Bridge extends BridgeAbstract
 
         foreach ($mediaMarkers as $marker => $method) {
             $el = $messageDiv->find('div.' . $marker, 0) ?: $messageDiv->find('a.' . $marker, 0);
-            if ($el) {
-                $pos = strpos($inner, $el->outertext);
+            if ($el !== null) {
+                $outer = (string)($el->outertext ?? '');
+                $pos = strpos($inner, $outer);
                 $mediaPieces[] = [$pos !== false ? $pos : PHP_INT_MAX, $method, $messageDiv];
             }
         }
 
-        $videoNotSupported = $messageDiv->find('a.tgme_widget_message_video_player.not_supported', 0) ?: $messageDiv->find('div.tgme_widget_message_video_player.not_supported', 0);
+        $videoNotSupported = $messageDiv->find('a.tgme_widget_message_video_player.not_supported', 0)
+            ?: $messageDiv->find('div.tgme_widget_message_video_player.not_supported', 0);
 
-        if (!$videoNotSupported && $messageDiv->find('video', 0)) {
+        if ($videoNotSupported === null && $messageDiv->find('video', 0) !== null) {
             $pos = strpos($inner, '<video');
             if ($pos !== false) {
                 $mediaPieces[] = [$pos, 'processVideo', $messageDiv];
@@ -364,9 +439,11 @@ class Telegram2Bridge extends BridgeAbstract
 
         foreach (array_merge($textPieces, $mediaPieces) as $piece) {
             $partHtml = $this->{$piece[1]}($piece[2]);
+
             if ($partHtml === '') {
                 continue;
             }
+
             if ($html !== '') {
                 $html .= '<br /><br />';
             }
@@ -379,11 +456,12 @@ class Telegram2Bridge extends BridgeAbstract
     private function processText(\simple_html_dom_node $textDiv): string
     {
         $nested = $textDiv->find('div.tgme_widget_message_text.js-message_text', 0);
-        if ($nested) {
+        if ($nested !== null) {
             $textDiv = $nested;
         }
 
-        $inner = $textDiv->innertext;
+        $inner = (string)($textDiv->innertext ?? '');
+
         $this->hashtags = $this->extractHashtags($inner);
 
         $plain = html_entity_decode(
@@ -405,8 +483,8 @@ class Telegram2Bridge extends BridgeAbstract
             return '';
         }
 
-        $dir = $textDiv->getAttribute('dir');
-        $attr = $dir ? ' dir="' . $dir . '"' : '';
+        $dir = (string)($textDiv->getAttribute('dir') ?? '');
+        $attr = $dir !== '' ? ' dir="' . $dir . '"' : '';
 
         return '<div class="tgme_widget_message_text js-message_text"' . $attr . '>'
             . $split['html'] . '</div>';
@@ -448,16 +526,16 @@ class Telegram2Bridge extends BridgeAbstract
         $text = '';
 
         $el = $reply->find('div.tgme_widget_message_metatext', 0);
-        if ($el) {
-            $text = $el->innertext;
+        if ($el !== null) {
+            $text = (string)($el->innertext ?? '');
         }
 
         $el = $reply->find('div.tgme_widget_message_text', 0);
-        if ($el) {
-            $text = $el->innertext;
+        if ($el !== null) {
+            $text = (string)($el->innertext ?? '');
         }
 
-        $href = htmlspecialchars($reply->href, ENT_QUOTES);
+        $href = htmlspecialchars((string)($reply->href ?? ''), ENT_QUOTES);
 
         return '<blockquote>' . $author . '<br />' . $text
             . '<a href="' . $href . '">' . $href . '</a></blockquote><hr />';
@@ -471,8 +549,9 @@ class Telegram2Bridge extends BridgeAbstract
 
         $out = '';
         foreach ($messageDiv->find('a.tgme_widget_message_photo_wrap') as $wrap) {
-            if (preg_match(self::BG_IMG_RE, $wrap->style, $m)) {
-                $out .= '<a href="' . $wrap->href . '"><img src="' . $m[1] . '" /></a>';
+            $style = (string)($wrap->style ?? '');
+            if ($style !== '' && preg_match(self::BG_IMG_RE, $style, $m) === 1) {
+                $out .= '<a href="' . (string)($wrap->href ?? '') . '"><img src="' . $m[1] . '" /></a>';
             }
         }
 
@@ -494,31 +573,43 @@ class Telegram2Bridge extends BridgeAbstract
 
         foreach ($thumbs as $sel) {
             $el = $messageDiv->find($sel, 0);
-            if ($el && preg_match(self::BG_IMG_RE, $el->style, $m)) {
-                $poster = $m[1];
-                break;
+            if ($el !== null) {
+                $style = (string)($el->style ?? '');
+                if ($style !== '' && preg_match(self::BG_IMG_RE, $style, $m) === 1) {
+                    $poster = $m[1];
+                    break;
+                }
             }
         }
 
-        $player = $messageDiv->find('a.tgme_widget_message_video_player', 0) ?: $messageDiv->find('div.tgme_widget_message_video_player', 0);
+        $player = $messageDiv->find('a.tgme_widget_message_video_player', 0)
+            ?: $messageDiv->find('div.tgme_widget_message_video_player', 0);
 
         $postHref = '';
-        if ($player?->href) {
-            $postHref = $player->href;
-            if (!str_starts_with($postHref, 'http')) {
-                $postHref = self::URI . '/' . ltrim($postHref, '/');
+        if ($player !== null) {
+            $playerHref = (string)($player->href ?? '');
+            if ($playerHref !== '') {
+                $postHref = $playerHref;
+                if (str_starts_with($postHref, 'http') === false) {
+                    $postHref = self::URI . '/' . ltrim($postHref, '/');
+                }
             }
         }
 
         $videoEl = $messageDiv->find('video', 0);
-        $src = $videoEl?->src ?? '';
+        $src = (string)($videoEl?->src ?? '');
 
         if ($poster === '' && $src === '' && $postHref === '') {
             return '';
         }
 
-        $href = $postHref ?: '#';
-        $channel = $this->feedName !== '' ? htmlspecialchars($this->feedName, ENT_QUOTES) : ('@' . $this->normalizeUsername());
+        $href = $postHref !== '' ? $postHref : '#';
+
+        if ($this->feedName !== '') {
+            $channel = htmlspecialchars($this->feedName, ENT_QUOTES);
+        } else {
+            $channel = '@' . $this->normalizeUsername();
+        }
 
         $duration = $this->getPlaintext($messageDiv, 'time.tgme_widget_message_video_duration');
         if ($duration === '') {
@@ -530,12 +621,15 @@ class Telegram2Bridge extends BridgeAbstract
         $duration = htmlspecialchars($duration, ENT_QUOTES);
 
         $resolution = '';
-        if ($player?->style) {
-            if (
-                preg_match('/width:\s*(\d+)px/i', $player->style, $mw)
-                && preg_match('/height:\s*(\d+)px/i', $player->style, $mh)
-            ) {
-                $resolution = $mw[1] . '?' . $mh[1];
+        if ($player !== null) {
+            $playerStyle = (string)($player->style ?? '');
+            if ($playerStyle !== '') {
+                if (
+                    preg_match('/width:\s*(\d+)px/i', $playerStyle, $mw) === 1
+                    && preg_match('/height:\s*(\d+)px/i', $playerStyle, $mh) === 1
+                ) {
+                    $resolution = $mw[1] . '?' . $mh[1];
+                }
             }
         }
 
@@ -548,10 +642,12 @@ class Telegram2Bridge extends BridgeAbstract
         }
 
         $html = '';
+
         if ($poster !== '') {
             $html .= '<a href="' . $href . '"><img src="' . $poster . '" style="'
                 . self::CSS['video'] . '" /></a><br />';
         }
+
         $html .= '<a href="' . $href . '">' . $label . '</a>';
 
         return $html;
@@ -564,23 +660,26 @@ class Telegram2Bridge extends BridgeAbstract
         }
 
         $div = $messageDiv->find('div.tgme_widget_message_sticker_wrap', 0);
-        if (!$div) {
+        if ($div === null) {
             return '';
         }
 
         $pic = $div->find('picture', 0);
-        if ($pic) {
+        if ($pic !== null) {
             $innerDiv = $pic->find('div', 0);
-            if ($innerDiv) {
+            if ($innerDiv !== null) {
                 $innerDiv->style = '';
             }
             $pic->style = '';
-            return (string) $div;
+            return (string)$div;
         }
 
         $el = $div->find('i', 0);
-        if ($el && preg_match(self::BG_IMG_RE, $el->style, $m)) {
-            return '<img src="' . $m[1] . '" />';
+        if ($el !== null) {
+            $style = (string)($el->style ?? '');
+            if ($style !== '' && preg_match(self::BG_IMG_RE, $style, $m) === 1) {
+                return '<img src="' . $m[1] . '" />';
+            }
         }
 
         return '';
@@ -589,7 +688,7 @@ class Telegram2Bridge extends BridgeAbstract
     private function processPoll(\simple_html_dom_node $messageDiv): string
     {
         $poll = $messageDiv->find('div.tgme_widget_message_poll', 0);
-        if (!$poll) {
+        if ($poll === null) {
             return '';
         }
 
@@ -619,6 +718,7 @@ class Telegram2Bridge extends BridgeAbstract
         }
 
         $footer = [];
+
         $voters = htmlspecialchars(
             $this->getPlaintext($messageDiv, 'span.tgme_widget_message_voters'),
             ENT_QUOTES
@@ -626,20 +726,22 @@ class Telegram2Bridge extends BridgeAbstract
         if ($voters !== '') {
             $footer[] = $voters . ' voters';
         }
-        if (str_contains($type, 'anonymous')) {
+
+        if (str_contains($type, 'anonymous') === true) {
             $footer[] = 'Anonymous';
         }
-        if (str_contains($type, 'quiz')) {
+        if (str_contains($type, 'quiz') === true) {
             $footer[] = 'Quiz';
         }
-        if (str_contains($type, 'multiple')) {
+        if (str_contains($type, 'multiple') === true) {
             $footer[] = 'Multiple choice';
         }
 
-        if (!empty($footer)) {
+        if ($footer !== []) {
             $html .= '<p style="' . self::CSS['poll_f'] . '">'
                 . implode(' &#183; ', $footer) . '</p>';
         }
+
         $html .= '</div>';
 
         return $html;
@@ -648,22 +750,26 @@ class Telegram2Bridge extends BridgeAbstract
     private function processLinkPreview(\simple_html_dom_node $messageDiv): string
     {
         $preview = $messageDiv->find('a.tgme_widget_message_link_preview', 0);
-        if (!$preview || trim($preview->innertext) === '') {
+        if ($preview === null || trim((string)($preview->innertext ?? '')) === '') {
             return '';
         }
 
         $img = '';
         $el = $preview->find('i', 0);
-        if ($el && preg_match(self::BG_IMG_RE, $el->style, $m)) {
-            $img = '<img src="' . $m[1] . '" />';
+        if ($el !== null) {
+            $style = (string)($el->style ?? '');
+            if ($style !== '' && preg_match(self::BG_IMG_RE, $style, $m) === 1) {
+                $img = '<img src="' . $m[1] . '" />';
+            }
         }
 
         $title = htmlspecialchars($this->getPlaintext($preview, 'div.link_preview_title'), ENT_QUOTES);
         $site = htmlspecialchars($this->getPlaintext($preview, 'div.link_preview_site_name'), ENT_QUOTES);
         $desc = htmlspecialchars($this->getPlaintext($preview, 'div.link_preview_description'), ENT_QUOTES);
+        $previewHref = (string)($preview->href ?? '');
 
-        return '<blockquote><a href="' . $preview->href . '">' . $img . '</a><br /><a href="'
-            . $preview->href . '">' . $title . ' - ' . $site . '</a><br />'
+        return '<blockquote><a href="' . $previewHref . '">' . $img . '</a><br /><a href="'
+            . $previewHref . '">' . $title . ' - ' . $site . '</a><br />'
             . $desc . '</blockquote>';
     }
 
@@ -692,25 +798,33 @@ class Telegram2Bridge extends BridgeAbstract
         $el = $messageDiv->find('div.tgme_widget_message_location', 0);
         $link = $messageDiv->find('a.tgme_widget_message_location_wrap', 0);
 
-        if (!$el || !$link) {
+        if ($el === null || $link === null) {
             return '';
         }
 
-        preg_match(self::BG_IMG_RE, $el->style, $m);
+        $style = (string)($el->style ?? '');
+        $m = [];
+        if ($style !== '') {
+            preg_match(self::BG_IMG_RE, $style, $m);
+        }
 
-        return '<a href="' . $link->href . '"><img src="' . ($m[1] ?? '') . '" /></a>';
+        $linkHref = (string)($link->href ?? '');
+        $imgSrc = $m[1] ?? '';
+
+        return '<a href="' . $linkHref . '"><img src="' . $imgSrc . '" /></a>';
     }
 
     private function extractHashtags(string &$html): array
     {
         $tags = [];
+
         if (
             preg_match_all(
                 '/<a\s[^>]*href="\?q=%23[^"]*"[^>]*>(.*?)<\/a>/is',
                 $html,
                 $matches,
                 PREG_SET_ORDER
-            )
+            ) > 0
         ) {
             foreach ($matches as $m) {
                 $text = trim(strip_tags($m[1]));
@@ -742,23 +856,27 @@ class Telegram2Bridge extends BridgeAbstract
 
     private function detectNotSupported(\simple_html_dom_node $message): ?array
     {
-        $videoPlayer = $message->find('a.tgme_widget_message_video_player.not_supported', 0) ?: $message->find('div.tgme_widget_message_video_player.not_supported', 0);
-        if ($videoPlayer) {
+        $videoPlayer = $message->find('a.tgme_widget_message_video_player.not_supported', 0)
+            ?: $message->find('div.tgme_widget_message_video_player.not_supported', 0);
+
+        if ($videoPlayer !== null) {
             return ['type' => 'video', 'element' => $videoPlayer];
         }
 
-        if ($message->find('div.media_supported_cont', 0)) {
+        if ($message->find('div.media_supported_cont', 0) !== null) {
             return null;
         }
-        if ($message->find('video', 0)) {
+
+        if ($message->find('video', 0) !== null) {
             return null;
         }
-        if ($message->find('a.tgme_widget_message_photo_wrap', 0)) {
+
+        if ($message->find('a.tgme_widget_message_photo_wrap', 0) !== null) {
             return null;
         }
 
         $notSupportedWrap = $message->find('div.message_media_not_supported_wrap', 0);
-        if ($notSupportedWrap) {
+        if ($notSupportedWrap !== null) {
             return ['type' => 'generic', 'element' => $notSupportedWrap];
         }
 
@@ -777,9 +895,14 @@ class Telegram2Bridge extends BridgeAbstract
         switch ($info['type']) {
             case 'video':
                 $reason = $this->getUnsupportedReason($message);
-                $stubLabel = $reason === self::REASON_TOO_BIG ? 'Media is too big' : 'Unsupported media';
+                if ($reason === self::REASON_TOO_BIG) {
+                    $stubLabel = 'Media is too big';
+                } else {
+                    $stubLabel = 'Unsupported media';
+                }
                 $title = 'Unsupported media';
                 break;
+
             case 'generic':
             default:
                 $stubLabel = 'Please open Telegram to view this post';
@@ -787,14 +910,14 @@ class Telegram2Bridge extends BridgeAbstract
                 break;
         }
 
-        if (!$hasContent) {
+        if ($hasContent === false) {
             $item['title'] = $title;
             $item['content'] = $this->renderUnsupported($item['uri'] ?? '#', $stubLabel);
         } else {
             $stub = $this->renderUnsupported($item['uri'] ?? '#', $stubLabel);
-            if (preg_match('/(<br\s*\/?>\s*){2,}\s*<\/div>\s*$/i', $item['content'])) {
+            if (preg_match('/(<br\s*\/?>\s*){2,}\s*<\/div>\s*$/i', $item['content']) === 1) {
                 $item['content'] = preg_replace('/\s*<\/div>\s*$/', $stub . '</div>', $item['content']);
-            } elseif (preg_match('/<br\s*\/?>\s*<\/div>\s*$/i', $item['content'])) {
+            } elseif (preg_match('/<br\s*\/?>\s*<\/div>\s*$/i', $item['content']) === 1) {
                 $item['content'] = preg_replace('/\s*<\/div>\s*$/', '<br />' . $stub . '</div>', $item['content']);
             } else {
                 $item['content'] = preg_replace('/\s*<\/div>\s*$/', '<br /><br />' . $stub . '</div>', $item['content']);
@@ -805,10 +928,12 @@ class Telegram2Bridge extends BridgeAbstract
     private function getUnsupportedReason(\simple_html_dom_node $message): string
     {
         $label = $message->find('div.message_media_not_supported_label', 0);
-        $text = $label ? trim($label->plaintext) : '';
-        if (str_contains($text, 'too big') || str_contains($text, 'too large')) {
+        $text = $label !== null ? trim((string)($label->plaintext ?? '')) : '';
+
+        if (str_contains($text, 'too big') === true || str_contains($text, 'too large') === true) {
             return self::REASON_TOO_BIG;
         }
+
         return self::REASON_DEFAULT;
     }
 
@@ -826,6 +951,7 @@ class Telegram2Bridge extends BridgeAbstract
     {
         $html = preg_replace('/<a[^>]*>\s*<\/a>/', '', $html);
         $html = preg_replace('/(<br\s*\/?>){3,}/i', '<br /><br />', $html);
+
         return trim($html);
     }
 
@@ -833,6 +959,7 @@ class Telegram2Bridge extends BridgeAbstract
     {
         $html = preg_replace('/<tg-emoji[^>]*>(.*?)<\/tg-emoji>/is', '$1', $html);
         $html = preg_replace('/<i\s[^>]*class="emoji"[^>]*>(.*?)<\/i>/is', '$1', $html);
+
         $html = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}\x{00AD}]/u', '', $html);
         $html = preg_replace('/[\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '', $html);
         $html = preg_replace(
@@ -842,7 +969,7 @@ class Telegram2Bridge extends BridgeAbstract
         );
         $html = preg_replace('/[\x{0000}-\x{0008}\x{000B}\x{000C}\x{000E}-\x{001F}\x{007F}]/u', '', $html);
 
-        if (class_exists(\Normalizer::class)) {
+        if (class_exists(\Normalizer::class) === true) {
             $normalized = \Normalizer::normalize($html, \Normalizer::FORM_KD);
             if ($normalized !== false) {
                 $html = $normalized;
@@ -858,6 +985,7 @@ class Telegram2Bridge extends BridgeAbstract
                     $m[1]
                 );
                 $url = preg_replace('/\?$/', '', $url);
+
                 return 'href="' . $url . '"';
             },
             $html
@@ -876,12 +1004,15 @@ class Telegram2Bridge extends BridgeAbstract
             '/(href|src)\s*=\s*["\']([^"\']*)["\']/i',
             function (array $m): string {
                 $url = $m[2];
-                if (preg_match('/^\s*(javascript|vbscript|data(?!:(?:image|video|audio)\/))/i', $url)) {
+
+                if (preg_match('/^\s*(javascript|vbscript|data(?!:(?:image|video|audio)\/))/i', $url) === 1) {
                     return $m[1] . '="#"';
                 }
-                if (str_starts_with($url, '?') || str_starts_with($url, '/')) {
+
+                if (str_starts_with($url, '?') === true || str_starts_with($url, '/') === true) {
                     return $m[1] . '="' . self::URI . '/s/' . $this->normalizeUsername() . $url . '"';
                 }
+
                 return $m[1] . '="' . $url . '"';
             },
             $html
@@ -910,6 +1041,7 @@ class Telegram2Bridge extends BridgeAbstract
         );
 
         $html = preg_replace('/<\/?tg-spoiler>/i', '', $html);
+
         $html = strip_tags($html, self::ALLOWED_TAGS);
 
         $html = preg_replace(
@@ -927,26 +1059,32 @@ class Telegram2Bridge extends BridgeAbstract
     private function shouldEmbedMedia(): bool
     {
         $mode = $this->getInput('embed_media') ?? 'auto';
+
         if ($mode === 'on') {
             return true;
         }
+
         if ($mode === 'off') {
             return false;
         }
+
         return (bool) $this->getInput('use_proxy');
     }
 
     private function embedMediaInHtml(string $html): string
     {
-        if (!$this->shouldEmbedMedia()) {
+        if ($this->shouldEmbedMedia() === false) {
             return $html;
         }
+
         $re = '/(src|poster)\s*=\s*["\'](https?:\/\/'
             . self::TG_HOSTS
             . '\/[^"\'\s>]+)["\']/i';
+
         $result = preg_replace_callback($re, function (array $m): string {
             return $m[1] . '="' . $this->urlToDataUri($m[2]) . '"';
         }, $html);
+
         return $result ?? $html;
     }
 
@@ -956,20 +1094,24 @@ class Telegram2Bridge extends BridgeAbstract
         if ($data === null) {
             return $url;
         }
+
         $maxSize = $this->parseSize($this->getOption('embed_max_size') ?: '10m');
         if ($maxSize > 0 && strlen($data['body']) > $maxSize) {
             return $url;
         }
+
         return 'data:' . $data['type'] . ';base64,' . base64_encode($data['body']);
     }
 
     private function fetchMediaCached(string $url): ?array
     {
-        if (array_key_exists($url, $this->mediaCache)) {
+        if (array_key_exists($url, $this->mediaCache) === true) {
             return $this->mediaCache[$url];
         }
+
         $useProxy = (bool) $this->getInput('use_proxy');
-        if ($useProxy) {
+
+        if ($useProxy === true) {
             try {
                 $data = getProtectedBinary($url, self::PROXY_PROFILE);
                 if ($data !== null) {
@@ -984,6 +1126,7 @@ class Telegram2Bridge extends BridgeAbstract
                 ));
             }
         }
+
         return $this->fetchMediaDirect($url);
     }
 
@@ -992,13 +1135,16 @@ class Telegram2Bridge extends BridgeAbstract
         for ($i = 0; $i < self::PROXY_RETRIES; $i++) {
             try {
                 $response = getContents($url, [], [], true);
+
                 $body = $response->getBody();
                 $ct = $response->getHeaders()['content-type'][0] ?? 'application/octet-stream';
                 $type = trim(explode(';', $ct)[0]);
+
                 if ($body === '' || $body === null) {
                     $this->mediaCache[$url] = null;
                     return null;
                 }
+
                 $this->mediaCache[$url] = ['body' => $body, 'type' => $type];
                 return $this->mediaCache[$url];
             } catch (\Exception $e) {
@@ -1009,11 +1155,13 @@ class Telegram2Bridge extends BridgeAbstract
                     $url,
                     $e->getMessage()
                 ));
+
                 if ($i < self::PROXY_RETRIES - 1) {
                     usleep(($i + 1) * self::RETRY_BACKOFF_US);
                 }
             }
         }
+
         $this->mediaCache[$url] = null;
         return null;
     }
@@ -1024,28 +1172,35 @@ class Telegram2Bridge extends BridgeAbstract
         if ($value === '') {
             return 0;
         }
-        if (preg_match('/^(\d+(?:\.\d+)?)\s*([kmg])?b?$/i', $value, $m)) {
+
+        if (preg_match('/^(\d+(?:\.\d+)?)\s*([kmg])?b?$/i', $value, $m) === 1) {
             $mult = ['' => 1, 'k' => 1024, 'm' => 1048576, 'g' => 1073741824];
             $unit = strtolower($m[2] ?? '');
+
             return (int) round((float) $m[1] * $mult[$unit]);
         }
+
         return (int) $value;
     }
 
     private function isBlocked(array $item, \simple_html_dom_node $message): bool
     {
-        if ($this->isAd($message)) {
+        if ($this->isAd($message) === true) {
             return true;
         }
+
         $haystack = $this->buildSearchHaystack($item);
-        $exclude = trim($this->getInput('exclude_keywords') ?? '');
-        if ($exclude !== '' && $this->matchesKeywordRules($haystack, $exclude)) {
+
+        $exclude = trim((string)($this->getInput('exclude_keywords') ?? ''));
+        if ($exclude !== '' && $this->matchesKeywordRules($haystack, $exclude) === true) {
             return true;
         }
-        $include = trim($this->getInput('include_keywords') ?? '');
-        if ($include !== '' && !$this->matchesKeywordRules($haystack, $include)) {
+
+        $include = trim((string)($this->getInput('include_keywords') ?? ''));
+        if ($include !== '' && $this->matchesKeywordRules($haystack, $include) === false) {
             return true;
         }
+
         return false;
     }
 
@@ -1062,43 +1217,54 @@ class Telegram2Bridge extends BridgeAbstract
         if ($haystack === '' || $rules === '') {
             return false;
         }
+
         foreach (explode(',', $rules) as $rule) {
             $rule = trim($rule);
             if ($rule === '') {
                 continue;
             }
-            if (str_contains($rule, '+')) {
+
+            if (str_contains($rule, '+') === true) {
                 $parts = array_filter(
-                    array_map(fn(string $p): string => mb_strtolower(trim($p), 'UTF-8'), explode('+', $rule)),
+                    array_map(
+                        fn(string $p): string => mb_strtolower(trim($p), 'UTF-8'),
+                        explode('+', $rule)
+                    ),
                     fn(string $p): bool => $p !== ''
                 );
-                if (empty($parts)) {
+
+                if ($parts === []) {
                     continue;
                 }
+
                 $all = true;
                 foreach ($parts as $part) {
-                    if (!str_contains($haystack, $part)) {
+                    if (str_contains($haystack, $part) === false) {
                         $all = false;
                         break;
                     }
                 }
-                if ($all) {
+
+                if ($all === true) {
                     return true;
                 }
-            } elseif (str_contains($haystack, mb_strtolower($rule, 'UTF-8'))) {
+            } elseif (str_contains($haystack, mb_strtolower($rule, 'UTF-8')) === true) {
                 return true;
             }
         }
+
         return false;
     }
 
     private function isAd(\simple_html_dom_node $message): bool
     {
         foreach ($message->find('[class]') as $el) {
-            if (str_contains($el->class ?? '', 'sponsored')) {
+            $class = (string)($el->class ?? '');
+            if (str_contains($class, 'sponsored') === true) {
                 return true;
             }
         }
+
         return false;
     }
 
@@ -1110,93 +1276,50 @@ class Telegram2Bridge extends BridgeAbstract
 
     private function normalizeUsername(): string
     {
-        return ltrim(trim($this->getInput('username')), '@');
+        return ltrim(trim((string)($this->getInput('username') ?? '')), '@');
     }
 
     private function extractChannelIcon(\simple_html_dom $dom): string
     {
         foreach ($dom->find('meta') as $meta) {
             if ($meta->getAttribute('property') === 'og:image') {
-                $content = trim($meta->content ?? '');
+                $content = trim((string)($meta->content ?? ''));
                 if ($content !== '') {
                     return $content;
                 }
             }
         }
+
         $el = $dom->find('i.tgme_page_photo_image img', 0);
-        if ($el) {
-            $src = trim($el->src ?? '');
+        if ($el !== null) {
+            $src = trim((string)($el->src ?? ''));
             if ($src !== '') {
                 return $src;
             }
         }
+
         return '';
     }
 
     private function extractForwardedAuthor(\simple_html_dom_node $fwd): string
     {
         $author = $fwd->find('span.tgme_widget_message_forwarded_from_author', 0);
-        if ($author) {
-            $text = trim($author->plaintext);
+        if ($author !== null) {
+            $text = trim((string)($author->plaintext ?? ''));
             if ($text !== '') {
                 return $text;
             }
         }
+
         return '';
     }
 
     private function getPlaintext(\simple_html_dom_node $element, string $selector): string
     {
         $el = $element->find($selector, 0);
-        return $el ? trim($el->plaintext) : '';
-    }
-
-    private function fetchPage(string $url): ?\simple_html_dom
-    {
-        $useProxy = (bool) $this->getInput('use_proxy');
-        if ($useProxy) {
-            for ($i = 0; $i < self::PROXY_RETRIES; $i++) {
-                try {
-                    return getProtectedSimpleHTMLDOM($url, self::PROXY_PROFILE);
-                } catch (\Throwable $e) {
-                    $this->logger->warning(sprintf(
-                        'TgWSProxy page fetch failed (attempt %d/%d): %s Ч %s',
-                        $i + 1,
-                        self::PROXY_RETRIES,
-                        $url,
-                        $e->getMessage()
-                    ));
-                    if ($i < self::PROXY_RETRIES - 1) {
-                        usleep(($i + 1) * self::RETRY_BACKOFF_US);
-                    }
-                }
-            }
-            $this->logger->warning(sprintf(
-                'TgWSProxy exhausted for %s, falling back to direct HTTP',
-                $url
-            ));
+        if ($el !== null) {
+            return trim((string)($el->plaintext ?? ''));
         }
-        return $this->fetchPageDirect($url);
-    }
-
-    private function fetchPageDirect(string $url): ?\simple_html_dom
-    {
-        for ($i = 0; $i < self::PROXY_RETRIES; $i++) {
-            try {
-                return getSimpleHTMLDOM($url);
-            } catch (\Exception $e) {
-                $this->logger->warning(sprintf(
-                    'Direct page fetch failed (attempt %d/%d): %s Ч %s',
-                    $i + 1,
-                    self::PROXY_RETRIES,
-                    $url,
-                    $e->getMessage()
-                ));
-                if ($i < self::PROXY_RETRIES - 1) {
-                    usleep(($i + 1) * self::RETRY_BACKOFF_US);
-                }
-            }
-        }
-        return null;
+        return '';
     }
 }
