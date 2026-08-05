@@ -137,7 +137,7 @@ class Vk2Bridge extends BridgeAbstract
         return $this->iconUrl !== null ? $this->proxyImage($this->iconUrl) : parent::getIcon();
     }
 
-    public function detectParameters(string $url): ?array
+    public function detectParameters($url): ?array
     {
         if (!preg_match(self::URL_REGEX, $url, $m)) {
             return null;
