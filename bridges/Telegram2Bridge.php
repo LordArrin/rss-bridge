@@ -148,7 +148,13 @@ class Telegram2Bridge extends BridgeAbstract
     public function collectData(): void
     {
         $url = 'https://t.me/s/' . $this->normalizeUsername();
-        $limit = max(1, (int) ($this->getInput('limit') ?: 10));
+
+        $limitInput = $this->getInput('limit');
+        if ($limitInput === null || $limitInput === '' || $limitInput === 0) {
+            $limitInput = 10;
+        }
+        $limit = max(1, (int) $limitInput);
+
         $pages = 0;
         $done = false;
         $seen = [];
@@ -416,7 +422,10 @@ class Telegram2Bridge extends BridgeAbstract
         ];
 
         foreach ($mediaMarkers as $marker => $method) {
-            $el = $messageDiv->find('div.' . $marker, 0) ?: $messageDiv->find('a.' . $marker, 0);
+            $el = $messageDiv->find('div.' . $marker, 0);
+            if ($el === null) {
+                $el = $messageDiv->find('a.' . $marker, 0);
+            }
             if ($el !== null) {
                 $outer = (string)($el->outertext ?? '');
                 $pos = strpos($inner, $outer);
@@ -424,9 +433,10 @@ class Telegram2Bridge extends BridgeAbstract
             }
         }
 
-        $videoNotSupported = $messageDiv->find('a.tgme_widget_message_video_player.not_supported', 0)
-            ?: $messageDiv->find('div.tgme_widget_message_video_player.not_supported', 0);
-
+        $videoNotSupported = $messageDiv->find('a.tgme_widget_message_video_player.not_supported', 0);
+        if ($videoNotSupported === null) {
+            $videoNotSupported = $messageDiv->find('div.tgme_widget_message_video_player.not_supported', 0);
+        }
         if ($videoNotSupported === null && $messageDiv->find('video', 0) !== null) {
             $pos = strpos($inner, '<video');
             if ($pos !== false) {
@@ -582,9 +592,10 @@ class Telegram2Bridge extends BridgeAbstract
             }
         }
 
-        $player = $messageDiv->find('a.tgme_widget_message_video_player', 0)
-            ?: $messageDiv->find('div.tgme_widget_message_video_player', 0);
-
+        $player = $messageDiv->find('a.tgme_widget_message_video_player', 0);
+        if ($player === null) {
+            $player = $messageDiv->find('div.tgme_widget_message_video_player', 0);
+        }
         $postHref = '';
         if ($player !== null) {
             $playerHref = (string)($player->href ?? '');
@@ -856,8 +867,10 @@ class Telegram2Bridge extends BridgeAbstract
 
     private function detectNotSupported(\simple_html_dom_node $message): ?array
     {
-        $videoPlayer = $message->find('a.tgme_widget_message_video_player.not_supported', 0)
-            ?: $message->find('div.tgme_widget_message_video_player.not_supported', 0);
+        $videoPlayer = $message->find('a.tgme_widget_message_video_player.not_supported', 0);
+        if ($videoPlayer === null) {
+            $videoPlayer = $message->find('div.tgme_widget_message_video_player.not_supported', 0);
+        }
 
         if ($videoPlayer !== null) {
             return ['type' => 'video', 'element' => $videoPlayer];
@@ -1095,7 +1108,12 @@ class Telegram2Bridge extends BridgeAbstract
             return $url;
         }
 
-        $maxSize = $this->parseSize($this->getOption('embed_max_size') ?: '10m');
+        $embedMaxSize = $this->getOption('embed_max_size');
+        if ($embedMaxSize === null || $embedMaxSize === '') {
+            $embedMaxSize = '10m';
+        }
+        $maxSize = $this->parseSize($embedMaxSize);
+
         if ($maxSize > 0 && strlen($data['body']) > $maxSize) {
             return $url;
         }
