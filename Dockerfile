@@ -1,7 +1,7 @@
 ARG ALPINE_VERSION=3.24
 FROM alpine:${ALPINE_VERSION}
 
-ARG IMAGE_VERSION=1.0.5
+ARG IMAGE_VERSION=1.0.7
 ARG CURL_IMPERSONATE_VERSION=1.5.6
 
 LABEL org.opencontainers.image.title="RSS Bridge" \
@@ -22,9 +22,11 @@ RUN set -xe && \
       php85-dom \
       php85-fileinfo \
       php85-fpm \
+      php85-gd \
       php85-iconv \
       php85-intl \
       php85-mbstring \
+      # php85-opcache \ # embedded since 8.0
       php85-openssl \
       php85-pdo_sqlite \
       php85-pecl-memcached \
