@@ -1,5 +1,3 @@
-# .github/workflows/lint-bridges.yml
-
 name: Lint Bridges
 
 on:
@@ -15,6 +13,16 @@ on:
       - 'bridges/**'
       - 'phpcs.xml'
       - '.github/workflows/lint-bridges.yml'
+  workflow_dispatch:
+    inputs:
+      check_mode:
+        description: 'Check mode'
+        required: true
+        type: choice
+        options:
+          - 'changed_only'
+          - 'all_bridges'
+        default: 'all_bridges'
 
 permissions:
   contents: write
@@ -45,31 +53,54 @@ jobs:
       - name: Determine changed bridge files
         id: changed
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.event.inputs.check_mode }}" = "all_bridges" ]; then
+              FILES=$(find bridges -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
+              echo "Running manual check on ALL bridge files"
+            else
+              if git rev-parse HEAD~1 >/dev/null 2>&1; then
+                BASE="HEAD~1"
+              else
+                BASE=""
+              fi
+              
+              if [ -n "$BASE" ]; then
+                FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- 'bridges/*.php' | tr '\n' ' ')
+              else
+                FILES=$(find bridges -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
+              fi
+              echo "Running manual check on CHANGED bridge files only"
+            fi
+          # Pull request
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="origin/${{ github.base_ref }}"
+            FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- 'bridges/*.php' | tr '\n' ' ')
+            echo "Checking PR changes against $BASE"
           else
             if git rev-parse HEAD~1 >/dev/null 2>&1; then
               BASE="HEAD~1"
             else
               BASE=""
             fi
-          fi
-
-          if [ -n "$BASE" ]; then
-            FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- 'bridges/*.php' | tr '\n' ' ')
-          else
-            FILES=$(find bridges -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
+            
+            if [ -n "$BASE" ]; then
+              FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- 'bridges/*.php' | tr '\n' ' ')
+              echo "Checking push changes against $BASE"
+            else
+              FILES=$(find bridges -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
+              echo "Initial commit - checking all files"
+            fi
           fi
 
           FILES=$(echo "$FILES" | xargs)
 
           if [ -z "$FILES" ]; then
             echo "has_files=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No bridge files were changed. Skipping phpcs."
+            echo "::notice::No bridge files to check."
           else
             echo "has_files=true" >> "$GITHUB_OUTPUT"
             echo "files=$FILES" >> "$GITHUB_OUTPUT"
-            echo "Changed bridge files:"
+            echo "Files to check:"
             echo "$FILES" | tr ' ' '\n'
           fi
 
@@ -95,7 +126,7 @@ jobs:
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           commit_options: '--no-verify'
 
-      - name: Run phpcs on changed bridges
+      - name: Run phpcs on bridge files
         if: steps.changed.outputs.has_files == 'true'
         run: |
           ./vendor/bin/phpcs \
