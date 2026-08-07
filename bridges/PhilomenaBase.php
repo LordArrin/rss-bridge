@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-class PhilomenaBridge extends BridgeAbstract
+abstract class PhilomenaBase extends BridgeAbstract
 {
     const NAME = 'Philomena';
     const URI = 'https://github.com/derpibooru/philomena';

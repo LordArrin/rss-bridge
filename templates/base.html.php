@@ -15,7 +15,7 @@
     <div class="container">
         <header>
             <a href="./">
-                <img width="400" src="static/logo_600px.png">
+                <img width="400" src="static/not_boring_logo_compact.png">
             </a>
         </header>
 

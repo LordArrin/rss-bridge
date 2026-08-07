@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-class DerpibooruBridge extends PhilomenaBridge
+class DerpibooruBridge extends PhilomenaBase
 {
     const NAME = 'Derpibooru';
     const URI = 'https://derpibooru.org/';
