@@ -76,7 +76,7 @@ abstract class PhilomenaBase extends BridgeAbstract
     {
         $params = parent::getParameters();
         $filters = static::getAvailableFilters();
-        if (!empty($filters)) {
+        if (empty($filters) === false) {
             $params['Global']['f'] = [
                 'name' => 'Content Filter',
                 'type' => 'list',
@@ -94,7 +94,7 @@ abstract class PhilomenaBase extends BridgeAbstract
         }
 
         $host = parse_url(static::URI, PHP_URL_HOST);
-        if (!$host) {
+        if (is_string($host) === false) {
             return null;
         }
 
@@ -104,15 +104,15 @@ abstract class PhilomenaBase extends BridgeAbstract
         $regex = '/^(https?:\/\/)?(www\.)?' . $escapedHost . '\/search(?:\?.*)?/';
         if (preg_match($regex, $url) > 0) {
             $parsedUrl = parse_url($url);
-            if (isset($parsedUrl['query'])) {
+            if (isset($parsedUrl['query']) === true) {
                 parse_str($parsedUrl['query'], $queryParams);
-                if (isset($queryParams['q'])) {
+                if (isset($queryParams['q']) === true) {
                     $params['q'] = $queryParams['q'];
                 }
-                if (isset($queryParams['sf'])) {
+                if (isset($queryParams['sf']) === true) {
                     $params['sf'] = $queryParams['sf'];
                 }
-                if (isset($queryParams['sd'])) {
+                if (isset($queryParams['sd']) === true) {
                     $params['sd'] = $queryParams['sd'];
                 }
                 return $params;
@@ -135,17 +135,17 @@ abstract class PhilomenaBase extends BridgeAbstract
 
         $tagsArray = [];
 
-        if (!empty($q)) {
+        if (empty($q) === false) {
             $qNormalized = preg_replace('/[\s,]+/', ', ', $q);
             $tagsArray = array_filter(array_map('trim', explode(',', $qNormalized)));
         }
 
-        if (!empty($excludeTags)) {
+        if (empty($excludeTags) === false) {
             $excludesNormalized = preg_replace('/[\s,]+/', ', ', $excludeTags);
             $excludesArray = array_filter(array_map('trim', explode(',', $excludesNormalized)));
             foreach ($excludesArray as $tag) {
                 $cleanTag = ltrim($tag, '-');
-                if (!empty($cleanTag)) {
+                if (empty($cleanTag) === false) {
                     $tagsArray[] = '-' . $cleanTag;
                 }
             }
@@ -157,7 +157,7 @@ abstract class PhilomenaBase extends BridgeAbstract
     public function getName(): string
     {
         $q = $this->getNormalizedQuery();
-        if (!empty($q)) {
+        if (empty($q) === false) {
             return static::NAME . ': ' . $q;
         }
         return parent::getName();
@@ -166,14 +166,14 @@ abstract class PhilomenaBase extends BridgeAbstract
     public function getURI(): string
     {
         $q = $this->getNormalizedQuery();
-        if (!empty($q)) {
+        if (empty($q) === false) {
             $url = static::URI . 'search?';
             $params = [
                 'q' => $q,
                 'sf' => $this->getInput('sf') ?? 'created_at',
                 'sd' => $this->getInput('sd') ?? 'desc'
             ];
-            if (!is_null($this->getInput('f'))) {
+            if (is_null($this->getInput('f')) === false) {
                 $params['filter_id'] = $this->getInput('f');
             }
             return $url . http_build_query($params);
@@ -189,7 +189,7 @@ abstract class PhilomenaBase extends BridgeAbstract
 
         $q = $this->getNormalizedQuery();
 
-        if (empty($q)) {
+        if (empty($q) === true) {
             throwClientException('Query cannot be empty.');
         }
 
@@ -210,11 +210,11 @@ abstract class PhilomenaBase extends BridgeAbstract
             throwClientException('Failed to parse API response: ' . $e->getMessage());
         }
 
-        if (!$json || !isset($json->images)) {
+        if (is_object($json) === false || isset($json->images) === false) {
             throwClientException('Invalid API response.');
         }
 
-        if (empty($json->images)) {
+        if (empty($json->images) === true) {
             return;
         }
 
@@ -222,7 +222,7 @@ abstract class PhilomenaBase extends BridgeAbstract
             $postUri = static::URI . 'images/' . $post->id;
             $artist = $this->extractArtist($post->tags ?? []);
 
-            $title = !empty($artist) ? sprintf('Image %s by %s', $post->id, $artist) : sprintf('Image %s', $post->id);
+            $title = empty($artist) === false ? sprintf('Image %s by %s', $post->id, $artist) : sprintf('Image %s', $post->id);
 
             $this->items[] = [
                 'uri' => $postUri,
@@ -261,19 +261,19 @@ abstract class PhilomenaBase extends BridgeAbstract
     {
         $html = '';
 
-        $isVideo = (isset($post->mime_type) && strpos($post->mime_type, 'video/') === 0)
-            || (isset($post->format) && in_array($post->format, ['webm', 'mp4'], true));
+        $isVideo = (isset($post->mime_type) === true && strpos($post->mime_type, 'video/') === 0)
+            || (isset($post->format) === true && in_array($post->format, ['webm', 'mp4'], true) === true);
 
         $mediaUrl = $post->representations->full ?? '';
         $thumbUrl = $post->representations->medium ?? $post->representations->small ?? $mediaUrl;
 
-        if ($isVideo && !empty($mediaUrl)) {
+        if ($isVideo === true && empty($mediaUrl) === false) {
             $html .= sprintf(
                 '<p><a href="%s"><video controls loop muted preload="metadata" style="max-width:100%%;height:auto;" src="%s"></video></a></p>',
                 $postUri,
                 htmlspecialchars($mediaUrl)
             );
-        } elseif (!empty($thumbUrl)) {
+        } elseif (empty($thumbUrl) === false) {
             $html .= sprintf(
                 '<p><a href="%s"><img src="%s" alt="Image %s"></a></p>',
                 $postUri,
@@ -282,9 +282,9 @@ abstract class PhilomenaBase extends BridgeAbstract
             );
         }
 
-        if (!empty($post->description)) {
+        if (empty($post->description) === false) {
             $cleanDesc = $this->cleanDescription($post->description);
-            if (!empty($cleanDesc)) {
+            if (empty($cleanDesc) === false) {
                 $html .= sprintf(
                     '<p><b>Description:</b><br>%s</p>',
                     nl2br(htmlspecialchars($cleanDesc))
@@ -299,8 +299,8 @@ abstract class PhilomenaBase extends BridgeAbstract
             $post->score ?? 'N/A'
         );
 
-        if (!$hideTags) {
-            if (!empty($post->source_urls)) {
+        if ($hideTags === false) {
+            if (empty($post->source_urls) === false) {
                 $sources = '';
                 foreach ($post->source_urls as $source) {
                     $sources .= sprintf(
@@ -312,7 +312,7 @@ abstract class PhilomenaBase extends BridgeAbstract
                 $html .= sprintf('<p><b>Sources:</b><br>%s</p>', $sources);
             }
 
-            if (!empty($post->tags) && is_array($post->tags)) {
+            if (empty($post->tags) === false && is_array($post->tags) === true) {
                 $html .= sprintf(
                     '<p><b>Tags:</b> %s</p>',
                     htmlspecialchars(implode(', ', $post->tags))
