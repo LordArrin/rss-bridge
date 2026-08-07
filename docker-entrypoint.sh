@@ -1,43 +1,26 @@
 #!/bin/sh
 set -e
 
-for file in /config/*; do
-    [ -f "$file" ] || continue
-
-    file_name="$(basename "$file")"
-
-    case "$file_name" in
-        *" "*) printf 'Custom file %s has a space in the name and will be skipped.\n' "$file_name"
-               continue ;;
+copy_custom() {
+    [ -f "$1" ] || return 0
+    name=$(basename "$1")
+    
+    case "$name" in
+        *" "*) printf 'Skipping %s (space in name)\n' "$name"; return 0 ;;
+        *Bridge.php) dest=/app/bridges ;;
+        *Format.php) dest=/app/formats ;;
+        config.ini.php|whitelist.txt|DEBUG) dest=/app ;;
+        *) return 0 ;;
     esac
+    
+    mkdir -p "$dest"
+    cp "$1" "$dest/"
+    chown nginx:nginx "$dest/$name"
+    printf 'Added: %s -> %s/\n' "$name" "$dest"
+}
 
-    case "$file_name" in
-        *Bridge.php)
-            cp "$file" /app/bridges/
-            chown nginx:nginx "/app/bridges/$file_name"
-            printf 'Custom Bridge %s added.\n' "$file_name"
-            ;;
-        *Format.php)
-            cp "$file" /app/formats/
-            chown nginx:nginx "/app/formats/$file_name"
-            printf 'Custom Format %s added.\n' "$file_name"
-            ;;
-        config.ini.php)
-            cp "$file" /app/
-            chown nginx:nginx "/app/$file_name"
-            printf 'Custom config.ini.php added.\n'
-            ;;
-        whitelist.txt)
-            cp "$file" /app/
-            chown nginx:nginx "/app/$file_name"
-            printf 'Custom whitelist.txt added.\n'
-            ;;
-        DEBUG)
-            cp "$file" /app/
-            chown nginx:nginx "/app/$file_name"
-            printf 'DEBUG file added.\n'
-            ;;
-    esac
+for f in /config/* /config/bridges/*; do
+    copy_custom "$f"
 done
 
 if [ -n "${HTTP_PORT:-}" ]; then
@@ -47,3 +30,5 @@ fi
 nginx
 
 exec php-fpm85 --nodaemonize
+
+fi

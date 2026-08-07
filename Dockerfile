@@ -1,7 +1,7 @@
 ARG ALPINE_VERSION=3.24
 FROM alpine:${ALPINE_VERSION}
 
-ARG IMAGE_VERSION=1.0.9
+ARG IMAGE_VERSION=1.1.0
 ARG CURL_IMPERSONATE_VERSION=1.5.6
 
 LABEL org.opencontainers.image.title="RSS Bridge" \
@@ -68,6 +68,8 @@ COPY ./config/nginx.conf /etc/nginx/http.d/default.conf
 COPY LICENSE ./
 
 COPY --chown=nginx:nginx ./ /app/
+RUN chmod -R 755 /app/bridges/
+
 RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 80
