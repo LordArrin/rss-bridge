@@ -11,6 +11,8 @@
         name="searchfield"
         id="searchfield"
         placeholder="Insert URL or bridge name"
+        onchange="rssbridge_list_search()"
+        onkeyup="rssbridge_list_search()"
         value=""
     >
     <button

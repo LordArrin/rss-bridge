@@ -94,7 +94,7 @@ var rssbridge_feed_finder = (function() {
             for (const param in element.bridgeData) {
                 content += `<li>${element.bridgeData[param].name} : ${element.bridgeData[param].value}</li>`;
             }
-            content += `</div>
+            content += `</ul>
               </div>
             </div>`;
         }
