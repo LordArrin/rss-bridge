@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="RSS-Bridge" />
     <title>RSS-Bridge</title>
-    <link href="static/style.css?2023-03-24" rel="stylesheet">
+    <link href="static/style.css" rel="stylesheet">
     <link rel="icon" type="image/png" href="static/favicon.png">
 
     <script src="static/rss-bridge.js"></script>
@@ -15,7 +15,7 @@
     <div class="container">
         <header>
             <a href="./">
-                <img width="400" src="static/not_boring_logo_compact.png">
+                <img width="400" src="static/not_boring_logo_compact.png" alt="RSS-Bridge">
             </a>
         </header>
 

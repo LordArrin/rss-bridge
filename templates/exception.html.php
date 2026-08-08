@@ -65,15 +65,15 @@
             </p>
         <?php else: ?>
             <p>
-                <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/<?= raw($e->getCode()) ?>">
-                    https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/<?= raw($e->getCode()) ?>
+                <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/<?= e($e->getCode()) ?>">
+                    https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/<?= e($e->getCode()) ?>
                 </a>
             </p>
         <?php endif; ?>
 
     <?php else: ?>
         <?php if ($e->getCode() === 10): ?>
-            <h2>The rss feed is completely empty</h2>
+            <h2>The rss feed is fully empty</h2>
             <p>
                 RSS-Bridge tried parse the empty string as xml.
                 The fetched url is not pointing to real xml.
@@ -90,7 +90,7 @@
 
     <h2>Details</h2>
 
-    <div style="margin-bottom: 15px">
+    <div class="error-details">
         <div class="error-type">
             <strong>Type:</strong> <?= e(get_class($e)) ?>
         </div>
@@ -130,19 +130,18 @@
     </div>
 
     <div>
-        <strong>Version:</strong> <?= raw(Configuration::getVersion()) ?>
+        <strong>Version:</strong> <?= e(Configuration::getVersion()) ?>
     </div>
 
     <div>
-        <strong>OS:</strong> <?= raw(PHP_OS_FAMILY) ?>
+        <strong>OS:</strong> <?= e(PHP_OS_FAMILY) ?>
     </div>
 
     <div>
-        <strong>PHP:</strong> <?= raw(PHP_VERSION ?: 'Unknown') ?>
+        <strong>PHP:</strong> <?= e(PHP_VERSION ?: 'Unknown') ?>
     </div>
 
     <br>
 
     <a href="/">Go back</a>
 </div>
-

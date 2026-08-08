@@ -1,4 +1,3 @@
-
 <script>
     document.addEventListener('DOMContentLoaded', rssbridge_toggle_bridge);
     document.addEventListener('DOMContentLoaded', rssbridge_list_search);
@@ -12,13 +11,11 @@
         name="searchfield"
         id="searchfield"
         placeholder="Insert URL or bridge name"
-        onchange="rssbridge_list_search()"
-        onkeyup="rssbridge_list_search()"
         value=""
     >
     <button
         type="button"
-	    id="findfeed"
+        id="findfeed"
         name="findfeed"
     >Find Feed from URL</button>
     <section id="findfeedresults">
@@ -29,8 +26,8 @@
 <?= raw($bridges) ?>
 
 <section class="footer">
-    <a href="https://github.com/lordarrin/rss-bridge">
-        https://github.com/lordarrin/rss-bridge
+    <a href="https://github.com/LordArrin/rss-bridge" rel="noopener noreferrer" target="_blank">
+        https://github.com/LordArrin/rss-bridge
     </a>
 
     <br>
@@ -52,7 +49,7 @@
 
     <?php if ($admin_telegram): ?>
         <div>
-            Url: <a href="<?= e($admin_telegram) ?>"><?= e($admin_telegram) ?></a>
+            Telegram: <a href="<?= e($admin_telegram) ?>" rel="noopener noreferrer" target="_blank"><?= e($admin_telegram) ?></a>
         </div>
     <?php endif; ?>
 

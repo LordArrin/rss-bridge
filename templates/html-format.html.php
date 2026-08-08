@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/ >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content="RSS-Bridge" />
     <title><?= e($title) ?></title>
-    <link href="static/style.css?2023-03-24" rel="stylesheet">
+    <link href="static/style.css" rel="stylesheet">
     <link rel="icon" type="image/png" href="static/favicon.png">
 
     <?php foreach ($formats as $format): ?>
@@ -16,7 +16,7 @@
             rel="alternate"
             type="<?= e($format['type']) ?>"
         >
-	<?php endforeach; ?>
+    <?php endforeach; ?>
 
     <meta name="robots" content="noindex, follow">
 </head>
@@ -30,7 +30,7 @@
 
         <div class="buttons">
             <a href="./#bridge-<?= e($bridge_name) ?>">
-                <button class="backbutton">← back to rss-bridge</button>
+                <button class="backbutton">< back to rss-bridge</button>
             </a>
 
             <?php foreach ($formats as $format): ?>
@@ -83,27 +83,31 @@
                 <?php if ($item['enclosures']): ?>
                     <div class="item-attachments">
                         <p>Attachments:</p>
-                        <?php foreach ($item['enclosures'] as $enclosure): ?>
-                            <li class="enclosure">
-                                <a href="<?= e($enclosure) ?>" rel="noopener noreferrer nofollow">
-                                    <?= e(substr($enclosure, strrpos($enclosure, '/') + 1)) ?>
-                                </a>
-                            </li>
-                        <?php endforeach; ?>
+                        <ul>
+                            <?php foreach ($item['enclosures'] as $enclosure): ?>
+                                <li class="enclosure">
+                                    <a href="<?= e($enclosure) ?>" rel="noopener noreferrer nofollow">
+                                        <?= e(substr($enclosure, strrpos($enclosure, '/') + 1)) ?>
+                                    </a>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
                     </div>
                 <?php endif; ?>
 
                 <?php if ($item['categories']): ?>
                     <div class="item-categories">
                         <p>Categories:</p>
-                        <?php foreach ($item['categories'] as $category): ?>
-                            <li class="category"><?= e($category) ?></li>
-                        <?php endforeach; ?>
+                        <ul>
+                            <?php foreach ($item['categories'] as $category): ?>
+                                <li class="category"><?= e($category) ?></li>
+                            <?php endforeach; ?>
+                        </ul>
                     </div>
                 <?php endif; ?>
             </section>
         <?php endforeach; ?>
 
     </div>
- </body>
+</body>
 </html>

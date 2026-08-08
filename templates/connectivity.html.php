@@ -1,13 +1,9 @@
 <!DOCTYPE html>
-
-<html>
+<html lang="en">
 <head>
-    <link rel="stylesheet" href="static/bootstrap.min.css">
-    <link
-        rel="stylesheet"
-        href="https://use.fontawesome.com/releases/v5.6.3/css/all.css"
-        integrity="sha384-UHRtZLI+pbxtHCWp1t77Bi1L4ZtiqrqD80Kn4Z8NTSRyMA2Fd33n5dQ8lWUE00s/"
-        crossorigin="anonymous">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSS-Bridge Connectivity Check</title>
     <link rel="stylesheet" href="static/connectivity.css">
     <script src="static/connectivity.js" type="text/javascript"></script>
 </head>
@@ -19,7 +15,7 @@
     <div id="status-message" class="sticky-top alert alert-primary alert-dismissible fade show" role="alert">
         <i id="status-icon" class="fas fa-sync"></i>
         <span>...</span>
-        <button type="button" class="close" data-dismiss="alert" aria-label="Close" onclick="stopConnectivityChecks()">
+        <button type="button" class="close" aria-label="Close" onclick="stopConnectivityChecks()">
             <span aria-hidden="true">&times;</span>
         </button>
     </div>

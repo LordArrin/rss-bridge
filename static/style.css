@@ -1,3 +1,41 @@
+/* ============================================
+   CSS Custom Properties (Theme Variables)
+   ============================================ */
+:root {
+    /* Light theme (default) */
+    --bg-color: #f0f0f0;
+    --text-color: #333;
+    --text-secondary: #888;
+    --primary-color: #2196F3;
+    --primary-hover: #49afff;
+    --card-bg: #FFFFFF;
+    --input-bg: white;
+    --input-text: #404552;
+    --input-border: #dedede;
+    --border-color: #ddd;
+    --shadow-color: rgba(0, 0, 0, 0.09);
+}
+
+/* Dark theme overrides */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-color: #202325;
+        --text-color: #e8e6e3;
+        --text-secondary: #888888;
+        --primary-color: #0A6AB6;
+        --primary-hover: #004daa;
+        --card-bg: #181A1B;
+        --input-bg: #181A1B;
+        --input-text: #BAB4AB;
+        --input-border: #393E40;
+        --border-color: #393E40;
+        --shadow-color: rgba(0, 0, 0, 0.3);
+    }
+}
+
+/* ============================================
+   Base Reset
+   ============================================ */
 html {
     box-sizing: border-box;
     font-size: 16px;
@@ -22,28 +60,29 @@ img {
     height: auto;
 }
 
-
 /* HTML5 display-role reset for older browsers */
 article, aside, details, figcaption, figure, footer, header, hgroup, menu, nav, section {
     display: block;
 }
 
 /* Adjust parameters for browsers that don't support the grid layout */
-
 .parameters label:before {
     content: " ";
     display: block;
 }
 
-/* Let's go for the actual style */
+/* ============================================
+   Main Styles
+   ============================================ */
 body {
-    background-color: #f0f0f0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
     font-family: sans-serif;
     font-size: 14px;
 }
 
 a, a:link, a:visited {
-    color: #2196F3;
+    color: var(--primary-color);
     text-decoration: none;
 }
 
@@ -51,9 +90,10 @@ a:hover {
     text-decoration: underline;
 }
 
-h1,h2 {
+h1, h2 {
     margin-bottom: 10px;
 }
+
 h5 {
     margin: 20px;
     font-weight: bold;
@@ -64,13 +104,18 @@ p {
     margin-bottom: 10px;
 }
 
-/* Header */
+/* ============================================
+   Header
+   ============================================ */
 header {
     padding: 15px;
-    color: #1182DB;
+    color: var(--primary-color);
     text-align: center;
 }
 
+/* ============================================
+   Alerts
+   ============================================ */
 .alert-info {
     margin-bottom: 15px;
     color: white;
@@ -101,12 +146,15 @@ header {
     text-align: center;
 }
 
+/* ============================================
+   Form Elements
+   ============================================ */
 select,
 input[type="text"],
 input[type="number"] {
-    background-color: white;
-    color: #404552;
-    border: 1px solid #dedede;
+    background-color: var(--input-bg);
+    color: var(--input-text);
+    border: 1px solid var(--input-border);
     margin-left: 8px;
     margin-bottom: 10px;
     padding: 5px 10px;
@@ -125,6 +173,9 @@ input:focus::placeholder { opacity: 0; }
 input:focus:-moz-placeholder { opacity: 0; }
 input:focus:-ms-input-placeholder { opacity: 0; }
 
+/* ============================================
+   Search Bar
+   ============================================ */
 .searchbar {
     width: 60%;
     text-align: center;
@@ -145,21 +196,26 @@ input:focus:-ms-input-placeholder { opacity: 0; }
 .searchbar > h3 {
     font-size: 200%;
     font-weight: bold;
-    color: #1182DB;
+    color: var(--primary-color);
     margin-bottom: 10px;
 }
 
+/* ============================================
+   Container
+   ============================================ */
 .container {
     width: 60%;
     margin: 0 auto 30px auto;
 }
 
-/* Section */
+/* ============================================
+   Sections
+   ============================================ */
 section {
     margin-bottom: 10px;
-    background-color: #FFFFFF;
+    background-color: var(--card-bg);
     padding: 15px;
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.09);
+    box-shadow: 0 6px 15px var(--shadow-color);
     border-radius: 4px;
 }
 
@@ -168,7 +224,7 @@ section .item-meta {
 }
 
 section .item-meta p {
-    color: #888;
+    color: var(--text-secondary);
     font-size: 1em;
 }
 
@@ -178,13 +234,13 @@ section .item-content {
 
 section .item-attachments {
     margin-bottom: 2em;
-    color: #888;
+    color: var(--text-secondary);
     font-size: 1em;
 }
 
 section .item-categories {
     margin-bottom: 1em;
-    color: #888;
+    color: var(--text-secondary);
     font-size: 1em;
 }
 
@@ -202,22 +258,26 @@ section > h2 {
     font-weight: bold;
     text-align: center;
 }
+
 section li {
     margin-left: 1em;
 }
+
 .bridge-card {
     position: relative;
     text-align: center;
 }
 
-/* Buttons */
+/* ============================================
+   Buttons
+   ============================================ */
 button.small {
     width: auto;
     line-height: 1.2em;
 }
 
 button:hover {
-    background: #49afff;
+    background: var(--primary-hover);
 }
 
 .description {
@@ -236,6 +296,9 @@ form {
     content: ' :';
 }
 
+/* ============================================
+   Info Icon
+   ============================================ */
 .info {
     cursor: pointer;
     opacity: 0.5;
@@ -257,6 +320,9 @@ form {
     opacity: 1;
 }
 
+/* ============================================
+   Grid Layout for Parameters
+   ============================================ */
 @supports (display: grid) {
 
     .parameters {
@@ -286,7 +352,7 @@ form {
     .parameters input[type="text"],
     .parameters input[type="number"] {
         width: auto;
-        color: #404552;
+        color: var(--input-text);
     }
 
     .parameters input[type="checkbox"] {
@@ -296,8 +362,11 @@ form {
 
 } /* @supports (display: grid) */
 
+/* ============================================
+   Error Page
+   ============================================ */
 p.maintainer {
-    color: #888888;
+    color: var(--text-secondary);
     font-size: 70%;
     text-align: right;
 }
@@ -317,17 +386,20 @@ select {
     margin-left: 8px;
 }
 
-/* Show more/less */
+/* ============================================
+   Show More / Less
+   ============================================ */
 .showmore-box {
     display: none;
 }
 
 .showmore, .showless {
-    color: #888888;
+    color: var(--text-secondary);
     cursor: pointer;
 }
+
 .showmore:hover, .showless:hover {
-    color: #000;
+    color: var(--text-color);
     cursor: pointer;
 }
 
@@ -343,21 +415,26 @@ select {
     display: block;
 }
 
-/* html format */
+/* ============================================
+   HTML Format Page
+   ============================================ */
 h1.pagetitle {
     margin: 40px 0 20px;
     font-size: 300%;
     font-weight: bold;
     text-align: center;
-    color: #2196F3;
+    color: var(--primary-color);
 }
+
 h1.pagetitle > a {
-    color: #2196F3;
+    color: var(--primary-color);
 }
+
 .buttons {
     text-align: center;
     margin-bottom: 15px;
 }
+
 button {
     line-height: 1.9em;
     color: #FFF;
@@ -367,11 +444,14 @@ button {
     margin: 12px auto 0px;
     border-radius: 4px;
     border: 1px solid transparent;
-    background: #2196F3 none repeat scroll 0% 0%;
+    background: var(--primary-color) none repeat scroll 0% 0%;
     cursor: pointer;
     width: 200px;
 }
 
+/* ============================================
+   Responsive (Mobile)
+   ============================================ */
 @media screen and (max-width: 767px) {
     .container {
         width: 100%;
@@ -408,49 +488,41 @@ button {
     } /* @supports (display: grid) */
 }
 
-/* Dark theme */
-@media (prefers-color-scheme: dark){
+/* ============================================
+   Dark Theme Additional Styles
+   ============================================ */
+@media (prefers-color-scheme: dark) {
     * {
         scrollbar-color: #202324 #454a4d;
-    }
-
-    body {
-        background-color: #202325;
-        color: #e8e6e3;
-    }
-
-    a, a:link, a:visited {
-        color: #0A6AB6;
     }
 
     /* Header */
     select,
     input[type="text"],
     input[type="number"] {
-        background-color: #181A1B;
+        background-color: var(--input-bg);
         /* does not apply to placeholder text without !important */
         color: white !important;
-
-        border: 1px solid #393E40;
+        border: 1px solid var(--input-border);
     }
 
     /* Section */
     section {
-        background-color: #181A1B;
+        background-color: var(--card-bg);
     }
 
     /* Buttons */
     button {
-        background: #0A6AB6 none repeat scroll 0% 0%;
+        background: var(--primary-color) none repeat scroll 0% 0%;
     }
 
     button:hover {
-        background: #004daa;
+        background: var(--primary-hover);
     }
 
-    @supports (display: grid){
+    @supports (display: grid) {
         .parameters input[type="number"] {
-            color: #BAB4AB;
+            color: var(--input-text);
         }
     }
 
@@ -460,38 +532,39 @@ button {
     }
 }
 
-/* find-feed */
+/* ============================================
+   Find Feed Results
+   ============================================ */
 .search-result {
-  background-color: #f0f0f0;
-  border-radius: 5px;
-  padding: 15px;
-  display: flex;
-  position: relative;
-  text-align: left;
-  margin-bottom: 15px;
+    background-color: var(--bg-color);
+    border-radius: 5px;
+    padding: 15px;
+    display: flex;
+    position: relative;
+    text-align: left;
+    margin-bottom: 15px;
 }
-@media (prefers-color-scheme: dark) {
-    .search-result {
-        background-color: #202325;
-    }
-}
+
 .search-result h2 {
-  color: #288cfc;
+    color: #288cfc;
 }
 
 .search-result a {
-  text-decoration: none;
-  color: #248afa;
+    text-decoration: none;
+    color: #248afa;
 }
+
 .search-result .icon {
-  margin: 0 15px 0 0;
+    margin: 0 15px 0 0;
 }
+
 .search-result span {
-  margin-right: 10px;
+    margin-right: 10px;
 }
+
 .search-result .description {
-  font-size: 110%;
-  margin-right: 0 !important;
-  margin-top: 5px !important;
+    font-size: 110%;
+    margin-right: 0 !important;
+    margin-top: 5px !important;
 }
 /* end find-feed */

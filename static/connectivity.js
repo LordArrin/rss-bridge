@@ -1,256 +1,283 @@
-var remote = location.href.substring(0, location.href.lastIndexOf("/"));
-var bridges = [];
-var abort = false;
+'use strict';
 
-window.onload = function() {
+const remote = location.href.substring(0, location.href.lastIndexOf("/"));
+let bridges = [];
+let abort = false;
+let searchTimeout = null;
 
-	fetch(remote + '/?action=list').then(function(response) {
-		return response.text()
-	}).then(function(data){
-		processBridgeList(data);
-	}).catch(console.log.bind(console)
-	);
+document.addEventListener('DOMContentLoaded', function() {
+    fetchBridgeList();
+    
+    // Add event listener for search input
+    const searchInput = document.getElementById('search');
+    if (searchInput) {
+        searchInput.addEventListener('keyup', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(search, 150);
+        });
+    }
+});
 
+async function fetchBridgeList() {
+    try {
+        const response = await fetch(remote + '/?action=list');
+        if (!response.ok) {
+            throw new Error('Failed to fetch bridge list: ' + response.status);
+        }
+        const data = await response.text();
+        processBridgeList(data);
+    } catch (error) {
+        console.error('Error fetching bridge list:', error);
+        showError('Failed to load bridge list. Please refresh the page.');
+    }
+}
+
+function showError(message) {
+    const msg = document.getElementById('status-message');
+    if (msg) {
+        msg.classList.remove('alert-primary');
+        msg.classList.add('alert-danger');
+        msg.getElementsByTagName('span')[0].textContent = message;
+    }
 }
 
 function processBridgeList(data) {
-
-	var list = JSON.parse(data);
-
-	buildTable(list);
-	buildBridgeQueue(list);
-	checkNextBridgeAsync();
-
+    try {
+        const list = JSON.parse(data);
+        buildTable(list);
+        buildBridgeQueue(list);
+        checkNextBridgeAsync();
+    } catch (error) {
+        console.error('Error processing bridge list:', error);
+        showError('Invalid bridge list data received.');
+    }
 }
 
 function buildTable(bridgeList) {
+    const table = document.createElement('table');
+    table.classList.add('table');
 
-	var table = document.createElement('table');
-	table.classList.add('table');
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+    <tr>
+        <th scope="col">Bridge</th>
+        <th scope="col">Result</th>
+    </tr>`;
 
-	var thead = document.createElement('thead');
-	thead.innerHTML = `
-	<tr>
-		<th scope="col">Bridge</th>
-		<th scope="col">Result</th>
-	</tr>`;
+    const tbody = document.createElement('tbody');
 
-	var tbody = document.createElement('tbody');
+    for (const bridge in bridgeList.bridges) {
+        const tr = document.createElement('tr');
+        tr.classList.add('bg-secondary');
+        tr.id = bridge;
 
-	for (var bridge in bridgeList.bridges) {
+        const td_bridge = document.createElement('td');
+        td_bridge.textContent = bridgeList.bridges[bridge].name;
 
-		var tr = document.createElement('tr');
-		tr.classList.add('bg-secondary');
-		tr.id = bridge;
+        // Link to the actual bridge on frontpage
+        const a = document.createElement('a');
+        a.href = remote + "/#bridge-" + bridge;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = '[Show]';
+        a.style.marginLeft = '5px';
+        a.style.color = 'inherit';
 
-		var td_bridge = document.createElement('td');
-		td_bridge.innerText = bridgeList.bridges[bridge].name;
+        td_bridge.appendChild(a);
+        tr.appendChild(td_bridge);
 
-		// Link to the actual bridge on frontpage
-		var a = document.createElement('a');
-		a.href = remote + "/?#bridge-" + bridge;
-		a.target = '_blank';
-		a.innerText = '[Show]';
-		a.style.marginLeft = '5px';
-		a.style.color = 'black';
+        const td_result = document.createElement('td');
 
-		td_bridge.appendChild(a);
-		tr.appendChild(td_bridge);
+        if (bridgeList.bridges[bridge].status === 'active') {
+            td_result.innerHTML = '<i title="Scheduled" class="fas fa-hourglass-start"></i>';
+        } else {
+            td_result.innerHTML = '<i title="Inactive" class="fas fa-times-circle"></i>';
+        }
 
-		var td_result = document.createElement('td');
+        tr.appendChild(td_result);
+        tbody.appendChild(tr);
+    }
 
-		if (bridgeList.bridges[bridge].status === 'active') {
-			td_result.innerHTML = '<i title="Scheduled" class="fas fa-hourglass-start"></i>';
-		} else {
-			td_result.innerHTML = '<i title="Inactive" class="fas fa-times-circle"></i>';
-		}
+    table.appendChild(thead);
+    table.appendChild(tbody);
 
-		tr.appendChild(td_result);
-		tbody.appendChild(tr);
-
-	}
-
-	table.appendChild(thead);
-	table.appendChild(tbody);
-
-	var content = document.getElementById('main-content');
-	content.appendChild(table);
-
+    const content = document.getElementById('main-content');
+    if (content) {
+        content.appendChild(table);
+    }
 }
 
 function buildBridgeQueue(bridgeList) {
-	for (var bridge in bridgeList.bridges) {
-		if (bridgeList.bridges[bridge].status !== 'active')
-			continue;
-		bridges.push(bridge);
-	}
+    for (const bridge in bridgeList.bridges) {
+        if (bridgeList.bridges[bridge].status !== 'active') {
+            continue;
+        }
+        bridges.push(bridge);
+    }
 }
 
+async function checkNextBridgeAsync() {
+    const msg = document.getElementById('status-message');
+    const icon = document.getElementById('status-icon');
 
-function checkNextBridgeAsync() {
-	return new Promise((resolve) => {
-		var msg = document.getElementById('status-message');
-		var icon = document.getElementById('status-icon');
+    if (!msg || !icon) {
+        return;
+    }
 
-		if (bridges.length === 0) {
-			msg.classList.remove('alert-primary');
-			msg.classList.add('alert-success');
-			msg.getElementsByTagName('span')[0].textContent = 'Done';
+    if (bridges.length === 0) {
+        msg.classList.remove('alert-primary');
+        msg.classList.add('alert-success');
+        msg.getElementsByTagName('span')[0].textContent = 'Done';
 
-			icon.classList.remove('fa-sync');
-			icon.classList.add('fa-check');
-		} else {
-			var bridge = bridges.shift();
+        icon.classList.remove('fa-sync');
+        icon.classList.add('fa-check');
+        return;
+    }
 
-			msg.getElementsByTagName('span')[0].textContent = 'Processing ' + bridge + '...';
+    const bridge = bridges.shift();
+    msg.getElementsByTagName('span')[0].textContent = 'Processing ' + bridge + '...';
 
-			fetch(remote + '/?action=Connectivity&bridge=' + bridge)
-			.then(function(response) { return response.text() })
-			.then(JSON.parse)
-			.then(processBridgeResultAsync)
-			.then(markBridgeSuccessful, markBridgeFailed)
-			.then(checkAbortAsync)
-			.then(checkNextBridgeAsync, abortChecks)
-			.catch(console.log.bind(console));
+    try {
+        const response = await fetch(remote + '/?action=Connectivity&bridge=' + bridge);
+        if (!response.ok) {
+            throw new Error('Bridge check failed: ' + response.status);
+        }
+        
+        const data = await response.text();
+        const result = JSON.parse(data);
+        
+        if (result.successful) {
+            markBridgeSuccessful(result);
+        } else {
+            markBridgeFailed(result);
+        }
+    } catch (error) {
+        console.error('Error checking bridge ' + bridge + ':', error);
+        markBridgeFailed({ bridge: bridge, error: error.message });
+    }
 
-			search(); // Dynamically update search results
-			updateProgressBar();
+    if (abort) {
+        abortChecks();
+        return;
+    }
 
-		}
-
-		resolve();
-	});
+    search(); // Dynamically update search results
+    updateProgressBar();
+    checkNextBridgeAsync();
 }
 
 function abortChecks() {
-	return new Promise((resolve) => {
-		var msg = document.getElementById('status-message');
+    const msg = document.getElementById('status-message');
+    if (!msg) {
+        return;
+    }
 
-		msg.classList.remove('alert-primary');
-		msg.classList.add('alert-warning');
-		msg.getElementsByTagName('span')[0].textContent = 'Aborted';
+    msg.classList.remove('alert-primary');
+    msg.classList.add('alert-warning');
+    msg.getElementsByTagName('span')[0].textContent = 'Aborted';
 
-		var icon = document.getElementById('status-icon');
-		icon.classList.remove('fa-sync');
-		icon.classList.add('fa-ban');
+    const icon = document.getElementById('status-icon');
+    if (icon) {
+        icon.classList.remove('fa-sync');
+        icon.classList.add('fa-ban');
+    }
 
-		bridges.forEach((bridge) => {
-			markBridgeAborted(bridge);
-		})
-
-		resolve();
-	});
-}
-
-function processBridgeResultAsync(result) {
-	return new Promise((resolve, reject) => {
-		if (result.successful) {
-			resolve(result);
-		} else {
-			reject(result);
-		}
-	});
+    bridges.forEach((bridge) => {
+        markBridgeAborted(bridge);
+    });
 }
 
 function markBridgeSuccessful(result) {
-	return new Promise((resolve) => {
-		var tr = document.getElementById(result.bridge);
-		tr.classList.remove('bg-secondary');
-		if (result.http_code == 200) {
-			tr.classList.add('bg-success');
-			tr.children[1].innerHTML = '<i title="Successful" class="fas fa-check"></i>';
-		} else {
-			tr.classList.add('bg-primary');
-			tr.children[1].innerHTML = '<i title="Redirected" class="fas fa-directions"></i>';
-		}
-
-		resolve();
-	});
+    const tr = document.getElementById(result.bridge);
+    if (!tr) {
+        return;
+    }
+    
+    tr.classList.remove('bg-secondary');
+    if (result.http_code === 200) {
+        tr.classList.add('bg-success');
+        tr.children[1].innerHTML = '<i title="Successful" class="fas fa-check"></i>';
+    } else {
+        tr.classList.add('bg-primary');
+        tr.children[1].innerHTML = '<i title="Redirected" class="fas fa-directions"></i>';
+    }
 }
 
 function markBridgeFailed(result) {
-	return new Promise((resolve) => {
-		var tr = document.getElementById(result.bridge);
-		tr.classList.remove('bg-secondary');
-		tr.classList.add('bg-danger');
-		tr.children[1].innerHTML = '<i title="Failed" class="fas fa-exclamation-triangle"></i>';
-
-		resolve();
-	});
+    const tr = document.getElementById(result.bridge);
+    if (!tr) {
+        return;
+    }
+    
+    tr.classList.remove('bg-secondary');
+    tr.classList.add('bg-danger');
+    tr.children[1].innerHTML = '<i title="Failed" class="fas fa-exclamation-triangle"></i>';
 }
 
 function markBridgeAborted(bridge) {
-	return new Promise((resolve) => {
-		var tr = document.getElementById(bridge);
-		tr.classList.remove('bg-secondary');
-		tr.classList.add('bg-warning');
-		tr.children[1].innerHTML = '<i title="Aborted" class="fas fa-ban"></i>';
-
-		resolve();
-	});
-}
-
-function checkAbortAsync() {
-	return new Promise((resolve, reject) => {
-		if (abort) {
-			reject();
-			return;
-		}
-
-		resolve();
-	});
+    const tr = document.getElementById(bridge);
+    if (!tr) {
+        return;
+    }
+    
+    tr.classList.remove('bg-secondary');
+    tr.classList.add('bg-warning');
+    tr.children[1].innerHTML = '<i title="Aborted" class="fas fa-ban"></i>';
 }
 
 function updateProgressBar() {
+    const table = document.querySelector('table');
+    if (!table) {
+        return;
+    }
 
-	// This will break if the table changes
-	var total = document.getElementsByTagName('tr').length - 1;
-	var current = bridges.length;
-	var progress = (total - current) * 100 / total;
+    // This will break if the table changes
+    const total = table.getElementsByTagName('tr').length - 1;
+    const current = bridges.length;
+    const progress = (total - current) * 100 / total;
 
-	var progressBar = document.getElementsByClassName('progress-bar')[0];
+    const progressBar = document.getElementsByClassName('progress-bar')[0];
 
-	if(progressBar){
-		progressBar.setAttribute('aria-valuenow', progress.toFixed(0));
-		progressBar.style.width = progress.toFixed(0) + '%';
-	}
-
+    if (progressBar) {
+        progressBar.setAttribute('aria-valuenow', progress.toFixed(0));
+        progressBar.style.width = progress.toFixed(0) + '%';
+    }
 }
 
 function stopConnectivityChecks() {
-	abort = true;
+    abort = true;
 }
 
 function search() {
+    const input = document.getElementById('search');
+    const table = document.querySelector('table');
+    
+    if (!input || !table) {
+        return;
+    }
 
-	var input = document.getElementById('search');
-	var filter = input.value.toUpperCase();
-	var table = document.getElementsByTagName('table')[0];
-	var tr = table.getElementsByTagName('tr');
+    const filter = input.value.toUpperCase();
+    const tr = table.getElementsByTagName('tr');
 
-	for (var i = 0; i < tr.length; i++) {
+    for (let i = 0; i < tr.length; i++) {
+        const td1 = tr[i].getElementsByTagName('td')[0];
+        const td2 = tr[i].getElementsByTagName('td')[1];
 
-		var td1 = tr[i].getElementsByTagName('td')[0];
-		var td2 = tr[i].getElementsByTagName('td')[1];
+        if (td1) {
+            const txtValue = td1.textContent || td1.innerText;
 
-		if (td1) {
+            let title = '';
+            const icon = td2 ? td2.getElementsByTagName('i')[0] : null;
+            if (icon) {
+                title = icon.title || '';
+            }
 
-			var txtValue = td1.textContent || td1.innerText;
-
-			var title = '';
-			if(td2.getElementsByTagName('i')[0]) {
-				title = td2.getElementsByTagName('i')[0].title;
-			}
-
-			if (txtValue.toUpperCase().indexOf(filter) > -1
-			|| title.toUpperCase().indexOf(filter) > -1) {
-				tr[i].style.display = '';
-			} else {
-				tr[i].style.display = 'none';
-			}
-
-		}
-
-	}
-
+            if (txtValue.toUpperCase().indexOf(filter) > -1 || 
+                title.toUpperCase().indexOf(filter) > -1) {
+                tr[i].style.display = '';
+            } else {
+                tr[i].style.display = 'none';
+            }
+        }
+    }
 }
