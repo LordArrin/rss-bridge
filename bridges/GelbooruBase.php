@@ -134,12 +134,12 @@ abstract class GelbooruBase extends BridgeAbstract
 
     protected function getTimestamp(\stdClass $element): string
     {
-        if (isset($element->change)) {
+        if (isset($element->change) === true) {
             $dateTime = new \DateTimeImmutable('@' . (int) $element->change);
             return $dateTime->format('d F Y H:i:s');
         }
 
-        if (isset($element->created_at)) {
+        if (isset($element->created_at) === true) {
             if (is_numeric($element->created_at) === true) {
                 $dateTime = new \DateTimeImmutable('@' . (int) $element->created_at);
                 return $dateTime->format('d F Y H:i:s');
