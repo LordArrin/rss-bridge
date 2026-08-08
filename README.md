@@ -218,4 +218,3 @@ RSS-Bridge uses third-party libraries with their own licenses:
 * [`Parsedown`](https://github.com/erusev/parsedown) - MIT
 * [`PHP Simple HTML DOM Parser`](https://simplehtmldom.sourceforge.io/docs/1.9/index.html) - MIT
 * [`php-urljoin`](https://github.com/fluffy-critter/php-urljoin) - MIT
-```
