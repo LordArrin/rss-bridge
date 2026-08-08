@@ -25,7 +25,7 @@ class FimfictionBridge extends BridgeAbstract
                 'name' => 'Story ID',
                 'type' => 'text',
                 'required' => true,
-                'exampleValue' => '550684',
+                'exampleValue' => '582300',
             ],
             'full_content' => [
                 'name' => 'Fetch full chapter content',
@@ -90,9 +90,11 @@ class FimfictionBridge extends BridgeAbstract
         $chaptersData = $this->extractChaptersList($dom, self::FETCH_LIMIT);
 
         foreach ($chaptersData as $data) {
-            $content = $this->getInput('full_content') === true
-                ? $this->buildFullContent(uri: $data['uri'], options: $options)
-                : $this->buildLinkContent(uri: $data['uri']);
+            if ($this->getInput('full_content') === true) {
+                $content = $this->buildFullContent(uri: $data['uri'], options: $options);
+            } else {
+                $content = $this->buildLinkContent(uri: $data['uri']);
+            }
 
             $this->items[] = [
                 'title'     => $data['title'],
@@ -192,7 +194,7 @@ class FimfictionBridge extends BridgeAbstract
         }
 
         $img = $container->find('img', 0);
-        return $img?->src ?: null;
+        return $img?->src ?? null;
     }
 
     private function extractChaptersList(\simple_html_dom $dom, int $limit): array
