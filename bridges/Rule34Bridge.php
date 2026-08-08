@@ -69,8 +69,8 @@ class Rule34Bridge extends GelbooruBase
 
     public function collectData(): void
     {
-        $apiKey = (string) ($this->getInput('api_key') ?: $this->getOption('api_key') ?: '');
-        $userId = (string) ($this->getInput('user_id') ?: $this->getOption('user_id') ?: '');
+        $apiKey = (string) ($this->getInput('api_key') ?? $this->getOption('api_key') ?? '');
+        $userId = (string) ($this->getInput('user_id') ?? $this->getOption('user_id') ?? '');
 
         if ($apiKey === '' || $userId === '') {
             throw new \Exception('API key and user ID are required. Provide them in the bridge parameters or in config.ini.php under the [Rule34Bridge] section.');

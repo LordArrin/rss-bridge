@@ -140,7 +140,7 @@ abstract class GelbooruBase extends BridgeAbstract
         }
 
         if (isset($element->created_at)) {
-            if (is_numeric($element->created_at)) {
+            if (is_numeric($element->created_at) === true) {
                 $dateTime = new \DateTimeImmutable('@' . (int) $element->created_at);
                 return $dateTime->format('d F Y H:i:s');
             }
