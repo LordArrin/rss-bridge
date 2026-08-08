@@ -311,8 +311,9 @@ final class RuStoreBridge extends BridgeAbstract
             return '<p style="' . self::CSS_STYLES['empty'] . '">No changelog available.</p>';
         }
 
+        $splitResult = preg_split('/\r\n|\r|\n/', $text);
         $lines = array_filter(
-            array_map(trim(...), preg_split('/\r\n|\r|\n/', $text) ?: []),
+            array_map(trim(...), $splitResult !== false ? $splitResult : []),
             static fn(string $s): bool => $s !== '',
         );
 
