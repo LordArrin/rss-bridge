@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-class Rule34Bridge extends GelbooruBridge
+class Rule34Bridge extends GelbooruBase
 {
     const NAME = 'Rule34';
     const URI = 'https://api.rule34.xxx/';
+    const VIEW_URI = 'https://rule34.xxx/';
     const DESCRIPTION = 'Returns images from rule34.xxx search';
     const MAINTAINER = 'LordArrin';
     const CACHE_TIMEOUT = 1800;
-    const VIEW_URI = 'https://rule34.xxx/';
 
     const CONFIGURATION = [
         'api_key' => [
@@ -38,13 +38,13 @@ class Rule34Bridge extends GelbooruBridge
                 'name' => 'Query (Tags)',
                 'type' => 'text',
                 'required' => true,
-                'title' => 'Tags for search, separated by commas or spaces (e.g., "tag1, tag2" or "tag1 tag2")'
+                'title' => 'Tags for search, separated by commas or spaces'
             ],
             'l' => [
                 'name' => 'Posts limit',
                 'type' => 'number',
                 'required' => false,
-                'title' => 'Maximum number of posts to fetch (API hard limit is 1000 per request)',
+                'title' => 'Maximum number of posts to fetch (API hard limit is 1000)',
                 'defaultValue' => 10
             ],
             'exclude_ai' => [
@@ -63,111 +63,98 @@ class Rule34Bridge extends GelbooruBridge
         0 => []
     ];
 
-    public function getName()
+    public function collectData(): void
     {
-        $query = $this->getInput('q');
+        $apiKey = (string) ($this->getInput('api_key') ?: $this->getOption('api_key') ?: '');
+        $userId = (string) ($this->getInput('user_id') ?: $this->getOption('user_id') ?: '');
 
-        if ($query !== null && $query !== '') {
-            $query = str_replace(',', ' ', $query);
-            $query = trim(preg_replace('/\s+/', ' ', $query));
-
-            return $query;
+        if ($apiKey === '' || $userId === '') {
+            throw new \Exception(
+                'API key and user ID are required. '
+                . 'Provide them in the bridge parameters or in config.ini.php under the [Rule34Bridge] section.'
+            );
         }
 
-        return parent::getName();
+        $this->apiKey = $apiKey;
+        $this->userId = $userId;
+
+        parent::collectData();
     }
 
-    protected function getFullURI()
+    public function getName(): string
     {
-        $query = str_replace(',', ' ', $this->getInput('q') ?? '');
-        $query = trim(preg_replace('/\s+/', ' ', $query));
+        $query = $this->normalizeQuery((string) ($this->getInput('q') ?? ''));
+
+        return $query !== '' ? $query : parent::getName();
+    }
+
+    protected function getFullURI(): string
+    {
+        $query = $this->normalizeQuery((string) ($this->getInput('q') ?? ''));
 
         if ($this->getInput('exclude_ai')) {
             $query = trim($query . ' -ai_generated');
         }
 
-        $limit = (int)($this->getInput('l') ?? 10);
-        $tags = str_replace(' ', '+', $query);
-        $apiKey = urlencode($this->getInput('api_key') ?? '');
-        $userId = urlencode($this->getInput('user_id') ?? '');
+        $params = [
+            'page' => 'dapi',
+            's' => 'post',
+            'q' => 'index',
+            'json' => 1,
+            'pid' => 0,
+            'limit' => (int) ($this->getInput('l') ?? 10),
+            'tags' => $query,
+            'api_key' => $this->apiKey ?? '',
+            'user_id' => $this->userId ?? '',
+        ];
 
-        return "{$this->getURI()}index.php?page=dapi&s=post&q=index&json=1&pid=0&limit={$limit}&tags={$tags}&api_key={$apiKey}&user_id={$userId}";
+        return $this->getURI() . 'index.php?' . http_build_query($params);
     }
 
-    public function collectData()
+    protected function extractPosts(mixed $data): array|\stdClass
     {
-        $apiKey = $this->getInput('api_key') ?: $this->getOption('api_key');
-        $userId = $this->getInput('user_id') ?: $this->getOption('user_id');
-
-        if (empty($apiKey) || empty($userId)) {
-            throw new \Exception('API key and user ID are required. Provide them in the bridge parameters or in config.ini.php under the [Rule34Bridge] section.');
+        if ($data instanceof \stdClass && ($data->success ?? null) === false) {
+            throw new \Exception('API error: ' . ($data->message ?? 'Unknown error'));
         }
 
-        $this->inputs[$this->queriedContext]['api_key']['value'] = $apiKey;
-        $this->inputs[$this->queriedContext]['user_id']['value'] = $userId;
-
-        $content = getContents($this->getFullURI());
-
-        if ($content === '') {
-            return;
-        }
-
-        $posts = Json::decode($content, false);
-
-        if (isset($posts->success) && $posts->success === false) {
-            throw new \Exception('API error: ' . ($posts->message ?? 'Unknown error'));
-        }
-
-        $posts = $posts->post ?? $posts;
-
-        if (!is_array($posts)) {
-            return;
-        }
-
-        foreach ($posts as $post) {
-            $this->items[] = $this->getItemFromElement($post);
-        }
+        return $data instanceof \stdClass ? ($data->post ?? []) : $data;
     }
 
-    protected function getItemFromElement($element)
+    protected function getItemFromElement(\stdClass $element): array
     {
-        $pageUrl = self::VIEW_URI . 'index.php?page=post&s=view&id=' . $element->id;
-        $thumbnailUrl = $element->preview_url ?? $this->buildThumbnailURI($element);
+        $pageUrl = self::VIEW_URI . 'index.php?page=post&s=view&id=' . (int) ($element->id ?? 0);
+        $thumbnailUrl = (string) ($element->preview_url ?? $this->buildThumbnailURI($element));
 
         $content = sprintf(
-            '<a href="%s"><img src="%s" /></a><br><br><b>Dimensions:</b> %s x %s',
-            htmlspecialchars($pageUrl),
-            htmlspecialchars($thumbnailUrl),
-            $element->width,
-            $element->height
+            '<a href="%s"><img src="%s" /></a><br><br><b>Dimensions:</b> %d x %d',
+            htmlspecialchars($pageUrl, ENT_QUOTES),
+            htmlspecialchars($thumbnailUrl, ENT_QUOTES),
+            (int) ($element->width ?? 0),
+            (int) ($element->height ?? 0)
         );
 
         if (!$this->getInput('hide_details')) {
-            $content .= sprintf('<br><br><b>Tags:</b> %s', htmlspecialchars($element->tags));
+            $content .= sprintf(
+                '<br><br><b>Tags:</b> %s',
+                htmlspecialchars((string) ($element->tags ?? ''), ENT_QUOTES)
+            );
 
-            if (!empty($element->source)) {
+            $source = (string) ($element->source ?? '');
+            if ($source !== '') {
                 $content .= sprintf(
-                    '<br><br><b>Source:</b> <a href="%s">%s</a>',
-                    htmlspecialchars($element->source),
-                    htmlspecialchars($element->source)
+                    '<br><br><b>Source:</b> <a href="%1$s">%1$s</a>',
+                    htmlspecialchars($source, ENT_QUOTES)
                 );
             }
         }
 
-        $timestamp = time();
-        if (isset($element->created_at)) {
-            $timestamp = is_numeric($element->created_at) ? (int)$element->created_at : (strtotime($element->created_at) ?: time());
-        } elseif (isset($element->change)) {
-            $timestamp = (int)$element->change;
-        }
-
         return [
-            'uri'       => $pageUrl,
-            'id'        => $pageUrl,
-            'title'     => sprintf('Image %s', $element->id),
-            'content'   => $content,
-            'author'    => $element->owner ?? 'unknown',
-            'timestamp' => $timestamp,
+            'uri' => $pageUrl,
+            'id' => $pageUrl,
+            'title' => sprintf('Image %d', (int) ($element->id ?? 0)),
+            'content' => $content,
+            'author' => (string) ($element->owner ?? 'unknown'),
+            'timestamp' => $this->getTimestamp($element),
         ];
     }
 }
