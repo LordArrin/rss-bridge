@@ -2,17 +2,6 @@
 
 declare(strict_types=1);
 
-enum ProxyProfile: string
-{
-    case FlareSolverr = 'flaresolverr';
-}
-
-enum ChapterFetchMode: int
-{
-    case LinkOnly = 0;
-    case FullContent = 1;
-}
-
 class FimfictionBridge extends BridgeAbstract
 {
     const MAINTAINER = 'LordArrin';
@@ -21,9 +10,9 @@ class FimfictionBridge extends BridgeAbstract
     const DESCRIPTION = 'Returns chapter updates for stories on Fimfiction';
     const CACHE_TIMEOUT = 3600;
 
-    private const PROXY_PROFILE = ProxyProfile::FlareSolverr;
+    private const PROXY_PROFILE = 'flaresolverr';
     private const MAX_RETRIES = 3;
-    private const RETRY_DELAY_US = 500000; // 0.5 секунды
+    private const RETRY_DELAY_US = 500000;
 
     const CONFIGURATION = [
         'session_token' => ['required' => false],
@@ -36,14 +25,14 @@ class FimfictionBridge extends BridgeAbstract
                 'name' => 'Story ID',
                 'type' => 'text',
                 'required' => true,
-                'exampleValue' => '550684'
+                'exampleValue' => '550684',
             ],
             'full_content' => [
                 'name' => 'Fetch full chapter content',
                 'type' => 'checkbox',
                 'defaultValue' => false,
             ],
-        ]
+        ],
     ];
 
     const FETCH_LIMIT = 3;
@@ -87,10 +76,7 @@ class FimfictionBridge extends BridgeAbstract
         $dom = $this->fetchWithRetry(url: $storyUrl, options: $options);
 
         if ($this->validateStoryPage($dom) === false) {
-            throwClientException(
-                'Received invalid story page structure. The story may be private, ' .
-                'deleted, or the proxy returned unexpected content.'
-            );
+            throwClientException('Received invalid story page structure. The story may be private, deleted, or the proxy returned unexpected content.');
         }
 
         $storyError = $this->detectStoryError($dom);
@@ -103,15 +89,10 @@ class FimfictionBridge extends BridgeAbstract
         $author = $this->extractAuthor($dom);
         $chaptersData = $this->extractChaptersList($dom, self::FETCH_LIMIT);
 
-        $fetchMode = $this->getInput('full_content') === true
-            ? ChapterFetchMode::FullContent
-            : ChapterFetchMode::LinkOnly;
-
         foreach ($chaptersData as $data) {
-            $content = match ($fetchMode) {
-                ChapterFetchMode::FullContent => $this->buildFullContent(uri: $data['uri'], options: $options),
-                ChapterFetchMode::LinkOnly => $this->buildLinkContent(uri: $data['uri']),
-            };
+            $content = $this->getInput('full_content') === true
+                ? $this->buildFullContent(uri: $data['uri'], options: $options)
+                : $this->buildLinkContent(uri: $data['uri']);
 
             $this->items[] = [
                 'title'     => $data['title'],
@@ -130,11 +111,7 @@ class FimfictionBridge extends BridgeAbstract
 
         for ($attempt = 1; $attempt <= self::MAX_RETRIES; $attempt++) {
             try {
-                return getProtectedSimpleHTMLDOM(
-                    $url,
-                    self::PROXY_PROFILE->value,
-                    $options
-                );
+                return getProtectedSimpleHTMLDOM($url, self::PROXY_PROFILE, $options);
             } catch (\Exception $e) {
                 $lastException = $e;
 
@@ -202,8 +179,7 @@ class FimfictionBridge extends BridgeAbstract
 
     private function extractAuthor(\simple_html_dom $dom): string
     {
-        $author = $dom->find('div.info-container a[href*=/user/]', 0)?->plaintext
-               ?? $dom->find('a[href*=/user/]', 0)?->plaintext;
+        $author = $dom->find('div.info-container a[href*=/user/]', 0)?->plaintext ?? $dom->find('a[href*=/user/]', 0)?->plaintext;
 
         return $author !== null && $author !== '' ? trim($author) : 'Unknown';
     }
@@ -283,8 +259,7 @@ class FimfictionBridge extends BridgeAbstract
         try {
             $dom = $this->fetchWithRetry(url: $uri, options: $options);
         } catch (\Exception $e) {
-            return '<p style="' . self::CSS['error'] . '">Error loading chapter: '
-                . htmlspecialchars($e->getMessage()) . '</p>';
+            return '<p style="' . self::CSS['error'] . '">Error loading chapter: ' . htmlspecialchars($e->getMessage()) . '</p>';
         }
 
         $content = '<div style="' . self::CSS['wrapper'] . '">';
@@ -306,9 +281,7 @@ class FimfictionBridge extends BridgeAbstract
     private function buildLinkContent(string $uri): string
     {
         $safeUri = htmlspecialchars($uri, ENT_QUOTES, 'UTF-8');
-        return '<div style="' . self::CSS['wrapper'] . '"><p style="'
-            . self::CSS['chapter-link'] . '">New chapter published - <a href="'
-            . $safeUri . '">read full</a></p></div>';
+        return '<div style="' . self::CSS['wrapper'] . '"><p style="' . self::CSS['chapter-link'] . '">New chapter published - <a href="' . $safeUri . '">read full</a></p></div>';
     }
 
     private function sanitizeContent(\simple_html_dom_node $element): void
@@ -326,16 +299,8 @@ class FimfictionBridge extends BridgeAbstract
         $dangerousTags = ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select'];
 
         foreach ($dangerousTags as $tag) {
-            $content = preg_replace(
-                '/<' . $tag . '[^>]*>.*?<\/' . $tag . '>/is',
-                '',
-                $content
-            );
-            $content = preg_replace(
-                '/<' . $tag . '[^>]*\/?>/is',
-                '',
-                $content
-            );
+            $content = preg_replace('/<' . $tag . '[^>]*>.*?<\/' . $tag . '>/is', '', $content);
+            $content = preg_replace('/<' . $tag . '[^>]*\/?>/is', '', $content);
         }
 
         return $content;
