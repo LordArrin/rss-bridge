@@ -63,16 +63,17 @@ class Rule34Bridge extends GelbooruBase
         0 => []
     ];
 
+    private string $apiKey = '';
+
+    private string $userId = '';
+
     public function collectData(): void
     {
         $apiKey = (string) ($this->getInput('api_key') ?: $this->getOption('api_key') ?: '');
         $userId = (string) ($this->getInput('user_id') ?: $this->getOption('user_id') ?: '');
 
         if ($apiKey === '' || $userId === '') {
-            throw new \Exception(
-                'API key and user ID are required. '
-                . 'Provide them in the bridge parameters or in config.ini.php under the [Rule34Bridge] section.'
-            );
+            throw new \Exception('API key and user ID are required. Provide them in the bridge parameters or in config.ini.php under the [Rule34Bridge] section.');
         }
 
         $this->apiKey = $apiKey;
@@ -92,7 +93,7 @@ class Rule34Bridge extends GelbooruBase
     {
         $query = $this->normalizeQuery((string) ($this->getInput('q') ?? ''));
 
-        if ($this->getInput('exclude_ai')) {
+        if ($this->getInput('exclude_ai') === true) {
             $query = trim($query . ' -ai_generated');
         }
 
@@ -133,7 +134,7 @@ class Rule34Bridge extends GelbooruBase
             (int) ($element->height ?? 0)
         );
 
-        if (!$this->getInput('hide_details')) {
+        if ($this->getInput('hide_details') === false) {
             $content .= sprintf(
                 '<br><br><b>Tags:</b> %s',
                 htmlspecialchars((string) ($element->tags ?? ''), ENT_QUOTES)

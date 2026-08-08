@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 abstract class GelbooruBase extends BridgeAbstract
 {
+    const NAME = 'Gelbooru';
     const URI = 'https://gelbooru.com/';
-    const DESCRIPTION = 'Base class for Gelbooru bridges';
+    const DESCRIPTION = 'Base bridge for Gelbooru-based imageboards (use a site-specific bridge instead)';
+    const MAINTAINER = 'LordArrin';
+    const CACHE_TIMEOUT = 1800;
 
     const PARAMETERS = [
         'global' => [
@@ -73,7 +76,7 @@ abstract class GelbooruBase extends BridgeAbstract
         $data = Json::decode($content, false);
         $posts = $this->extractPosts($data);
 
-        if (!is_iterable($posts)) {
+        if (is_iterable($posts) === false) {
             return;
         }
 
