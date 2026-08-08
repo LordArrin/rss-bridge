@@ -2,6 +2,17 @@
 
 declare(strict_types=1);
 
+enum ProxyProfile: string
+{
+    case FlareSolverr = 'flaresolverr';
+}
+
+enum ChapterFetchMode: int
+{
+    case LinkOnly = 0;
+    case FullContent = 1;
+}
+
 class FimfictionBridge extends BridgeAbstract
 {
     const MAINTAINER = 'LordArrin';
@@ -10,7 +21,9 @@ class FimfictionBridge extends BridgeAbstract
     const DESCRIPTION = 'Returns chapter updates for stories on Fimfiction';
     const CACHE_TIMEOUT = 3600;
 
-    private const PROXY_PROFILE = 'flaresolverr';
+    private const PROXY_PROFILE = ProxyProfile::FlareSolverr;
+    private const MAX_RETRIES = 3;
+    private const RETRY_DELAY_US = 500000; // 0.5 секунды
 
     const CONFIGURATION = [
         'session_token' => ['required' => false],
@@ -53,7 +66,7 @@ class FimfictionBridge extends BridgeAbstract
     public function getURI(): string
     {
         $id = $this->getInput('story_id');
-        return $id ? self::URI . 'story/' . $id . '/' : self::URI;
+        return $id === '' ? self::URI : self::URI . 'story/' . $id . '/';
     }
 
     public function getIcon(): string
@@ -64,16 +77,16 @@ class FimfictionBridge extends BridgeAbstract
     public function collectData(): void
     {
         $storyId = $this->getInput('story_id');
-        if (!$storyId) {
+        if ($storyId === '' || $storyId === null) {
             throwClientException('Story ID is required');
         }
 
         $storyUrl = self::URI . 'story/' . $storyId . '/';
         $options = $this->buildProxyOptions();
 
-        $dom = getProtectedSimpleHTMLDOM($storyUrl, self::PROXY_PROFILE, $options);
+        $dom = $this->fetchWithRetry(url: $storyUrl, options: $options);
 
-        if (!$this->validateStoryPage($dom)) {
+        if ($this->validateStoryPage($dom) === false) {
             throwClientException(
                 'Received invalid story page structure. The story may be private, ' .
                 'deleted, or the proxy returned unexpected content.'
@@ -81,7 +94,7 @@ class FimfictionBridge extends BridgeAbstract
         }
 
         $storyError = $this->detectStoryError($dom);
-        if ($storyError) {
+        if ($storyError !== null) {
             throwClientException($storyError);
         }
 
@@ -90,10 +103,15 @@ class FimfictionBridge extends BridgeAbstract
         $author = $this->extractAuthor($dom);
         $chaptersData = $this->extractChaptersList($dom, self::FETCH_LIMIT);
 
+        $fetchMode = $this->getInput('full_content') === true
+            ? ChapterFetchMode::FullContent
+            : ChapterFetchMode::LinkOnly;
+
         foreach ($chaptersData as $data) {
-            $content = $this->getInput('full_content')
-                ? $this->buildFullContent($data['uri'], $options)
-                : $this->buildLinkContent($data['uri']);
+            $content = match ($fetchMode) {
+                ChapterFetchMode::FullContent => $this->buildFullContent(uri: $data['uri'], options: $options),
+                ChapterFetchMode::LinkOnly => $this->buildLinkContent(uri: $data['uri']),
+            };
 
             $this->items[] = [
                 'title'     => $data['title'],
@@ -104,6 +122,30 @@ class FimfictionBridge extends BridgeAbstract
                 'uid'       => $data['uri'],
             ];
         }
+    }
+
+    private function fetchWithRetry(string $url, array $options): \simple_html_dom
+    {
+        $lastException = null;
+
+        for ($attempt = 1; $attempt <= self::MAX_RETRIES; $attempt++) {
+            try {
+                return getProtectedSimpleHTMLDOM(
+                    $url,
+                    self::PROXY_PROFILE->value,
+                    $options
+                );
+            } catch (\Exception $e) {
+                $lastException = $e;
+
+                if ($attempt < self::MAX_RETRIES) {
+                    $delay = self::RETRY_DELAY_US * (2 ** ($attempt - 1));
+                    usleep($delay);
+                }
+            }
+        }
+
+        throw $lastException;
     }
 
     private function buildProxyOptions(): array
@@ -118,7 +160,7 @@ class FimfictionBridge extends BridgeAbstract
         $sessionToken = $this->getOption('session_token');
         $signingKey = $this->getOption('signing_key');
 
-        if (!empty($sessionToken) && !empty($signingKey)) {
+        if ($sessionToken !== null && $sessionToken !== '' && $signingKey !== null && $signingKey !== '') {
             $options['cookies'][] = ['name' => 'session_token', 'value' => $sessionToken, 'domain' => 'www.fimfiction.net'];
             $options['cookies'][] = ['name' => 'signing_key', 'value' => $signingKey, 'domain' => 'www.fimfiction.net'];
         }
@@ -136,55 +178,51 @@ class FimfictionBridge extends BridgeAbstract
 
     private function detectStoryError(\simple_html_dom $dom): ?string
     {
-        $errorMessages = [
-            'Story not found'             => 'This story has been deleted or does not exist.',
-            'This story is not available' => 'This story is not available in your region.',
-            'You must be logged in'       => 'This story requires login to view.',
-            'Mature Content'              => 'This story contains mature content and requires authentication.',
-        ];
+        $text = $dom->plaintext;
 
-        foreach ($errorMessages as $pattern => $message) {
-            if (stripos($dom->plaintext, $pattern) !== false) {
-                return $message;
-            }
-        }
-
-        return null;
+        return match (true) {
+            stripos($text, 'Story not found') !== false => 'This story has been deleted or does not exist.',
+            stripos($text, 'This story is not available') !== false => 'This story is not available in your region.',
+            stripos($text, 'You must be logged in') !== false => 'This story requires login to view.',
+            stripos($text, 'Mature Content') !== false => 'This story contains mature content and requires authentication.',
+            default => null,
+        };
     }
 
     private function extractStoryTitle(\simple_html_dom $dom): string
     {
-        $titleElem = $dom->find('a.story_name', 0);
-        if ($titleElem) {
-            return trim($titleElem->plaintext);
+        $title = $dom->find('a.story_name', 0)?->plaintext;
+        if ($title !== null && $title !== '') {
+            return trim($title);
         }
-        return trim(str_replace(' - Fimfiction', '', $dom->find('title', 0)->plaintext ?? 'Unknown Story'));
+
+        $pageTitle = $dom->find('title', 0)?->plaintext ?? 'Unknown Story';
+        return trim(str_replace(' - Fimfiction', '', $pageTitle));
     }
 
     private function extractAuthor(\simple_html_dom $dom): string
     {
-        $authorElem = $dom->find('div.info-container a[href*=/user/]', 0) ?? $dom->find('a[href*=/user/]', 0);
-        if ($authorElem) {
-            return trim($authorElem->plaintext);
-        }
-        return 'Unknown';
+        $author = $dom->find('div.info-container a[href*=/user/]', 0)?->plaintext
+               ?? $dom->find('a[href*=/user/]', 0)?->plaintext;
+
+        return $author !== null && $author !== '' ? trim($author) : 'Unknown';
     }
 
     private function extractStoryImage(\simple_html_dom $dom): ?string
     {
         $container = $dom->find('[class*=story_container__story_image]', 0);
-        if (!$container) {
+        if ($container === null) {
             return null;
         }
 
         $img = $container->find('img', 0);
-        return ($img && $img->src) ? $img->src : null;
+        return $img?->src ?: null;
     }
 
     private function extractChaptersList(\simple_html_dom $dom, int $limit): array
     {
         $chapterList = $dom->find('ul.chapters', 0);
-        if (!$chapterList) {
+        if ($chapterList === null) {
             throwClientException('Could not find chapter list (ul.chapters)');
         }
 
@@ -193,9 +231,9 @@ class FimfictionBridge extends BridgeAbstract
 
         foreach ($chapterList->find('li') as $chapter) {
             $titleBox = $chapter->find('.title-box', 0);
-            $link = $titleBox ? $titleBox->find('a.chapter-title', 0) : null;
+            $link = $titleBox?->find('a.chapter-title', 0);
 
-            if (!$link) {
+            if ($link === null) {
                 $index++;
                 continue;
             }
@@ -220,15 +258,15 @@ class FimfictionBridge extends BridgeAbstract
 
     private function extractTimestamp($chapterElem): int
     {
-        $dateElem = $chapterElem ? $chapterElem->find('.title-box .date', 0) : null;
+        $dateElem = $chapterElem?->find('.title-box .date', 0);
 
-        if (!$dateElem) {
+        if ($dateElem === null) {
             return time();
         }
 
         $fullText = $dateElem->plaintext;
 
-        if (preg_match('/(\d{1,2})(?:st|nd|rd|th)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})/', $fullText, $matches)) {
+        if (preg_match('/(\d{1,2})(?:st|nd|rd|th)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})/', $fullText, $matches) === 1) {
             $timestamp = strtotime("{$matches[1]} {$matches[2]} {$matches[3]}");
             if ($timestamp !== false) {
                 return $timestamp;
@@ -240,10 +278,10 @@ class FimfictionBridge extends BridgeAbstract
 
     private function buildFullContent(string $uri, array $options): string
     {
-        $options['cache_ttl'] = 604800; // 7 дней
+        $options['cache_ttl'] = 604800;
 
         try {
-            $dom = getProtectedSimpleHTMLDOM($uri, self::PROXY_PROFILE, $options);
+            $dom = $this->fetchWithRetry(url: $uri, options: $options);
         } catch (\Exception $e) {
             return '<p style="' . self::CSS['error'] . '">Error loading chapter: '
                 . htmlspecialchars($e->getMessage()) . '</p>';
@@ -252,9 +290,9 @@ class FimfictionBridge extends BridgeAbstract
         $content = '<div style="' . self::CSS['wrapper'] . '">';
         $body = $dom->find('#chapter-body .bbcode', 0);
 
-        if ($body) {
-            $this->sanitizeContent($body);
-            $this->styleSceneBreaks($body);
+        if ($body !== null) {
+            $this->sanitizeContent(element: $body);
+            $this->styleSceneBreaks(element: $body);
             $content .= $body->innertext;
         } else {
             $content .= '<p style="' . self::CSS['error'] . '">Chapter content could not be loaded.</p>';
@@ -275,29 +313,42 @@ class FimfictionBridge extends BridgeAbstract
 
     private function sanitizeContent(\simple_html_dom_node $element): void
     {
+        $content = $element->innertext;
+
+        $element->innertext = $content
+            |> $this->removeDangerousTags(...)
+            |> $this->removeEventHandlers(...)
+            |> $this->removeJavascriptUrls(...);
+    }
+
+    private function removeDangerousTags(string $content): string
+    {
         $dangerousTags = ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select'];
+
         foreach ($dangerousTags as $tag) {
-            foreach ($element->find($tag) as $dangerous) {
-                $dangerous->outertext = '';
-            }
+            $content = preg_replace(
+                '/<' . $tag . '[^>]*>.*?<\/' . $tag . '>/is',
+                '',
+                $content
+            );
+            $content = preg_replace(
+                '/<' . $tag . '[^>]*\/?>/is',
+                '',
+                $content
+            );
         }
 
-        foreach ($element->find('*') as $node) {
-            $attributes = $node->getAllAttributes();
-            if ($attributes) {
-                foreach (array_keys($attributes) as $attr) {
-                    if (stripos($attr, 'on') === 0) {
-                        $node->removeAttribute($attr);
-                    }
-                    if (in_array(strtolower($attr), ['href', 'src'])) {
-                        $value = $node->getAttribute($attr);
-                        if ($value && stripos(trim($value), 'javascript:') === 0) {
-                            $node->removeAttribute($attr);
-                        }
-                    }
-                }
-            }
-        }
+        return $content;
+    }
+
+    private function removeEventHandlers(string $content): string
+    {
+        return preg_replace('/\s+on\w+\s*=\s*["\'][^"\']*["\']/i', '', $content);
+    }
+
+    private function removeJavascriptUrls(string $content): string
+    {
+        return preg_replace('/(href|src)\s*=\s*["\']javascript:[^"\']*["\']/i', '$1="#"', $content);
     }
 
     private function styleSceneBreaks(\simple_html_dom_node $element): void
