@@ -126,9 +126,9 @@ final class RuStoreBridge extends BridgeAbstract
                 continue;
             }
 
-            if (($data['@type'] ?? null) === 'BreadcrumbList' && isset($data['itemListElement'])) {
+            if (($data['@type'] ?? null) === 'BreadcrumbList' && isset($data['itemListElement']) === true) {
                 $last = end($data['itemListElement']);
-                if (isset($last['name'])) {
+                if (isset($last['name']) === true) {
                     return (string) $last['name'];
                 }
             }
@@ -149,7 +149,7 @@ final class RuStoreBridge extends BridgeAbstract
         $fragment = substr($html, $pos, 500);
         if (preg_match('/content\s*=\s*["\']([^"\']+)["\']/', $fragment, $m) === 1) {
             $url = $m[1];
-            if (str_starts_with($url, '//')) {
+            if (isset($data['itemListElement']) !== true) {
                 return 'https:' . $url;
             }
             return $url;
