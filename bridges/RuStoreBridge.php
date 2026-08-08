@@ -2,303 +2,342 @@
 
 declare(strict_types=1);
 
-class RuStoreBridge extends BridgeAbstract
+final class RuStoreBridge extends BridgeAbstract
 {
-    const NAME = 'RuStore';
-    const URI = 'https://www.rustore.ru';
-    const DESCRIPTION = 'Returns application updates with its changelog';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 3600;
-    const PARAMETERS = [
+    public const NAME = 'RuStore';
+    public const URI = 'https://www.rustore.ru';
+    public const DESCRIPTION = 'Returns application updates with its changelog';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 3600;
+    public const PARAMETERS = [
         [
             'package' => [
                 'name' => 'Package name',
                 'type' => 'text',
                 'required' => true,
                 'exampleValue' => 'com.flyersoft.moonreader',
-            ]
-        ]
+                'pattern' => '^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$',
+            ],
+        ],
     ];
 
-    const BASE_URL = 'https://www.rustore.ru/catalog/app/';
-
-    const CSS = [
-        'item'  => 'background:#f9f9f9;padding:12px;border-left:3px solid #0077ff;margin:0 0 15px 0;font-size:0.95em;line-height:1.5',
-        'empty' => 'font-style:italic;color:#999',
-    ];
-
-    const HTTP_HEADERS = [
-        'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
-        'Accept: text/html,application/xhtml+xml,application/xml',
+    private const BASE_URL = 'https://www.rustore.ru/catalog/app/';
+    private const VERSIONS_PATH = '/versions';
+    private const PACKAGE_PATTERN = '/^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/';
+    private const HTTP_HEADERS = [
         'Referer: https://www.rustore.ru/',
     ];
+    private const CSS_STYLES = [
+        'item' => 'background:rgba(0,119,255,0.08);color:inherit;padding:12px;border-left:3px solid #0077ff;margin:0 0 15px 0;font-size:0.95em;line-height:1.5;border-radius:4px',
+        'empty' => 'font-style:italic;color:inherit;opacity:0.6;padding:8px 0',
+    ];
 
-    private $appName = '';
-    private $appIcon = null;
+    private string $package = '';
+    private string $appName = '';
+    private ?string $appIcon = null;
 
-    public function collectData()
+    #[\Override]
+    public function collectData(): void
     {
-        $package = $this->getInput('package');
-
-        if (!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/', $package)) {
-            throw new \Exception('Invalid package name format.');
+        $package = (string) $this->getInput('package');
+        
+        if (!preg_match(self::PACKAGE_PATTERN, $package)) {
+            throw new \InvalidArgumentException('Invalid package name format.');
         }
 
-        $url = self::BASE_URL . urlencode($package) . '/versions';
-        $html = getSimpleHTMLDOM($url, self::HTTP_HEADERS);
+        $this->package = $package;
+        $html = getContents(self::BASE_URL . urlencode($package) . self::VERSIONS_PATH, self::HTTP_HEADERS);
 
-        if (!$html) {
-            throw new \Exception('Failed to load page: ' . $url);
+        if ($html === '') {
+            throw new \RuntimeException('Failed to load page (empty response).');
         }
 
-        $this->extractMeta($html);
+        $this->appName = $this->extractAppName($html);
+        $this->appIcon = $this->extractOgImage($html);
+
         $versions = $this->parseJsonLd($html) ?: $this->parseNextJsPayload($html);
 
-        if (empty($versions)) {
-            throw new \Exception('No version data found on the page.');
+        if ($versions === []) {
+            throw new \RuntimeException('No version data found.');
         }
 
-        foreach ($versions as $version) {
-            $this->items[] = $this->buildItem($version, $package);
+        $this->items = array_map(
+            callback: fn(array $v): array => $this->buildItem($v),
+            array: $versions,
+        );
+    }
+
+    public function getName(): string
+    {
+        if ($this->appName === '') {
+            return parent::getName();
         }
+        $clean = preg_replace('/[\x{1F300}-\x{1F9FF}\x{2600}-\x{27BF}\x{FE00}-\x{FE0F}]/u', '', $this->appName);
+        return trim($clean) ?: parent::getName();
     }
 
-    public function getName()
+    public function getURI(): string
     {
-        return $this->appName ?: parent::getName();
+        return $this->package !== '' ? self::BASE_URL . urlencode($this->package) : parent::getURI();
     }
 
-    public function getURI()
+    public function getIcon(): ?string
     {
-        return $this->getInput('package') ? self::BASE_URL . urlencode($this->getInput('package')) : parent::getURI();
+        return $this->appIcon ?? parent::getIcon();
     }
 
-    public function getIcon()
+    private function extractAppName(string $html): string
     {
-        return $this->appIcon ?: parent::getIcon();
-    }
+        $offset = 0;
+        $needle = '<script type="application/ld+json">';
 
-    private function extractMeta($html)
-    {
-        foreach ($html->find('script[type="application/ld+json"]') as $script) {
-            $data = json_decode(trim($script->innertext), true);
-            if (!is_array($data)) {
+        while (($pos = strpos($html, $needle, $offset)) !== false) {
+            $start = $pos + strlen($needle);
+            $end = strpos($html, '</script>', $start);
+            if ($end === false) break;
+
+            $json = html_entity_decode(substr($html, $start, $end - $start), ENT_QUOTES | ENT_HTML5);
+            $offset = $end + 9;
+
+            if (!json_validate($json)) continue;
+
+            try {
+                $data = json_decode($json, associative: true, flags: JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
                 continue;
             }
 
-            if (($data['@type'] ?? '') === 'BreadcrumbList' && !empty($data['itemListElement'])) {
+            if (($data['@type'] ?? null) === 'BreadcrumbList' 
+                && !empty($data['itemListElement'])) {
                 $last = end($data['itemListElement']);
-                $this->appName = $last['name'] ?? '';
-                break;
+                return $last['name'] ?? '';
             }
         }
-
-        $og = $html->find('meta[property="og:image"]', 0);
-        if ($og && !empty($og->content)) {
-            $this->appIcon = strpos($og->content, '//') === 0 ? 'https:' . $og->content : $og->content;
-        }
+        return '';
     }
 
-    private function parseJsonLd($html)
+    private function extractOgImage(string $html): ?string
+    {
+        $pos = strpos($html, 'property="og:image"') ?: strpos($html, "property='og:image'");
+        if ($pos === false) return null;
+
+        $fragment = substr($html, $pos, 500);
+        if (preg_match('/content\s*=\s*["\']([^"\']+)["\']/', $fragment, $m)) {
+            return str_starts_with($m[1], '//') ? 'https:' . $m[1] : $m[1];
+        }
+        return null;
+    }
+
+    private function parseJsonLd(string $html): array
     {
         $versions = [];
+        $offset = 0;
+        $needle = '<script type="application/ld+json">';
 
-        foreach ($html->find('script[type="application/ld+json"]') as $script) {
-            $data = json_decode(trim($script->innertext), true);
-            if (!is_array($data) || ($data['@type'] ?? '') !== 'ItemList') {
+        while (($pos = strpos($html, $needle, $offset)) !== false) {
+            $start = $pos + strlen($needle);
+            $end = strpos($html, '</script>', $start);
+            if ($end === false) break;
+
+            $json = html_entity_decode(substr($html, $start, $end - $start), ENT_QUOTES | ENT_HTML5);
+            $offset = $end + 9;
+
+            if (!json_validate($json)) continue;
+
+            try {
+                $data = json_decode($json, associative: true, flags: JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
                 continue;
             }
 
-            foreach ($data['itemListElement'] ?? [] as $element) {
-                if (($element['@type'] ?? '') !== 'UpdateAction' || empty($element['name'])) {
-                    continue;
-                }
+            if (($data['@type'] ?? null) !== 'ItemList' || empty($data['itemListElement'])) continue;
+
+            foreach ($data['itemListElement'] as $element) {
+                if (!is_array($element)) continue;
+                if (($element['@type'] ?? null) !== 'UpdateAction' || empty($element['name'])) continue;
 
                 $versions[] = [
-                    'versionName' => $element['name'],
-                    'whatsNew'    => $element['description'] ?? '',
-                    'date'        => $element['startTime'] ?? '',
+                    'versionName' => (string) $element['name'],
+                    'whatsNew' => (string) ($element['description'] ?? ''),
+                    'date' => (string) ($element['startTime'] ?? ''),
                 ];
             }
 
-            if (!empty($versions)) {
-                break;
-            }
+            if ($versions !== []) return $versions;
         }
-
         return $versions;
     }
 
-    private function parseNextJsPayload($html)
+    private function parseNextJsPayload(string $html): array
     {
-        $allContent = '';
-        foreach ($html->find('script') as $script) {
-            if (strpos($script->innertext, 'self.__next_f.push') !== false) {
-                $allContent .= $script->innertext . "\n";
-            }
-        }
+        $marker = '"versions":[';
+        $pos = strpos($html, $marker) ?: strpos($html, '"versions" : [');
+        if ($pos === false) return [];
 
-        if (empty($allContent)) {
+        $arrayStart = $pos + strlen($marker);
+        $arrayEnd = $this->findMatchingBracket($html, $arrayStart - 1, '[', ']');
+        if ($arrayEnd === false) return [];
+
+        $json = '[' . substr($html, $arrayStart, $arrayEnd - $arrayStart) . ']';
+        if (!json_validate($json)) return [];
+
+        try {
+            $data = json_decode($json, associative: true, flags: JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
             return [];
         }
 
-        if (preg_match('/"versions"\s*:\s*\[(.+?)\]\s*,\s*"continuation"/s', $allContent, $match)) {
-            $json = stripcslashes('[' . $match[1] . ']');
-            $data = json_decode($json, true);
+        if (!is_array($data)) return [];
 
-            if (!is_array($data)) {
-                return [];
-            }
-
-            $versions = [];
-            foreach ($data as $v) {
-                if (empty($v['versionName'])) {
-                    continue;
-                }
-                $versions[] = [
-                    'versionName' => $v['versionName'],
-                    'whatsNew'    => $v['whatsNew'] ?? '',
-                    'date'        => $v['appVerUpdatedAt'] ?? '',
-                ];
-            }
-            return $versions;
+        $versions = [];
+        foreach ($data as $v) {
+            if (!is_array($v) || empty($v['versionName'])) continue;
+            $versions[] = [
+                'versionName' => (string) $v['versionName'],
+                'whatsNew' => (string) ($v['whatsNew'] ?? ''),
+                'date' => (string) ($v['appVerUpdatedAt'] ?? ''),
+            ];
         }
-
-        return [];
+        return $versions;
     }
 
-    private function looksLikeImplicitList($lines)
+    private function findMatchingBracket(string $str, int $openPos, string $openChar, string $closeChar): int|false
     {
-        if (count($lines) < 2) {
-            return false;
-        }
+        $depth = 0;
+        $inString = false;
+        $escape = false;
 
-        $semicolonCount = 0;
-        $capitalStartCount = 0;
-        $hasExplicitMarker = false;
+        for ($i = $openPos, $len = strlen($str); $i < $len; $i++) {
+            $c = $str[$i];
 
-        foreach ($lines as $line) {
-            if (preg_match('/;\s*$/u', $line)) {
-                $semicolonCount++;
+            if ($escape) {
+                $escape = false;
+                continue;
             }
-            if (preg_match('/^[\p{Lu}0-9]/u', $line)) {
-                $capitalStartCount++;
+
+            if ($c === '\\') {
+                $escape = true;
+                continue;
             }
-            if (preg_match('/^[\x{00AD}\x{FEFF}]?[\x{2014}\x{2013}\-\x{2022}\x{25CF}*]/u', $line)) {
-                $hasExplicitMarker = true;
+
+            if ($c === '"') {
+                $inString = !$inString;
+                continue;
+            }
+
+            if ($inString) continue;
+
+            if ($c === $openChar) {
+                $depth++;
+            } elseif ($c === $closeChar) {
+                if (--$depth === 0) return $i;
             }
         }
-
-        if ($hasExplicitMarker) {
-            return false;
-        }
-
-        if ($semicolonCount >= count($lines) - 1) {
-            return true;
-        }
-
-        return $capitalStartCount >= count($lines);
+        return false;
     }
 
-    private function formatChangelogHtml($text)
+    private function formatChangelog(string $text): string
     {
-        $text = trim((string) $text);
+        $text = trim($text);
         if ($text === '') {
-            return '<p style="' . self::CSS['empty'] . '">No changelog available for this version.</p>';
+            return '<p style="' . self::CSS_STYLES['empty'] . '">No changelog available.</p>';
         }
 
-        $lines = preg_split('/\r\n|\r|\n/', $text);
-        $lines = array_values(array_filter(array_map('trim', $lines)));
+        $lines = array_filter(
+            array_map(trim(...), preg_split('/\r\n|\r|\n/', $text) ?: []),
+            static fn(string $s): bool => $s !== '',
+        );
 
-        if (empty($lines)) {
-            return '<p style="' . self::CSS['empty'] . '">No changelog available for this version.</p>';
+        if ($lines === []) {
+            return '<p style="' . self::CSS_STYLES['empty'] . '">No changelog available.</p>';
         }
 
-        $bullet = "\u{2022}";
-        $processed = [];
+        $lines = array_values($lines);
         $isImplicitList = $this->looksLikeImplicitList($lines);
+        $bullet = "\u{2022}";
+        $formatted = [];
 
         foreach ($lines as $line) {
             if (preg_match('/^[\x{00AD}\x{FEFF}]?([\x{2460}-\x{2473}])\s*(.*)$/u', $line, $m)) {
                 $num = mb_ord($m[1], 'UTF-8') - 0x245F;
-                $clean = trim($m[2]);
+                $clean = $this->capitalize(trim($m[2]));
                 if ($clean !== '') {
-                    $clean = mb_strtoupper(mb_substr($clean, 0, 1)) . mb_substr($clean, 1);
-                    $processed[] = ['type' => 'numbered', 'num' => $num, 'text' => $clean];
+                    $formatted[] = $num . '. ' . htmlspecialchars($clean, ENT_QUOTES | ENT_HTML5);
                 }
                 continue;
             }
 
-            if (preg_match('/^[\x{00AD}\x{FEFF}]?\x{25CF}\s*(.*)$/u', $line, $m)) {
-                $clean = trim($m[1]);
+            if (preg_match('/^[\x{00AD}\x{FEFF}]?[\x{25CF}\x{2014}\x{2013}\-\x{2022}*]\s*(.*)$/u', $line, $m)) {
+                $clean = $this->capitalize(trim($m[1]));
                 if ($clean !== '') {
-                    $clean = mb_strtoupper(mb_substr($clean, 0, 1)) . mb_substr($clean, 1);
-                    $processed[] = ['type' => 'bullet', 'text' => $clean];
-                }
-                continue;
-            }
-
-            if (preg_match('/^[\x{00AD}\x{FEFF}]?[\x{2014}\x{2013}\-\x{2022}*]\s*(.*)$/u', $line, $m)) {
-                $clean = trim($m[1]);
-                if ($clean !== '') {
-                    $clean = mb_strtoupper(mb_substr($clean, 0, 1)) . mb_substr($clean, 1);
-                    $processed[] = ['type' => 'bullet', 'text' => $clean];
+                    $formatted[] = $bullet . ' ' . htmlspecialchars($clean, ENT_QUOTES | ENT_HTML5);
                 }
                 continue;
             }
 
             if ($line !== '') {
                 if ($isImplicitList) {
-                    $clean = rtrim($line, '; ');
-                    $clean = mb_strtoupper(mb_substr($clean, 0, 1)) . mb_substr($clean, 1);
-                    $processed[] = ['type' => 'bullet', 'text' => $clean];
+                    $clean = $this->capitalize(rtrim($line, '; '));
+                    if ($clean !== '') {
+                        $formatted[] = $bullet . ' ' . htmlspecialchars($clean, ENT_QUOTES | ENT_HTML5);
+                    }
                 } else {
-                    $processed[] = ['type' => 'plain', 'text' => $line];
+                    $formatted[] = htmlspecialchars($line, ENT_QUOTES | ENT_HTML5);
                 }
             }
         }
 
-        if (empty($processed)) {
-            return '<p style="' . self::CSS['empty'] . '">No changelog available for this version.</p>';
+        if ($formatted === []) {
+            return '<p style="' . self::CSS_STYLES['empty'] . '">No changelog available.</p>';
         }
 
-        $formatted = [];
-        foreach ($processed as $item) {
-            $escaped = htmlspecialchars($item['text']);
-            if ($item['type'] === 'plain') {
-                $formatted[] = $escaped;
-            } elseif (count($processed) === 1) {
-                $formatted[] = $escaped;
-            } elseif ($item['type'] === 'numbered') {
-                $formatted[] = $item['num'] . '. ' . $escaped;
-            } else {
-                $formatted[] = $bullet . ' ' . $escaped;
-            }
-        }
-
-        return '<div style="' . self::CSS['item'] . '"><p>'
-             . implode('<br>', $formatted)
-             . '</p></div>';
+        return sprintf(
+            '<div style="%s"><p>%s</p></div>',
+            self::CSS_STYLES['item'],
+            implode('<br>', $formatted),
+        );
     }
 
-    private function buildItem($version, $package)
+    private function looksLikeImplicitList(array $lines): bool
     {
-        $versionName = $version['versionName'];
-        $content = $this->formatChangelogHtml($version['whatsNew'] ?? '');
+        if (count($lines) < 2) return false;
 
-        $timestamp = time();
-        if (!empty($version['date'])) {
-            $ts = strtotime($version['date']);
-            if ($ts !== false) {
-                $timestamp = $ts;
+        $semicolonCount = $capitalStartCount = $hasExplicitMarker = 0;
+
+        foreach ($lines as $line) {
+            if (preg_match('/;\s*$/u', $line)) $semicolonCount++;
+            if (preg_match('/^[\p{Lu}0-9]/u', $line)) $capitalStartCount++;
+            if (preg_match('/^[\x{00AD}\x{FEFF}]?[\x{2014}\x{2013}\-\x{2022}\x{25CF}*]/u', $line)) {
+                $hasExplicitMarker = true;
             }
+        }
+
+        if ($hasExplicitMarker) return false;
+        if ($semicolonCount >= count($lines) - 1) return true;
+        return $capitalStartCount >= count($lines);
+    }
+
+    private function capitalize(string $text): string
+    {
+        return $text === '' ? '' : mb_strtoupper(mb_substr($text, 0, 1)) . mb_substr($text, 1);
+    }
+
+    private function buildItem(array $version): array
+    {
+        try {
+            $timestamp = (new \DateTimeImmutable($version['date']))->getTimestamp();
+        } catch (\Exception) {
+            $ts = strtotime($version['date'] ?: 'now');
+            $timestamp = $ts !== false ? $ts : time();
         }
 
         return [
-            'uri'       => self::BASE_URL . urlencode($package) . '/versions#v' . urlencode($versionName),
-            'title'     => $versionName,
-            'content'   => $content,
-            'uid'       => 'rustore-' . $package . '-' . $versionName,
+            'uri' => self::BASE_URL . urlencode($this->package) . self::VERSIONS_PATH . '#v' . urlencode($version['versionName']),
+            'title' => $this->appName !== '' 
+                ? sprintf('%s — %s', $this->appName, $version['versionName'])
+                : $version['versionName'],
+            'content' => $this->formatChangelog($version['whatsNew']),
+            'uid' => sprintf('rustore-%s-%s', $this->package, $version['versionName']),
             'timestamp' => $timestamp,
         ];
     }
