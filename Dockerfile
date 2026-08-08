@@ -1,8 +1,10 @@
 ARG ALPINE_VERSION=3.24
 FROM alpine:${ALPINE_VERSION}
 
-ARG IMAGE_VERSION=1.1.0
+ARG IMAGE_VERSION=1.1.1
 ARG CURL_IMPERSONATE_VERSION=1.5.6
+
+ENV RSSBRIDGE_SYSTEM_VERSION=${IMAGE_VERSION}
 
 LABEL org.opencontainers.image.title="RSS Bridge" \
       org.opencontainers.image.description="RSS-Bridge - generate feeds for websites that don't have one" \

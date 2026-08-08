@@ -7,8 +7,6 @@
  */
 final class Configuration
 {
-    private const VERSION = '2025-08-05';
-
     private static $config = [];
 
     private function __construct()
@@ -171,28 +169,18 @@ final class Configuration
         self::$config[strtolower($section)][strtolower($key)] = $value;
     }
 
-    public static function getVersion()
+    public static function getVersion(): string
     {
-        $headFile = __DIR__ . '/../.git/HEAD';
+        $envVersion = getenv('RSSBRIDGE_SYSTEM_VERSION');
+        $baseVersion = ($envVersion !== false && $envVersion !== '') ? $envVersion : self::VERSION;
 
-        if (@is_readable($headFile)) {
-            $revisionHashFile = '.git/' . substr(file_get_contents($headFile), 5, -1);
-            $parts = explode('/', $revisionHashFile);
-
-            if (isset($parts[3])) {
-                $branchName = $parts[3];
-                if (file_exists($revisionHashFile)) {
-                    return sprintf('%s (git.%s.%s)', self::VERSION, $branchName, substr(file_get_contents($revisionHashFile), 0, 7));
-                }
-            }
-        }
-        return self::VERSION;
+        return $baseVersion;
     }
 
     private static function throwConfigError($section, $key, $message = '')
     {
         http_response_code(500);
-        print ("Config [$section] => [$key] is invalid. $message");
+        print("Config [$section] => [$key] is invalid. $message");
         exit(1);
     }
 }
