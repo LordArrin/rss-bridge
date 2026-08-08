@@ -39,7 +39,8 @@ class BoostyBridge extends BridgeAbstract
 
     public function collectData(): void
     {
-        $this->blogName = (string) $this->getInput('blog');
+        $blog = $this->getInput('blog');
+        $this->blogName = $blog !== null ? (string) $blog : '';
         foreach ($this->fetchPosts() as $p) {
             $item = $this->buildItem($p);
             if ($item !== null) {
@@ -649,13 +650,13 @@ class BoostyBridge extends BridgeAbstract
             return 'Boosty: ' . $this->blogDisplayName;
         }
         $blog = $this->getInput('blog');
-        return $blog !== '' ? 'Boosty: ' . $blog : self::NAME;
+        return $blog !== null && $blog !== '' ? 'Boosty: ' . $blog : self::NAME;
     }
 
     public function getURI(): string
     {
         $blog = $this->getInput('blog');
-        return $blog !== '' ? 'https://boosty.to/' . urlencode($blog) : self::URI;
+        return $blog !== null && $blog !== '' ? 'https://boosty.to/' . urlencode($blog) : self::URI;
     }
 
     public function getIcon(): string
