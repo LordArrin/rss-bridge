@@ -334,7 +334,7 @@ final class RuStoreBridge extends BridgeAbstract
         return [
             'uri' => self::BASE_URL . urlencode($this->package) . self::VERSIONS_PATH . '#v' . urlencode($version['versionName']),
             'title' => $this->appName !== '' 
-                ? sprintf('%s — %s', $this->appName, $version['versionName'])
+                ? sprintf('%s - %s', $this->appName, $version['versionName'])
                 : $version['versionName'],
             'content' => $this->formatChangelog($version['whatsNew']),
             'uid' => sprintf('rustore-%s-%s', $this->package, $version['versionName']),
