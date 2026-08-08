@@ -36,12 +36,11 @@ final class RuStoreBridge extends BridgeAbstract
     private string $appName = '';
     private ?string $appIcon = null;
 
-    #[\Override]
     public function collectData(): void
     {
         $package = (string) $this->getInput('package');
-        
-        if (!preg_match(self::PACKAGE_PATTERN, $package)) {
+
+        if (preg_match(self::PACKAGE_PATTERN, $package) === 0) {
             throw new \InvalidArgumentException('Invalid package name format.');
         }
 
@@ -55,7 +54,10 @@ final class RuStoreBridge extends BridgeAbstract
         $this->appName = $this->extractAppName($html);
         $this->appIcon = $this->extractOgImage($html);
 
-        $versions = $this->parseJsonLd($html) ?: $this->parseNextJsPayload($html);
+        $versions = $this->parseJsonLd($html);
+        if ($versions === []) {
+            $versions = $this->parseNextJsPayload($html);
+        }
 
         if ($versions === []) {
             throw new \RuntimeException('No version data found.');
@@ -72,18 +74,31 @@ final class RuStoreBridge extends BridgeAbstract
         if ($this->appName === '') {
             return parent::getName();
         }
+
         $clean = preg_replace('/[\x{1F300}-\x{1F9FF}\x{2600}-\x{27BF}\x{FE00}-\x{FE0F}]/u', '', $this->appName);
-        return trim($clean) ?: parent::getName();
+        $clean = trim((string) $clean);
+
+        if ($clean === '') {
+            return parent::getName();
+        }
+
+        return $clean;
     }
 
     public function getURI(): string
     {
-        return $this->package !== '' ? self::BASE_URL . urlencode($this->package) : parent::getURI();
+        if ($this->package === '') {
+            return parent::getURI();
+        }
+        return self::BASE_URL . urlencode($this->package);
     }
 
     public function getIcon(): ?string
     {
-        return $this->appIcon ?? parent::getIcon();
+        if ($this->appIcon === null) {
+            return parent::getIcon();
+        }
+        return $this->appIcon;
     }
 
     private function extractAppName(string $html): string
@@ -94,12 +109,16 @@ final class RuStoreBridge extends BridgeAbstract
         while (($pos = strpos($html, $needle, $offset)) !== false) {
             $start = $pos + strlen($needle);
             $end = strpos($html, '</script>', $start);
-            if ($end === false) break;
+            if ($end === false) {
+                break;
+            }
 
             $json = html_entity_decode(substr($html, $start, $end - $start), ENT_QUOTES | ENT_HTML5);
             $offset = $end + 9;
 
-            if (!json_validate($json)) continue;
+            if (json_validate($json) === false) {
+                continue;
+            }
 
             try {
                 $data = json_decode($json, associative: true, flags: JSON_THROW_ON_ERROR);
@@ -107,10 +126,11 @@ final class RuStoreBridge extends BridgeAbstract
                 continue;
             }
 
-            if (($data['@type'] ?? null) === 'BreadcrumbList' 
-                && !empty($data['itemListElement'])) {
+            if (($data['@type'] ?? null) === 'BreadcrumbList' && isset($data['itemListElement'])) {
                 $last = end($data['itemListElement']);
-                return $last['name'] ?? '';
+                if (isset($last['name'])) {
+                    return (string) $last['name'];
+                }
             }
         }
         return '';
@@ -118,12 +138,21 @@ final class RuStoreBridge extends BridgeAbstract
 
     private function extractOgImage(string $html): ?string
     {
-        $pos = strpos($html, 'property="og:image"') ?: strpos($html, "property='og:image'");
-        if ($pos === false) return null;
+        $pos = strpos($html, 'property="og:image"');
+        if ($pos === false) {
+            $pos = strpos($html, "property='og:image'");
+        }
+        if ($pos === false) {
+            return null;
+        }
 
         $fragment = substr($html, $pos, 500);
-        if (preg_match('/content\s*=\s*["\']([^"\']+)["\']/', $fragment, $m)) {
-            return str_starts_with($m[1], '//') ? 'https:' . $m[1] : $m[1];
+        if (preg_match('/content\s*=\s*["\']([^"\']+)["\']/', $fragment, $m) === 1) {
+            $url = $m[1];
+            if (str_starts_with($url, '//')) {
+                return 'https:' . $url;
+            }
+            return $url;
         }
         return null;
     }
@@ -137,12 +166,16 @@ final class RuStoreBridge extends BridgeAbstract
         while (($pos = strpos($html, $needle, $offset)) !== false) {
             $start = $pos + strlen($needle);
             $end = strpos($html, '</script>', $start);
-            if ($end === false) break;
+            if ($end === false) {
+                break;
+            }
 
             $json = html_entity_decode(substr($html, $start, $end - $start), ENT_QUOTES | ENT_HTML5);
             $offset = $end + 9;
 
-            if (!json_validate($json)) continue;
+            if (json_validate($json) === false) {
+                continue;
+            }
 
             try {
                 $data = json_decode($json, associative: true, flags: JSON_THROW_ON_ERROR);
@@ -150,11 +183,23 @@ final class RuStoreBridge extends BridgeAbstract
                 continue;
             }
 
-            if (($data['@type'] ?? null) !== 'ItemList' || empty($data['itemListElement'])) continue;
+            if (($data['@type'] ?? null) !== 'ItemList') {
+                continue;
+            }
+            if (isset($data['itemListElement']) === false) {
+                continue;
+            }
 
             foreach ($data['itemListElement'] as $element) {
-                if (!is_array($element)) continue;
-                if (($element['@type'] ?? null) !== 'UpdateAction' || empty($element['name'])) continue;
+                if (is_array($element) === false) {
+                    continue;
+                }
+                if (($element['@type'] ?? null) !== 'UpdateAction') {
+                    continue;
+                }
+                if (isset($element['name']) === false) {
+                    continue;
+                }
 
                 $versions[] = [
                     'versionName' => (string) $element['name'],
@@ -163,7 +208,9 @@ final class RuStoreBridge extends BridgeAbstract
                 ];
             }
 
-            if ($versions !== []) return $versions;
+            if ($versions !== []) {
+                return $versions;
+            }
         }
         return $versions;
     }
@@ -171,15 +218,24 @@ final class RuStoreBridge extends BridgeAbstract
     private function parseNextJsPayload(string $html): array
     {
         $marker = '"versions":[';
-        $pos = strpos($html, $marker) ?: strpos($html, '"versions" : [');
-        if ($pos === false) return [];
+        $pos = strpos($html, $marker);
+        if ($pos === false) {
+            $pos = strpos($html, '"versions" : [');
+        }
+        if ($pos === false) {
+            return [];
+        }
 
         $arrayStart = $pos + strlen($marker);
         $arrayEnd = $this->findMatchingBracket($html, $arrayStart - 1, '[', ']');
-        if ($arrayEnd === false) return [];
+        if ($arrayEnd === false) {
+            return [];
+        }
 
         $json = '[' . substr($html, $arrayStart, $arrayEnd - $arrayStart) . ']';
-        if (!json_validate($json)) return [];
+        if (json_validate($json) === false) {
+            return [];
+        }
 
         try {
             $data = json_decode($json, associative: true, flags: JSON_THROW_ON_ERROR);
@@ -187,11 +243,18 @@ final class RuStoreBridge extends BridgeAbstract
             return [];
         }
 
-        if (!is_array($data)) return [];
+        if (is_array($data) === false) {
+            return [];
+        }
 
         $versions = [];
         foreach ($data as $v) {
-            if (!is_array($v) || empty($v['versionName'])) continue;
+            if (is_array($v) === false) {
+                continue;
+            }
+            if (isset($v['versionName']) === false) {
+                continue;
+            }
             $versions[] = [
                 'versionName' => (string) $v['versionName'],
                 'whatsNew' => (string) ($v['whatsNew'] ?? ''),
@@ -210,7 +273,7 @@ final class RuStoreBridge extends BridgeAbstract
         for ($i = $openPos, $len = strlen($str); $i < $len; $i++) {
             $c = $str[$i];
 
-            if ($escape) {
+            if ($escape === true) {
                 $escape = false;
                 continue;
             }
@@ -221,16 +284,21 @@ final class RuStoreBridge extends BridgeAbstract
             }
 
             if ($c === '"') {
-                $inString = !$inString;
+                $inString = ($inString === false);
                 continue;
             }
 
-            if ($inString) continue;
+            if ($inString === true) {
+                continue;
+            }
 
             if ($c === $openChar) {
                 $depth++;
             } elseif ($c === $closeChar) {
-                if (--$depth === 0) return $i;
+                $depth--;
+                if ($depth === 0) {
+                    return $i;
+                }
             }
         }
         return false;
@@ -258,7 +326,7 @@ final class RuStoreBridge extends BridgeAbstract
         $formatted = [];
 
         foreach ($lines as $line) {
-            if (preg_match('/^[\x{00AD}\x{FEFF}]?([\x{2460}-\x{2473}])\s*(.*)$/u', $line, $m)) {
+            if (preg_match('/^[\x{00AD}\x{FEFF}]?([\x{2460}-\x{2473}])\s*(.*)$/u', $line, $m) === 1) {
                 $num = mb_ord($m[1], 'UTF-8') - 0x245F;
                 $clean = $this->capitalize(trim($m[2]));
                 if ($clean !== '') {
@@ -267,7 +335,7 @@ final class RuStoreBridge extends BridgeAbstract
                 continue;
             }
 
-            if (preg_match('/^[\x{00AD}\x{FEFF}]?[\x{25CF}\x{2014}\x{2013}\-\x{2022}*]\s*(.*)$/u', $line, $m)) {
+            if (preg_match('/^[\x{00AD}\x{FEFF}]?[\x{25CF}\x{2014}\x{2013}\-\x{2022}*]\s*(.*)$/u', $line, $m) === 1) {
                 $clean = $this->capitalize(trim($m[1]));
                 if ($clean !== '') {
                     $formatted[] = $bullet . ' ' . htmlspecialchars($clean, ENT_QUOTES | ENT_HTML5);
@@ -276,7 +344,7 @@ final class RuStoreBridge extends BridgeAbstract
             }
 
             if ($line !== '') {
-                if ($isImplicitList) {
+                if ($isImplicitList === true) {
                     $clean = $this->capitalize(rtrim($line, '; '));
                     if ($clean !== '') {
                         $formatted[] = $bullet . ' ' . htmlspecialchars($clean, ENT_QUOTES | ENT_HTML5);
@@ -300,26 +368,43 @@ final class RuStoreBridge extends BridgeAbstract
 
     private function looksLikeImplicitList(array $lines): bool
     {
-        if (count($lines) < 2) return false;
+        if (count($lines) < 2) {
+            return false;
+        }
 
-        $semicolonCount = $capitalStartCount = $hasExplicitMarker = 0;
+        $semicolonCount = 0;
+        $capitalStartCount = 0;
+        $hasExplicitMarker = false;
 
         foreach ($lines as $line) {
-            if (preg_match('/;\s*$/u', $line)) $semicolonCount++;
-            if (preg_match('/^[\p{Lu}0-9]/u', $line)) $capitalStartCount++;
-            if (preg_match('/^[\x{00AD}\x{FEFF}]?[\x{2014}\x{2013}\-\x{2022}\x{25CF}*]/u', $line)) {
+            if (preg_match('/;\s*$/u', $line) === 1) {
+                $semicolonCount++;
+            }
+            if (preg_match('/^[\p{Lu}0-9]/u', $line) === 1) {
+                $capitalStartCount++;
+            }
+            if (preg_match('/^[\x{00AD}\x{FEFF}]?[\x{2014}\x{2013}\-\x{2022}\x{25CF}*]/u', $line) === 1) {
                 $hasExplicitMarker = true;
             }
         }
 
-        if ($hasExplicitMarker) return false;
-        if ($semicolonCount >= count($lines) - 1) return true;
+        if ($hasExplicitMarker === true) {
+            return false;
+        }
+
+        if ($semicolonCount >= count($lines) - 1) {
+            return true;
+        }
+
         return $capitalStartCount >= count($lines);
     }
 
     private function capitalize(string $text): string
     {
-        return $text === '' ? '' : mb_strtoupper(mb_substr($text, 0, 1)) . mb_substr($text, 1);
+        if ($text === '') {
+            return '';
+        }
+        return mb_strtoupper(mb_substr($text, 0, 1)) . mb_substr($text, 1);
     }
 
     private function buildItem(array $version): array
@@ -327,15 +412,17 @@ final class RuStoreBridge extends BridgeAbstract
         try {
             $timestamp = (new \DateTimeImmutable($version['date']))->getTimestamp();
         } catch (\Exception) {
-            $ts = strtotime($version['date'] ?: 'now');
-            $timestamp = $ts !== false ? $ts : time();
+            $ts = strtotime($version['date'] !== '' ? $version['date'] : 'now');
+            if ($ts === false) {
+                $timestamp = time();
+            } else {
+                $timestamp = $ts;
+            }
         }
 
         return [
             'uri' => self::BASE_URL . urlencode($this->package) . self::VERSIONS_PATH . '#v' . urlencode($version['versionName']),
-            'title' => $this->appName !== '' 
-                ? sprintf('%s - %s', $this->appName, $version['versionName'])
-                : $version['versionName'],
+            'title' => $version['versionName'],
             'content' => $this->formatChangelog($version['whatsNew']),
             'uid' => sprintf('rustore-%s-%s', $this->package, $version['versionName']),
             'timestamp' => $timestamp,
