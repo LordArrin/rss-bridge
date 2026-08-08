@@ -50,9 +50,11 @@ class BoostyBridge extends BridgeAbstract
 
     private function fetchPosts(): array
     {
-        $limit = min((int) $this->getInput('limit') ?: 20, 100);
+        $limitInput = (int) $this->getInput('limit');
+        $limit = min($limitInput !== 0 ? $limitInput : 20, 100);
         $url = 'https://api.boosty.to/v1/blog/' . urlencode($this->blogName) . '/post/?limit=' . $limit;
         $data = Json::decode(getContents($url));
+
         if (isset($data['data']) === false || is_array($data['data']) === false) {
             throw new Exception('Failed to fetch data from Boosty API');
         }
@@ -74,7 +76,7 @@ class BoostyBridge extends BridgeAbstract
         $title = $p['title'] ?? '';
 
         if ($title === '') {
-            $blocks = $paid ? ($p['teaser'] ?? []) : ($p['data'] ?? []);
+            $blocks = $paid === true ? ($p['teaser'] ?? []) : ($p['data'] ?? []);
             $extractedTitle = $this->extractFirstSentence($blocks);
             if ($extractedTitle !== null) {
                 $title = $extractedTitle;
@@ -583,18 +585,20 @@ class BoostyBridge extends BridgeAbstract
             if ($i < $n) {
                 $hi = $i < $n - 1 ? unpack('v', $units[$i])[1] : 0;
                 if ($hi >= 0xD800 && $hi <= 0xDBFF) {
-                    $out .= $this->esc(mb_convert_encoding(
+                    $converted = mb_convert_encoding(
                         string: $units[$i] . $units[$i + 1],
                         to_encoding: 'UTF-8',
                         from_encoding: 'UTF-16LE'
-                    ) ?: '');
+                    );
+                    $out .= $this->esc($converted !== false ? $converted : '');
                     $out .= $tags[++$i] ?? '';
                 } else {
-                    $out .= $this->esc(mb_convert_encoding(
+                    $converted = mb_convert_encoding(
                         string: $units[$i],
                         to_encoding: 'UTF-8',
                         from_encoding: 'UTF-16LE'
-                    ) ?: '');
+                    );
+                    $out .= $this->esc($converted !== false ? $converted : '');
                 }
             }
         }
