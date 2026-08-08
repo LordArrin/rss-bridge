@@ -2,32 +2,6 @@
 
 declare(strict_types=1);
 
-enum MediaType: string
-{
-    case Image = 'image';
-    case AudioFile = 'audio_file';
-    case File = 'file';
-    case OkVideo = 'ok_video';
-}
-
-enum TextTag: int
-{
-    case Strong = 0;
-    case Underline = 1;
-    case Emphasis = 2;
-    case Strikethrough = 3;
-
-    public function toHtmlTag(): string
-    {
-        return match ($this) {
-            self::Strong => 'strong',
-            self::Underline => 'u',
-            self::Emphasis => 'em',
-            self::Strikethrough => 's',
-        };
-    }
-}
-
 class BoostyBridge extends BridgeAbstract
 {
     const NAME = 'Boosty';
@@ -45,6 +19,8 @@ class BoostyBridge extends BridgeAbstract
     private string $blogName = '';
     private string $blogDisplayName = '';
     private string $blogAvatar = '';
+
+    private const MEDIA_TYPES = ['image' => true, 'audio_file' => true, 'file' => true, 'ok_video' => true];
 
     private const CSS = [
         'paywall'  => 'padding:15px;margin:10px 0;border-left:4px solid #e8a33d',
@@ -77,13 +53,13 @@ class BoostyBridge extends BridgeAbstract
         $limit = min((int) $this->getInput('limit') ?: 20, 100);
         $url = 'https://api.boosty.to/v1/blog/' . urlencode($this->blogName) . '/post/?limit=' . $limit;
         $data = Json::decode(getContents($url));
-        if (!isset($data['data']) || !is_array($data['data'])) {
+        if (isset($data['data']) === false || is_array($data['data']) === false) {
             throw new Exception('Failed to fetch data from Boosty API');
         }
-        if (!empty($data['data'][0]['user']['name'])) {
+        if (empty($data['data'][0]['user']['name']) === false) {
             $this->blogDisplayName = (string) $data['data'][0]['user']['name'];
         }
-        if (!empty($data['data'][0]['user']['avatarUrl'])) {
+        if (empty($data['data'][0]['user']['avatarUrl']) === false) {
             $this->blogAvatar = (string) $data['data'][0]['user']['avatarUrl'];
         }
         return $data['data'];
@@ -91,18 +67,18 @@ class BoostyBridge extends BridgeAbstract
 
     private function buildItem(array $p): ?array
     {
-        if (!($p['isPublished'] ?? false)) {
+        if (($p['isPublished'] ?? false) === false) {
             return null;
         }
         $paid = $this->isPaid($p);
         $title = $p['title'] ?? '';
-        
+
         if ($title === '') {
             $blocks = $paid ? ($p['teaser'] ?? []) : ($p['data'] ?? []);
             $extractedTitle = $this->extractFirstSentence($blocks);
             if ($extractedTitle !== null) {
                 $title = $extractedTitle;
-                if ($paid) {
+                if ($paid === true) {
                     $p['teaser'] = $this->removeFirstSentenceFromBlocks($p['teaser'] ?? []);
                 } else {
                     $p['data'] = $this->removeFirstSentenceFromBlocks($p['data'] ?? []);
@@ -111,10 +87,10 @@ class BoostyBridge extends BridgeAbstract
                 $title = 'Untitled';
             }
         }
-        
-        $title = ($paid ? '[Paid] ' : '') . $title;
-        $content = $paid ? $this->renderPaywall($p) : $this->renderFree($p);
-        
+
+        $title = ($paid === true ? '[Paid] ' : '') . $title;
+        $content = $paid === true ? $this->renderPaywall($p) : $this->renderFree($p);
+
         return $this->meta($p, $title, $content);
     }
 
@@ -140,7 +116,7 @@ class BoostyBridge extends BridgeAbstract
     {
         $punctuation = ['.', '!', '?', '…'];
         $firstEnd = false;
-        
+
         foreach ($punctuation as $punct) {
             $pos = mb_strpos($text, $punct, 0, 'UTF-8');
             if ($pos !== false) {
@@ -150,7 +126,7 @@ class BoostyBridge extends BridgeAbstract
                 }
             }
         }
-        
+
         return $firstEnd;
     }
 
@@ -160,53 +136,53 @@ class BoostyBridge extends BridgeAbstract
             if (($block['type'] ?? '') !== 'text') {
                 continue;
             }
-            
+
             $content = $block['content'] ?? '';
             if ($content === '') {
                 continue;
             }
-            
+
             $d = json_decode($content, true);
-            if (!is_array($d) || !isset($d[0])) {
+            if (is_array($d) === false || isset($d[0]) === false) {
                 continue;
             }
-            
+
             $text = $d[0];
-            if (!is_string($text)) {
-                $text = is_array($text) ? implode('', $text) : (string) $text;
+            if (is_string($text) === false) {
+                $text = is_array($text) === true ? implode('', $text) : (string) $text;
             }
             if ($text === '') {
                 continue;
             }
-            
+
             $sentenceEnd = $this->findSentenceEnd($text);
-            
+
             if ($sentenceEnd === false) {
                 unset($blocks[$index]);
                 return array_values($blocks);
             }
-            
+
             $newText = mb_substr($text, $sentenceEnd, null, 'UTF-8');
             $newText = ltrim($newText);
-            
+
             if ($newText === '') {
                 unset($blocks[$index]);
                 return array_values($blocks);
             }
-            
+
             $d[0] = $newText;
-            
-            if (isset($d[2]) && is_array($d[2])) {
+
+            if (isset($d[2]) === true && is_array($d[2]) === true) {
                 $removedText = mb_substr($text, 0, $sentenceEnd, 'UTF-8');
                 $removedUtf16 = mb_convert_encoding($removedText, 'UTF-16LE', 'UTF-8');
                 $removedCodeUnits = mb_strlen($removedUtf16, 'UTF-16LE');
-                
+
                 $styles = [];
                 foreach ($d[2] as $style) {
                     if (count($style) >= 3) {
                         $start = (int) ($style[1] ?? 0);
                         $length = (int) ($style[2] ?? 0);
-                        
+
                         if ($start >= $removedCodeUnits) {
                             $newStart = $start - $removedCodeUnits;
                             $styles[] = [$style[0], $newStart, $length];
@@ -218,12 +194,12 @@ class BoostyBridge extends BridgeAbstract
                 }
                 $d[2] = $styles;
             }
-            
+
             $block['content'] = json_encode($d, JSON_UNESCAPED_UNICODE);
             $blocks[$index] = $block;
             break;
         }
-        
+
         return array_values($blocks);
     }
 
@@ -231,6 +207,22 @@ class BoostyBridge extends BridgeAbstract
     {
         return ($p['subscriptionLevel'] ?? null) !== null
             || ($p['price'] ?? 0) > 0;
+    }
+
+    private function isMediaType(string $type): bool
+    {
+        return isset(self::MEDIA_TYPES[$type]);
+    }
+
+    private function getHtmlTag(int $type): ?string
+    {
+        return match ($type) {
+            0 => 'strong',
+            1 => 'u',
+            2 => 'em',
+            3 => 's',
+            default => null,
+        };
     }
 
     private function getPostUrl(string $postId): string
@@ -251,14 +243,14 @@ class BoostyBridge extends BridgeAbstract
             $h = $teaser . $h;
         }
 
-        if (isset($p['subscriptionLevel'])) {
+        if (isset($p['subscriptionLevel']) === true) {
             $lv = $p['subscriptionLevel'];
             $h .= '<p' . $this->style('pp') . '><strong>Subscription:</strong> ' . $this->esc($lv['name'] ?? 'Unknown') . '</p>';
             $pr = $this->price($lv['currencyPrices'] ?? []);
             if ($pr !== null) {
                 $h .= '<p' . $this->style('pp') . '><strong>Price:</strong> ' . $this->esc($pr) . '/month</p>';
             }
-        } elseif (isset($p['price']) && $p['price'] > 0) {
+        } elseif (isset($p['price']) === true && $p['price'] > 0) {
             $pr = $this->price($p['currencyPrices'] ?? [], $p['price']);
             if ($pr !== null) {
                 $h .= '<p' . $this->style('pp') . '><strong>Price:</strong> ' . $this->esc($pr) . '</p>';
@@ -281,7 +273,7 @@ class BoostyBridge extends BridgeAbstract
                 continue;
             }
 
-            if (MediaType::tryFrom($type) !== null) {
+            if ($this->isMediaType($type) === true) {
                 $out .= $this->renderMedia($b);
             } elseif ($type === 'text') {
                 $r = $this->draft($b['content'] ?? '');
@@ -310,7 +302,7 @@ class BoostyBridge extends BridgeAbstract
             'author'    => $p['user']['name'] ?? $this->blogName,
             'uid'       => $p['id'] ?? uniqid(),
         ];
-        if (isset($p['tags']) && is_array($p['tags']) && !$this->getInput('hideTags')) {
+        if (isset($p['tags']) === true && is_array($p['tags']) === true && $this->getInput('hideTags') === false) {
             $item['categories'] = array_map(fn(array $t): string => $t['title'] ?? '', $p['tags']);
         }
         return $item;
@@ -351,7 +343,7 @@ class BoostyBridge extends BridgeAbstract
                     $out .= '<p>' . implode('', $buf) . '</p>';
                     $buf = [];
                 }
-                if (MediaType::tryFrom($type) !== null) {
+                if ($this->isMediaType($type) === true) {
                     $out .= $this->renderMedia($b);
                 }
             }
@@ -359,7 +351,7 @@ class BoostyBridge extends BridgeAbstract
         if ($buf !== []) {
             $out .= '<p>' . implode('', $buf) . '</p>';
         }
-        if (!empty($p['poll']) && is_array($p['poll'])) {
+        if (empty($p['poll']) === false && is_array($p['poll']) === true) {
             $out .= $this->renderPoll($p['poll']);
         }
         return $out;
@@ -390,7 +382,7 @@ class BoostyBridge extends BridgeAbstract
         foreach ($items as $item) {
             $content = $this->listItemContent($item);
             $nested = '';
-            if (!empty($item['items']) && is_array($item['items'])) {
+            if (empty($item['items']) === false && is_array($item['items']) === true) {
                 $nested = $this->renderListItems($item['items'], $tag, $cssKey);
             }
             if ($content === '' && $nested === '') {
@@ -416,7 +408,7 @@ class BoostyBridge extends BridgeAbstract
                 if ($r !== '') {
                     $h .= $r;
                 }
-            } elseif (MediaType::tryFrom($bType) !== null) {
+            } elseif ($this->isMediaType($bType) === true) {
                 $h .= $this->renderMedia($block);
             }
         }
@@ -449,7 +441,7 @@ class BoostyBridge extends BridgeAbstract
         }
 
         $title = $this->esc($b['title'] ?? ($b['track'] ?? 'File'));
-        if ($type === 'audio_file' && !empty($b['artist'])) {
+        if ($type === 'audio_file' && empty($b['artist']) === false) {
             $title = $this->esc($b['artist']) . ' - ' . $title;
         }
         return '<p><a href="' . $url . '">' . $title . '</a></p>';
@@ -459,20 +451,20 @@ class BoostyBridge extends BridgeAbstract
     {
         $h = '<div' . $this->style('poll') . '>';
         $title = $poll['title'] ?? '';
-        if (is_array($title)) {
+        if (is_array($title) === true) {
             $title = implode(' ', $title);
         }
         if ($title !== '') {
             $h .= '<p' . $this->style('poll_t') . '>' . $this->esc($title) . '</p>';
         }
-        
+
         $total = (int) ($poll['counter'] ?? 0);
         if ($total === 0) {
             foreach ($poll['options'] ?? [] as $o) {
                 $total += (int) ($o['counter'] ?? 0);
             }
         }
-        
+
         foreach ($poll['options'] ?? [] as $o) {
             $text = $this->esc($o['text'] ?? '');
             $c = (int) ($o['counter'] ?? 0);
@@ -480,34 +472,34 @@ class BoostyBridge extends BridgeAbstract
             $pct = max(0, min(100, (int) round($f)));
             $filled = (int) round($pct / 5);
             $bar = '[' . str_repeat('#', $filled) . str_repeat('.', 20 - $filled) . ']';
-            
+
             $h .= '<div' . $this->style('poll_o') . '>';
             $h .= '<b>' . $pct . '%</b> ' . $text . '<br />';
             $h .= '<code>' . $bar . '</code>';
             $h .= '</div>';
         }
-        
+
         $footer = [];
         if ($total > 0) {
             $footer[] = $total . ' voters';
         }
-        if (!empty($poll['isMultiple'])) {
+        if (empty($poll['isMultiple']) === false) {
             $footer[] = 'Multiple choice';
         }
-        if (!empty($poll['isFinished'])) {
+        if (empty($poll['isFinished']) === false) {
             $footer[] = 'Finished';
         }
-        
+
         if ($footer !== []) {
             $h .= '<p' . $this->style('poll_f') . '>' . implode(' &#183; ', $footer) . '</p>';
         }
-        
+
         return $h . '</div>';
     }
 
     private function calculateFraction(array $option, int $total): float
     {
-        if (isset($option['fraction'])) {
+        if (isset($option['fraction']) === true) {
             return (float) $option['fraction'];
         }
         $counter = (int) ($option['counter'] ?? 0);
@@ -516,11 +508,11 @@ class BoostyBridge extends BridgeAbstract
 
     private function pollVisible(array $poll, int $total): bool
     {
-        if (!empty($poll['isFinished']) || !empty($poll['showResults']) || !empty($poll['isResultVisible'])) {
+        if (empty($poll['isFinished']) === false || empty($poll['showResults']) === false || empty($poll['isResultVisible']) === false) {
             return true;
         }
         foreach ($poll['options'] ?? [] as $o) {
-            if (array_key_exists('fraction', $o) || (isset($o['counter']) && $o['counter'] > 0)) {
+            if (array_key_exists('fraction', $o) === true || (isset($o['counter']) === true && $o['counter'] > 0)) {
                 return true;
             }
         }
@@ -534,12 +526,12 @@ class BoostyBridge extends BridgeAbstract
         }
         try {
             $d = json_decode($content, true);
-            if (!is_array($d) || !isset($d[0])) {
+            if (is_array($d) === false || isset($d[0]) === false) {
                 return '';
             }
             $text = $d[0];
-            if (!is_string($text)) {
-                $text = is_array($text) ? implode('', $text) : (string) $text;
+            if (is_string($text) === false) {
+                $text = is_array($text) === true ? implode('', $text) : (string) $text;
             }
             if ($text === '') {
                 return '';
@@ -550,7 +542,7 @@ class BoostyBridge extends BridgeAbstract
                 from_encoding: 'UTF-8'
             );
             $units = str_split($utf16, 2);
-            $styles = (isset($d[2]) && is_array($d[2])) ? $d[2] : [];
+            $styles = (isset($d[2]) === true && is_array($d[2]) === true) ? $d[2] : [];
             return str_replace("\n", '<br>', $this->applyStyles($units, $styles));
         } catch (\Throwable $e) {
             return $this->esc($content);
@@ -566,11 +558,10 @@ class BoostyBridge extends BridgeAbstract
             if (count($s) < 3) {
                 continue;
             }
-            $tagObj = TextTag::tryFrom((int) ($s[0] ?? -1));
-            if ($tagObj === null) {
+            $tag = $this->getHtmlTag((int) ($s[0] ?? -1));
+            if ($tag === null) {
                 continue;
             }
-            $tag = $tagObj->toHtmlTag();
             $a = (int) ($s[1] ?? 0);
             $b = $a + (int) ($s[2] ?? 0);
             if ($a < 0 || $b > $n || $a >= $b) {
@@ -616,16 +607,16 @@ class BoostyBridge extends BridgeAbstract
             return $x['p'] <=> $y['p'];
         }
         if ($x['k'] !== $y['k']) {
-            return $x['k'] ? -1 : 1;
+            return $x['k'] === 1 ? -1 : 1;
         }
-        return $x['k'] ? ($y['d'] <=> $x['d']) : ($x['d'] <=> $y['d']);
+        return $x['k'] === 1 ? ($y['d'] <=> $x['d']) : ($x['d'] <=> $y['d']);
     }
 
     private function price(array $cp, $fb = null): ?string
     {
         return match (true) {
-            isset($cp['RUB']) => $cp['RUB'] . ' RUB',
-            isset($cp['USD']) => $cp['USD'] . ' USD',
+            isset($cp['RUB']) === true => $cp['RUB'] . ' RUB',
+            isset($cp['USD']) === true => $cp['USD'] . ' USD',
             default => $fb !== null ? (string) $fb : null,
         };
     }
@@ -654,18 +645,18 @@ class BoostyBridge extends BridgeAbstract
             return 'Boosty: ' . $this->blogDisplayName;
         }
         $blog = $this->getInput('blog');
-        return $blog ? 'Boosty: ' . $blog : self::NAME;
+        return $blog !== '' ? 'Boosty: ' . $blog : self::NAME;
     }
 
     public function getURI(): string
     {
         $blog = $this->getInput('blog');
-        return $blog ? 'https://boosty.to/' . urlencode($blog) : self::URI;
+        return $blog !== '' ? 'https://boosty.to/' . urlencode($blog) : self::URI;
     }
 
     public function getIcon(): string
     {
-        if (empty($this->blogAvatar)) {
+        if (empty($this->blogAvatar) === true) {
             return parent::getIcon();
         }
         return $this->blogAvatar . '#.png';
