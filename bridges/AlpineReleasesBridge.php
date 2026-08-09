@@ -41,7 +41,8 @@ class AlpineReleasesBridge extends BridgeAbstract
                 $versions = $matches[1];
             }
 
-            $timestamp = strtotime((string)($entry->updated ?? '')) ?: 0;
+            $ts = strtotime((string)($entry->updated ?? ''));
+            $timestamp = $ts !== false ? $ts : 0;
 
             $content = (string)($entry->content ?? $entry->summary ?? '');
             $plainContent = trim(strip_tags($content));
@@ -104,7 +105,7 @@ class AlpineReleasesBridge extends BridgeAbstract
             }
 
             $branchName = $this->cleanText((string)($cells[0]->plaintext ?? ''));
-            if (str_starts_with($branchName, 'v')) {
+            if (str_starts_with($branchName, 'v') === true) {
                 $branchName = substr($branchName, 1);
             }
 
