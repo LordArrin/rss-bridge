@@ -9,29 +9,29 @@ class NginxBridge extends NginxBase
     const DESCRIPTION = 'Returns Nginx releases with changelogs and other news';
     const MAINTAINER = 'LordArrin';
 
-    protected function getSoftwareName(): string 
-    { 
-        return 'nginx'; 
+    protected function getSoftwareName(): string
+    {
+        return 'nginx';
     }
 
-    protected function getNewsUrl(): string 
-    { 
-        return 'https://nginx.org/news.html'; 
+    protected function getNewsUrl(): string
+    {
+        return 'https://nginx.org/news.html';
     }
 
-    protected function getChangesUrl(): string 
-    { 
-        return 'https://nginx.org/en/CHANGES'; 
+    protected function getChangesUrl(): string
+    {
+        return 'https://nginx.org/en/CHANGES';
     }
 
-    protected function getTitlePrefix(): string 
-    { 
-        return 'NGINX'; 
+    protected function getTitlePrefix(): string
+    {
+        return 'NGINX';
     }
 
-    protected function getUidPrefix(): string 
-    { 
-        return 'nginx'; 
+    protected function getUidPrefix(): string
+    {
+        return 'nginx';
     }
 
     public function getName(): string

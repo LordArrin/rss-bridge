@@ -9,29 +9,29 @@ class FreeNginxBridge extends NginxBase
     const DESCRIPTION = 'Returns FreeNginx releases with changelogs and other news';
     const MAINTAINER = 'LordArrin';
 
-    protected function getSoftwareName(): string 
-    { 
-        return 'freenginx'; 
+    protected function getSoftwareName(): string
+    {
+        return 'freenginx';
     }
 
-    protected function getNewsUrl(): string 
-    { 
-        return 'https://freenginx.org/'; 
+    protected function getNewsUrl(): string
+    {
+        return 'https://freenginx.org/';
     }
 
-    protected function getChangesUrl(): string 
-    { 
-        return 'https://freenginx.org/en/CHANGES'; 
+    protected function getChangesUrl(): string
+    {
+        return 'https://freenginx.org/en/CHANGES';
     }
 
-    protected function getTitlePrefix(): string 
-    { 
-        return 'freenginx'; 
+    protected function getTitlePrefix(): string
+    {
+        return 'freenginx';
     }
 
-    protected function getUidPrefix(): string 
-    { 
-        return 'freenginx'; 
+    protected function getUidPrefix(): string
+    {
+        return 'freenginx';
     }
 
     public function getName(): string

@@ -53,7 +53,10 @@ abstract class NginxBase extends BridgeAbstract
     public function collectData(): void
     {
         $source = $this->getInput('source');
-        $limit = (int)$this->getInput('limit') ?: 20;
+        $limit = (int)$this->getInput('limit');
+        if ($limit === 0) {
+            $limit = 20;
+        }
 
         match ($source) {
             'changes' => $this->collectChanges(),
@@ -68,7 +71,7 @@ abstract class NginxBase extends BridgeAbstract
     private function collectChanges(): void
     {
         $content = getContents($this->getChangesUrl());
-        if (!$content) {
+        if ($content === FALSE) {
             throw new \Exception('Failed to load CHANGES');
         }
 
@@ -85,7 +88,7 @@ abstract class NginxBase extends BridgeAbstract
                 continue;
             }
 
-            if (!preg_match($headerPattern, $block, $m)) {
+            if (preg_match($headerPattern, $block, $m) === 0) {
                 continue;
             }
 
@@ -118,7 +121,7 @@ abstract class NginxBase extends BridgeAbstract
                 continue;
             }
 
-            if (str_starts_with($trimmed, '*) ')) {
+            if (str_starts_with($trimmed, '*) ') === TRUE) {
                 if ($current !== '') {
                     $items[] = $this->normalizeItem($current);
                 }
@@ -140,7 +143,7 @@ abstract class NginxBase extends BridgeAbstract
         $item = preg_replace('/Thanks to [^.]+\./', '', $item);
         $item = preg_replace('/\s+/', ' ', trim($item));
 
-        if (preg_match('/^(\w+):\s*(.+)$/', $item, $m)) {
+        if (preg_match('/^(\w+):\s*(.+)$/', $item, $m) === 1) {
             return $m[1] . ': ' . $this->capitalizeFirst($m[2]);
         }
 
@@ -160,7 +163,7 @@ abstract class NginxBase extends BridgeAbstract
     {
         $categories = [];
         foreach ($items as $item) {
-            if (preg_match('/^(\w+):\s*/', $item, $m)) {
+            if (preg_match('/^(\w+):\s*/', $item, $m) === 1) {
                 $categories[$m[1]][] = preg_replace('/^\w+:\s*/', '', $item);
             } else {
                 $categories['Other'][] = $item;
@@ -203,12 +206,12 @@ abstract class NginxBase extends BridgeAbstract
     private function collectNews(): void
     {
         $html = getSimpleHTMLDOM($this->getNewsUrl());
-        if (!$html) {
+        if ($html === FALSE) {
             throw new \Exception('Failed to load news page');
         }
 
         $newsTable = $html->find('table', 0);
-        if (!$newsTable) {
+        if ($newsTable === FALSE || $newsTable === NULL) {
             throw new \Exception('News table not found');
         }
 
@@ -226,7 +229,7 @@ abstract class NginxBase extends BridgeAbstract
             }
 
             $dom = str_get_html($content);
-            if ($dom) {
+            if ($dom !== FALSE) {
                 $dom = defaultLinkTo($dom, $this->getURI());
                 $content = $dom->save();
             }
