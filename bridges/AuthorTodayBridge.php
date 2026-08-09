@@ -21,8 +21,7 @@ class AuthorTodayBridge extends BridgeAbstract
             'notags' => [
                 'name' => 'Disable tags',
                 'type' => 'checkbox',
-                'required' => false,
-                'defaultValue' => 'checked'
+                'defaultValue' => false,
             ],
         ],
     ];
@@ -57,7 +56,7 @@ class AuthorTodayBridge extends BridgeAbstract
 
     public function getName(): string
     {
-        return $this->feedTitle ?: self::NAME;
+        return $this->feedTitle !== '' ? $this->feedTitle : self::NAME;
     }
 
     public function getIcon(): string
@@ -77,7 +76,7 @@ class AuthorTodayBridge extends BridgeAbstract
         $this->feedTitle = $this->extractFeedTitle($html);
         $items = $this->parseChapters($html);
 
-        if (!$items) {
+        if ($items === []) {
             throwServerException('Unable to parse chapters.');
         }
 
@@ -89,7 +88,7 @@ class AuthorTodayBridge extends BridgeAbstract
         $url = self::URI . '/work/' . $workId;
         $html = getSimpleHTMLDOM($url);
 
-        if (!$html) {
+        if ($html === false) {
             throwServerException("Unable to load page: {$url}");
         }
 
@@ -99,23 +98,28 @@ class AuthorTodayBridge extends BridgeAbstract
     private function extractFeedTitle($html): string
     {
         $titleNode = $html->find('h1.book-title', 0);
-        return $titleNode ? trim((string)$titleNode->plaintext) : '';
+
+        if ($titleNode === null) {
+            return '';
+        }
+
+        return trim((string)$titleNode->plaintext);
     }
 
     private function parseChapters($html): array
     {
         $authorNode = $html->find('.book-authors a', 0);
-        $author = $authorNode ? trim((string)$authorNode->plaintext) : '';
+        $author = $authorNode !== null ? trim((string)$authorNode->plaintext) : '';
 
         $coverNode = $html->find('img.cover-image', 0);
-        $coverUrl = $coverNode ? $this->absoluteUrl((string)$coverNode->getAttribute('src')) : '';
+        $coverUrl = $coverNode !== null ? $this->absoluteUrl((string)$coverNode->getAttribute('src')) : '';
 
         $statusHtml = $this->statusHtml($html);
-        $tags = $this->getInput('notags') ? [] : $this->tags($html);
+        $tags = $this->getInput('notags') === true ? [] : $this->tags($html);
 
         $chapters = $html->find('#tab-chapters ul.table-of-content li');
 
-        if (!$chapters) {
+        if ($chapters === []) {
             throwServerException('Chapter list not found. The work may be unavailable or markup has changed.');
         }
 
@@ -142,14 +146,14 @@ class AuthorTodayBridge extends BridgeAbstract
     ): ?array {
         $link = $chapter->find('a', 0);
 
-        if (!$link) {
+        if ($link === null) {
             return null;
         }
 
         $title = trim((string)$link->plaintext);
         $uri = $this->absoluteUrl((string)$link->getAttribute('href'));
         $timeNode = $chapter->find('[data-time]', 0);
-        $timestamp = $timeNode ? $this->timestamp((string)$timeNode->getAttribute('data-time')) : null;
+        $timestamp = $timeNode !== null ? $this->timestamp((string)$timeNode->getAttribute('data-time')) : null;
 
         $content = $statusHtml;
 
@@ -162,7 +166,7 @@ class AuthorTodayBridge extends BridgeAbstract
 
         return [
             'uri' => $uri,
-            'title' => $title ?: 'Chapter',
+            'title' => $title !== '' ? $title : 'Chapter',
             'uid' => $uri,
             'content' => $content,
             '_position' => $position,
@@ -174,10 +178,7 @@ class AuthorTodayBridge extends BridgeAbstract
 
     private function addSortedItems(array $items): void
     {
-        usort($items, fn(array $a, array $b): int => 
-            ($b['timestamp'] ?? 0) <=> ($a['timestamp'] ?? 0) 
-            ?: $a['_position'] <=> $b['_position']
-        );
+        usort($items, fn(array $a, array $b): int => ($b['timestamp'] ?? 0) <=> ($a['timestamp'] ?? 0) ?: $a['_position'] <=> $b['_position']);
 
         foreach (array_slice($items, 0, self::ITEM_LIMIT) as $item) {
             unset($item['_position']);
@@ -193,15 +194,15 @@ class AuthorTodayBridge extends BridgeAbstract
             return null;
         }
 
-        if (ctype_digit($value)) {
+        if (ctype_digit($value) === true) {
             return $value;
         }
 
-        if (preg_match('#^(\d+)/?$#', $value, $matches)) {
+        if (preg_match('#^(\d+)/?$#', $value, $matches) === 1) {
             return $matches[1];
         }
 
-        if (preg_match('#/work/(\d+)#', $value, $matches)) {
+        if (preg_match('#/work/(\d+)#', $value, $matches) === 1) {
             return $matches[1];
         }
 
@@ -212,8 +213,8 @@ class AuthorTodayBridge extends BridgeAbstract
     {
         $url = trim($url);
 
-        if ($url === '' || preg_match('#^https?://#i', $url)) {
-            return $url ?: self::URI;
+        if ($url === '' || preg_match('#^https?://#i', $url) === 1) {
+            return $url !== '' ? $url : self::URI;
         }
 
         return self::URI . '/' . ltrim($url, '/');
@@ -229,14 +230,21 @@ class AuthorTodayBridge extends BridgeAbstract
 
         $value = (string)preg_replace('/\.\d+/', '', $value);
 
-        if (!preg_match('/(Z|[+-]\d{2}:?\d{2})$/', $value)) {
+        if (preg_match('/(Z|[+-]\d{2}:?\d{2})$/', $value) !== 1) {
             $value .= 'Z';
         }
 
-        $date = DateTimeImmutable::createFromFormat('Y-m-d\TH:i:sP', $value)
-            ?: DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s\Z', $value);
+        $date = DateTimeImmutable::createFromFormat('Y-m-d\TH:i:sP', $value);
 
-        return $date?->getTimestamp();
+        if ($date === false) {
+            $date = DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s\Z', $value);
+        }
+
+        if ($date === false) {
+            return null;
+        }
+
+        return $date->getTimestamp();
     }
 
     private function plainText($node): string
@@ -302,7 +310,7 @@ class AuthorTodayBridge extends BridgeAbstract
     private function adultText($html): string
     {
         foreach ($html->find('.label-adult-only') as $node) {
-            if ($this->isInsideFooter($node)) {
+            if ($this->isInsideFooter($node) === true) {
                 continue;
             }
 
@@ -320,7 +328,7 @@ class AuthorTodayBridge extends BridgeAbstract
     {
         $source = (string)$html->save();
 
-        if (preg_match('/likeCount["\']?\s*:\s*["\']?(\d+)/i', $source, $matches)) {
+        if (preg_match('/likeCount["\']?\s*:\s*["\']?(\d+)/i', $source, $matches) === 1) {
             return $matches[1];
         }
 
@@ -361,6 +369,7 @@ class AuthorTodayBridge extends BridgeAbstract
 
         if ($time !== null) {
             $timeSpan = $this->buildTimeSpan($time);
+
             if ($timeSpan !== '') {
                 $parts[] = $timeSpan;
             }
@@ -373,7 +382,7 @@ class AuthorTodayBridge extends BridgeAbstract
             $parts[] = "<span>{$escapedSize}</span>";
         }
 
-        if (!$parts) {
+        if ($parts === []) {
             return '';
         }
 
@@ -381,13 +390,14 @@ class AuthorTodayBridge extends BridgeAbstract
         $separator = "<span style=\"{$separatorStyle}\">&#160;|&#160;</span>";
 
         $statusStyle = self::CSS['status'];
+
         return "<div style=\"{$statusStyle}\">" . implode($separator, $parts) . '</div>';
     }
 
     private function buildLabelSpan($label, string $labelText): string
     {
         $iconNode = $label->find('i', 0);
-        $iconClass = $iconNode ? (string)$iconNode->getAttribute('class') : '';
+        $iconClass = $iconNode !== null ? (string)$iconNode->getAttribute('class') : '';
         $labelClass = (string)$label->getAttribute('class');
 
         $labelStyle = $this->labelStyle($labelClass);
@@ -406,12 +416,13 @@ class AuthorTodayBridge extends BridgeAbstract
         }
 
         $formattedDate = htmlspecialchars(date('d.m.Y H:i', $timestamp), ENT_QUOTES, 'UTF-8');
+
         return "<span>{$formattedDate}</span>";
     }
 
     private function extractSizeText($label, string $labelText, string $adultText): string
     {
-        $statusNode = $label ? $label->parent() : null;
+        $statusNode = $label !== null ? $label->parent() : null;
         $sizeText = $this->plainText($statusNode);
 
         if ($sizeText !== '' && $labelText !== '') {
