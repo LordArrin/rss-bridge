@@ -161,11 +161,7 @@ class PawchiveBridge extends BridgeAbstract
         ],
     ];
 
-    private const array HTTP_HEADERS = [
-        'Accept: application/json, text/css, */*',
-    ];
-
-    private const array DOMAINS = ['pawchive.pw', 'pawchive.st'];
+    private const array DOMAINS = ['pawchive.pw'];
     private const string CACHE_KEY_ACTIVE_DOMAIN = 'active_domain';
 
     private ?string $author = null;
@@ -439,7 +435,6 @@ class PawchiveBridge extends BridgeAbstract
     private function getJson(string $endpoint): array
     {
         $service = $this->getInput('service');
-        $headers = [...self::HTTP_HEADERS, 'Cookie: session=' . (string)$this->getOption('session')];
         $curlOptions = [
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_MAXREDIRS => 0,
@@ -460,7 +455,7 @@ class PawchiveBridge extends BridgeAbstract
             $url = 'https://' . $host . '/' . self::API_PREFIX . $service . $endpoint;
 
             try {
-                $apiResponse = getContents($url, $headers, $curlOptions);
+                $apiResponse = getContents($url, [], $curlOptions);
 
                 if (is_string($apiResponse) === false) {
                     $lastException = new \Exception(
@@ -509,7 +504,7 @@ class PawchiveBridge extends BridgeAbstract
 
         throwServerException(sprintf(
             'All Pawchive mirrors failed. Last error: %s',
-            $lastException !== null ? $lastException->getMessage() : 'unknown'
+            ($lastException !== null) === true ? $lastException->getMessage() : 'unknown'
         ));
     }
 
@@ -520,7 +515,7 @@ class PawchiveBridge extends BridgeAbstract
 
         if (empty($post['file']['path']) === false) {
             $file = $post['file'];
-            $file['name'] = isset($file['name']) ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
+            $file['name'] = isset($file['name']) === true ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
             $file['path'] = trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
             $seenPaths[$file['path']] = true;
             $files[] = $file;
@@ -529,7 +524,7 @@ class PawchiveBridge extends BridgeAbstract
         if (empty($post['attachments']) === false && is_array($post['attachments']) === true) {
             foreach ($post['attachments'] as $file) {
                 if (empty($file['path']) === false) {
-                    $file['name'] = isset($file['name']) ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
+                    $file['name'] = isset($file['name']) === true ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
                     $file['path'] = trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
 
                     if (isset($seenPaths[$file['path']]) === true) {
