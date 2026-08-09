@@ -47,14 +47,14 @@ class MSISupportBridge extends BridgeAbstract
     public function getName(): string
     {
         $info = $this->getProductInfo();
-        if (!$info) {
+        if ($info === null) {
             return parent::getName();
         }
 
-        $displayName = !empty($info['sub_product']) ? $info['sub_product'] : $info['product'];
+        $displayName = empty($info['sub_product']) === false ? $info['sub_product'] : $info['product'];
         $name = str_replace('-', ' ', $displayName);
 
-        if (!empty($info['fragment'])) {
+        if (empty($info['fragment']) === false) {
             $fragmentName = strtolower($info['fragment']) === 'bios' ? 'BIOS' : ucfirst($info['fragment']);
             $name .= ' (' . $fragmentName . ')';
         }
@@ -65,7 +65,11 @@ class MSISupportBridge extends BridgeAbstract
     #[\Override]
     public function getURI(): string
     {
-        return $this->getInput('url') ?: parent::getURI();
+        $url = $this->getInput('url');
+        if ($url === null || $url === '') {
+            return parent::getURI();
+        }
+        return $url;
     }
 
     private function getProductInfo(): ?array
@@ -75,7 +79,7 @@ class MSISupportBridge extends BridgeAbstract
         }
 
         $url = $this->getInput('url');
-        if (!$url || !filter_var($url, FILTER_VALIDATE_URL)) {
+        if ($url === null || $url === '' || filter_var($url, FILTER_VALIDATE_URL) === false) {
             return null;
         }
 
@@ -101,10 +105,10 @@ class MSISupportBridge extends BridgeAbstract
         $category = array_pop($segments);
 
         $subProduct = '';
-        if (!empty($parsedUrl['query'])) {
+        if (empty($parsedUrl['query']) === false) {
             $queryParams = [];
             parse_str($parsedUrl['query'], $queryParams);
-            if (!empty($queryParams['sub_product'])) {
+            if (empty($queryParams['sub_product']) === false) {
                 $subProduct = $queryParams['sub_product'];
             }
         }
@@ -122,7 +126,7 @@ class MSISupportBridge extends BridgeAbstract
     private function getDownloadTypes(): array
     {
         $fragment = $this->getProductInfo()['fragment'] ?? '';
-        $types = in_array($fragment, self::VALID_TYPES, true) ? [$fragment] : self::VALID_TYPES;
+        $types = in_array($fragment, self::VALID_TYPES, true) === true ? [$fragment] : self::VALID_TYPES;
 
         return array_values(array_filter($types, fn(string $t): bool => $t !== 'manual'));
     }
@@ -130,20 +134,23 @@ class MSISupportBridge extends BridgeAbstract
     private function fetchApiData(string $type): ?array
     {
         $info = $this->getProductInfo();
-        if (!$info) {
+        if ($info === null) {
             return null;
         }
 
-        $apiProduct = !empty($info['sub_product']) ? $info['sub_product'] : $info['product'];
+        $apiProduct = empty($info['sub_product']) === false ? $info['sub_product'] : $info['product'];
         $url = self::API_BASE_URL . '?product=' . urlencode($apiProduct) . '&type=' . urlencode($type);
 
         try {
             $json = getContents($url, ['Accept: application/json']);
-            if (!json_validate($json)) {
+            if (json_validate($json) === false) {
                 return null;
             }
             $data = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
-            return ($data && isset($data['result']['downloads'])) ? $data['result']['downloads'] : null;
+            if ($data === null || isset($data['result']['downloads']) === false) {
+                return null;
+            }
+            return $data['result']['downloads'];
         } catch (Exception) {
             return null;
         }
@@ -151,12 +158,15 @@ class MSISupportBridge extends BridgeAbstract
 
     private function decodeHtml(?string $str): string
     {
-        return empty($str) ? '' : html_entity_decode($str, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if ($str === null || $str === '') {
+            return '';
+        }
+        return html_entity_decode($str, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
     private function cleanDescription(?string $html): string
     {
-        if (empty($html)) {
+        if ($html === null || $html === '') {
             return '';
         }
 
@@ -187,31 +197,34 @@ class MSISupportBridge extends BridgeAbstract
     {
         $title = $this->decodeHtml($file['download_title'] ?? $subCategory);
         $version = $this->decodeHtml($file['download_version'] ?? '');
-        $itemTitle = "[{$subCategory}] {$title}" . (!empty($version) ? " - {$version}" : '');
+        $itemTitle = "[{$subCategory}] {$title}";
+        if ($version !== '') {
+            $itemTitle .= " - {$version}";
+        }
 
         $uri = "https://www.msi.com/{$info['category']}/{$info['product']}/support";
-        if (!empty($info['sub_product'])) {
+        if (empty($info['sub_product']) === false) {
             $uri .= '?sub_product=' . urlencode($info['sub_product']);
         }
-        if (!empty($info['fragment'])) {
+        if (empty($info['fragment']) === false) {
             $uri .= '#' . $info['fragment'];
         }
 
         $content = '<div style="' . self::CSS['item'] . '">';
 
-        if (!empty($file['download_description'])) {
+        if (empty($file['download_description']) === false) {
             $desc = $this->cleanDescription($file['download_description']);
             $content .= '<p style="' . self::CSS['p'] . '"><span style="' . self::CSS['label'] . '">Description:</span><br>' . $desc . '</p>';
         }
-        if (!empty($file['os'])) {
+        if (empty($file['os']) === false) {
             $os = htmlspecialchars($this->decodeHtml($file['os']), ENT_QUOTES, 'UTF-8');
             $content .= '<p style="' . self::CSS['p'] . '"><span style="' . self::CSS['label'] . '">OS:</span> ' . $os . '</p>';
         }
-        if (!empty($file['download_size'])) {
+        if (empty($file['download_size']) === false) {
             $sizeMb = round((float) $file['download_size'] / (1024 * 1024), 2);
             $content .= '<p style="' . self::CSS['p'] . '"><span style="' . self::CSS['label'] . '">Size:</span> ' . $sizeMb . ' MB</p>';
         }
-        if (!$hideAttachments && !empty($file['download_url'])) {
+        if ($hideAttachments === false && empty($file['download_url']) === false) {
             $downloadUrl = htmlspecialchars($file['download_url'], ENT_QUOTES, 'UTF-8');
             $downloadStyle = self::CSS['download'];
             $content .= sprintf(
@@ -231,8 +244,9 @@ class MSISupportBridge extends BridgeAbstract
             'uid'     => $file['download_id'] ?? md5($itemTitle)
         ];
 
-        if (!empty($file['download_release'])) {
-            $item['timestamp'] = strtotime($file['download_release']) ?: null;
+        if (empty($file['download_release']) === false) {
+            $timestamp = strtotime($file['download_release']);
+            $item['timestamp'] = $timestamp === false ? null : $timestamp;
         }
 
         return $item;
@@ -242,7 +256,7 @@ class MSISupportBridge extends BridgeAbstract
     public function collectData(): void
     {
         $info = $this->getProductInfo();
-        if (!$info || empty($info['product']) || empty($info['category'])) {
+        if ($info === null || empty($info['product']) === true || empty($info['category']) === true) {
             throwClientException('Invalid URL format or could not extract product info. Expected format: https://www.msi.com/Category/Product-ID/support');
         }
 
@@ -251,7 +265,7 @@ class MSISupportBridge extends BridgeAbstract
 
         foreach ($this->getDownloadTypes() as $type) {
             $downloads = $this->fetchApiData($type);
-            if (!$downloads) {
+            if ($downloads === null) {
                 continue;
             }
 
@@ -260,15 +274,15 @@ class MSISupportBridge extends BridgeAbstract
                     continue;
                 }
 
-                if (!is_array($files) || !array_is_list($files)) {
+                if (is_array($files) === false || array_is_list($files) === false) {
                     continue;
                 }
 
                 foreach ($files as $file) {
-                    if (!is_array($file)) {
+                    if (is_array($file) === false) {
                         continue;
                     }
-                    if (empty($file['download_url']) && empty($file['download_title'])) {
+                    if (empty($file['download_url']) === true && empty($file['download_title']) === true) {
                         continue;
                     }
                     $allItems[] = $this->buildFeedItem($file, $subCategory, $info, $hideAttachments);
@@ -276,7 +290,7 @@ class MSISupportBridge extends BridgeAbstract
             }
         }
 
-        if (empty($allItems)) {
+        if (empty($allItems) === true) {
             return;
         }
 
