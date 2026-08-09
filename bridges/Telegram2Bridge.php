@@ -59,7 +59,6 @@ TXT,
         'hide_external_links' => [
             'name' => 'Hide external Telegram links',
             'type' => 'checkbox',
-            'defaultValue' => 'checked',
             'title' => 'Hide posts containing links or mentions of other Telegram channels/users',
         ],
         'include_keywords' => [
@@ -126,10 +125,10 @@ TXT,
         'unsup_wrap'  => 'background:#17212b;border-radius:12px;padding:28px 16px;text-align:center',
         'unsup_label' => 'color:#708499;font-size:14px;margin-bottom:16px',
         'unsup_btn' => <<<'CSS'
-        display:inline-block;background:#2b5278;color:#6ab2f2;
-        text-decoration:none;text-transform:uppercase;font-weight:bold;
-        font-size:13px;letter-spacing:0.03em;padding:10px 24px;border-radius:8px
-        CSS,
+display:inline-block;background:#2b5278;color:#6ab2f2;
+text-decoration:none;text-transform:uppercase;font-weight:bold;
+font-size:13px;letter-spacing:0.03em;padding:10px 24px;border-radius:8px
+CSS,
         'video'       => 'max-width:100%',
         'wrapper'     => 'font-size:14px;line-height:1.6;word-wrap:break-word',
         'quote'       => 'border-left:4px solid #4a76a8;padding-left:12px;margin:8px 0',
@@ -1451,6 +1450,8 @@ TXT,
             $this->getInput('hide_external_links') === true
             && $this->hasExternalTelegramLinks($item) === true
         ) {
+            return true;
+        }
 
         $haystack = $this->buildSearchHaystack($item);
 
