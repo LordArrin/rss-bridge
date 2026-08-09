@@ -1447,11 +1447,10 @@ TXT,
             return true;
         }
 
-        if ($this->getInput('hide_external_links') === true
+        if (
+            $this->getInput('hide_external_links') === true
             && $this->hasExternalTelegramLinks($item) === true
         ) {
-            return true;
-        }
 
         $haystack = $this->buildSearchHaystack($item);
 
@@ -1533,7 +1532,8 @@ TXT,
         if (preg_match_all($urlRe, $content, $matches, PREG_SET_ORDER) > 0) {
             foreach ($matches as $m) {
                 $username = strtolower($m[1]);
-                if ($username !== $currentUsername
+                if (
+                    $username !== $currentUsername
                     && in_array($username, self::TELEGRAM_SPECIAL_PAGES, true) === false
                 ) {
                     return true;
