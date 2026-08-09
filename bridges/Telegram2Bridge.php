@@ -113,9 +113,9 @@ TXT,
     private const CSS = [
         'unsup_wrap'  => 'background:#17212b;border-radius:12px;padding:28px 16px;text-align:center',
         'unsup_label' => 'color:#708499;font-size:14px;margin-bottom:16px',
-        'unsup_btn'   => 'display:inline-block;background:#2b5278;color:#6ab2f2;' .
-            'text-decoration:none;text-transform:uppercase;font-weight:bold;' .
-            'font-size:13px;letter-spacing:0.03em;padding:10px 24px;border-radius:8px',
+        'unsup_btn'   => <<<'CSS'
+display:inline-block;background:#2b5278;color:#6ab2f2;text-decoration:none;text-transform:uppercase;font-weight:bold;font-size:13px;letter-spacing:0.03em;padding:10px 24px;border-radius:8px
+CSS,
         'video'       => 'max-width:100%',
         'wrapper'     => 'font-size:14px;line-height:1.6;word-wrap:break-word',
         'quote'       => 'border-left:4px solid #4a76a8;padding-left:12px;margin:8px 0',
@@ -205,7 +205,7 @@ TXT,
     {
         $this->validateUsername();
 
-        $url = 'https://t.me/s/' . $this->getNormalizedUsername();
+        $url = sprintf('%s/s/%s', self::URI, $this->getNormalizedUsername());
 
         $limitInput = $this->getInput('limit');
         if ($limitInput === null || $limitInput === '' || $limitInput === 0) {
@@ -304,7 +304,7 @@ TXT,
     public function getURI(): string
     {
         if ($this->getInput('username') !== null) {
-            return self::URI . '/s/' . $this->getNormalizedUsername();
+            return sprintf('%s/s/%s', self::URI, $this->getNormalizedUsername());
         }
 
         return parent::getURI();
@@ -342,12 +342,6 @@ TXT,
         return null;
     }
 
-    /**
-     * @template T
-     * @param \Closure(): T $fn
-     * @return T
-     * @throws \Throwable
-     */
     private function withRetry(\Closure $fn, string $context, string $url = ''): mixed
     {
         $lastException = null;
@@ -604,14 +598,14 @@ TXT,
         $dir = $textDiv->getAttribute('dir');
         $attr = $dir !== '' ? ' dir="' . $dir . '"' : '';
 
-        return "<div class=\"tgme_widget_message_text js-message_text\"{$attr}>{$split['html']}</div>";
+        return sprintf("<div class=\"tgme_widget_message_text js-message_text\"%s>%s</div>", $attr, $split['html']);
     }
 
     private function splitTitleAndContent(string $html): array
     {
         $html = preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $html);
 
-        if (preg_match('/<br\s*\/?>/i', $html, $m, PREG_OFFSET_CAPTURE)) {
+        if (preg_match('/<br\s*\/?>/i', $html, $m, PREG_OFFSET_CAPTURE) === 1) {
             $firstLineHtml = substr(string: $html, offset: 0, length: $m[0][1]);
             $firstLinePlain = $this->htmlToPlain($firstLineHtml);
 
@@ -698,15 +692,15 @@ TXT,
             }
 
             if ($token[0] === '<') {
-                if (preg_match('/^<\s*\/\s*(\w+)/u', $token, $m)) {
+                if (preg_match('/^<\s*\/\s*(\w+)/u', $token, $m) === 1) {
                     $tag = strtolower($m[1]);
                     $stack = array_values(array_filter(
                         array: $stack,
                         callback: fn($s) => $s['tag'] !== $tag
                     ));
-                } elseif (preg_match('/^<\s*(\w+)/u', $token, $m)) {
+                } elseif (preg_match('/^<\s*(\w+)/u', $token, $m) === 1) {
                     $tag = strtolower($m[1]);
-                    if (!in_array($tag, $void, true) && !str_ends_with(rtrim($token, '>'), '/')) {
+                    if (in_array($tag, $void, true) === false && str_ends_with(rtrim($token, '>'), '/') === false) {
                         $stack[] = ['tag' => $tag, 'html' => $token];
                     }
                 }
@@ -750,9 +744,13 @@ TXT,
             $displayText = htmlspecialchars(string: $author, flags: ENT_QUOTES);
         }
 
-        return '<div style="' . self::CSS['reply_compact'] . '">'
-            . '<a href="' . $href . '" style="' . self::CSS['reply_link'] . '">' . $displayText . '</a>'
-            . '</div>';
+        return sprintf(
+            '<div style="%s"><a href="%s" style="%s">%s</a></div>',
+            self::CSS['reply_compact'],
+            $href,
+            self::CSS['reply_link'],
+            $displayText
+        );
     }
 
     private function processPhoto(\Dom\Element $messageDiv, ParseContext $context): string
@@ -766,7 +764,7 @@ TXT,
             $style = $wrap->getAttribute('style') ?? '';
             $href = $wrap->getAttribute('href') ?? '';
             if ($style !== '' && preg_match(self::BG_IMG_RE, $style, $m) === 1) {
-                $out .= '<a href="' . $href . '"><img src="' . $m[1] . '" /></a>';
+                $out .= sprintf('<a href="%s"><img src="%s" /></a>', $href, $m[1]);
             }
         }
 
@@ -811,7 +809,7 @@ TXT,
             if ($playerHref !== '') {
                 $postHref = $playerHref;
                 if (str_starts_with(haystack: $postHref, needle: 'http') === false) {
-                    $postHref = self::URI . '/' . ltrim($postHref, '/');
+                    $postHref = sprintf('%s/%s', self::URI, ltrim($postHref, '/'));
                 }
             }
         }
@@ -846,7 +844,7 @@ TXT,
                 preg_match('/width:\s*(\d+)px/i', $playerStyle, $mw) === 1
                 && preg_match('/height:\s*(\d+)px/i', $playerStyle, $mh) === 1
             ) {
-                $resolution = $mw[1] . '?' . $mh[1];
+                $resolution = sprintf('%s?%s', $mw[1], $mh[1]);
             }
         }
 
@@ -861,11 +859,10 @@ TXT,
         $html = '';
 
         if ($poster !== '') {
-            $html .= '<a href="' . $href . '"><img src="' . $poster . '" style="'
-                . self::CSS['video'] . '" /></a><br />';
+            $html .= sprintf('<a href="%s"><img src="%s" style="%s" /></a><br />', $href, $poster, self::CSS['video']);
         }
 
-        $html .= '<a href="' . $href . '">' . $label . '</a>';
+        $html .= sprintf('<a href="%s">%s</a>', $href, $label);
 
         return $html;
     }
@@ -895,7 +892,7 @@ TXT,
         if ($el !== null) {
             $style = $el->getAttribute('style') ?? '';
             if ($style !== '' && preg_match(self::BG_IMG_RE, $style, $m) === 1) {
-                return '<img src="' . $m[1] . '" />';
+                return sprintf('<img src="%s" />', $m[1]);
             }
         }
 
@@ -916,9 +913,8 @@ TXT,
             $context->title = $title;
         }
 
-        $html = '<div style="' . self::CSS['poll'] . '">';
-        $html .= '<p style="' . self::CSS['poll_t'] . '">'
-            . htmlspecialchars(string: $title, flags: ENT_QUOTES) . '</p>';
+        $html = sprintf('<div style="%s">', self::CSS['poll']);
+        $html .= sprintf('<p style="%s">%s</p>', self::CSS['poll_t'], htmlspecialchars(string: $title, flags: ENT_QUOTES));
 
         foreach ($poll->querySelectorAll(self::SELECTORS['POLL_OPTION']) as $opt) {
             $percent = $this->getPlaintext($opt, self::SELECTORS['POLL_PERCENT']);
@@ -928,9 +924,9 @@ TXT,
             $filled = (int) round($pct / 5);
             $bar = '[' . str_repeat(string: '#', times: $filled) . str_repeat(string: '.', times: 20 - $filled) . ']';
 
-            $html .= '<div style="' . self::CSS['poll_o'] . '">';
-            $html .= '<b>' . $pct . '%</b> ' . htmlspecialchars(string: $text, flags: ENT_QUOTES) . '<br />';
-            $html .= '<code>' . $bar . '</code>';
+            $html .= sprintf('<div style="%s">', self::CSS['poll_o']);
+            $html .= sprintf('<b>%d%%</b> %s<br />', $pct, htmlspecialchars(string: $text, flags: ENT_QUOTES));
+            $html .= sprintf('<code>%s</code>', $bar);
             $html .= '</div>';
         }
 
@@ -955,8 +951,7 @@ TXT,
         }
 
         if ($footer !== []) {
-            $html .= '<p style="' . self::CSS['poll_f'] . '">'
-                . implode(separator: ' &#183; ', array: $footer) . '</p>';
+            $html .= sprintf('<p style="%s">%s</p>', self::CSS['poll_f'], implode(separator: ' &#183; ', array: $footer));
         }
 
         $html .= '</div>';
@@ -976,7 +971,7 @@ TXT,
         if ($el !== null) {
             $style = $el->getAttribute('style') ?? '';
             if ($style !== '' && preg_match(self::BG_IMG_RE, $style, $m) === 1) {
-                $img = '<img src="' . $m[1] . '" />';
+                $img = sprintf('<img src="%s" />', $m[1]);
             }
         }
 
@@ -985,9 +980,15 @@ TXT,
         $desc = htmlspecialchars(string: $this->getPlaintext($preview, self::SELECTORS['LINK_PREVIEW_DESC']), flags: ENT_QUOTES);
         $previewHref = $preview->getAttribute('href') ?? '';
 
-        return '<blockquote><a href="' . $previewHref . '">' . $img . '</a><br /><a href="'
-            . $previewHref . '">' . $title . ' - ' . $site . '</a><br />'
-            . $desc . '</blockquote>';
+        return sprintf(
+            '<blockquote><a href="%s">%s</a><br /><a href="%s">%s - %s</a><br />%s</blockquote>',
+            $previewHref,
+            $img,
+            $previewHref,
+            $title,
+            $site,
+            $desc
+        );
     }
 
     private function processAttachment(\Dom\Element $messageDiv, ParseContext $context): string
@@ -1000,7 +1001,7 @@ TXT,
         foreach ($messageDiv->querySelectorAll(self::SELECTORS['DOCUMENT']) as $doc) {
             $docTitle = htmlspecialchars(string: $this->getPlaintext($doc, self::SELECTORS['DOCUMENT_TITLE']), flags: ENT_QUOTES);
             $docExtra = htmlspecialchars(string: $this->getPlaintext($doc, self::SELECTORS['DOCUMENT_EXTRA']), flags: ENT_QUOTES);
-            $out .= $docTitle . ' - ' . $docExtra . '<br />';
+            $out .= sprintf('%s - %s<br />', $docTitle, $docExtra);
         }
 
         return $out;
@@ -1028,7 +1029,7 @@ TXT,
 
         $imgSrc = $m[1] ?? '';
 
-        return '<a href="' . $linkHref . '"><img src="' . $imgSrc . '" /></a>';
+        return sprintf('<a href="%s"><img src="%s" /></a>', $linkHref, $imgSrc);
     }
 
     private function extractHashtags(string $html): ExtractedHashtags
@@ -1114,8 +1115,10 @@ TXT,
         $type = $info['type'];
 
         $isTooBig = $this->getUnsupportedReason($message) === UnsupportedReason::TOO_BIG;
+        $mediaLabel = $isTooBig === true ? 'Media is too big' : 'Unsupported media';
+
         $stubLabel = match ($type) {
-            UnsupportedType::VIDEO => $isTooBig ? 'Media is too big' : 'Unsupported media',
+            UnsupportedType::VIDEO => $mediaLabel,
             UnsupportedType::GENERIC => 'Please open Telegram to view this post',
         };
 
@@ -1155,10 +1158,14 @@ TXT,
         string $uri,
         string $label = 'Please open Telegram to view this post'
     ): string {
-        return '<blockquote style="' . self::CSS['unsup_wrap'] . '"><div style="'
-            . self::CSS['unsup_label'] . '">' . $label . '</div><a href="'
-            . $uri . '" style="' . self::CSS['unsup_btn']
-            . '"><b>View in Telegram</b></a></blockquote>';
+        return sprintf(
+            '<blockquote style="%s"><div style="%s">%s</div><a href="%s" style="%s"><b>View in Telegram</b></a></blockquote>',
+            self::CSS['unsup_wrap'],
+            self::CSS['unsup_label'],
+            $label,
+            $uri,
+            self::CSS['unsup_btn']
+        );
     }
 
     private function removeViewInTelegram(string $html): string
@@ -1200,7 +1207,7 @@ TXT,
                 );
                 $url = preg_replace('/\?$/', '', $url);
 
-                return 'href="' . $url . '"';
+                return sprintf('href="%s"', $url);
             },
             subject: $html
         );
@@ -1220,14 +1227,14 @@ TXT,
                 $url = $m[2];
 
                 if (preg_match('/^\s*(javascript|vbscript|data(?!:(?:image|video|audio)\/))/i', $url) === 1) {
-                    return $m[1] . '="#"';
+                    return sprintf('%s="#"', $m[1]);
                 }
 
                 if (str_starts_with(haystack: $url, needle: '?') === true || str_starts_with(haystack: $url, needle: '/') === true) {
-                    return $m[1] . '="' . self::URI . '/s/' . $this->getNormalizedUsername() . $url . '"';
+                    return sprintf('%s="%s/s/%s%s"', $m[1], self::URI, $this->getNormalizedUsername(), $url);
                 }
 
-                return $m[1] . '="' . $url . '"';
+                return sprintf('%s="%s"', $m[1], $url);
             },
             subject: $html
         );
@@ -1249,7 +1256,7 @@ TXT,
                 if ($val === '') {
                     return '';
                 }
-                return ' style="' . htmlspecialchars(string: $val, flags: ENT_QUOTES) . '"';
+                return sprintf(' style="%s"', htmlspecialchars(string: $val, flags: ENT_QUOTES));
             },
             subject: $html
         );
@@ -1260,14 +1267,14 @@ TXT,
 
         $html = preg_replace(
             '/<blockquote(\s[^>]*)?>/i',
-            '<blockquote$1 style="' . self::CSS['quote'] . '">',
+            sprintf('<blockquote$1 style="%s">', self::CSS['quote']),
             $html
         );
 
         $html = preg_replace('/<a[^>]*>\s*<\/a>/', '', $html);
         $html = preg_replace('/(<br\s*\/?>){3,}/i', '<br /><br />', $html);
 
-        return '<div style="' . self::CSS['wrapper'] . '">' . trim(string: $html) . '</div>';
+        return sprintf('<div style="%s">%s</div>', self::CSS['wrapper'], trim(string: $html));
     }
 
     private function shouldEmbedMedia(): bool
@@ -1290,7 +1297,7 @@ TXT,
             . '\/[^"\'\s>]+)["\']/i';
 
         $result = preg_replace_callback($re, function (array $m): string {
-            return $m[1] . '="' . $this->urlToDataUri($m[2]) . '"';
+            return sprintf('%s="%s"', $m[1], $this->urlToDataUri($m[2]));
         }, $html);
 
         return $result ?? $html;
@@ -1313,7 +1320,7 @@ TXT,
             return $url;
         }
 
-        return 'data:' . $data['type'] . ';base64,' . base64_encode(string: $data['body']);
+        return sprintf('data:%s;base64,%s', $data['type'], base64_encode(string: $data['body']));
     }
 
     private function fetchMediaCached(string $url): ?array
