@@ -113,10 +113,9 @@ TXT,
     private const CSS = [
         'unsup_wrap'  => 'background:#17212b;border-radius:12px;padding:28px 16px;text-align:center',
         'unsup_label' => 'color:#708499;font-size:14px;margin-bottom:16px',
-        // phpcs:ignore Squiz.Strings.Concatenation
         'unsup_btn' => 'display:inline-block;background:#2b5278;color:#6ab2f2;'
             . 'text-decoration:none;text-transform:uppercase;font-weight:bold;'
-            . 'font-size:13px;letter-spacing:0.03em;padding:10px 24px;border-radius:8px',
+            . 'font-size:13px;letter-spacing:0.03em;padding:10px 24px;border-radius:8px', //won't fix
         'video'       => 'max-width:100%',
         'wrapper'     => 'font-size:14px;line-height:1.6;word-wrap:break-word',
         'quote'       => 'border-left:4px solid #4a76a8;padding-left:12px;margin:8px 0',
