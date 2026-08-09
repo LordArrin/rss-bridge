@@ -21,13 +21,10 @@ class AuthorTodayBridge extends BridgeAbstract
             'notags' => [
                 'name' => 'Disable tags',
                 'type' => 'checkbox',
-                'defaultValue' => false,
+                'required' => false,
+                'defaultValue' => 'checked'
             ],
         ],
-    ];
-
-    public const HTTP_HEADERS = [
-        'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
     ];
 
     public const CSS = [
@@ -43,6 +40,7 @@ class AuthorTodayBridge extends BridgeAbstract
     ];
 
     private const ITEM_LIMIT = 5;
+    private const FOOTER_SEARCH_DEPTH = 8;
 
     private string $feedTitle = '';
 
@@ -59,7 +57,7 @@ class AuthorTodayBridge extends BridgeAbstract
 
     public function getName(): string
     {
-        return $this->feedTitle !== '' ? $this->feedTitle : self::NAME;
+        return $this->feedTitle ?: self::NAME;
     }
 
     public function getIcon(): string
@@ -75,16 +73,37 @@ class AuthorTodayBridge extends BridgeAbstract
             throwClientException('Story ID must be a number or a URL containing /work/{id}');
         }
 
-        $url = self::URI . '/work/' . $workId;
-        $html = getSimpleHTMLDOM($url, self::HTTP_HEADERS);
+        $html = $this->loadPage($workId);
+        $this->feedTitle = $this->extractFeedTitle($html);
+        $items = $this->parseChapters($html);
 
-        if (!$html) {
-            throwServerException('Unable to load page: ' . $url);
+        if (!$items) {
+            throwServerException('Unable to parse chapters.');
         }
 
-        $titleNode = $html->find('h1.book-title', 0);
-        $this->feedTitle = $titleNode ? trim((string)$titleNode->plaintext) : '';
+        $this->addSortedItems($items);
+    }
 
+    private function loadPage(string $workId): \simple_html_dom
+    {
+        $url = self::URI . '/work/' . $workId;
+        $html = getSimpleHTMLDOM($url);
+
+        if (!$html) {
+            throwServerException("Unable to load page: {$url}");
+        }
+
+        return $html;
+    }
+
+    private function extractFeedTitle($html): string
+    {
+        $titleNode = $html->find('h1.book-title', 0);
+        return $titleNode ? trim((string)$titleNode->plaintext) : '';
+    }
+
+    private function parseChapters($html): array
+    {
         $authorNode = $html->find('.book-authors a', 0);
         $author = $authorNode ? trim((string)$authorNode->plaintext) : '';
 
@@ -93,6 +112,7 @@ class AuthorTodayBridge extends BridgeAbstract
 
         $statusHtml = $this->statusHtml($html);
         $tags = $this->getInput('notags') ? [] : $this->tags($html);
+
         $chapters = $html->find('#tab-chapters ul.table-of-content li');
 
         if (!$chapters) {
@@ -102,61 +122,62 @@ class AuthorTodayBridge extends BridgeAbstract
         $items = [];
 
         foreach (array_reverse($chapters) as $position => $chapter) {
-            $link = $chapter->find('a', 0);
+            $item = $this->buildChapterItem($chapter, $position, $statusHtml, $coverUrl, $author, $tags);
 
-            if (!$link) {
-                continue;
+            if ($item !== null) {
+                $items[] = $item;
             }
-
-            $title = trim((string)$link->plaintext);
-            $uri = $this->absoluteUrl((string)$link->getAttribute('href'));
-            $timeNode = $chapter->find('[data-time]', 0);
-            $timestamp = $timeNode ? $this->timestamp((string)$timeNode->getAttribute('data-time')) : null;
-
-            $content = $statusHtml;
-
-            if ($coverUrl !== '') {
-                $content .= '<p><a href="' . htmlspecialchars($uri, ENT_QUOTES, 'UTF-8') . '"><img src="'
-                    . htmlspecialchars($coverUrl, ENT_QUOTES, 'UTF-8')
-                    . '" alt="Cover" style="' . self::CSS['cover'] . '"></a></p>';
-            }
-
-            $item = [
-                'uri' => $uri,
-                'title' => $title !== '' ? $title : 'Chapter',
-                'uid' => $uri,
-                'content' => $content,
-                '_position' => $position,
-            ];
-
-            if ($timestamp !== null) {
-                $item['timestamp'] = $timestamp;
-            }
-
-            if ($author !== '') {
-                $item['author'] = $author;
-            }
-
-            if ($tags !== []) {
-                $item['categories'] = $tags;
-            }
-
-            $items[] = $item;
         }
 
-        if (!$items) {
-            throwServerException('Unable to parse chapters.');
+        return $items;
+    }
+
+    private function buildChapterItem(
+        $chapter,
+        int $position,
+        string $statusHtml,
+        string $coverUrl,
+        string $author,
+        array $tags
+    ): ?array {
+        $link = $chapter->find('a', 0);
+
+        if (!$link) {
+            return null;
         }
 
-        usort($items, static function (array $a, array $b): int {
-            $time = ($b['timestamp'] ?? 0) <=> ($a['timestamp'] ?? 0);
+        $title = trim((string)$link->plaintext);
+        $uri = $this->absoluteUrl((string)$link->getAttribute('href'));
+        $timeNode = $chapter->find('[data-time]', 0);
+        $timestamp = $timeNode ? $this->timestamp((string)$timeNode->getAttribute('data-time')) : null;
 
-            if ($time !== 0) {
-                return $time;
-            }
+        $content = $statusHtml;
 
-            return $a['_position'] <=> $b['_position'];
-        });
+        if ($coverUrl !== '') {
+            $escapedUri = htmlspecialchars($uri, ENT_QUOTES, 'UTF-8');
+            $escapedCover = htmlspecialchars($coverUrl, ENT_QUOTES, 'UTF-8');
+            $coverStyle = self::CSS['cover'];
+            $content .= "<p><a href=\"{$escapedUri}\"><img src=\"{$escapedCover}\" alt=\"Cover\" style=\"{$coverStyle}\"></a></p>";
+        }
+
+        return [
+            'uri' => $uri,
+            'title' => $title ?: 'Chapter',
+            'uid' => $uri,
+            'content' => $content,
+            '_position' => $position,
+            ...($timestamp !== null ? ['timestamp' => $timestamp] : []),
+            ...($author !== '' ? ['author' => $author] : []),
+            ...($tags !== [] ? ['categories' => $tags] : []),
+        ];
+    }
+
+    private function addSortedItems(array $items): void
+    {
+        usort($items, fn(array $a, array $b): int => 
+            ($b['timestamp'] ?? 0) <=> ($a['timestamp'] ?? 0) 
+            ?: $a['_position'] <=> $b['_position']
+        );
 
         foreach (array_slice($items, 0, self::ITEM_LIMIT) as $item) {
             unset($item['_position']);
@@ -191,12 +212,8 @@ class AuthorTodayBridge extends BridgeAbstract
     {
         $url = trim($url);
 
-        if ($url === '') {
-            return self::URI;
-        }
-
-        if (preg_match('#^https?://#i', $url)) {
-            return $url;
+        if ($url === '' || preg_match('#^https?://#i', $url)) {
+            return $url ?: self::URI;
         }
 
         return self::URI . '/' . ltrim($url, '/');
@@ -216,13 +233,10 @@ class AuthorTodayBridge extends BridgeAbstract
             $value .= 'Z';
         }
 
-        $date = date_create($value);
+        $date = DateTimeImmutable::createFromFormat('Y-m-d\TH:i:sP', $value)
+            ?: DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s\Z', $value);
 
-        if ($date === false) {
-            return null;
-        }
-
-        return $date->getTimestamp();
+        return $date?->getTimestamp();
     }
 
     private function plainText($node): string
@@ -253,35 +267,28 @@ class AuthorTodayBridge extends BridgeAbstract
 
     private function statusIcon(string $class): string
     {
-        if (strpos($class, 'icon-pencil') !== false) {
-            return '&#9998;';
-        }
-
-        if (strpos($class, 'icon-check') !== false) {
-            return '&#10004;';
-        }
-
-        return '&#8226;';
+        return match (true) {
+            str_contains($class, 'icon-pencil') => '&#9998;',
+            str_contains($class, 'icon-check') => '&#10004;',
+            default => '&#8226;',
+        };
     }
 
     private function labelStyle(string $class): string
     {
-        $color = self::CSS['label_default'];
-
-        if (strpos($class, 'label-success') !== false) {
-            $color = self::CSS['label_success'];
-        } elseif (strpos($class, 'label-primary') !== false) {
-            $color = self::CSS['label_primary'];
-        } elseif (strpos($class, 'label-danger') !== false) {
-            $color = self::CSS['label_danger'];
-        }
+        $color = match (true) {
+            str_contains($class, 'label-success') => self::CSS['label_success'],
+            str_contains($class, 'label-primary') => self::CSS['label_primary'],
+            str_contains($class, 'label-danger') => self::CSS['label_danger'],
+            default => self::CSS['label_default'],
+        };
 
         return self::CSS['label'] . ';' . $color;
     }
 
     private function isInsideFooter($node): bool
     {
-        for ($i = 0; $i < 8 && $node !== null; $i++) {
+        for ($i = 0; $i < self::FOOTER_SEARCH_DEPTH && $node !== null; $i++) {
             if (strtolower((string)$node->tag) === 'footer') {
                 return true;
             }
@@ -333,39 +340,77 @@ class AuthorTodayBridge extends BridgeAbstract
         $labelText = $this->plainText($label);
 
         if ($labelText !== '') {
-            $iconNode = $label->find('i', 0);
-            $iconClass = $iconNode ? (string)$iconNode->getAttribute('class') : '';
-            $labelClass = (string)$label->getAttribute('class');
-
-            $parts[] = '<span style="' . $this->labelStyle($labelClass) . '">'
-                . $this->statusIcon($iconClass) . '&#160;'
-                . htmlspecialchars($labelText, ENT_QUOTES, 'UTF-8') . '</span>';
+            $parts[] = $this->buildLabelSpan($label, $labelText);
         }
 
         $adultText = $this->adultText($html);
 
         if ($adultText !== '') {
-            $parts[] = '<span style="' . $this->labelStyle('label-danger') . '">'
-                . htmlspecialchars($adultText, ENT_QUOTES, 'UTF-8') . '</span>';
+            $labelStyle = $this->labelStyle('label-danger');
+            $escapedAdult = htmlspecialchars($adultText, ENT_QUOTES, 'UTF-8');
+            $parts[] = "<span style=\"{$labelStyle}\">{$escapedAdult}</span>";
         }
 
         $likes = $this->likeCount($html);
 
         if ($likes !== '') {
-            $parts[] = '<span style="' . self::CSS['meta'] . '">&#9829;&#160;'
-                . htmlspecialchars($likes, ENT_QUOTES, 'UTF-8') . '</span>';
+            $metaStyle = self::CSS['meta'];
+            $escapedLikes = htmlspecialchars($likes, ENT_QUOTES, 'UTF-8');
+            $parts[] = "<span style=\"{$metaStyle}\">&#9829;&#160;{$escapedLikes}</span>";
         }
 
         if ($time !== null) {
-            $timestamp = $this->timestamp((string)$time->getAttribute('data-time'));
-
-            if ($timestamp !== null) {
-                $parts[] = '<span>'
-                    . htmlspecialchars(date('d.m.Y H:i', $timestamp), ENT_QUOTES, 'UTF-8')
-                    . '</span>';
+            $timeSpan = $this->buildTimeSpan($time);
+            if ($timeSpan !== '') {
+                $parts[] = $timeSpan;
             }
         }
 
+        $sizeText = $this->extractSizeText($label, $labelText, $adultText);
+
+        if ($sizeText !== '') {
+            $escapedSize = htmlspecialchars($sizeText, ENT_QUOTES, 'UTF-8');
+            $parts[] = "<span>{$escapedSize}</span>";
+        }
+
+        if (!$parts) {
+            return '';
+        }
+
+        $separatorStyle = self::CSS['separator'];
+        $separator = "<span style=\"{$separatorStyle}\">&#160;|&#160;</span>";
+
+        $statusStyle = self::CSS['status'];
+        return "<div style=\"{$statusStyle}\">" . implode($separator, $parts) . '</div>';
+    }
+
+    private function buildLabelSpan($label, string $labelText): string
+    {
+        $iconNode = $label->find('i', 0);
+        $iconClass = $iconNode ? (string)$iconNode->getAttribute('class') : '';
+        $labelClass = (string)$label->getAttribute('class');
+
+        $labelStyle = $this->labelStyle($labelClass);
+        $statusIcon = $this->statusIcon($iconClass);
+        $escapedLabel = htmlspecialchars($labelText, ENT_QUOTES, 'UTF-8');
+
+        return "<span style=\"{$labelStyle}\">{$statusIcon}&#160;{$escapedLabel}</span>";
+    }
+
+    private function buildTimeSpan($time): string
+    {
+        $timestamp = $this->timestamp((string)$time->getAttribute('data-time'));
+
+        if ($timestamp === null) {
+            return '';
+        }
+
+        $formattedDate = htmlspecialchars(date('d.m.Y H:i', $timestamp), ENT_QUOTES, 'UTF-8');
+        return "<span>{$formattedDate}</span>";
+    }
+
+    private function extractSizeText($label, string $labelText, string $adultText): string
+    {
         $statusNode = $label ? $label->parent() : null;
         $sizeText = $this->plainText($statusNode);
 
@@ -377,16 +422,6 @@ class AuthorTodayBridge extends BridgeAbstract
             $sizeText = trim(str_replace($adultText, '', $sizeText), " \t\n\r\0\x0B|");
         }
 
-        if ($sizeText !== '') {
-            $parts[] = '<span>' . htmlspecialchars($sizeText, ENT_QUOTES, 'UTF-8') . '</span>';
-        }
-
-        if (!$parts) {
-            return '';
-        }
-
-        $separator = '<span style="' . self::CSS['separator'] . '">&#160;|&#160;</span>';
-
-        return '<div style="' . self::CSS['status'] . '">' . implode($separator, $parts) . '</div>';
+        return $sizeText;
     }
 }
