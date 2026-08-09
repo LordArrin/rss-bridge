@@ -1,10 +1,11 @@
 ARG ALPINE_VERSION=3.24
 FROM alpine:${ALPINE_VERSION}
 
-ARG IMAGE_VERSION=1.1.1
-ARG CURL_IMPERSONATE_VERSION=1.5.6
+ARG IMAGE_VERSION=1.1.2
+ARG CURL_VERSION=2.0.0
 
 ENV RSSBRIDGE_SYSTEM_VERSION=${IMAGE_VERSION}
+ENV CURL_IMPERSONATE_VERSION=${CURL_VERSION}
 
 LABEL org.opencontainers.image.title="RSS Bridge" \
       org.opencontainers.image.description="RSS-Bridge - generate feeds for websites that don't have one" \
@@ -39,12 +40,10 @@ RUN set -xe && \
       curl \
       patchelf \
     && \
-    # --- curl-impersonate v1.5.6 (v2.0.0 musl is broken) ---
-    curlimpersonate_version=1.5.6 && \
     arch="$(uname -m)" && \
-    archive="libcurl-impersonate-v${curlimpersonate_version}.${arch}-linux-musl.tar.gz" && \
+    archive="libcurl-impersonate-v${CURL_IMPERSONATE_VERSION}.${arch}-linux-musl.tar.gz" && \
     curl -fSLo "/tmp/${archive}" \
-      "https://github.com/lexiforest/curl-impersonate/releases/download/v${curlimpersonate_version}/${archive}" && \
+      "https://github.com/lexiforest/curl-impersonate/releases/download/v${CURL_IMPERSONATE_VERSION}/${archive}" && \
     mkdir -p /usr/local/lib/curl-impersonate && \
     tar xzf "/tmp/${archive}" -C /usr/local/lib/curl-impersonate && \
     rm -f "/tmp/${archive}" && \
@@ -52,7 +51,7 @@ RUN set -xe && \
     patchelf --set-soname libcurl.so.4 \
       /usr/local/lib/curl-impersonate/libcurl-impersonate.so && \
     # Replace system libcurl with curl-impersonate
-    rm -f /usr/lib/libcurl.so.4 /usr/lib/libcurl.so.4.8.0 && \
+    rm -f /usr/lib/libcurl.so.4 /usr/lib/libcurl.so.* && \
     ln -sf /usr/local/lib/curl-impersonate/libcurl-impersonate.so /usr/lib/libcurl.so.4 && \
     # --- Cleanup ---
     apk del --no-cache patchelf && \

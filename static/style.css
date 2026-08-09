@@ -568,3 +568,8 @@ button {
     margin-top: 5px !important;
 }
 /* end find-feed */
+
+/* Auto-hide empty findfeedresults section */
+#findfeedresults:empty {
+    display: none;
+}

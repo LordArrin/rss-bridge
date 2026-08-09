@@ -12,7 +12,7 @@ class PawchiveBridge extends BridgeAbstract
 
     const API_PREFIX = 'api/v1/';
 
-    const PARAMETERS = [[
+    const array PARAMETERS = [[
         'service' => [
             'name' => 'Content service',
             'type' => 'list',
@@ -45,7 +45,7 @@ class PawchiveBridge extends BridgeAbstract
         ],
     ]];
 
-    private const ALL_SERVICES = [
+    private const array ALL_SERVICES = [
         'Pixiv Fanbox' => 'fanbox',
         'Patreon' => 'patreon',
         'Fantia' => 'fantia',
@@ -57,12 +57,12 @@ class PawchiveBridge extends BridgeAbstract
         'Fansly' => 'fansly',
     ];
 
-    private const ACTIVE_SERVICES = [
+    private const array ACTIVE_SERVICES = [
         'Pixiv Fanbox' => 'fanbox',
         'Patreon' => 'patreon',
     ];
 
-    private const MIME_TYPES = [
+    private const array MIME_TYPES = [
         'jpg' => 'image/jpeg',
         'jpeg' => 'image/jpeg',
         'png' => 'image/png',
@@ -93,10 +93,10 @@ class PawchiveBridge extends BridgeAbstract
         'psd' => 'application/x-photoshop',
     ];
 
-    private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'jfif', 'bmp', 'svg', 'tiff', 'tif', 'ico'];
-    private const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'm4v'];
+    private const array IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'jfif', 'bmp', 'svg', 'tiff', 'tif', 'ico'];
+    private const array VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'm4v'];
 
-    private const CSS = [
+    private const array CSS = [
         'image' => 'max-width:100%;height:auto;display:block;margin:0',
         'video' => 'max-width:100%;height:auto;display:block;margin:0',
         'file-link' => 'display:inline-block;margin:0;color:#0066cc;text-decoration:none',
@@ -109,7 +109,7 @@ class PawchiveBridge extends BridgeAbstract
         'attachments-item' => 'margin:4px 0',
     ];
 
-    private const SANITIZE_TAGS_TO_REMOVE = [
+    private const array SANITIZE_TAGS_TO_REMOVE = [
         'script',
         'iframe',
         'input',
@@ -125,7 +125,7 @@ class PawchiveBridge extends BridgeAbstract
         'noscript',
     ];
 
-    private const SANITIZE_ATTRIBUTES_TO_KEEP = [
+    private const array SANITIZE_ATTRIBUTES_TO_KEEP = [
         'title',
         'href',
         'src',
@@ -155,26 +155,25 @@ class PawchiveBridge extends BridgeAbstract
         'preload',
     ];
 
-    const CONFIGURATION = [
+    const array CONFIGURATION = [
         'session' => [
             'required' => true,
         ],
     ];
 
-    private const HTTP_HEADERS = [
+    private const array HTTP_HEADERS = [
         'Accept: application/json, text/css, */*',
     ];
 
-    private const DOMAINS = ['pawchive.pw', 'pawchive.st'];
-    private const CACHE_KEY_ACTIVE_DOMAIN = 'active_domain';
+    private const array DOMAINS = ['pawchive.pw', 'pawchive.st'];
+    private const string CACHE_KEY_ACTIVE_DOMAIN = 'active_domain';
 
-    private ?string $author = null;
-    private ?string $authorAvatarUrl = null;
+    public private(set) ?string $author = null;
+    public private(set) ?string $authorAvatarUrl = null;
     private array $mimeCache = [];
-    private ?string $activeDomainHost = null;
-
-    private function getActiveDomainHost(): string
-    {
+    
+private ?string $activeDomainHost = null {
+    get {
         if ($this->activeDomainHost === null) {
             $cached = $this->loadCacheValue(self::CACHE_KEY_ACTIVE_DOMAIN);
             $this->activeDomainHost = match (true) {
@@ -182,35 +181,32 @@ class PawchiveBridge extends BridgeAbstract
                 default => self::DOMAINS[0],
             };
         }
-
         return $this->activeDomainHost;
     }
-
-    private function setActiveDomainHost(string $host): void
-    {
+    set(?string $host) {
         $this->activeDomainHost = $host;
         $this->saveCacheValue(self::CACHE_KEY_ACTIVE_DOMAIN, $host, self::CACHE_TIMEOUT);
     }
+}
 
     private function baseURI(): string
     {
-        return 'https://' . $this->getActiveDomainHost() . '/';
+        return 'https://' . $this->activeDomainHost . '/';
     }
 
     private function getFileDomain(): string
     {
-        return 'https://file.' . $this->getActiveDomainHost();
+        return 'https://file.' . $this->activeDomainHost;
     }
 
     private function getThumbnailDomain(): string
     {
-        return 'https://img.' . $this->getActiveDomainHost();
+        return 'https://img.' . $this->activeDomainHost;
     }
 
     private function getFileUrl(string $path, ?string $filename = null): string
     {
         $url = $this->getFileDomain() . '/data' . $path;
-
         return $filename !== null ? $url . '?f=' . urlencode($filename) : $url;
     }
 
@@ -226,7 +222,7 @@ class PawchiveBridge extends BridgeAbstract
 
     private function normalizeUrls(string $content): string
     {
-        $activeHost = $this->getActiveDomainHost();
+        $activeHost = $this->activeDomainHost;
 
         foreach (self::DOMAINS as $host) {
             if ($host !== $activeHost) {
@@ -257,7 +253,6 @@ class PawchiveBridge extends BridgeAbstract
     private function getMimeType(string $filename): string
     {
         $ext = $this->getExtension($filename);
-
         return $this->mimeCache[$ext] ??= self::MIME_TYPES[$ext] ?? 'application/octet-stream';
     }
 
@@ -265,7 +260,6 @@ class PawchiveBridge extends BridgeAbstract
     {
         $cleanFilename = (string)preg_replace('/[^\x20-\x7E]/', '', $filename);
         $cleanFilename = trim($cleanFilename);
-
         return strtolower(trim(pathinfo($cleanFilename, PATHINFO_EXTENSION)));
     }
 
@@ -281,17 +275,13 @@ class PawchiveBridge extends BridgeAbstract
 
     private function isMediaByExtension(string $filename): bool
     {
-        return match (true) {
-            $this->isImageByExtension($filename), $this->isVideoByExtension($filename) => true,
-            default => false,
-        };
+        return $this->isImageByExtension($filename) || $this->isVideoByExtension($filename);
     }
 
     private function hasMedia(array $post): bool
     {
         if (!empty($post['file']['path'])) {
             $name = $post['file']['name'] ?? basename($post['file']['path']);
-
             if ($this->isMediaByExtension((string)$name)) {
                 return true;
             }
@@ -301,7 +291,6 @@ class PawchiveBridge extends BridgeAbstract
             foreach ($post['attachments'] as $file) {
                 if (!empty($file['path'])) {
                     $name = $file['name'] ?? basename($file['path']);
-
                     if ($this->isMediaByExtension((string)$name)) {
                         return true;
                     }
@@ -445,7 +434,7 @@ class PawchiveBridge extends BridgeAbstract
             CURLOPT_MAXREDIRS => 0,
         ];
 
-        $activeHost = $this->getActiveDomainHost();
+        $activeHost = $this->activeDomainHost;
         $hostsToTry = [$activeHost];
 
         foreach (self::DOMAINS as $host) {
@@ -469,6 +458,13 @@ class PawchiveBridge extends BridgeAbstract
                     continue;
                 }
 
+                if (!json_validate($apiResponse)) {
+                    $lastException = new \Exception(
+                        sprintf('Invalid JSON response from %s', $host)
+                    );
+                    continue;
+                }
+
                 $data = Json::decode($apiResponse);
 
                 if (!is_array($data)) {
@@ -485,7 +481,7 @@ class PawchiveBridge extends BridgeAbstract
                     continue;
                 }
 
-                $this->setActiveDomainHost($host);
+                $this->activeDomainHost = $host;
 
                 return $data;
             } catch (\Exception $e) {
@@ -540,11 +536,11 @@ class PawchiveBridge extends BridgeAbstract
 
     private function thumbnailsAvailable(array $files): bool
     {
-        foreach ($files as $file) {
+        return array_any($files, function (array $file): bool {
             $fileName = trim($file['name'] ?? basename($file['path']));
 
             if ($fileName === '' || !$this->isImageByExtension($fileName)) {
-                continue;
+                return false;
             }
 
             $ch = curl_init($this->getThumbnailUrl($file['path']));
@@ -558,9 +554,7 @@ class PawchiveBridge extends BridgeAbstract
             $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
 
             return $code >= 200 && $code < 400;
-        }
-
-        return false;
+        });
     }
 
     private function processFiles(array $files, bool $hideAttachments, string &$contentHtml, array &$downloadLinks): void
@@ -652,7 +646,6 @@ class PawchiveBridge extends BridgeAbstract
     public function getIcon(): string
     {
         $icon = $this->authorAvatarUrl ?? parent::getIcon();
-
         return $this->normalizeUrls($icon);
     }
 
@@ -661,7 +654,6 @@ class PawchiveBridge extends BridgeAbstract
         $service = $this->getInput('service');
         $user = $this->getInput('user');
         $uri = $this->baseURI() . $service . '/user/' . $user;
-
         return $this->normalizeUrls($uri);
     }
 
@@ -713,10 +705,10 @@ class PawchiveBridge extends BridgeAbstract
 
     private function createItem(array $post, bool $hideAttachments): array
     {
-        $content = $post['content'] ?? '';
-        $content = $this->normalizeUrls($content);
-        $content = $this->resolveRelativeUrls($content);
-        $content = $this->sanitizeHtml($content);
+        $content = ($post['content'] ?? '')
+            |> $this->normalizeUrls(...)
+            |> $this->resolveRelativeUrls(...)
+            |> $this->sanitizeHtml(...);
 
         $files = $this->collectFiles($post);
 
