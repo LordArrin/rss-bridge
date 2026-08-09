@@ -119,15 +119,78 @@ CSS,
         'video'       => 'max-width:100%',
         'wrapper'     => 'font-size:14px;line-height:1.6;word-wrap:break-word',
         'quote'       => 'border-left:4px solid #4a76a8;padding-left:12px;margin:8px 0',
+        'reply_compact' => 'border-left:4px solid #27a7e7;padding:8px 12px;margin-bottom:12px;font-size:13px;line-height:1.4',
+        'reply_link'  => 'font-weight:bold;font-weight:500',
         'poll'        => 'background:#f9f9f9;padding:15px;margin:10px 0;border-left:4px solid #4a76a8',
         'poll_t'      => 'margin:0 0 10px 0;font-weight:bold',
         'poll_o'      => 'margin:8px 0',
         'poll_f'      => 'margin:10px 0 0 0;color:#888;font-size:0.85em',
     ];
 
+    private const SELECTORS = [
+        'CHANNEL_TITLE'          => 'div.tgme_channel_info_header_title span',
+        'MESSAGE_WRAP'           => 'div.tgme_widget_message_wrap.js-widget_message_wrap',
+        'LOAD_MORE_LINK'         => 'div.tgme_widget_message_centered.js-messages_more_wrap a',
+        'MESSAGE_DATE_LINK'      => 'a.tgme_widget_message_date',
+        'MESSAGE_TIMESTAMP'      => 'span.tgme_widget_message_meta time',
+
+        'UNSUPPORTED_CONT'       => 'div.media_not_supported_cont',
+        'FORWARDED_FROM'         => 'div.tgme_widget_message_forwarded_from',
+        'FORWARDED_AUTHOR'       => 'span.tgme_widget_message_forwarded_from_author',
+        'REPLY_LINK'             => 'a.tgme_widget_message_reply',
+        'REPLY_AUTHOR'           => 'span.tgme_widget_message_author_name',
+        'REPLY_METATEXT'         => 'div.tgme_widget_message_metatext',
+        'MESSAGE_TEXT'           => 'div.tgme_widget_message_text.js-message_text',
+        'MESSAGE_TEXT_SIMPLE'    => 'div.tgme_widget_message_text',
+        'REPLY_TEXT'             => 'div.tgme_widget_message_text.js-message_reply_text',
+
+        'PHOTO_LINK'             => 'a.tgme_widget_message_photo_wrap',
+
+        'VIDEO_PLAYER_LINK'      => 'a.tgme_widget_message_video_player',
+        'VIDEO_PLAYER_DIV'       => 'div.tgme_widget_message_video_player',
+        'VIDEO_PLAYER_LINK_NS'   => 'a.tgme_widget_message_video_player.not_supported',
+        'VIDEO_PLAYER_DIV_NS'    => 'div.tgme_widget_message_video_player.not_supported',
+        'VIDEO_THUMB'            => 'i.tgme_widget_message_video_thumb',
+        'VIDEO_PREVIEW_THUMB'    => 'i.link_preview_video_thumb',
+        'ROUNDVIDEO_THUMB'       => 'i.tgme_widget_message_roundvideo_thumb',
+        'VIDEO_DURATION_TIME'    => 'time.tgme_widget_message_video_duration',
+        'VIDEO_DURATION_SPAN'    => 'span.tgme_widget_message_video_duration',
+        'VIDEO_DURATION_FALLBACK' => 'time.message_video_duration',
+
+        'STICKER_WRAP'           => 'div.tgme_widget_message_sticker_wrap',
+
+        'POLL'                   => 'div.tgme_widget_message_poll',
+        'POLL_QUESTION'          => 'div.tgme_widget_message_poll_question',
+        'POLL_TYPE'              => 'div.tgme_widget_message_poll_type',
+        'POLL_OPTION'            => 'div.tgme_widget_message_poll_option',
+        'POLL_PERCENT'           => 'div.tgme_widget_message_poll_option_percent',
+        'POLL_TEXT'              => 'div.tgme_widget_message_poll_option_text',
+        'VOTERS'                 => 'span.tgme_widget_message_voters',
+
+        'DOCUMENT'               => 'div.tgme_widget_message_document',
+        'DOCUMENT_TITLE'         => 'div.tgme_widget_message_document_title',
+        'DOCUMENT_EXTRA'         => 'div.tgme_widget_message_document_extra',
+
+        'LINK_PREVIEW'           => 'a.tgme_widget_message_link_preview',
+        'LINK_PREVIEW_TITLE'     => 'div.link_preview_title',
+        'LINK_PREVIEW_SITE'      => 'div.link_preview_site_name',
+        'LINK_PREVIEW_DESC'      => 'div.link_preview_description',
+
+        'LOCATION'               => 'div.tgme_widget_message_location',
+        'LOCATION_WRAP'          => 'a.tgme_widget_message_location_wrap',
+
+        'UNSUPPORTED_WRAP'       => 'div.message_media_not_supported_wrap',
+        'UNSUPPORTED_LABEL'      => 'div.message_media_not_supported_label',
+        'SUPPORTED_CONT'         => 'div.media_supported_cont',
+
+        'PAGE_PHOTO_IMG'         => 'i.tgme_page_photo_image img',
+        'ANY_WITH_CLASS'         => '[class]',
+        'META_TAGS'              => 'meta',
+    ];
+
     private string $feedName = '';
     private string $feedIcon = '';
-    private array $mediaCache = [];
+    private ?array $mediaCache = null;
     
     private ?string $cachedNormalizedUsername = null;
 
@@ -142,6 +205,8 @@ CSS,
 
     public function collectData(): void
     {
+        $this->validateUsername();
+
         $url = 'https://t.me/s/' . $this->normalizedUsername;
 
         $limitInput = $this->getInput('limit');
@@ -167,10 +232,10 @@ CSS,
             }
 
             if ($this->feedName === '') {
-                $el = $dom->querySelector('div.tgme_channel_info_header_title span');
+                $el = $dom->querySelector(self::SELECTORS['CHANNEL_TITLE']);
                 $this->feedName = htmlspecialchars_decode(
                     $el?->textContent ?? '',
-                    ENT_QUOTES
+                    flags: ENT_QUOTES
                 );
             }
 
@@ -178,7 +243,7 @@ CSS,
                 $this->feedIcon = $this->extractChannelIcon($dom);
             }
 
-            $messages = $dom->querySelectorAll('div.tgme_widget_message_wrap.js-widget_message_wrap');
+            $messages = $dom->querySelectorAll(self::SELECTORS['MESSAGE_WRAP']);
             if ($this->feedName === '' && count($messages) === 0) {
                 throwClientException('Unable to find channel. The channel is non-existing or non-public.');
             }
@@ -195,8 +260,7 @@ CSS,
 
                 $item = $this->parseMessage($message);
                 $notSupported = $this->detectNotSupported($message);
-                $hasContent = trim(strip_tags($item['content'])) !== ''
-                    || trim($item['title']) !== '';
+                $hasContent = $this->hasContent($item);
 
                 if ($hasContent === false && $notSupported === null) {
                     continue;
@@ -225,7 +289,7 @@ CSS,
                 break;
             }
 
-            $more = $dom->querySelector('div.tgme_widget_message_centered.js-messages_more_wrap a');
+            $more = $dom->querySelector(self::SELECTORS['LOAD_MORE_LINK']);
             if ($more !== null && str_contains($more->getAttribute('href') ?? '', 'before') === true) {
                 $next = 'https://t.me' . $more->getAttribute('href');
                 if (isset($seen[$next]) === true) {
@@ -280,53 +344,27 @@ CSS,
         return null;
     }
 
-    private function fetchPage(string $url): ?\Dom\HTMLDocument
+    /**
+     * @template T
+     * @param \Closure(): T $fn
+     * @return T
+     * @throws \Throwable
+     */
+    private function withRetry(\Closure $fn, string $context, string $url = ''): mixed
     {
-        $useProxy = (bool) $this->getInput('use_proxy');
-
-        if ($useProxy === true) {
-            for ($i = 0; $i < self::PROXY_RETRIES; $i++) {
-                try {
-                    $dom = getProtectedSimpleHTMLDOM($url, self::PROXY_PROFILE);
-                    $html = (string)$dom;
-                    return \Dom\HTMLDocument::createFromString($html, LIBXML_NOERROR);
-                } catch (\Throwable $e) {
-                    $this->logger->warning(sprintf(
-                        'TgWSProxy page fetch failed (attempt %d/%d): %s Ч %s',
-                        $i + 1,
-                        self::PROXY_RETRIES,
-                        $url,
-                        $e->getMessage()
-                    ));
-
-                    if ($i < self::PROXY_RETRIES - 1) {
-                        usleep(($i + 1) * self::RETRY_BACKOFF_US);
-                    }
-                }
-            }
-
-            $this->logger->warning(sprintf(
-                'TgWSProxy exhausted for %s, falling back to direct HTTP',
-                $url
-            ));
-        }
-
-        return $this->fetchPageDirect($url);
-    }
-
-    private function fetchPageDirect(string $url): ?\Dom\HTMLDocument
-    {
+        $lastException = null;
+        
         for ($i = 0; $i < self::PROXY_RETRIES; $i++) {
             try {
-                $dom = getSimpleHTMLDOM($url);
-                $html = (string)$dom;
-                return \Dom\HTMLDocument::createFromString($html, LIBXML_NOERROR);
-            } catch (\Exception $e) {
+                return $fn();
+            } catch (\Throwable $e) {
+                $lastException = $e;
                 $this->logger->warning(sprintf(
-                    'Direct page fetch failed (attempt %d/%d): %s Ч %s',
+                    '%s failed (attempt %d/%d)%s: %s',
+                    $context,
                     $i + 1,
                     self::PROXY_RETRIES,
-                    $url,
+                    $url !== '' ? " for {$url}" : '',
                     $e->getMessage()
                 ));
 
@@ -336,7 +374,65 @@ CSS,
             }
         }
 
-        return null;
+        throw $lastException;
+    }
+
+    private function validateUsername(): void
+    {
+        $username = $this->normalizedUsername;
+        if (preg_match('/^[a-zA-Z0-9_]{5,32}$/', $username) !== 1) {
+            throwClientException(sprintf(
+                'Invalid Telegram username "%s". Expected 5-32 alphanumeric characters or underscores.',
+                $username
+            ));
+        }
+    }
+
+    private function hasContent(array $item): bool
+    {
+        return trim(strip_tags($item['content'] ?? '')) !== ''
+            || trim($item['title'] ?? '') !== '';
+    }
+
+    private function fetchPage(string $url): ?\Dom\HTMLDocument
+    {
+        $useProxy = (bool) $this->getInput('use_proxy');
+
+        if ($useProxy === true) {
+            try {
+                return $this->withRetry(
+                    fn(): \Dom\HTMLDocument => \Dom\HTMLDocument::createFromString(
+                        source: (string)getProtectedSimpleHTMLDOM($url, self::PROXY_PROFILE),
+                        options: LIBXML_NOERROR
+                    ),
+                    'TgWSProxy page fetch',
+                    $url
+                );
+            } catch (\Throwable $e) {
+                $this->logger->warning(sprintf(
+                    'TgWSProxy exhausted for %s, falling back to direct HTTP',
+                    $url
+                ));
+            }
+        }
+
+        return $this->fetchPageDirect($url);
+    }
+
+    private function fetchPageDirect(string $url): ?\Dom\HTMLDocument
+    {
+        try {
+            return $this->withRetry(
+                fn(): \Dom\HTMLDocument => \Dom\HTMLDocument::createFromString(
+                    source: (string)getSimpleHTMLDOM($url),
+                    options: LIBXML_NOERROR
+                ),
+                'Direct page fetch',
+                $url
+            );
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     private function parseMessage(\Dom\Element $message): array
@@ -375,13 +471,13 @@ CSS,
 
     private function extractUri(\Dom\Element $message): string
     {
-        $el = $message->querySelector('a.tgme_widget_message_date');
+        $el = $message->querySelector(self::SELECTORS['MESSAGE_DATE_LINK']);
         return $el?->getAttribute('href') ?? '';
     }
 
     private function extractTimestamp(\Dom\Element $message): ?string
     {
-        $el = $message->querySelector('span.tgme_widget_message_meta time');
+        $el = $message->querySelector(self::SELECTORS['MESSAGE_TIMESTAMP']);
         if ($el === null) {
             return null;
         }
@@ -391,18 +487,18 @@ CSS,
 
     private function processContent(\Dom\Element $messageDiv, ParseContext $context): ContentResult
     {
-        foreach ($messageDiv->querySelectorAll('div.media_not_supported_cont') as $fake) {
+        foreach ($messageDiv->querySelectorAll(self::SELECTORS['UNSUPPORTED_CONT']) as $fake) {
             $fake->outerHTML = '';
         }
 
         $html = '';
 
-        $fwd = $messageDiv->querySelector('div.tgme_widget_message_forwarded_from');
+        $fwd = $messageDiv->querySelector(self::SELECTORS['FORWARDED_FROM']);
         if ($fwd !== null) {
             $context->author = $this->extractForwardedAuthor($fwd);
         }
 
-        $reply = $messageDiv->querySelector('a.tgme_widget_message_reply');
+        $reply = $messageDiv->querySelector(self::SELECTORS['REPLY_LINK']);
         if ($reply !== null) {
             $html .= $this->processReply($reply);
         }
@@ -411,44 +507,44 @@ CSS,
 
         $textPieces = [];
 
-        $textDiv = $messageDiv->querySelector('div.tgme_widget_message_text.js-message_text');
+        $textDiv = $messageDiv->querySelector(self::SELECTORS['MESSAGE_TEXT']);
         if ($textDiv !== null) {
             $outer = $textDiv->outerHTML;
             $pos = strpos($inner, $outer);
-            $textPieces[] = [$pos !== false ? $pos : PHP_INT_MAX, 'processText', $textDiv, $context];
+            $textPieces[] = [$pos !== false ? $pos : PHP_INT_MAX, MediaPieceType::TEXT->handler(), $textDiv, $context];
         }
 
         $mediaPieces = [];
 
         $mediaMarkers = [
-            'tgme_widget_message_sticker_wrap'  => 'processSticker',
-            'tgme_widget_message_poll'          => 'processPoll',
-            'tgme_widget_message_photo_wrap'    => 'processPhoto',
-            'tgme_widget_message_document'      => 'processAttachment',
-            'tgme_widget_message_link_preview'  => 'processLinkPreview',
-            'tgme_widget_message_location_wrap' => 'processLocation',
+            MediaPieceType::STICKER,
+            MediaPieceType::POLL,
+            MediaPieceType::PHOTO,
+            MediaPieceType::ATTACHMENT,
+            MediaPieceType::LINK_PREVIEW,
+            MediaPieceType::LOCATION,
         ];
 
-        foreach ($mediaMarkers as $marker => $method) {
-            $el = $messageDiv->querySelector('div.' . $marker);
+        foreach ($mediaMarkers as $type) {
+            $el = $messageDiv->querySelector('div.' . $type->value);
             if ($el === null) {
-                $el = $messageDiv->querySelector('a.' . $marker);
+                $el = $messageDiv->querySelector('a.' . $type->value);
             }
             if ($el !== null) {
                 $outer = $el->outerHTML;
                 $pos = strpos($inner, $outer);
-                $mediaPieces[] = [$pos !== false ? $pos : PHP_INT_MAX, $method, $messageDiv, $context];
+                $mediaPieces[] = [$pos !== false ? $pos : PHP_INT_MAX, $type->handler(), $messageDiv, $context];
             }
         }
 
-        $videoNotSupported = $messageDiv->querySelector('a.tgme_widget_message_video_player.not_supported');
+        $videoNotSupported = $messageDiv->querySelector(self::SELECTORS['VIDEO_PLAYER_LINK_NS']);
         if ($videoNotSupported === null) {
-            $videoNotSupported = $messageDiv->querySelector('div.tgme_widget_message_video_player.not_supported');
+            $videoNotSupported = $messageDiv->querySelector(self::SELECTORS['VIDEO_PLAYER_DIV_NS']);
         }
         if ($videoNotSupported === null && $messageDiv->querySelector('video') !== null) {
             $pos = strpos($inner, '<video');
             if ($pos !== false) {
-                $mediaPieces[] = [$pos, 'processVideo', $messageDiv, $context];
+                $mediaPieces[] = [$pos, MediaPieceType::VIDEO->handler(), $messageDiv, $context];
             }
         }
 
@@ -482,23 +578,20 @@ CSS,
 
     private function processText(\Dom\Element $textDiv, ParseContext $context): string
     {
-        $nested = $textDiv->querySelector('div.tgme_widget_message_text.js-message_text');
+        $nested = $textDiv->querySelector(self::SELECTORS['MESSAGE_TEXT']);
         if ($nested !== null) {
             $textDiv = $nested;
         }
 
         $inner = $textDiv->innerHTML;
 
-        $context->hashtags = $this->extractHashtags($inner);
+        $extracted = $this->extractHashtags($inner);
+        $inner = $extracted->html;
+        $context->hashtags = $extracted->tags;
 
-        $plain = html_entity_decode(
-            preg_replace('/\s+/u', ' ', strip_tags(
-                preg_replace('/<br\s*\/?>/i', ' ', $inner)
-            )),
-            ENT_QUOTES | ENT_HTML5
-        );
+        $plain = $this->htmlToPlain($inner);
 
-        if (mb_strlen($plain, 'UTF-8') <= self::MAX_TITLE_LENGTH) {
+        if (mb_strlen(string: $plain, encoding: 'UTF-8') <= self::MAX_TITLE_LENGTH) {
             $context->title = $plain;
             return '';
         }
@@ -522,34 +615,43 @@ CSS,
         $html = preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $html);
 
         if (preg_match('/<br\s*\/?>/i', $html, $m, PREG_OFFSET_CAPTURE)) {
-            $firstLineHtml = substr($html, 0, $m[0][1]);
+            $firstLineHtml = substr(string: $html, offset: 0, length: $m[0][1]);
             $firstLinePlain = $this->htmlToPlain($firstLineHtml);
 
-            if ($firstLinePlain !== '' && mb_strlen($firstLinePlain) <= self::MAX_TITLE_LENGTH) {
-                $restHtml = substr($html, $m[0][1] + strlen($m[0][0]));
-                return ['title' => $firstLinePlain, 'html' => trim(preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $restHtml))];
+            if ($firstLinePlain !== '' && mb_strlen(string: $firstLinePlain) <= self::MAX_TITLE_LENGTH) {
+                $restHtml = substr(string: $html, offset: $m[0][1] + strlen($m[0][0]));
+                return [
+                    'title' => $firstLinePlain,
+                    'html' => trim(preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $restHtml))
+                ];
             }
         }
 
-        $paragraphs = preg_split('/(?:\s*<br\s*\/?>\s*){2,}/i', $html);
+        $paragraphs = preg_split(
+            pattern: '/(?:\s*<br\s*\/?>\s*){2,}/i',
+            subject: $html
+        );
         $firstPlain = $this->htmlToPlain($paragraphs[0]);
 
-        if (mb_strlen($firstPlain) <= self::MAX_TITLE_LENGTH) {
-            return ['title' => $firstPlain, 'html' => trim(implode('<br /><br />', array_slice($paragraphs, 1)))];
+        if (mb_strlen(string: $firstPlain) <= self::MAX_TITLE_LENGTH) {
+            return [
+                'title' => $firstPlain,
+                'html' => trim(implode(separator: '<br /><br />', array: array_slice(array: $paragraphs, offset: 1)))
+            ];
         }
 
         $prefix = $this->truncateAtWord($firstPlain, self::MAX_TITLE_LENGTH);
         
-        $remainder = trim(mb_substr($firstPlain, mb_strlen($prefix)));
+        $remainder = trim(mb_substr(string: $firstPlain, start: mb_strlen($prefix)));
         if ($remainder !== '' && !preg_match('/^[\s\p{P}]/u', $remainder) && !preg_match('/[\s\p{P}]$/u', $prefix)) {
-            $sp = mb_strrpos($prefix, ' ');
+            $sp = mb_strrpos(haystack: $prefix, needle: ' ');
             if ($sp !== false && $sp > self::MIN_TITLE_SPACE_POS) {
-                $prefix = rtrim(mb_substr($prefix, 0, $sp));
+                $prefix = rtrim(mb_substr(string: $prefix, start: 0, length: $sp));
             }
         }
 
         $firstHtml = $this->removeTextPrefix($paragraphs[0], $prefix);
-        $restHtml = implode('<br /><br />', array_slice($paragraphs, 1));
+        $restHtml = implode(separator: '<br /><br />', array: array_slice(array: $paragraphs, offset: 1));
         $contentHtml = trim($firstHtml . ($restHtml !== '' ? '<br /><br />' . $restHtml : ''));
 
         return ['title' => $prefix . '...', 'html' => $contentHtml];
@@ -558,33 +660,33 @@ CSS,
     private function htmlToPlain(string $html): string
     {
         return html_entity_decode(
-            preg_replace('/\s+/u', ' ', strip_tags(preg_replace('/<br\s*\/?>/i', ' ', $html))),
-            ENT_QUOTES | ENT_HTML5
+            string: preg_replace('/\s+/u', ' ', strip_tags(preg_replace('/<br\s*\/?>/i', ' ', $html))),
+            flags: ENT_QUOTES | ENT_HTML5
         );
     }
 
     private function truncateAtWord(string $text, int $length): string
     {
-        if (mb_strlen($text) <= $length) {
+        if (mb_strlen(string: $text) <= $length) {
             return $text;
         }
 
-        $cut = mb_substr($text, 0, $length);
-        $sp = mb_strrpos($cut, ' ');
+        $cut = mb_substr(string: $text, start: 0, length: $length);
+        $sp = mb_strrpos(haystack: $cut, needle: ' ');
 
         return ($sp !== false && $sp > self::MIN_TITLE_SPACE_POS)
-            ? rtrim(mb_substr($cut, 0, $sp))
+            ? rtrim(mb_substr(string: $cut, start: 0, length: $sp))
             : rtrim($cut);
     }
 
     private function removeTextPrefix(string $html, string $prefix): string
     {
-        $limit = mb_strlen($prefix);
+        $limit = mb_strlen(string: $prefix);
         if ($limit <= 0) {
             return $html;
         }
 
-        $tokens = preg_split('/(<[^>]*>)/u', $html, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $tokens = preg_split(pattern: '/(<[^>]*>)/u', subject: $html, limit: -1, flags: PREG_SPLIT_DELIM_CAPTURE);
         $void = ['br', 'img', 'hr', 'input', 'meta', 'link', 'source'];
         
         $consumed = 0;
@@ -601,7 +703,10 @@ CSS,
             if ($token[0] === '<') {
                 if (preg_match('/^<\s*\/\s*(\w+)/u', $token, $m)) {
                     $tag = strtolower($m[1]);
-                    $stack = array_values(array_filter($stack, fn($s) => $s['tag'] !== $tag));
+                    $stack = array_values(array_filter(
+                        array: $stack,
+                        callback: fn($s) => $s['tag'] !== $tag
+                    ));
                 } elseif (preg_match('/^<\s*(\w+)/u', $token, $m)) {
                     $tag = strtolower($m[1]);
                     if (!in_array($tag, $void, true) && !str_ends_with(rtrim($token, '>'), '/')) {
@@ -622,7 +727,8 @@ CSS,
             $cut = true;
             $skip = $limit - $consumed;
             
-            $out .= implode('', array_column($stack, 'html')) . implode('', array_slice($units, $skip));
+            $out .= implode('', array_column(array: $stack, column_key: 'html'))
+                . implode('', array_slice(array: $units, offset: $skip));
         }
 
         if (!$cut) {
@@ -634,26 +740,22 @@ CSS,
     
     private function processReply(\Dom\Element $reply): string
     {
-        $author = htmlspecialchars(
-            $this->getPlaintext($reply, 'span.tgme_widget_message_author_name'),
-            ENT_QUOTES
-        );
-        $text = '';
+        $replyText = $this->getPlaintext($reply, self::SELECTORS['REPLY_TEXT']);
+        $author = $this->getPlaintext($reply, self::SELECTORS['REPLY_AUTHOR']);
+        $href = htmlspecialchars($reply->getAttribute('href') ?? '', flags: ENT_QUOTES);
 
-        $el = $reply->querySelector('div.tgme_widget_message_metatext');
-        if ($el !== null) {
-            $text = $el->innerHTML;
+        if ($replyText !== '') {
+            $displayText = htmlspecialchars(
+                string: $this->truncateAtWord($replyText, self::MAX_TITLE_LENGTH),
+                flags: ENT_QUOTES
+            );
+        } else {
+            $displayText = htmlspecialchars(string: $author, flags: ENT_QUOTES);
         }
 
-        $el = $reply->querySelector('div.tgme_widget_message_text');
-        if ($el !== null) {
-            $text = $el->innerHTML;
-        }
-
-        $href = htmlspecialchars($reply->getAttribute('href') ?? '', ENT_QUOTES);
-
-        return '<blockquote>' . $author . '<br />' . $text
-            . '<a href="' . $href . '">' . $href . '</a></blockquote><hr />';
+        return '<div style="' . self::CSS['reply_compact'] . '">'
+            . '<a href="' . $href . '" style="' . self::CSS['reply_link'] . '">' . $displayText . '</a>'
+            . '</div>';
     }
 
     private function processPhoto(\Dom\Element $messageDiv, ParseContext $context): string
@@ -663,10 +765,11 @@ CSS,
         }
 
         $out = '';
-        foreach ($messageDiv->querySelectorAll('a.tgme_widget_message_photo_wrap') as $wrap) {
+        foreach ($messageDiv->querySelectorAll(self::SELECTORS['PHOTO_LINK']) as $wrap) {
             $style = $wrap->getAttribute('style') ?? '';
+            $href = $wrap->getAttribute('href') ?? '';
             if ($style !== '' && preg_match(self::BG_IMG_RE, $style, $m) === 1) {
-                $out .= '<a href="' . ($wrap->getAttribute('href') ?? '') . '"><img src="' . $m[1] . '" /></a>';
+                $out .= '<a href="' . $href . '"><img src="' . $m[1] . '" /></a>';
             }
         }
 
@@ -681,9 +784,9 @@ CSS,
 
         $poster = '';
         $thumbs = [
-            'i.tgme_widget_message_video_thumb',
-            'i.link_preview_video_thumb',
-            'i.tgme_widget_message_roundvideo_thumb',
+            self::SELECTORS['VIDEO_THUMB'],
+            self::SELECTORS['VIDEO_PREVIEW_THUMB'],
+            self::SELECTORS['ROUNDVIDEO_THUMB'],
         ];
 
         foreach ($thumbs as $sel) {
@@ -697,16 +800,20 @@ CSS,
             }
         }
 
-        $player = $messageDiv->querySelector('a.tgme_widget_message_video_player');
+        $player = $messageDiv->querySelector(self::SELECTORS['VIDEO_PLAYER_LINK']);
         if ($player === null) {
-            $player = $messageDiv->querySelector('div.tgme_widget_message_video_player');
+            $player = $messageDiv->querySelector(self::SELECTORS['VIDEO_PLAYER_DIV']);
         }
+
         $postHref = '';
+        $playerStyle = '';
         if ($player !== null) {
             $playerHref = $player->getAttribute('href') ?? '';
+            $playerStyle = $player->getAttribute('style') ?? '';
+
             if ($playerHref !== '') {
                 $postHref = $playerHref;
-                if (str_starts_with($postHref, 'http') === false) {
+                if (str_starts_with(haystack: $postHref, needle: 'http') === false) {
                     $postHref = self::URI . '/' . ltrim($postHref, '/');
                 }
             }
@@ -722,30 +829,27 @@ CSS,
         $href = $postHref !== '' ? $postHref : '#';
 
         if ($this->feedName !== '') {
-            $channel = htmlspecialchars($this->feedName, ENT_QUOTES);
+            $channel = htmlspecialchars(string: $this->feedName, flags: ENT_QUOTES);
         } else {
             $channel = '@' . $this->normalizedUsername;
         }
 
-        $duration = $this->getPlaintext($messageDiv, 'time.tgme_widget_message_video_duration');
+        $duration = $this->getPlaintext($messageDiv, self::SELECTORS['VIDEO_DURATION_TIME']);
         if ($duration === '') {
-            $duration = $this->getPlaintext($messageDiv, 'span.tgme_widget_message_video_duration');
+            $duration = $this->getPlaintext($messageDiv, self::SELECTORS['VIDEO_DURATION_SPAN']);
         }
         if ($duration === '') {
-            $duration = $this->getPlaintext($messageDiv, 'time.message_video_duration');
+            $duration = $this->getPlaintext($messageDiv, self::SELECTORS['VIDEO_DURATION_FALLBACK']);
         }
-        $duration = htmlspecialchars($duration, ENT_QUOTES);
+        $duration = htmlspecialchars(string: $duration, flags: ENT_QUOTES);
 
         $resolution = '';
-        if ($player !== null) {
-            $playerStyle = $player->getAttribute('style') ?? '';
-            if ($playerStyle !== '') {
-                if (
-                    preg_match('/width:\s*(\d+)px/i', $playerStyle, $mw) === 1
-                    && preg_match('/height:\s*(\d+)px/i', $playerStyle, $mh) === 1
-                ) {
-                    $resolution = $mw[1] . '?' . $mh[1];
-                }
+        if ($playerStyle !== '') {
+            if (
+                preg_match('/width:\s*(\d+)px/i', $playerStyle, $mw) === 1
+                && preg_match('/height:\s*(\d+)px/i', $playerStyle, $mh) === 1
+            ) {
+                $resolution = $mw[1] . '?' . $mh[1];
             }
         }
 
@@ -775,7 +879,7 @@ CSS,
             $context->title = '@' . $this->normalizedUsername . ' posted a sticker';
         }
 
-        $div = $messageDiv->querySelector('div.tgme_widget_message_sticker_wrap');
+        $div = $messageDiv->querySelector(self::SELECTORS['STICKER_WRAP']);
         if ($div === null) {
             return '';
         }
@@ -803,13 +907,13 @@ CSS,
 
     private function processPoll(\Dom\Element $messageDiv, ParseContext $context): string
     {
-        $poll = $messageDiv->querySelector('div.tgme_widget_message_poll');
+        $poll = $messageDiv->querySelector(self::SELECTORS['POLL']);
         if ($poll === null) {
             return '';
         }
 
-        $title = $this->getPlaintext($poll, 'div.tgme_widget_message_poll_question');
-        $type = $this->getPlaintext($poll, 'div.tgme_widget_message_poll_type');
+        $title = $this->getPlaintext($poll, self::SELECTORS['POLL_QUESTION']);
+        $type = $this->getPlaintext($poll, self::SELECTORS['POLL_TYPE']);
 
         if ($context->title === '') {
             $context->title = $title;
@@ -817,18 +921,18 @@ CSS,
 
         $html = '<div style="' . self::CSS['poll'] . '">';
         $html .= '<p style="' . self::CSS['poll_t'] . '">'
-            . htmlspecialchars($title, ENT_QUOTES) . '</p>';
+            . htmlspecialchars(string: $title, flags: ENT_QUOTES) . '</p>';
 
-        foreach ($poll->querySelectorAll('div.tgme_widget_message_poll_option') as $opt) {
-            $percent = $this->getPlaintext($opt, 'div.tgme_widget_message_poll_option_percent');
-            $text = $this->getPlaintext($opt, 'div.tgme_widget_message_poll_option_text');
+        foreach ($poll->querySelectorAll(self::SELECTORS['POLL_OPTION']) as $opt) {
+            $percent = $this->getPlaintext($opt, self::SELECTORS['POLL_PERCENT']);
+            $text = $this->getPlaintext($opt, self::SELECTORS['POLL_TEXT']);
 
             $pct = max(0, min(100, (int) str_replace('%', '', $percent)));
             $filled = (int) round($pct / 5);
-            $bar = '[' . str_repeat('#', $filled) . str_repeat('.', 20 - $filled) . ']';
+            $bar = '[' . str_repeat(string: '#', times: $filled) . str_repeat(string: '.', times: 20 - $filled) . ']';
 
             $html .= '<div style="' . self::CSS['poll_o'] . '">';
-            $html .= '<b>' . $pct . '%</b> ' . htmlspecialchars($text, ENT_QUOTES) . '<br />';
+            $html .= '<b>' . $pct . '%</b> ' . htmlspecialchars(string: $text, flags: ENT_QUOTES) . '<br />';
             $html .= '<code>' . $bar . '</code>';
             $html .= '</div>';
         }
@@ -836,26 +940,26 @@ CSS,
         $footer = [];
 
         $voters = htmlspecialchars(
-            $this->getPlaintext($messageDiv, 'span.tgme_widget_message_voters'),
-            ENT_QUOTES
+            string: $this->getPlaintext($messageDiv, self::SELECTORS['VOTERS']),
+            flags: ENT_QUOTES
         );
         if ($voters !== '') {
             $footer[] = $voters . ' voters';
         }
 
-        if (str_contains($type, 'anonymous') === true) {
+        if (str_contains(haystack: $type, needle: 'anonymous') === true) {
             $footer[] = 'Anonymous';
         }
-        if (str_contains($type, 'quiz') === true) {
+        if (str_contains(haystack: $type, needle: 'quiz') === true) {
             $footer[] = 'Quiz';
         }
-        if (str_contains($type, 'multiple') === true) {
+        if (str_contains(haystack: $type, needle: 'multiple') === true) {
             $footer[] = 'Multiple choice';
         }
 
         if ($footer !== []) {
             $html .= '<p style="' . self::CSS['poll_f'] . '">'
-                . implode(' &#183; ', $footer) . '</p>';
+                . implode(separator: ' &#183; ', array: $footer) . '</p>';
         }
 
         $html .= '</div>';
@@ -865,7 +969,7 @@ CSS,
 
     private function processLinkPreview(\Dom\Element $messageDiv, ParseContext $context): string
     {
-        $preview = $messageDiv->querySelector('a.tgme_widget_message_link_preview');
+        $preview = $messageDiv->querySelector(self::SELECTORS['LINK_PREVIEW']);
         if ($preview === null || trim($preview->innerHTML) === '') {
             return '';
         }
@@ -879,9 +983,9 @@ CSS,
             }
         }
 
-        $title = htmlspecialchars($this->getPlaintext($preview, 'div.link_preview_title'), ENT_QUOTES);
-        $site = htmlspecialchars($this->getPlaintext($preview, 'div.link_preview_site_name'), ENT_QUOTES);
-        $desc = htmlspecialchars($this->getPlaintext($preview, 'div.link_preview_description'), ENT_QUOTES);
+        $title = htmlspecialchars(string: $this->getPlaintext($preview, self::SELECTORS['LINK_PREVIEW_TITLE']), flags: ENT_QUOTES);
+        $site = htmlspecialchars(string: $this->getPlaintext($preview, self::SELECTORS['LINK_PREVIEW_SITE']), flags: ENT_QUOTES);
+        $desc = htmlspecialchars(string: $this->getPlaintext($preview, self::SELECTORS['LINK_PREVIEW_DESC']), flags: ENT_QUOTES);
         $previewHref = $preview->getAttribute('href') ?? '';
 
         return '<blockquote><a href="' . $previewHref . '">' . $img . '</a><br /><a href="'
@@ -896,9 +1000,9 @@ CSS,
         }
 
         $out = 'File attachments:<br />';
-        foreach ($messageDiv->querySelectorAll('div.tgme_widget_message_document') as $doc) {
-            $docTitle = htmlspecialchars($this->getPlaintext($doc, 'div.tgme_widget_message_document_title'), ENT_QUOTES);
-            $docExtra = htmlspecialchars($this->getPlaintext($doc, 'div.tgme_widget_message_document_extra'), ENT_QUOTES);
+        foreach ($messageDiv->querySelectorAll(self::SELECTORS['DOCUMENT']) as $doc) {
+            $docTitle = htmlspecialchars(string: $this->getPlaintext($doc, self::SELECTORS['DOCUMENT_TITLE']), flags: ENT_QUOTES);
+            $docExtra = htmlspecialchars(string: $this->getPlaintext($doc, self::SELECTORS['DOCUMENT_EXTRA']), flags: ENT_QUOTES);
             $out .= $docTitle . ' - ' . $docExtra . '<br />';
         }
 
@@ -911,55 +1015,55 @@ CSS,
             $context->title = '@' . $this->normalizedUsername . ' posted a location';
         }
 
-        $el = $messageDiv->querySelector('div.tgme_widget_message_location');
-        $link = $messageDiv->querySelector('a.tgme_widget_message_location_wrap');
+        $el = $messageDiv->querySelector(self::SELECTORS['LOCATION']);
+        $link = $messageDiv->querySelector(self::SELECTORS['LOCATION_WRAP']);
 
         if ($el === null || $link === null) {
             return '';
         }
 
         $style = $el->getAttribute('style') ?? '';
+        $linkHref = $link->getAttribute('href') ?? '';
         $m = [];
         if ($style !== '') {
             preg_match(self::BG_IMG_RE, $style, $m);
         }
 
-        $linkHref = $link->getAttribute('href') ?? '';
         $imgSrc = $m[1] ?? '';
 
         return '<a href="' . $linkHref . '"><img src="' . $imgSrc . '" /></a>';
     }
 
-    private function extractHashtags(string &$html): array
+    private function extractHashtags(string $html): ExtractedHashtags
     {
         $tags = [];
 
         if (
             preg_match_all(
-                '/<a\s[^>]*href="\?q=%23[^"]*"[^>]*>(.*?)<\/a>/is',
-                $html,
-                $matches,
-                PREG_SET_ORDER
+                pattern: '/<a\s[^>]*href="\?q=%23[^"]*"[^>]*>(.*?)<\/a>/is',
+                subject: $html,
+                matches: $matches,
+                flags: PREG_SET_ORDER
             ) > 0
         ) {
             foreach ($matches as $m) {
                 $text = trim(strip_tags($m[1]));
                 if ($text !== '' && $text[0] === '#') {
-                    $tags[] = mb_substr($text, 1, null, 'UTF-8');
+                    $tags[] = mb_substr(string: $text, start: 1, encoding: 'UTF-8');
                 }
             }
         }
 
         $html = preg_replace_callback(
-            '/<a\s[^>]*href="\?q=%23[^"]*"[^>]*>(.*?)<\/a>/is',
-            function (array $m): string {
+            pattern: '/<a\s[^>]*href="\?q=%23[^"]*"[^>]*>(.*?)<\/a>/is',
+            callback: function (array $m): string {
                 $text = trim(strip_tags($m[1]));
                 if ($text !== '' && $text[0] === '#') {
                     return '';
                 }
                 return $m[0];
             },
-            $html
+            subject: $html
         );
 
         $html = preg_replace('/<b>\s*<\/b>/i', '', $html);
@@ -967,21 +1071,24 @@ CSS,
         $html = preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $html);
         $html = preg_replace('/\s*(?:<br\s*\/?>)+\s*$/i', '', $html);
 
-        return array_values(array_unique($tags));
+        return new ExtractedHashtags(
+            html: $html,
+            tags: array_values(array: array_unique($tags))
+        );
     }
 
     private function detectNotSupported(\Dom\Element $message): ?array
     {
-        $videoPlayer = $message->querySelector('a.tgme_widget_message_video_player.not_supported');
+        $videoPlayer = $message->querySelector(self::SELECTORS['VIDEO_PLAYER_LINK_NS']);
         if ($videoPlayer === null) {
-            $videoPlayer = $message->querySelector('div.tgme_widget_message_video_player.not_supported');
+            $videoPlayer = $message->querySelector(self::SELECTORS['VIDEO_PLAYER_DIV_NS']);
         }
 
         if ($videoPlayer !== null) {
             return ['type' => UnsupportedType::VIDEO, 'element' => $videoPlayer];
         }
 
-        if ($message->querySelector('div.media_supported_cont') !== null) {
+        if ($message->querySelector(self::SELECTORS['SUPPORTED_CONT']) !== null) {
             return null;
         }
 
@@ -989,11 +1096,11 @@ CSS,
             return null;
         }
 
-        if ($message->querySelector('a.tgme_widget_message_photo_wrap') !== null) {
+        if ($message->querySelector(self::SELECTORS['PHOTO_LINK']) !== null) {
             return null;
         }
 
-        $notSupportedWrap = $message->querySelector('div.message_media_not_supported_wrap');
+        $notSupportedWrap = $message->querySelector(self::SELECTORS['UNSUPPORTED_WRAP']);
         if ($notSupportedWrap !== null) {
             return ['type' => UnsupportedType::GENERIC, 'element' => $notSupportedWrap];
         }
@@ -1009,7 +1116,6 @@ CSS,
     ): void {
         $type = $info['type'];
         
-        // ѕункт 8: match expression вместо switch
         $stubLabel = match ($type) {
             UnsupportedType::VIDEO => $this->getUnsupportedReason($message) === UnsupportedReason::TOO_BIG
                 ? 'Media is too big'
@@ -1039,10 +1145,10 @@ CSS,
 
     private function getUnsupportedReason(\Dom\Element $message): UnsupportedReason
     {
-        $label = $message->querySelector('div.message_media_not_supported_label');
+        $label = $message->querySelector(self::SELECTORS['UNSUPPORTED_LABEL']);
         $text = $label !== null ? trim($label->textContent) : '';
 
-        if (str_contains($text, 'too big') === true || str_contains($text, 'too large') === true) {
+        if (str_contains(haystack: $text, needle: 'too big') === true || str_contains(haystack: $text, needle: 'too large') === true) {
             return UnsupportedReason::TOO_BIG;
         }
 
@@ -1064,7 +1170,7 @@ CSS,
         $html = preg_replace('/<a[^>]*>\s*<\/a>/', '', $html);
         $html = preg_replace('/(<br\s*\/?>){3,}/i', '<br /><br />', $html);
 
-        return trim($html);
+        return trim(string: $html);
     }
 
     private function normalizeText(string $html): string
@@ -1089,8 +1195,8 @@ CSS,
         }
 
         $html = preg_replace_callback(
-            '/href\s*=\s*["\'](https?:\/\/[^"\']+)["\']/i',
-            function (array $m): string {
+            pattern: '/href\s*=\s*["\'](https?:\/\/[^"\']+)["\']/i',
+            callback: function (array $m): string {
                 $url = preg_replace(
                     '/[?&](utm_\w+|fbclid|gclid|yclid|dclid|tg_rhash)=[^&]*/',
                     '',
@@ -1100,7 +1206,7 @@ CSS,
 
                 return 'href="' . $url . '"';
             },
-            $html
+            subject: $html
         );
 
         return preg_replace('/ {2,}/', ' ', $html);
@@ -1113,29 +1219,29 @@ CSS,
         $html = preg_replace('/\s+on\w+\s*=\s*[^\s>]+/i', '', $html);
 
         $html = preg_replace_callback(
-            '/(href|src)\s*=\s*["\']([^"\']*)["\']/i',
-            function (array $m): string {
+            pattern: '/(href|src)\s*=\s*["\']([^"\']*)["\']/i',
+            callback: function (array $m): string {
                 $url = $m[2];
 
                 if (preg_match('/^\s*(javascript|vbscript|data(?!:(?:image|video|audio)\/))/i', $url) === 1) {
                     return $m[1] . '="#"';
                 }
 
-                if (str_starts_with($url, '?') === true || str_starts_with($url, '/') === true) {
+                if (str_starts_with(haystack: $url, needle: '?') === true || str_starts_with(haystack: $url, needle: '/') === true) {
                     return $m[1] . '="' . self::URI . '/s/' . $this->normalizedUsername . $url . '"';
                 }
 
                 return $m[1] . '="' . $url . '"';
             },
-            $html
+            subject: $html
         );
 
         $html = preg_replace('/\s+(class|id|data-[\w-]+)\s*=\s*["\'][^"\']*["\']/i', '', $html);
         $html = preg_replace('/\sexpandable(?=[\s>])/i', '', $html);
 
         $html = preg_replace_callback(
-            '/\s+style\s*=\s*["\']([^"\']*)["\']/i',
-            function (array $m): string {
+            pattern: '/\s+style\s*=\s*["\']([^"\']*)["\']/i',
+            callback: function (array $m): string {
                 $val = $m[1];
                 $val = preg_replace('/expression\s*\(/i', '', $val);
                 $val = preg_replace('/javascript\s*:/i', '', $val);
@@ -1143,18 +1249,18 @@ CSS,
                 $val = preg_replace('/behavior\s*:/i', '', $val);
                 $val = preg_replace('/@import\b/i', '', $val);
                 $val = preg_replace('/url\s*\(\s*["\']?\s*javascript:/i', 'url(', $val);
-                $val = trim($val);
+                $val = trim(string: $val);
                 if ($val === '') {
                     return '';
                 }
-                return ' style="' . htmlspecialchars($val, ENT_QUOTES) . '"';
+                return ' style="' . htmlspecialchars(string: $val, flags: ENT_QUOTES) . '"';
             },
-            $html
+            subject: $html
         );
 
         $html = preg_replace('/<\/?tg-spoiler>/i', '', $html);
 
-        $html = strip_tags($html, self::ALLOWED_TAGS);
+        $html = strip_tags(string: $html, allowed_tags: self::ALLOWED_TAGS);
 
         $html = preg_replace(
             '/<blockquote(\s[^>]*)?>/i',
@@ -1165,7 +1271,7 @@ CSS,
         $html = preg_replace('/<a[^>]*>\s*<\/a>/', '', $html);
         $html = preg_replace('/(<br\s*\/?>){3,}/i', '<br /><br />', $html);
 
-        return '<div style="' . self::CSS['wrapper'] . '">' . trim($html) . '</div>';
+        return '<div style="' . self::CSS['wrapper'] . '">' . trim(string: $html) . '</div>';
     }
 
     private function shouldEmbedMedia(): bool
@@ -1211,12 +1317,12 @@ CSS,
             return $url;
         }
 
-        return 'data:' . $data['type'] . ';base64,' . base64_encode($data['body']);
+        return 'data:' . $data['type'] . ';base64,' . base64_encode(string: $data['body']);
     }
 
     private function fetchMediaCached(string $url): ?array
     {
-        if (array_key_exists($url, $this->mediaCache) === true) {
+        if ($this->mediaCache !== null && array_key_exists($url, $this->mediaCache) === true) {
             return $this->mediaCache[$url];
         }
 
@@ -1226,6 +1332,7 @@ CSS,
             try {
                 $data = getProtectedBinary($url, self::PROXY_PROFILE);
                 if ($data !== null) {
+                    $this->mediaCache ??= [];
                     $this->mediaCache[$url] = $data;
                     return $data;
                 }
@@ -1243,38 +1350,29 @@ CSS,
 
     private function fetchMediaDirect(string $url): ?array
     {
-        for ($i = 0; $i < self::PROXY_RETRIES; $i++) {
-            try {
-                $response = getContents($url, [], [], true);
+        try {
+            return $this->withRetry(
+                function() use ($url): array {
+                    $response = getContents($url, [], [], true);
 
-                $body = $response->getBody();
-                $ct = $response->getHeaders()['content-type'][0] ?? 'application/octet-stream';
-                $type = trim(explode(';', $ct)[0]);
+                    $body = $response->getBody();
+                    $ct = $response->getHeaders()['content-type'][0] ?? 'application/octet-stream';
+                    $type = trim(string: explode(separator: ';', string: $ct)[0]);
 
-                if ($body === '' || $body === null) {
-                    $this->mediaCache[$url] = null;
-                    return null;
-                }
+                    if ($body === '' || $body === null) {
+                        throw new \RuntimeException('Empty response body');
+                    }
 
-                $this->mediaCache[$url] = ['body' => $body, 'type' => $type];
-                return $this->mediaCache[$url];
-            } catch (\Exception $e) {
-                $this->logger->warning(sprintf(
-                    'Direct media fetch failed (attempt %d/%d): %s Ч %s',
-                    $i + 1,
-                    self::PROXY_RETRIES,
-                    $url,
-                    $e->getMessage()
-                ));
-
-                if ($i < self::PROXY_RETRIES - 1) {
-                    usleep(($i + 1) * self::RETRY_BACKOFF_US);
-                }
-            }
+                    return ['body' => $body, 'type' => $type];
+                },
+                'Direct media fetch',
+                $url
+            );
+        } catch (\Throwable $e) {
+            $this->mediaCache ??= [];
+            $this->mediaCache[$url] = null;
+            return null;
         }
-
-        $this->mediaCache[$url] = null;
-        return null;
     }
 
     private function parseSize(string|int|float $value): int
@@ -1284,14 +1382,18 @@ CSS,
             return 0;
         }
 
-        if (preg_match('/^(\d+(?:\.\d+)?)\s*([kmg])?b?$/i', $value, $m) === 1) {
-            $mult = ['' => 1, 'k' => 1024, 'm' => 1048576, 'g' => 1073741824];
-            $unit = strtolower($m[2] ?? '');
-
-            return (int) round((float) $m[1] * $mult[$unit]);
+        if (preg_match('/^(\d+(?:\.\d+)?)\s*([kmg])?b?$/i', $value, $m) !== 1) {
+            return (int) $value;
         }
 
-        return (int) $value;
+        $mult = match (strtolower($m[2] ?? '')) {
+            'k' => 1024,
+            'm' => 1048576,
+            'g' => 1073741824,
+            default => 1,
+        };
+
+        return (int) round(num: (float) $m[1] * $mult);
     }
 
     private function isBlocked(array $item, \Dom\Element $message): bool
@@ -1318,8 +1420,8 @@ CSS,
     private function buildSearchHaystack(array $item): string
     {
         return mb_strtolower(
-            trim(($item['title'] ?? '') . ' ' . strip_tags($item['content'] ?? '')),
-            'UTF-8'
+            string: trim(($item['title'] ?? '') . ' ' . strip_tags($item['content'] ?? '')),
+            encoding: 'UTF-8'
         );
     }
 
@@ -1329,29 +1431,26 @@ CSS,
             return false;
         }
 
-        foreach (explode(',', $rules) as $rule) {
-            $rule = trim($rule);
+        foreach (explode(separator: ',', string: $rules) as $rule) {
+            $rule = trim(string: $rule);
             if ($rule === '') {
                 continue;
             }
 
-            if (str_contains($rule, '+') === true) {
-                $parts = array_filter(
-                    array_map(
-                        fn(string $p): string => mb_strtolower(trim($p), 'UTF-8'),
-                        explode('+', $rule)
-                    ),
-                    fn(string $p): bool => $p !== ''
+            if (str_contains(haystack: $rule, needle: '+') === true) {
+                $parts = array_map(
+                    callback: fn(string $p): string => mb_strtolower(string: trim(string: $p), encoding: 'UTF-8'),
+                    array: preg_split(pattern: '/\+/', subject: $rule, flags: PREG_SPLIT_NO_EMPTY)
                 );
 
                 if ($parts === []) {
                     continue;
                 }
 
-                if (array_all($parts, fn($part) => str_contains($haystack, $part))) {
+                if (array_all(array: $parts, callback: fn($part) => str_contains(haystack: $haystack, needle: $part))) {
                     return true;
                 }
-            } elseif (str_contains($haystack, mb_strtolower($rule, 'UTF-8')) === true) {
+            } elseif (str_contains(haystack: $haystack, needle: mb_strtolower(string: $rule, encoding: 'UTF-8')) === true) {
                 return true;
             }
         }
@@ -1362,31 +1461,33 @@ CSS,
     private function isAd(\Dom\Element $message): bool
     {
         return array_any(
-            iterator_to_array($message->querySelectorAll('[class]')),
-            fn($el) => str_contains($el->getAttribute('class') ?? '', 'sponsored')
+            array: iterator_to_array($message->querySelectorAll(self::SELECTORS['ANY_WITH_CLASS'])),
+            callback: fn($el) => str_contains(haystack: $el->getAttribute('class') ?? '', needle: 'sponsored')
         );
     }
 
     private function isShortPost(array $item): bool
     {
         $plain = trim(($item['title'] ?? '') . ' ' . strip_tags($item['content'] ?? ''));
-        return mb_strlen($plain, 'UTF-8') <= self::SHORT_POST_MAX_LENGTH;
+        return mb_strlen(string: $plain, encoding: 'UTF-8') <= self::SHORT_POST_MAX_LENGTH;
     }
 
     private function extractChannelIcon(\Dom\HTMLDocument $dom): string
     {
-        foreach ($dom->querySelectorAll('meta') as $meta) {
-            if ($meta->getAttribute('property') === 'og:image') {
-                $content = trim($meta->getAttribute('content') ?? '');
-                if ($content !== '') {
-                    return $content;
-                }
+        $meta = array_find(
+            array: iterator_to_array($dom->querySelectorAll(self::SELECTORS['META_TAGS'])),
+            callback: fn($m) => $m->getAttribute('property') === 'og:image'
+        );
+        if ($meta !== null) {
+            $content = trim(string: $meta->getAttribute('content') ?? '');
+            if ($content !== '') {
+                return $content;
             }
         }
 
-        $el = $dom->querySelector('i.tgme_page_photo_image img');
+        $el = $dom->querySelector(self::SELECTORS['PAGE_PHOTO_IMG']);
         if ($el !== null) {
-            $src = trim($el->getAttribute('src') ?? '');
+            $src = trim(string: $el->getAttribute('src') ?? '');
             if ($src !== '') {
                 return $src;
             }
@@ -1397,9 +1498,9 @@ CSS,
 
     private function extractForwardedAuthor(\Dom\Element $fwd): string
     {
-        $author = $fwd->querySelector('span.tgme_widget_message_forwarded_from_author');
+        $author = $fwd->querySelector(self::SELECTORS['FORWARDED_AUTHOR']);
         if ($author !== null) {
-            $text = trim($author->textContent);
+            $text = trim(string: $author->textContent);
             if ($text !== '') {
                 return $text;
             }
@@ -1412,7 +1513,7 @@ CSS,
     {
         $el = $element->querySelector($selector);
         if ($el !== null) {
-            return trim($el->textContent);
+            return trim(string: $el->textContent);
         }
         return '';
     }
@@ -1431,6 +1532,37 @@ final readonly class ContentResult {
         public string $author,
         public array $hashtags,
     ) {}
+}
+
+final readonly class ExtractedHashtags {
+    public function __construct(
+        public string $html,
+        public array $tags,
+    ) {}
+}
+
+enum MediaPieceType: string {
+    case STICKER = 'tgme_widget_message_sticker_wrap';
+    case POLL = 'tgme_widget_message_poll';
+    case PHOTO = 'tgme_widget_message_photo_wrap';
+    case ATTACHMENT = 'tgme_widget_message_document';
+    case LINK_PREVIEW = 'tgme_widget_message_link_preview';
+    case LOCATION = 'tgme_widget_message_location_wrap';
+    case VIDEO = 'video';
+    case TEXT = 'text';
+
+    public function handler(): string {
+        return match ($this) {
+            self::STICKER => 'processSticker',
+            self::POLL => 'processPoll',
+            self::PHOTO => 'processPhoto',
+            self::ATTACHMENT => 'processAttachment',
+            self::LINK_PREVIEW => 'processLinkPreview',
+            self::LOCATION => 'processLocation',
+            self::VIDEO => 'processVideo',
+            self::TEXT => 'processText',
+        };
+    }
 }
 
 enum EmbedMediaMode: string {
