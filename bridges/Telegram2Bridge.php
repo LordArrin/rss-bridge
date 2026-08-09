@@ -113,6 +113,7 @@ TXT,
     private const CSS = [
         'unsup_wrap'  => 'background:#17212b;border-radius:12px;padding:28px 16px;text-align:center',
         'unsup_label' => 'color:#708499;font-size:14px;margin-bottom:16px',
+        // phpcs:ignore Squiz.Strings.Concatenation
         'unsup_btn' => 'display:inline-block;background:#2b5278;color:#6ab2f2;'
             . 'text-decoration:none;text-transform:uppercase;font-weight:bold;'
             . 'font-size:13px;letter-spacing:0.03em;padding:10px 24px;border-radius:8px',
@@ -686,9 +687,11 @@ TXT,
         $cut = mb_substr(string: $text, start: 0, length: $length);
         $sp = mb_strrpos(haystack: $cut, needle: ' ');
 
-        return ($sp !== false && $sp > self::MIN_TITLE_SPACE_POS)
-            ? rtrim(mb_substr(string: $cut, start: 0, length: $sp))
-            : rtrim($cut);
+        if ($sp !== false && $sp > self::MIN_TITLE_SPACE_POS) {
+            return rtrim(mb_substr(string: $cut, start: 0, length: $sp));
+        }
+
+        return rtrim($cut);
     }
 
     private function removeTextPrefix(string $html, string $prefix): string
