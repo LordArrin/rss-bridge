@@ -56,6 +56,12 @@ TXT,
             'defaultValue' => 'checked',
             'title' => 'Remove hashtags from post text and assign them as feed item categories',
         ],
+        'hide_external_links' => [
+            'name' => 'Hide external Telegram links',
+            'type' => 'checkbox',
+            'defaultValue' => 'checked',
+            'title' => 'Hide posts containing links or mentions of other Telegram channels/users',
+        ],
         'include_keywords' => [
             'name' => 'Include keywords',
             'type' => 'text',
@@ -110,12 +116,20 @@ TXT,
 
     private const ALLOWED_TAGS = '<div><a><p><br><hr><b><i><u><s><strong><em><code><pre><blockquote><span><img><video><source><ul><ol><li>';
 
+    private const TELEGRAM_SPECIAL_PAGES = [
+        'addstickers', 'addtheme', 'boost', 'confirmphone', 'donate',
+        'giftcode', 'invoice', 'joinchat', 'login', 'proxy',
+        'socks', 'setlanguage', 'share', 'addemoji', 'addlist',
+    ];
+
     private const CSS = [
         'unsup_wrap'  => 'background:#17212b;border-radius:12px;padding:28px 16px;text-align:center',
         'unsup_label' => 'color:#708499;font-size:14px;margin-bottom:16px',
-        'unsup_btn' => 'display:inline-block;background:#2b5278;color:#6ab2f2;'
-            . 'text-decoration:none;text-transform:uppercase;font-weight:bold;'
-            . 'font-size:13px;letter-spacing:0.03em;padding:10px 24px;border-radius:8px', //won't fix
+        'unsup_btn' => <<<'CSS'
+        display:inline-block;background:#2b5278;color:#6ab2f2;
+        text-decoration:none;text-transform:uppercase;font-weight:bold;
+        font-size:13px;letter-spacing:0.03em;padding:10px 24px;border-radius:8px
+        CSS,
         'video'       => 'max-width:100%',
         'wrapper'     => 'font-size:14px;line-height:1.6;word-wrap:break-word',
         'quote'       => 'border-left:4px solid #4a76a8;padding-left:12px;margin:8px 0',
@@ -1433,6 +1447,12 @@ TXT,
             return true;
         }
 
+        if ($this->getInput('hide_external_links') === true
+            && $this->hasExternalTelegramLinks($item) === true
+        ) {
+            return true;
+        }
+
         $haystack = $this->buildSearchHaystack($item);
 
         $exclude = trim((string) ($this->getInput('exclude_keywords') ?? ''));
@@ -1501,6 +1521,37 @@ TXT,
     {
         $plain = trim(($item['title'] ?? '') . ' ' . strip_tags($item['content'] ?? ''));
         return mb_strlen(string: $plain, encoding: 'UTF-8') <= self::SHORT_POST_MAX_LENGTH;
+    }
+
+    private function hasExternalTelegramLinks(array $item): bool
+    {
+        $currentUsername = strtolower($this->getNormalizedUsername());
+        $content = ($item['content'] ?? '') . ' ' . ($item['title'] ?? '');
+
+        $urlRe = '/(?:https?:\/\/)?(?:t\.me|telegram\.me)\/(?:s\/)?([a-zA-Z0-9_]{5,32})(?:\/\d+)?/i';
+
+        if (preg_match_all($urlRe, $content, $matches, PREG_SET_ORDER) > 0) {
+            foreach ($matches as $m) {
+                $username = strtolower($m[1]);
+                if ($username !== $currentUsername
+                    && in_array($username, self::TELEGRAM_SPECIAL_PAGES, true) === false
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        $mentionRe = '/@([a-zA-Z0-9_]{5,32})\b/';
+
+        if (preg_match_all($mentionRe, $content, $matches, PREG_SET_ORDER) > 0) {
+            foreach ($matches as $m) {
+                if (strtolower($m[1]) !== $currentUsername) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function extractChannelIcon(\Dom\HTMLDocument $dom): string
