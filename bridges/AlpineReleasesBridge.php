@@ -25,19 +25,19 @@ class AlpineReleasesBridge extends BridgeAbstract
         $branches = $this->getBranchesInfo();
         $feed = simplexml_load_string(getContents('https://alpinelinux.org/atom.xml'));
 
-        if (!$feed) {
+        if ($feed === false) {
             return;
         }
 
         foreach ($feed->entry as $entry) {
             $title = (string)$entry->title;
 
-            if (!preg_match('/alpine.*\d+\.\d+(\.\d+)?.*(released|releases)/i', $title)) {
+            if (preg_match('/alpine.*\d+\.\d+(\.\d+)?.*(released|releases)/i', $title) === 0) {
                 continue;
             }
 
             $versions = [];
-            if (preg_match_all('/(\d+\.\d+(?:\.\d+)?)/', $title, $matches)) {
+            if (preg_match_all('/(\d+\.\d+(?:\.\d+)?)/', $title, $matches) > 0) {
                 $versions = $matches[1];
             }
 
@@ -91,7 +91,7 @@ class AlpineReleasesBridge extends BridgeAbstract
     private function getBranchesInfo(): array
     {
         $html = getSimpleHTMLDOMCached(self::URI, 86400);
-        if (!$html) {
+        if ($html === false) {
             return [];
         }
 
@@ -112,7 +112,7 @@ class AlpineReleasesBridge extends BridgeAbstract
             $endOfSupport = $this->cleanText((string)($cells[4]->plaintext ?? ''));
 
             $matches = [];
-            if (preg_match_all('/(\d+\.\d+(?:\.\d+)?)/', (string)$cells[3]->plaintext, $matches)) {
+            if (preg_match_all('/(\d+\.\d+(?:\.\d+)?)/', (string)$cells[3]->plaintext, $matches) > 0) {
                 foreach ($matches[1] as $version) {
                     $branches[$version] = [
                         'branchName' => $branchName,
@@ -132,7 +132,7 @@ class AlpineReleasesBridge extends BridgeAbstract
 
         $rows = '';
         foreach ($versions as $i => $version) {
-            if (!isset($branches[$version])) {
+            if (isset($branches[$version]) === false) {
                 continue;
             }
 
