@@ -21,7 +21,8 @@ class AuthorTodayBridge extends BridgeAbstract
             'notags' => [
                 'name' => 'Disable tags',
                 'type' => 'checkbox',
-                'defaultValue' => false,
+                'required' => false,
+                'defaultValue' => 'checked',
             ],
         ],
     ];
@@ -178,7 +179,11 @@ class AuthorTodayBridge extends BridgeAbstract
 
     private function addSortedItems(array $items): void
     {
-        usort($items, fn(array $a, array $b): int => ($b['timestamp'] ?? 0) <=> ($a['timestamp'] ?? 0) ?: $a['_position'] <=> $b['_position']);
+        usort($items, function (array $a, array $b): int {
+            $timeComparison = ($b['timestamp'] ?? 0) <=> ($a['timestamp'] ?? 0);
+
+            return $timeComparison !== 0 ? $timeComparison : $a['_position'] <=> $b['_position'];
+        });
 
         foreach (array_slice($items, 0, self::ITEM_LIMIT) as $item) {
             unset($item['_position']);
