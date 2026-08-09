@@ -2,22 +2,18 @@
 
 /**
  * Checks if the website for a given bridge is reachable.
- *
- * **Remarks**
- * - This action is only available in debug mode.
- * - Returns the bridge status as Json-formatted string.
- * - Returns an error if the bridge is not whitelisted.
- * - Returns a responsive web page that automatically checks all whitelisted
- * bridges (using JavaScript) if no bridge is specified.
  */
 class ConnectivityAction implements ActionInterface
 {
     private BridgeFactory $bridgeFactory;
+    private SafeBridgeLoader $safeLoader;
 
     public function __construct(
-        BridgeFactory $bridgeFactory
+        BridgeFactory $bridgeFactory,
+        SafeBridgeLoader $safeLoader
     ) {
         $this->bridgeFactory = $bridgeFactory;
+        $this->safeLoader = $safeLoader;
     }
 
     public function __invoke(Request $request): Response
@@ -43,7 +39,20 @@ class ConnectivityAction implements ActionInterface
             throw new \Exception('Bridge is not whitelisted!');
         }
 
-        $bridge = $this->bridgeFactory->create($bridgeClassName);
+        // Using a secure bridge loader
+        $bridge = $this->safeLoader->createSafely($bridgeClassName);
+
+        // If the bridge is broken, return an error instead of crashing.
+        if ($this->safeLoader->isBridgeBroken($bridge)) {
+            $brokenInfo = $this->safeLoader->getBrokenBridges()[$bridgeClassName] ?? ['message' => 'Unknown error'];
+            return new Response(Json::encode([
+                'bridge'     => $bridgeClassName,
+                'successful' => false,
+                'http_code'  => null,
+                'error'      => 'Bridge is invalid: ' . $brokenInfo['message']
+            ]), 200, ['content-type' => 'text/json']);
+        }
+
         $curl_opts = [
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_FOLLOWLOCATION => true,

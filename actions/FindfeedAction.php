@@ -8,11 +8,14 @@
 class FindfeedAction implements ActionInterface
 {
     private BridgeFactory $bridgeFactory;
+    private SafeBridgeLoader $safeLoader;
 
     public function __construct(
-        BridgeFactory $bridgeFactory
+        BridgeFactory $bridgeFactory,
+        SafeBridgeLoader $safeLoader
     ) {
         $this->bridgeFactory = $bridgeFactory;
+        $this->safeLoader = $safeLoader;
     }
 
     public function __invoke(Request $request): Response
@@ -33,7 +36,13 @@ class FindfeedAction implements ActionInterface
                 continue;
             }
 
-            $bridge = $this->bridgeFactory->create($bridgeClassName);
+            // Using a secure bridge loader
+            $bridge = $this->safeLoader->createSafely($bridgeClassName);
+
+            // Skipping broken bridges
+            if ($this->safeLoader->isBridgeBroken($bridge)) {
+                continue;
+            }
 
             $bridgeParams = $bridge->detectParameters($url);
 

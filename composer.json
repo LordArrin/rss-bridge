@@ -1,7 +1,7 @@
 {
     "name": "lordarrin/rss-bridge",
     "description": "RSS-Bridge - generate feeds for websites that don't have one",
-    "license": "AGPL-3.0",
+    "license": "AGPL-3.0-or-later",
     "require": {
         "php": ">=8.5",
         "ext-curl": "*",
@@ -14,9 +14,9 @@
         "ext-dom": "*"
     },
     "require-dev": {
-        "phpunit/phpunit": "^11.0|^12.0",
-        "squizlabs/php_codesniffer": "^3.11",
-        "phpstan/phpstan": "^2.1"
+        "phpunit/phpunit": "^13.3.0",
+        "PHPCSStandards/PHP_CodeSniffer": "^4.0.4",
+        "phpstan/phpstan": "^2.2.8"
     },
     "scripts": {
         "test": "phpunit",

@@ -5,15 +5,18 @@ class DisplayAction implements ActionInterface
     private CacheInterface $cache;
     private Logger $logger;
     private BridgeFactory $bridgeFactory;
+    private SafeBridgeLoader $safeLoader;
 
     public function __construct(
         CacheInterface $cache,
         Logger $logger,
-        BridgeFactory $bridgeFactory
+        BridgeFactory $bridgeFactory,
+        SafeBridgeLoader $safeLoader
     ) {
         $this->cache = $cache;
         $this->logger = $logger;
         $this->bridgeFactory = $bridgeFactory;
+        $this->safeLoader = $safeLoader;
     }
 
     public function __invoke(Request $request): Response
@@ -49,7 +52,8 @@ class DisplayAction implements ActionInterface
 
         $cacheKey = 'http_' . json_encode($request->toArray());
 
-        $bridge = $this->bridgeFactory->create($bridgeClassName);
+        // Using a secure bridge loader
+        $bridge = $this->safeLoader->createSafely($bridgeClassName);
 
         $response = $this->createResponse($request, $bridge, $format);
 
@@ -217,13 +221,13 @@ class DisplayAction implements ActionInterface
             'assignee' => $maintainer[0],
         ];
 
-        return 'https://github.com/RSS-Bridge/rss-bridge/issues/new?' . http_build_query($query);
+        return 'https://github.com/LordArrin/rss-bridge/issues/new?' . http_build_query($query);
     }
 
     private static function createGithubSearchUrl($bridge): string
     {
         return sprintf(
-            'https://github.com/RSS-Bridge/rss-bridge/issues?q=%s',
+            'https://github.com/LordArrin/rss-bridge/issues?q=%s',
             urlencode('is:issue is:open ' . $bridge->getName())
         );
     }

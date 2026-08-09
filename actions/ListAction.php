@@ -3,11 +3,14 @@
 class ListAction implements ActionInterface
 {
     private BridgeFactory $bridgeFactory;
+    private SafeBridgeLoader $safeLoader;
 
     public function __construct(
-        BridgeFactory $bridgeFactory
+        BridgeFactory $bridgeFactory,
+        SafeBridgeLoader $safeLoader
     ) {
         $this->bridgeFactory = $bridgeFactory;
+        $this->safeLoader = $safeLoader;
     }
 
     public function __invoke(Request $request): Response
@@ -17,7 +20,14 @@ class ListAction implements ActionInterface
         $list->total = 0;
 
         foreach ($this->bridgeFactory->getBridgeClassNames() as $bridgeClassName) {
-            $bridge = $this->bridgeFactory->create($bridgeClassName);
+            // Using a secure bridge loader
+            $bridge = $this->safeLoader->createSafely($bridgeClassName);
+
+            // Check to see if the bridge is broken.
+            if ($this->safeLoader->isBridgeBroken($bridge)) {
+                // Skipping broken bridges
+                continue;
+            }
 
             $list->bridges[$bridgeClassName] = [
                 'status'        => $this->bridgeFactory->isEnabled($bridgeClassName) ? 'active' : 'inactive',

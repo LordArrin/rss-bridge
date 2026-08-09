@@ -5,23 +5,23 @@ declare(strict_types=1);
 $container = new Container();
 
 $container[ConnectivityAction::class] = function ($c) {
-    return new ConnectivityAction($c['bridge_factory']);
+    return new ConnectivityAction($c['bridge_factory'], $c['safe_bridge_loader']);
 };
 
 $container[DetectAction::class] = function ($c) {
-    return new DetectAction($c['bridge_factory']);
+    return new DetectAction($c['bridge_factory'], $c['safe_bridge_loader']);
 };
 
 $container[DisplayAction::class] = function ($c) {
-    return new DisplayAction($c['cache'], $c['logger'], $c['bridge_factory']);
+    return new DisplayAction($c['cache'], $c['logger'], $c['bridge_factory'], $c['safe_bridge_loader']);
 };
 
 $container[FindfeedAction::class] = function ($c) {
-    return new FindfeedAction($c['bridge_factory']);
+    return new FindfeedAction($c['bridge_factory'], $c['safe_bridge_loader']);
 };
 
 $container[FrontpageAction::class] = function ($c) {
-    return new FrontpageAction($c['bridge_factory']);
+    return new FrontpageAction($c['bridge_factory'], $c['safe_bridge_loader']);
 };
 
 $container[HealthAction::class] = function () {
@@ -29,13 +29,16 @@ $container[HealthAction::class] = function () {
 };
 
 $container[ListAction::class] = function ($c) {
-    return new ListAction($c['bridge_factory']);
+    return new ListAction($c['bridge_factory'], $c['safe_bridge_loader']);
 };
 
 $container['bridge_factory'] = function ($c) {
     return new BridgeFactory($c['cache'], $c['logger']);
 };
 
+$container['safe_bridge_loader'] = function ($c) {
+    return new SafeBridgeLoader($c['bridge_factory'], $c['logger']);
+};
 
 $container['http_client'] = function () {
     return new CurlHttpClient();

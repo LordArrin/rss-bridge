@@ -3,11 +3,14 @@
 final class FrontpageAction implements ActionInterface
 {
     private BridgeFactory $bridgeFactory;
+    private SafeBridgeLoader $safeLoader;
 
     public function __construct(
-        BridgeFactory $bridgeFactory
+        BridgeFactory $bridgeFactory,
+        SafeBridgeLoader $safeLoader
     ) {
         $this->bridgeFactory = $bridgeFactory;
+        $this->safeLoader = $safeLoader;
     }
 
     public function __invoke(Request $request): Response
@@ -29,10 +32,35 @@ final class FrontpageAction implements ActionInterface
         $body = '';
         foreach ($bridgeClassNames as $bridgeClassName) {
             if ($this->bridgeFactory->isEnabled($bridgeClassName)) {
-                $bridge = $this->bridgeFactory->create($bridgeClassName);
+                // Using a secure bridge loader
+                $bridge = $this->safeLoader->createSafely($bridgeClassName);
+                
+                // Skipping broken bridges
+                if ($this->safeLoader->isBridgeBroken($bridge)) {
+                    continue;
+                }
+
                 $body .= self::render($bridge, $bridgeClassName, $token);
                 $activeBridges++;
             }
+        }
+
+        // Adding messages about broken bridges.
+        foreach ($this->safeLoader->getBrokenBridges() as $brokenBridgeName => $errorInfo) {
+            $errorMessage = $errorInfo['message'];
+            
+            if (strlen($errorMessage) > 200) {
+                $errorMessage = substr($errorMessage, 0, 200) . '...';
+            }
+            
+            $messages[] = [
+                'body' => sprintf(
+                    'Bridge "%s" failed to load and was disabled. Error: %s',
+                    $brokenBridgeName,
+                    $errorMessage
+                ),
+                'level' => 'warning'
+            ];
         }
 
         $response = new Response(render(__DIR__ . '/../templates/frontpage.html.php', [
@@ -44,7 +72,6 @@ final class FrontpageAction implements ActionInterface
             'total_bridges'     => count($bridgeClassNames),
         ]));
 
-        // TODO: The rendered template could be cached, but beware config changes that changes the html
         return $response;
     }
 
