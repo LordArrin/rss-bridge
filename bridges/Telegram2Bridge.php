@@ -96,7 +96,7 @@ TXT,
     ];
 
     private const BG_IMG_RE = "/background-image:url\\('(.*)'\\)/";
-    private const TG_HOSTS = '(?:[\\w-]+\\.)*(?:telegram\\.org|t\\.me|telesco\\.pe)';
+    private const TG_HOSTS = '(?:[\w-]+\.)*(?:telegram\.org|t\.me|telesco\.pe)';
 
     private const MAX_PAGES = 100;
     private const PROXY_RETRIES = 3;
@@ -113,9 +113,9 @@ TXT,
     private const CSS = [
         'unsup_wrap'  => 'background:#17212b;border-radius:12px;padding:28px 16px;text-align:center',
         'unsup_label' => 'color:#708499;font-size:14px;margin-bottom:16px',
-        'unsup_btn'   => <<<'CSS'
-display:inline-block;background:#2b5278;color:#6ab2f2;text-decoration:none;text-transform:uppercase;font-weight:bold;font-size:13px;letter-spacing:0.03em;padding:10px 24px;border-radius:8px
-CSS,
+        'unsup_btn' => 'display:inline-block;background:#2b5278;color:#6ab2f2;'
+            . 'text-decoration:none;text-transform:uppercase;font-weight:bold;'
+            . 'font-size:13px;letter-spacing:0.03em;padding:10px 24px;border-radius:8px',
         'video'       => 'max-width:100%',
         'wrapper'     => 'font-size:14px;line-height:1.6;word-wrap:break-word',
         'quote'       => 'border-left:4px solid #4a76a8;padding-left:12px;margin:8px 0',
@@ -186,6 +186,32 @@ CSS,
         'PAGE_PHOTO_IMG'         => 'i.tgme_page_photo_image img',
         'ANY_WITH_CLASS'         => '[class]',
         'META_TAGS'              => 'meta',
+    ];
+
+    private const MEDIA_TYPE_STICKER = 'sticker';
+    private const MEDIA_TYPE_POLL = 'poll';
+    private const MEDIA_TYPE_PHOTO = 'photo';
+    private const MEDIA_TYPE_ATTACHMENT = 'attachment';
+    private const MEDIA_TYPE_LINK_PREVIEW = 'link_preview';
+    private const MEDIA_TYPE_LOCATION = 'location';
+
+    private const EMBED_MODE_AUTO = 'auto';
+    private const EMBED_MODE_ALWAYS = 'on';
+    private const EMBED_MODE_NEVER = 'off';
+
+    private const UNSUPPORTED_REASON_TOO_BIG = 'too_big';
+    private const UNSUPPORTED_REASON_DEFAULT = 'default';
+
+    private const UNSUPPORTED_TYPE_VIDEO = 'video';
+    private const UNSUPPORTED_TYPE_GENERIC = 'generic';
+
+    private const MEDIA_HANDLERS = [
+        self::MEDIA_TYPE_STICKER => ['class' => 'tgme_widget_message_sticker_wrap', 'method' => 'processSticker'],
+        self::MEDIA_TYPE_POLL => ['class' => 'tgme_widget_message_poll', 'method' => 'processPoll'],
+        self::MEDIA_TYPE_PHOTO => ['class' => 'tgme_widget_message_photo_wrap', 'method' => 'processPhoto'],
+        self::MEDIA_TYPE_ATTACHMENT => ['class' => 'tgme_widget_message_document', 'method' => 'processAttachment'],
+        self::MEDIA_TYPE_LINK_PREVIEW => ['class' => 'tgme_widget_message_link_preview', 'method' => 'processLinkPreview'],
+        self::MEDIA_TYPE_LOCATION => ['class' => 'tgme_widget_message_location_wrap', 'method' => 'processLocation'],
     ];
 
     private string $feedName = '';
@@ -429,18 +455,18 @@ CSS,
 
     private function parseMessage(\Dom\Element $message): array
     {
-        $context = new ParseContext();
+        $context = ['title' => '', 'author' => '', 'hashtags' => []];
 
         $uri = $this->extractUri($message);
         $contentResult = $this->processContent($message, $context);
 
         $item = [];
         $item['uri'] = $uri;
-        $item['content'] = $contentResult->html;
-        $item['title'] = $contentResult->title;
+        $item['content'] = $contentResult['html'];
+        $item['title'] = $contentResult['title'];
 
-        if ($contentResult->author !== '' && $contentResult->author !== $this->feedName) {
-            $item['author'] = $contentResult->author;
+        if ($contentResult['author'] !== '' && $contentResult['author'] !== $this->feedName) {
+            $item['author'] = $contentResult['author'];
         }
 
         $timestamp = $this->extractTimestamp($message);
@@ -454,8 +480,8 @@ CSS,
             |> $this->embedMediaInHtml(...)
             |> $this->sanitizeContent(...);
 
-        if ($this->getInput('hide_hashtags') === false && $contentResult->hashtags !== []) {
-            $item['categories'] = $contentResult->hashtags;
+        if ($this->getInput('hide_hashtags') === false && $contentResult['hashtags'] !== []) {
+            $item['categories'] = $contentResult['hashtags'];
         }
 
         return $item;
@@ -477,7 +503,7 @@ CSS,
         return $dt !== '' ? $dt : null;
     }
 
-    private function processContent(\Dom\Element $messageDiv, ParseContext $context): ContentResult
+    private function processContent(\Dom\Element $messageDiv, array &$context): array
     {
         foreach ($messageDiv->querySelectorAll(self::SELECTORS['UNSUPPORTED_CONT']) as $fake) {
             $fake->outerHTML = '';
@@ -487,7 +513,7 @@ CSS,
 
         $fwd = $messageDiv->querySelector(self::SELECTORS['FORWARDED_FROM']);
         if ($fwd !== null) {
-            $context->author = $this->extractForwardedAuthor($fwd);
+            $context['author'] = $this->extractForwardedAuthor($fwd);
         }
 
         $reply = $messageDiv->querySelector(self::SELECTORS['REPLY_LINK']);
@@ -503,29 +529,21 @@ CSS,
         if ($textDiv !== null) {
             $outer = $textDiv->outerHTML;
             $pos = strpos($inner, $outer);
-            $textPieces[] = [$pos !== false ? $pos : PHP_INT_MAX, MediaPieceType::TEXT->handler(), $textDiv, $context];
+            $textPieces[] = [$pos !== false ? $pos : PHP_INT_MAX, 'processText', $textDiv];
         }
 
         $mediaPieces = [];
 
-        $mediaMarkers = [
-            MediaPieceType::STICKER,
-            MediaPieceType::POLL,
-            MediaPieceType::PHOTO,
-            MediaPieceType::ATTACHMENT,
-            MediaPieceType::LINK_PREVIEW,
-            MediaPieceType::LOCATION,
-        ];
-
-        foreach ($mediaMarkers as $type) {
-            $el = $messageDiv->querySelector('div.' . $type->value);
+        foreach (self::MEDIA_HANDLERS as $type => $handler) {
+            $className = $handler['class'];
+            $el = $messageDiv->querySelector('div.' . $className);
             if ($el === null) {
-                $el = $messageDiv->querySelector('a.' . $type->value);
+                $el = $messageDiv->querySelector('a.' . $className);
             }
             if ($el !== null) {
                 $outer = $el->outerHTML;
                 $pos = strpos($inner, $outer);
-                $mediaPieces[] = [$pos !== false ? $pos : PHP_INT_MAX, $type->handler(), $messageDiv, $context];
+                $mediaPieces[] = [$pos !== false ? $pos : PHP_INT_MAX, $handler['method'], $messageDiv];
             }
         }
 
@@ -536,7 +554,7 @@ CSS,
         if ($videoNotSupported === null && $messageDiv->querySelector('video') !== null) {
             $pos = strpos($inner, '<video');
             if ($pos !== false) {
-                $mediaPieces[] = [$pos, MediaPieceType::VIDEO->handler(), $messageDiv, $context];
+                $mediaPieces[] = [$pos, 'processVideo', $messageDiv];
             }
         }
 
@@ -546,9 +564,8 @@ CSS,
         foreach (array_merge($textPieces, $mediaPieces) as $piece) {
             $method = $piece[1];
             $element = $piece[2];
-            $ctx = $piece[3];
 
-            $partHtml = $this->{$method}($element, $ctx);
+            $partHtml = $this->{$method}($element, $context);
 
             if ($partHtml === '') {
                 continue;
@@ -560,15 +577,15 @@ CSS,
             $html .= $partHtml;
         }
 
-        return new ContentResult(
-            html: $html,
-            title: $context->title,
-            author: $context->author,
-            hashtags: $context->hashtags,
-        );
+        return [
+            'html' => $html,
+            'title' => $context['title'],
+            'author' => $context['author'],
+            'hashtags' => $context['hashtags'],
+        ];
     }
 
-    private function processText(\Dom\Element $textDiv, ParseContext $context): string
+    private function processText(\Dom\Element $textDiv, array &$context): string
     {
         $nested = $textDiv->querySelector(self::SELECTORS['MESSAGE_TEXT']);
         if ($nested !== null) {
@@ -578,18 +595,18 @@ CSS,
         $inner = $textDiv->innerHTML;
 
         $extracted = $this->extractHashtags($inner);
-        $inner = $extracted->html;
-        $context->hashtags = $extracted->tags;
+        $inner = $extracted['html'];
+        $context['hashtags'] = $extracted['tags'];
 
         $plain = $this->htmlToPlain($inner);
 
         if (mb_strlen(string: $plain, encoding: 'UTF-8') <= self::MAX_TITLE_LENGTH) {
-            $context->title = $plain;
+            $context['title'] = $plain;
             return '';
         }
 
         $split = $this->splitTitleAndContent($inner);
-        $context->title = $split['title'];
+        $context['title'] = $split['title'];
 
         if ($split['html'] === '') {
             return '';
@@ -598,7 +615,11 @@ CSS,
         $dir = $textDiv->getAttribute('dir');
         $attr = $dir !== '' ? ' dir="' . $dir . '"' : '';
 
-        return sprintf("<div class=\"tgme_widget_message_text js-message_text\"%s>%s</div>", $attr, $split['html']);
+        return sprintf(
+            '<div class="tgme_widget_message_text js-message_text"%s>%s</div>',
+            $attr,
+            $split['html']
+        );
     }
 
     private function splitTitleAndContent(string $html): array
@@ -753,10 +774,10 @@ CSS,
         );
     }
 
-    private function processPhoto(\Dom\Element $messageDiv, ParseContext $context): string
+    private function processPhoto(\Dom\Element $messageDiv, array &$context): string
     {
-        if ($context->title === '') {
-            $context->title = '@' . $this->getNormalizedUsername() . ' posted a photo';
+        if ($context['title'] === '') {
+            $context['title'] = '@' . $this->getNormalizedUsername() . ' posted a photo';
         }
 
         $out = '';
@@ -771,10 +792,10 @@ CSS,
         return $out;
     }
 
-    private function processVideo(\Dom\Element $messageDiv, ParseContext $context): string
+    private function processVideo(\Dom\Element $messageDiv, array &$context): string
     {
-        if ($context->title === '') {
-            $context->title = '@' . $this->getNormalizedUsername() . ' posted a video';
+        if ($context['title'] === '') {
+            $context['title'] = '@' . $this->getNormalizedUsername() . ' posted a video';
         }
 
         $poster = '';
@@ -867,10 +888,10 @@ CSS,
         return $html;
     }
 
-    private function processSticker(\Dom\Element $messageDiv, ParseContext $context): string
+    private function processSticker(\Dom\Element $messageDiv, array &$context): string
     {
-        if ($context->title === '') {
-            $context->title = '@' . $this->getNormalizedUsername() . ' posted a sticker';
+        if ($context['title'] === '') {
+            $context['title'] = '@' . $this->getNormalizedUsername() . ' posted a sticker';
         }
 
         $div = $messageDiv->querySelector(self::SELECTORS['STICKER_WRAP']);
@@ -899,7 +920,7 @@ CSS,
         return '';
     }
 
-    private function processPoll(\Dom\Element $messageDiv, ParseContext $context): string
+    private function processPoll(\Dom\Element $messageDiv, array &$context): string
     {
         $poll = $messageDiv->querySelector(self::SELECTORS['POLL']);
         if ($poll === null) {
@@ -909,8 +930,8 @@ CSS,
         $title = $this->getPlaintext($poll, self::SELECTORS['POLL_QUESTION']);
         $type = $this->getPlaintext($poll, self::SELECTORS['POLL_TYPE']);
 
-        if ($context->title === '') {
-            $context->title = $title;
+        if ($context['title'] === '') {
+            $context['title'] = $title;
         }
 
         $html = sprintf('<div style="%s">', self::CSS['poll']);
@@ -959,7 +980,7 @@ CSS,
         return $html;
     }
 
-    private function processLinkPreview(\Dom\Element $messageDiv, ParseContext $context): string
+    private function processLinkPreview(\Dom\Element $messageDiv, array &$context): string
     {
         $preview = $messageDiv->querySelector(self::SELECTORS['LINK_PREVIEW']);
         if ($preview === null || trim($preview->innerHTML) === '') {
@@ -991,10 +1012,10 @@ CSS,
         );
     }
 
-    private function processAttachment(\Dom\Element $messageDiv, ParseContext $context): string
+    private function processAttachment(\Dom\Element $messageDiv, array &$context): string
     {
-        if ($context->title === '') {
-            $context->title = '@' . $this->getNormalizedUsername() . ' posted an attachment';
+        if ($context['title'] === '') {
+            $context['title'] = '@' . $this->getNormalizedUsername() . ' posted an attachment';
         }
 
         $out = 'File attachments:<br />';
@@ -1007,10 +1028,10 @@ CSS,
         return $out;
     }
 
-    private function processLocation(\Dom\Element $messageDiv, ParseContext $context): string
+    private function processLocation(\Dom\Element $messageDiv, array &$context): string
     {
-        if ($context->title === '') {
-            $context->title = '@' . $this->getNormalizedUsername() . ' posted a location';
+        if ($context['title'] === '') {
+            $context['title'] = '@' . $this->getNormalizedUsername() . ' posted a location';
         }
 
         $el = $messageDiv->querySelector(self::SELECTORS['LOCATION']);
@@ -1032,7 +1053,7 @@ CSS,
         return sprintf('<a href="%s"><img src="%s" /></a>', $linkHref, $imgSrc);
     }
 
-    private function extractHashtags(string $html): ExtractedHashtags
+    private function extractHashtags(string $html): array
     {
         $tags = [];
 
@@ -1069,10 +1090,10 @@ CSS,
         $html = preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $html);
         $html = preg_replace('/\s*(?:<br\s*\/?>)+\s*$/i', '', $html);
 
-        return new ExtractedHashtags(
-            html: $html,
-            tags: array_values(array: array_unique($tags))
-        );
+        return [
+            'html' => $html,
+            'tags' => array_values(array_unique($tags))
+        ];
     }
 
     private function detectNotSupported(\Dom\Element $message): ?array
@@ -1083,7 +1104,7 @@ CSS,
         }
 
         if ($videoPlayer !== null) {
-            return ['type' => UnsupportedType::VIDEO, 'element' => $videoPlayer];
+            return ['type' => self::UNSUPPORTED_TYPE_VIDEO, 'element' => $videoPlayer];
         }
 
         if ($message->querySelector(self::SELECTORS['SUPPORTED_CONT']) !== null) {
@@ -1100,7 +1121,7 @@ CSS,
 
         $notSupportedWrap = $message->querySelector(self::SELECTORS['UNSUPPORTED_WRAP']);
         if ($notSupportedWrap !== null) {
-            return ['type' => UnsupportedType::GENERIC, 'element' => $notSupportedWrap];
+            return ['type' => self::UNSUPPORTED_TYPE_GENERIC, 'element' => $notSupportedWrap];
         }
 
         return null;
@@ -1114,17 +1135,17 @@ CSS,
     ): void {
         $type = $info['type'];
 
-        $isTooBig = $this->getUnsupportedReason($message) === UnsupportedReason::TOO_BIG;
+        $isTooBig = $this->getUnsupportedReason($message) === self::UNSUPPORTED_REASON_TOO_BIG;
         $mediaLabel = $isTooBig === true ? 'Media is too big' : 'Unsupported media';
 
         $stubLabel = match ($type) {
-            UnsupportedType::VIDEO => $mediaLabel,
-            UnsupportedType::GENERIC => 'Please open Telegram to view this post',
+            self::UNSUPPORTED_TYPE_VIDEO => $mediaLabel,
+            self::UNSUPPORTED_TYPE_GENERIC => 'Please open Telegram to view this post',
         };
 
         $title = match ($type) {
-            UnsupportedType::VIDEO => 'Unsupported media',
-            UnsupportedType::GENERIC => 'Unsupported content',
+            self::UNSUPPORTED_TYPE_VIDEO => 'Unsupported media',
+            self::UNSUPPORTED_TYPE_GENERIC => 'Unsupported content',
         };
 
         if ($hasContent === false) {
@@ -1142,16 +1163,16 @@ CSS,
         }
     }
 
-    private function getUnsupportedReason(\Dom\Element $message): UnsupportedReason
+    private function getUnsupportedReason(\Dom\Element $message): string
     {
         $label = $message->querySelector(self::SELECTORS['UNSUPPORTED_LABEL']);
         $text = $label !== null ? trim($label->textContent) : '';
 
         if (str_contains(haystack: $text, needle: 'too big') === true || str_contains(haystack: $text, needle: 'too large') === true) {
-            return UnsupportedReason::TOO_BIG;
+            return self::UNSUPPORTED_REASON_TOO_BIG;
         }
 
-        return UnsupportedReason::DEFAULT_REASON;
+        return self::UNSUPPORTED_REASON_DEFAULT;
     }
 
     private function renderUnsupported(
@@ -1279,11 +1300,16 @@ CSS,
 
     private function shouldEmbedMedia(): bool
     {
-        $modeInput = $this->getInput('embed_media') ?? 'auto';
-        $mode = EmbedMediaMode::tryFrom($modeInput) ?? EmbedMediaMode::AUTO;
+        $modeInput = $this->getInput('embed_media') ?? self::EMBED_MODE_AUTO;
         $useProxy = (bool) $this->getInput('use_proxy');
 
-        return $mode->shouldEmbed($useProxy);
+        if ($modeInput === self::EMBED_MODE_ALWAYS) {
+            return true;
+        }
+        if ($modeInput === self::EMBED_MODE_NEVER) {
+            return false;
+        }
+        return $useProxy;
     }
 
     private function embedMediaInHtml(string $html): string
@@ -1520,85 +1546,4 @@ CSS,
         }
         return '';
     }
-}
-
-final class ParseContext
-{
-    public string $title = '';
-    public string $author = '';
-    public array $hashtags = [];
-}
-
-final readonly class ContentResult
-{
-    public function __construct(
-        public string $html,
-        public string $title,
-        public string $author,
-        public array $hashtags,
-    ) {
-    }
-}
-
-final readonly class ExtractedHashtags
-{
-    public function __construct(
-        public string $html,
-        public array $tags,
-    ) {
-    }
-}
-
-enum MediaPieceType: string
-{
-    case STICKER = 'tgme_widget_message_sticker_wrap';
-    case POLL = 'tgme_widget_message_poll';
-    case PHOTO = 'tgme_widget_message_photo_wrap';
-    case ATTACHMENT = 'tgme_widget_message_document';
-    case LINK_PREVIEW = 'tgme_widget_message_link_preview';
-    case LOCATION = 'tgme_widget_message_location_wrap';
-    case VIDEO = 'video';
-    case TEXT = 'text';
-
-    public function handler(): string
-    {
-        return match ($this) {
-            self::STICKER => 'processSticker',
-            self::POLL => 'processPoll',
-            self::PHOTO => 'processPhoto',
-            self::ATTACHMENT => 'processAttachment',
-            self::LINK_PREVIEW => 'processLinkPreview',
-            self::LOCATION => 'processLocation',
-            self::VIDEO => 'processVideo',
-            self::TEXT => 'processText',
-        };
-    }
-}
-
-enum EmbedMediaMode: string
-{
-    case AUTO = 'auto';
-    case ALWAYS = 'on';
-    case NEVER = 'off';
-
-    public function shouldEmbed(bool $useProxy): bool
-    {
-        return match ($this) {
-            self::ALWAYS => true,
-            self::NEVER => false,
-            self::AUTO => $useProxy,
-        };
-    }
-}
-
-enum UnsupportedReason: string
-{
-    case TOO_BIG = 'too_big';
-    case DEFAULT_REASON = 'default';
-}
-
-enum UnsupportedType: string
-{
-    case VIDEO = 'video';
-    case GENERIC = 'generic';
 }
