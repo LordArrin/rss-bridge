@@ -102,9 +102,9 @@ class PawchiveBridge extends BridgeAbstract
         'file-link' => 'display:inline-block;margin:0;color:#0066cc;text-decoration:none',
         'url-link' => 'color:#0066cc;text-decoration:none;word-break:break-all',
         'file-container' => 'margin:10px 0',
-        'external-link-container' => 'margin:10px 0;padding:10px;border:1px solid #ddd;border-radius:5px',
-        'attachments-container' => 'margin-top:20px;padding:10px;background:#f9f9f9;border:1px solid #ddd;border-radius:5px',
-        'attachments-heading' => 'margin:0 0 8px 0;font-weight:bold;color:#333',
+        'external-link-container' => 'margin:10px 0;padding:10px;border:1px solid #444;border-radius:5px',
+        'attachments-container' => 'margin-top:20px;padding:10px',
+        'attachments-heading' => 'margin:0 0 8px 0;font-weight:bold',
         'attachments-list' => 'margin:0;padding:0;list-style:none',
         'attachments-item' => 'margin:4px 0',
     ];
@@ -589,7 +589,7 @@ class PawchiveBridge extends BridgeAbstract
                 default => 'file',
             };
 
-            if ($fileType === 'image') {
+            if (($fileType === 'image') === true) {
                 $imageUrl = $useThumbnails === true ? $this->getThumbnailUrl($file['path']) : $fullUrl;
 
                 $contentHtml .= sprintf(
@@ -605,7 +605,7 @@ class PawchiveBridge extends BridgeAbstract
                 continue;
             }
 
-            if ($fileType === 'video') {
+            if (($fileType === 'video') === true) {
                 if ($hideAttachments === false) {
                     $contentHtml .= sprintf(
                         '<div style="%s">%s</div>',
