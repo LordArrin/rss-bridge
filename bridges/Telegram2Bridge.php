@@ -95,8 +95,8 @@ TXT,
         ],
     ];
 
-    private const BG_IMG_RE = "/background-image:url\('(.*)'\)/";
-    private const TG_HOSTS = '(?:[\w-]+\.)*(?:telegram\.org|t\.me|telesco\.pe)';
+    private const BG_IMG_RE = "/background-image:url\\('(.*)'\\)/";
+    private const TG_HOSTS = '(?:[\\w-]+\\.)*(?:telegram\\.org|t\\.me|telesco\\.pe)';
 
     private const MAX_PAGES = 100;
     private const PROXY_RETRIES = 3;
@@ -113,9 +113,9 @@ TXT,
     private const CSS = [
         'unsup_wrap'  => 'background:#17212b;border-radius:12px;padding:28px 16px;text-align:center',
         'unsup_label' => 'color:#708499;font-size:14px;margin-bottom:16px',
-        'unsup_btn'   => <<<'CSS'
-display:inline-block;background:#2b5278;color:#6ab2f2;text-decoration:none;text-transform:uppercase;font-weight:bold;font-size:13px;letter-spacing:0.03em;padding:10px 24px;border-radius:8px
-CSS,
+        'unsup_btn'   => 'display:inline-block;background:#2b5278;color:#6ab2f2;' .
+            'text-decoration:none;text-transform:uppercase;font-weight:bold;' .
+            'font-size:13px;letter-spacing:0.03em;padding:10px 24px;border-radius:8px',
         'video'       => 'max-width:100%',
         'wrapper'     => 'font-size:14px;line-height:1.6;word-wrap:break-word',
         'quote'       => 'border-left:4px solid #4a76a8;padding-left:12px;margin:8px 0',
@@ -191,23 +191,21 @@ CSS,
     private string $feedName = '';
     private string $feedIcon = '';
     private ?array $mediaCache = null;
-    
     private ?string $cachedNormalizedUsername = null;
 
-    public string $normalizedUsername {
-        get {
-            if ($this->cachedNormalizedUsername === null) {
-                $this->cachedNormalizedUsername = ltrim(trim((string)($this->getInput('username') ?? '')), '@');
-            }
-            return $this->cachedNormalizedUsername;
+    private function getNormalizedUsername(): string
+    {
+        if ($this->cachedNormalizedUsername === null) {
+            $this->cachedNormalizedUsername = ltrim(trim((string) ($this->getInput('username') ?? '')), '@');
         }
+        return $this->cachedNormalizedUsername;
     }
 
     public function collectData(): void
     {
         $this->validateUsername();
 
-        $url = 'https://t.me/s/' . $this->normalizedUsername;
+        $url = 'https://t.me/s/' . $this->getNormalizedUsername();
 
         $limitInput = $this->getInput('limit');
         if ($limitInput === null || $limitInput === '' || $limitInput === 0) {
@@ -234,7 +232,7 @@ CSS,
             if ($this->feedName === '') {
                 $el = $dom->querySelector(self::SELECTORS['CHANNEL_TITLE']);
                 $this->feedName = htmlspecialchars_decode(
-                    $el?->textContent ?? '',
+                    $el !== null ? $el->textContent ?? '' : '',
                     flags: ENT_QUOTES
                 );
             }
@@ -306,7 +304,7 @@ CSS,
     public function getURI(): string
     {
         if ($this->getInput('username') !== null) {
-            return self::URI . '/s/' . $this->normalizedUsername;
+            return self::URI . '/s/' . $this->getNormalizedUsername();
         }
 
         return parent::getURI();
@@ -334,7 +332,7 @@ CSS,
     {
         $re = '/^https?:\/\/(?:(?:t|telegram)\.me\/(?:s\/)?([\w]+)|([\w]+)\.t\.me\/?)$/';
 
-        if (preg_match($re, (string)$url, $m) === 1) {
+        if (preg_match($re, (string) $url, $m) === 1) {
             $username = $m[1] !== '' ? $m[1] : ($m[2] ?? '');
             if ($username !== '') {
                 return ['username' => $username];
@@ -353,7 +351,7 @@ CSS,
     private function withRetry(\Closure $fn, string $context, string $url = ''): mixed
     {
         $lastException = null;
-        
+
         for ($i = 0; $i < self::PROXY_RETRIES; $i++) {
             try {
                 return $fn();
@@ -379,7 +377,7 @@ CSS,
 
     private function validateUsername(): void
     {
-        $username = $this->normalizedUsername;
+        $username = $this->getNormalizedUsername();
         if (preg_match('/^[a-zA-Z0-9_]{5,32}$/', $username) !== 1) {
             throwClientException(sprintf(
                 'Invalid Telegram username "%s". Expected 5-32 alphanumeric characters or underscores.',
@@ -402,7 +400,7 @@ CSS,
             try {
                 return $this->withRetry(
                     fn(): \Dom\HTMLDocument => \Dom\HTMLDocument::createFromString(
-                        source: (string)getProtectedSimpleHTMLDOM($url, self::PROXY_PROFILE),
+                        source: (string) getProtectedSimpleHTMLDOM($url, self::PROXY_PROFILE),
                         options: LIBXML_NOERROR
                     ),
                     'TgWSProxy page fetch',
@@ -424,7 +422,7 @@ CSS,
         try {
             return $this->withRetry(
                 fn(): \Dom\HTMLDocument => \Dom\HTMLDocument::createFromString(
-                    source: (string)getSimpleHTMLDOM($url),
+                    source: (string) getSimpleHTMLDOM($url),
                     options: LIBXML_NOERROR
                 ),
                 'Direct page fetch',
@@ -438,10 +436,10 @@ CSS,
     private function parseMessage(\Dom\Element $message): array
     {
         $context = new ParseContext();
-        
+
         $uri = $this->extractUri($message);
         $contentResult = $this->processContent($message, $context);
-        
+
         $item = [];
         $item['uri'] = $uri;
         $item['content'] = $contentResult->html;
@@ -472,7 +470,7 @@ CSS,
     private function extractUri(\Dom\Element $message): string
     {
         $el = $message->querySelector(self::SELECTORS['MESSAGE_DATE_LINK']);
-        return $el?->getAttribute('href') ?? '';
+        return $el !== null ? ($el->getAttribute('href') ?? '') : '';
     }
 
     private function extractTimestamp(\Dom\Element $message): ?string
@@ -555,7 +553,7 @@ CSS,
             $method = $piece[1];
             $element = $piece[2];
             $ctx = $piece[3];
-            
+
             $partHtml = $this->{$method}($element, $ctx);
 
             if ($partHtml === '') {
@@ -606,8 +604,7 @@ CSS,
         $dir = $textDiv->getAttribute('dir');
         $attr = $dir !== '' ? ' dir="' . $dir . '"' : '';
 
-        return '<div class="tgme_widget_message_text js-message_text"' . $attr . '>'
-            . $split['html'] . '</div>';
+        return "<div class=\"tgme_widget_message_text js-message_text\"{$attr}>{$split['html']}</div>";
     }
 
     private function splitTitleAndContent(string $html): array
@@ -641,9 +638,9 @@ CSS,
         }
 
         $prefix = $this->truncateAtWord($firstPlain, self::MAX_TITLE_LENGTH);
-        
+
         $remainder = trim(mb_substr(string: $firstPlain, start: mb_strlen($prefix)));
-        if ($remainder !== '' && !preg_match('/^[\s\p{P}]/u', $remainder) && !preg_match('/[\s\p{P}]$/u', $prefix)) {
+        if ($remainder !== '' && preg_match('/^[\s\p{P}]/u', $remainder) === 0 && preg_match('/[\s\p{P}]$/u', $prefix) === 0) {
             $sp = mb_strrpos(haystack: $prefix, needle: ' ');
             if ($sp !== false && $sp > self::MIN_TITLE_SPACE_POS) {
                 $prefix = rtrim(mb_substr(string: $prefix, start: 0, length: $sp));
@@ -688,14 +685,14 @@ CSS,
 
         $tokens = preg_split(pattern: '/(<[^>]*>)/u', subject: $html, limit: -1, flags: PREG_SPLIT_DELIM_CAPTURE);
         $void = ['br', 'img', 'hr', 'input', 'meta', 'link', 'source'];
-        
+
         $consumed = 0;
         $stack = [];
         $out = '';
         $cut = false;
 
         foreach ($tokens as $token) {
-            if ($token === '' || $cut) {
+            if ($token === '' || $cut === true) {
                 $out .= $token;
                 continue;
             }
@@ -726,18 +723,18 @@ CSS,
 
             $cut = true;
             $skip = $limit - $consumed;
-            
+
             $out .= implode('', array_column(array: $stack, column_key: 'html'))
                 . implode('', array_slice(array: $units, offset: $skip));
         }
 
-        if (!$cut) {
+        if ($cut === false) {
             return '';
         }
 
         return '... ' . ltrim(preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $out));
     }
-    
+
     private function processReply(\Dom\Element $reply): string
     {
         $replyText = $this->getPlaintext($reply, self::SELECTORS['REPLY_TEXT']);
@@ -761,7 +758,7 @@ CSS,
     private function processPhoto(\Dom\Element $messageDiv, ParseContext $context): string
     {
         if ($context->title === '') {
-            $context->title = '@' . $this->normalizedUsername . ' posted a photo';
+            $context->title = '@' . $this->getNormalizedUsername() . ' posted a photo';
         }
 
         $out = '';
@@ -779,7 +776,7 @@ CSS,
     private function processVideo(\Dom\Element $messageDiv, ParseContext $context): string
     {
         if ($context->title === '') {
-            $context->title = '@' . $this->normalizedUsername . ' posted a video';
+            $context->title = '@' . $this->getNormalizedUsername() . ' posted a video';
         }
 
         $poster = '';
@@ -820,7 +817,7 @@ CSS,
         }
 
         $videoEl = $messageDiv->querySelector('video');
-        $src = $videoEl?->getAttribute('src') ?? '';
+        $src = $videoEl !== null ? ($videoEl->getAttribute('src') ?? '') : '';
 
         if ($poster === '' && $src === '' && $postHref === '') {
             return '';
@@ -831,7 +828,7 @@ CSS,
         if ($this->feedName !== '') {
             $channel = htmlspecialchars(string: $this->feedName, flags: ENT_QUOTES);
         } else {
-            $channel = '@' . $this->normalizedUsername;
+            $channel = '@' . $this->getNormalizedUsername();
         }
 
         $duration = $this->getPlaintext($messageDiv, self::SELECTORS['VIDEO_DURATION_TIME']);
@@ -876,7 +873,7 @@ CSS,
     private function processSticker(\Dom\Element $messageDiv, ParseContext $context): string
     {
         if ($context->title === '') {
-            $context->title = '@' . $this->normalizedUsername . ' posted a sticker';
+            $context->title = '@' . $this->getNormalizedUsername() . ' posted a sticker';
         }
 
         $div = $messageDiv->querySelector(self::SELECTORS['STICKER_WRAP']);
@@ -996,7 +993,7 @@ CSS,
     private function processAttachment(\Dom\Element $messageDiv, ParseContext $context): string
     {
         if ($context->title === '') {
-            $context->title = '@' . $this->normalizedUsername . ' posted an attachment';
+            $context->title = '@' . $this->getNormalizedUsername() . ' posted an attachment';
         }
 
         $out = 'File attachments:<br />';
@@ -1012,7 +1009,7 @@ CSS,
     private function processLocation(\Dom\Element $messageDiv, ParseContext $context): string
     {
         if ($context->title === '') {
-            $context->title = '@' . $this->normalizedUsername . ' posted a location';
+            $context->title = '@' . $this->getNormalizedUsername() . ' posted a location';
         }
 
         $el = $messageDiv->querySelector(self::SELECTORS['LOCATION']);
@@ -1115,11 +1112,10 @@ CSS,
         bool $hasContent
     ): void {
         $type = $info['type'];
-        
+
+        $isTooBig = $this->getUnsupportedReason($message) === UnsupportedReason::TOO_BIG;
         $stubLabel = match ($type) {
-            UnsupportedType::VIDEO => $this->getUnsupportedReason($message) === UnsupportedReason::TOO_BIG
-                ? 'Media is too big'
-                : 'Unsupported media',
+            UnsupportedType::VIDEO => $isTooBig ? 'Media is too big' : 'Unsupported media',
             UnsupportedType::GENERIC => 'Please open Telegram to view this post',
         };
 
@@ -1228,7 +1224,7 @@ CSS,
                 }
 
                 if (str_starts_with(haystack: $url, needle: '?') === true || str_starts_with(haystack: $url, needle: '/') === true) {
-                    return $m[1] . '="' . self::URI . '/s/' . $this->normalizedUsername . $url . '"';
+                    return $m[1] . '="' . self::URI . '/s/' . $this->getNormalizedUsername() . $url . '"';
                 }
 
                 return $m[1] . '="' . $url . '"';
@@ -1279,7 +1275,7 @@ CSS,
         $modeInput = $this->getInput('embed_media') ?? 'auto';
         $mode = EmbedMediaMode::tryFrom($modeInput) ?? EmbedMediaMode::AUTO;
         $useProxy = (bool) $this->getInput('use_proxy');
-        
+
         return $mode->shouldEmbed($useProxy);
     }
 
@@ -1352,7 +1348,7 @@ CSS,
     {
         try {
             return $this->withRetry(
-                function() use ($url): array {
+                function () use ($url): array {
                     $response = getContents($url, [], [], true);
 
                     $body = $response->getBody();
@@ -1404,12 +1400,12 @@ CSS,
 
         $haystack = $this->buildSearchHaystack($item);
 
-        $exclude = trim((string)($this->getInput('exclude_keywords') ?? ''));
+        $exclude = trim((string) ($this->getInput('exclude_keywords') ?? ''));
         if ($exclude !== '' && $this->matchesKeywordRules($haystack, $exclude) === true) {
             return true;
         }
 
-        $include = trim((string)($this->getInput('include_keywords') ?? ''));
+        $include = trim((string) ($this->getInput('include_keywords') ?? ''));
         if ($include !== '' && $this->matchesKeywordRules($haystack, $include) === false) {
             return true;
         }
@@ -1447,7 +1443,7 @@ CSS,
                     continue;
                 }
 
-                if (array_all(array: $parts, callback: fn($part) => str_contains(haystack: $haystack, needle: $part))) {
+                if (array_all(array: $parts, callback: fn($part) => str_contains(haystack: $haystack, needle: $part)) === true) {
                     return true;
                 }
             } elseif (str_contains(haystack: $haystack, needle: mb_strtolower(string: $rule, encoding: 'UTF-8')) === true) {
@@ -1519,29 +1515,35 @@ CSS,
     }
 }
 
-final class ParseContext {
+final class ParseContext
+{
     public string $title = '';
     public string $author = '';
     public array $hashtags = [];
 }
 
-final readonly class ContentResult {
+final readonly class ContentResult
+{
     public function __construct(
         public string $html,
         public string $title,
         public string $author,
         public array $hashtags,
-    ) {}
+    ) {
+    }
 }
 
-final readonly class ExtractedHashtags {
+final readonly class ExtractedHashtags
+{
     public function __construct(
         public string $html,
         public array $tags,
-    ) {}
+    ) {
+    }
 }
 
-enum MediaPieceType: string {
+enum MediaPieceType: string
+{
     case STICKER = 'tgme_widget_message_sticker_wrap';
     case POLL = 'tgme_widget_message_poll';
     case PHOTO = 'tgme_widget_message_photo_wrap';
@@ -1551,7 +1553,8 @@ enum MediaPieceType: string {
     case VIDEO = 'video';
     case TEXT = 'text';
 
-    public function handler(): string {
+    public function handler(): string
+    {
         return match ($this) {
             self::STICKER => 'processSticker',
             self::POLL => 'processPoll',
@@ -1565,13 +1568,15 @@ enum MediaPieceType: string {
     }
 }
 
-enum EmbedMediaMode: string {
+enum EmbedMediaMode: string
+{
     case AUTO = 'auto';
     case ALWAYS = 'on';
     case NEVER = 'off';
-    
-    public function shouldEmbed(bool $useProxy): bool {
-        return match($this) {
+
+    public function shouldEmbed(bool $useProxy): bool
+    {
+        return match ($this) {
             self::ALWAYS => true,
             self::NEVER => false,
             self::AUTO => $useProxy,
@@ -1579,12 +1584,14 @@ enum EmbedMediaMode: string {
     }
 }
 
-enum UnsupportedReason: string {
+enum UnsupportedReason: string
+{
     case TOO_BIG = 'too_big';
     case DEFAULT_REASON = 'default';
 }
 
-enum UnsupportedType: string {
+enum UnsupportedType: string
+{
     case VIDEO = 'video';
     case GENERIC = 'generic';
 }
