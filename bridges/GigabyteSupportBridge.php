@@ -23,38 +23,43 @@ class GigabyteSupportBridge extends BridgeAbstract
             'title' => 'Check this box to hide the download button from feed items'
         ]
     ]];
+    
     private const CSS = [
-        'item' => 'font-family:sans-serif;line-height:1.6;color:#333',
+        'item' => 'font-family:sans-serif;line-height:1.6;color:inherit',
         'p' => 'margin:8px 0',
         'link' => 'color:#ff6600;text-decoration:none;font-weight:500',
-        'label' => 'font-weight:bold;color:#111',
+        'label' => 'font-weight:bold;color:inherit',
         'download' => 'display:inline-block;margin-top:10px;padding:8px 16px;background:#ff6600;color:#fff;text-decoration:none;border-radius:4px;font-weight:500',
     ];
-    private $productInfo = null;
-    private $pageContent = null;
+    
+    private ?array $productInfo = null;
+    private ?string $pageContent = null;
 
-    public function getIcon()
+    public function getIcon(): string
     {
         return 'https://www.gigabyte.com/favicon.ico';
     }
 
-    public function getName()
+    public function getName(): string
     {
         $info = $this->getProductInfo();
         if (!$info) {
             return parent::getName();
         }
+        
         $html = $this->fetchPageContent();
         $productName = $html ? $this->extractProductName($html) : null;
         $name = $productName ?? str_replace('-', ' ', $info['product']);
+        
         $fragment = strtolower(preg_replace('/^support-/i', '', $info['fragment']));
         if (in_array($fragment, self::VALID_TYPES, true)) {
             $name .= ' (' . ($fragment === 'bios' ? 'BIOS' : ucfirst($fragment)) . ')';
         }
+        
         return $name;
     }
 
-    public function getURI()
+    public function getURI(): string
     {
         return $this->getInput('url') ?: parent::getURI();
     }
@@ -64,29 +69,48 @@ class GigabyteSupportBridge extends BridgeAbstract
         if ($this->productInfo !== null) {
             return $this->productInfo;
         }
+        
         $url = $this->getInput('url');
         if (!$url) {
             return null;
         }
+        
         $parsedUrl = parse_url($url);
-        $segments = array_values(array_filter(explode('/', trim($parsedUrl['path'] ?? '', '/')), fn($s) => $s !== ''));
+        $segments = array_values(array_filter(
+            explode('/', trim($parsedUrl['path'] ?? '', '/')),
+            fn(string $s): bool => $s !== ''
+        ));
+        
         if (count($segments) < 2) {
             return null;
         }
+        
         if (end($segments) === 'support') {
             array_pop($segments);
         }
+        
         $this->productInfo = [
             'product' => array_pop($segments),
             'category' => array_pop($segments),
             'fragment' => $parsedUrl['fragment'] ?? ''
         ];
+        
         return $this->productInfo;
+    }
+
+    private function supportUrl(array $info): string
+    {
+        return sprintf('https://www.gigabyte.com/%s/%s/support', $info['category'], $info['product']);
     }
 
     private function getDownloadTypes(): array
     {
-        $fragment = strtolower(preg_replace('/^support-/i', '', $this->getProductInfo()['fragment'] ?? ''));
+        $info = $this->getProductInfo();
+        if (!$info) {
+            return self::VALID_TYPES;
+        }
+        
+        $fragment = strtolower(preg_replace('/^support-/i', '', $info['fragment']));
         return in_array($fragment, self::VALID_TYPES, true) ? [$fragment] : self::VALID_TYPES;
     }
 
@@ -95,16 +119,14 @@ class GigabyteSupportBridge extends BridgeAbstract
         if ($this->pageContent !== null) {
             return $this->pageContent;
         }
+        
         $info = $this->getProductInfo();
         if (!$info) {
             return null;
         }
+        
         try {
-            $headers = [
-                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
-            ];
-            $this->pageContent = getContents(sprintf('https://www.gigabyte.com/%s/%s/support', $info['category'], $info['product']), $headers);
+            $this->pageContent = getContents($this->supportUrl($info));
             return $this->pageContent;
         } catch (Exception $e) {
             return null;
@@ -116,53 +138,61 @@ class GigabyteSupportBridge extends BridgeAbstract
         if (!preg_match('/<[^>]*class="[^"]*model-base-info-title[^"]*"[^>]*>(.*?)<\/[^>]+>/is', $html, $match)) {
             return null;
         }
+        
         $name = trim(strip_tags($match[1]));
-        return !empty($name) ? $name : null;
+        return $name !== '' ? $name : null;
     }
 
     private function normalize(string $text, bool $keepLinks = false): string
     {
-        if (empty($text)) {
+        if ($text === '') {
             return '';
         }
+        
         $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $text = preg_replace('/Checksum\s*:\s*\S+/i', '', $text);
+        
         if ($keepLinks) {
             $text = preg_replace('/<li[^>]*>/i', '[[SEP]]', $text);
             $text = preg_replace('/<\/li>/i', '', $text);
             $text = preg_replace('/<br\s*\/?>/i', '[[SEP]]', $text);
             $text = preg_replace('/<\/?p[^>]*>/i', '[[SEP]]', $text);
             $text = preg_replace('/<\/?div[^>]*>/i', '[[SEP]]', $text);
+            
             $linkStyle = self::CSS['link'];
-            $text = preg_replace_callback('/<a\s+([^>]*?)>(.*?)<\/a>/is', function ($m) use ($linkStyle) {
+            $text = preg_replace_callback('/<a\s+([^>]*?)>(.*?)<\/a>/is', function (array $m) use ($linkStyle): string {
                 $attrs = $m[1];
-                if (stripos($attrs, 'target=') === false) {
+                
+                if (!str_contains(strtolower($attrs), 'target=')) {
                     $attrs .= ' target="_blank"';
                 }
-                if (stripos($attrs, 'rel=') === false) {
+                if (!str_contains(strtolower($attrs), 'rel=')) {
                     $attrs .= ' rel="noopener noreferrer"';
                 }
-                if (stripos($attrs, 'style=') === false) {
+                if (!str_contains(strtolower($attrs), 'style=')) {
                     $attrs .= ' style="' . $linkStyle . '"';
                 }
+                
                 return '<a ' . trim($attrs) . '>' . $m[2] . '</a>';
             }, $text);
+            
             $text = strip_tags($text);
             $parts = preg_split('/\[\[SEP\]\]|\n|\r\n?/', $text);
-            $cleanParts = [];
-            foreach ($parts as $part) {
-                $part = preg_replace('/\s+/', ' ', trim($part));
-                if (!empty($part)) {
-                    $cleanParts[] = $part;
-                }
-            }
+            
+            $cleanParts = array_filter(
+                array_map(fn(string $part): string => preg_replace('/\s+/', ' ', trim($part)), $parts),
+                fn(string $part): bool => $part !== ''
+            );
+            
             return implode('<br>', $cleanParts);
         }
+        
         $text = preg_replace('/\s+/', ' ', $text);
         $text = preg_replace('/<br\s*\/?>/i', ', ', $text);
         $text = preg_replace('/(64bit|32bit)\s+(Windows|Linux|macOS)/i', '$1, $2', $text);
         $text = strip_tags($text);
         $text = preg_replace('/,\s*,/', ',', $text);
+        
         return trim($text, ', ');
     }
 
@@ -171,23 +201,24 @@ class GigabyteSupportBridge extends BridgeAbstract
         if (!preg_match('/href="([^"]*(?:download\.gigabyte\.com|\.zip)[^"]*)"/i', $row, $match)) {
             return '';
         }
+        
         $url = $match[1];
-        if (strpos($url, '/') === 0) {
-            return 'https://www.gigabyte.com' . $url;
-        }
-        return $url;
+        return str_starts_with($url, '/') ? 'https://www.gigabyte.com' . $url : $url;
     }
 
     private function parseTableRow(string $row, bool $hasOs): ?array
     {
-        if (stripos($row, '<th') !== false) {
+        if (str_contains($row, '<th')) {
             return null;
         }
+        
         preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $row, $matches);
         $cells = $matches[1];
+        
         if (count($cells) < 4) {
             return null;
         }
+        
         return [
             'description' => $this->normalize($cells[0], true),
             'version' => $this->normalize($cells[1]),
@@ -203,16 +234,20 @@ class GigabyteSupportBridge extends BridgeAbstract
         preg_match_all('/<tr[^>]*>(.*?)<\/tr>/is', $tableHtml, $matches);
         $rows = [];
         $hasOs = null;
+        
         foreach ($matches[1] as $row) {
             preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $row, $cellMatches);
+            
             if ($hasOs === null && count($cellMatches[1]) > 0) {
                 $hasOs = count($cellMatches[1]) >= 6;
             }
+            
             $parsed = $this->parseTableRow($row, $hasOs ?? false);
             if ($parsed !== null) {
                 $rows[] = $parsed;
             }
         }
+        
         return $rows;
     }
 
@@ -220,31 +255,43 @@ class GigabyteSupportBridge extends BridgeAbstract
     {
         preg_match_all('/<h2[^>]*>([^<]+)<\/h2>\s*(?:<[^>]+>\s*)*<table[^>]*>(.*?)<\/table>/is', $html, $matches, PREG_SET_ORDER);
         $items = [];
+        
         foreach ($matches as $match) {
             $category = trim($match[1]);
             $type = strtolower($category) === 'bios' ? 'bios' : 'driver';
+            
             foreach ($this->extractRowsFromTable($match[2]) as $row) {
                 $row['type'] = $type;
                 $row['category'] = $category;
                 $items[] = $row;
             }
         }
+        
         return $items;
     }
 
     private function render(string $label, string $value, bool $lineBreak = false, bool $allowHtml = false): string
     {
-        if (empty($value)) {
+        if ($value === '') {
             return '';
         }
+        
         $displayValue = $allowHtml ? $value : htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
         $displayValue = preg_replace('/^(?:\s|<br\s*\/?>)+/i', '', $displayValue);
         $displayValue = ltrim($displayValue);
-        if (empty($displayValue)) {
+        
+        if ($displayValue === '') {
             return '';
         }
+        
         $separator = $lineBreak ? '<br>' : ' ';
-        return sprintf('<p style="%s"><span style="%s">%s:</span>%s%s</p>', self::CSS['p'], self::CSS['label'], $label, $separator, $displayValue);
+        return sprintf('<p style="%s"><span style="%s">%s:</span>%s%s</p>', 
+            self::CSS['p'], 
+            self::CSS['label'], 
+            $label, 
+            $separator, 
+            $displayValue
+        );
     }
 
     private function buildFeedItem(array $data, array $info, bool $hideAttachments): array
@@ -255,18 +302,22 @@ class GigabyteSupportBridge extends BridgeAbstract
             $rawTitle = sprintf('[%s] %s', $data['category'], strip_tags($data['description']));
             $rawTitle = preg_replace('/Checksum\s*:\s*\S+/i', '', $rawTitle);
             $itemTitle = preg_replace('/\s+/', ' ', trim(trim($rawTitle)));
+            
             if (!empty($data['version'])) {
                 $itemTitle .= ' - ' . $data['version'];
             }
         }
-        $uri = sprintf('https://www.gigabyte.com/%s/%s/support', $info['category'], $info['product']);
-        if (!empty($info['fragment'])) {
+        
+        $uri = $this->supportUrl($info);
+        if ($info['fragment'] !== '') {
             $uri .= '#' . $info['fragment'];
         }
+        
         $content = '<div style="' . self::CSS['item'] . '">';
         $content .= $this->render('Description', $data['description'], true, true);
         $content .= $this->render('OS', $data['os']);
         $content .= $this->render('Size', $data['size']);
+        
         if (!$hideAttachments && !empty($data['download'])) {
             $downloadUrl = htmlspecialchars($data['download'], ENT_QUOTES, 'UTF-8');
             $content .= sprintf(
@@ -276,39 +327,54 @@ class GigabyteSupportBridge extends BridgeAbstract
                 self::CSS['download']
             );
         }
+        
         $content .= '</div>';
-        $item = ['title' => $itemTitle, 'uri' => $uri, 'content' => $content, 'uid' => md5($itemTitle . $data['version'])];
+        
+        $item = [
+            'title' => $itemTitle,
+            'uri' => $uri,
+            'content' => $content,
+            'uid' => md5($itemTitle . $data['version'])
+        ];
+        
         if (!empty($data['date'])) {
             $timestamp = strtotime($data['date']);
             if ($timestamp !== false) {
                 $item['timestamp'] = $timestamp;
             }
         }
+        
         return $item;
     }
 
-    public function collectData()
+    public function collectData(): void
     {
         $info = $this->getProductInfo();
-        if (!$info || !$info['product'] || !$info['category']) {
+        if (!$info || $info['product'] === '' || $info['category'] === '') {
             throwClientException('Invalid URL format or could not extract product info. Expected format: https://www.gigabyte.com/Category/Product-ID/support');
         }
+        
         $html = $this->fetchPageContent();
         if (!$html) {
             throwClientException('Failed to fetch support page content');
         }
+        
         $hideAttachments = (bool) $this->getInput('hide_download_button');
         $types = $this->getDownloadTypes();
         $allItems = [];
+        
         foreach ($this->parseSections($html) as $item) {
             if (in_array($item['type'], $types, true)) {
                 $allItems[] = $this->buildFeedItem($item, $info, $hideAttachments);
             }
         }
+        
         if (empty($allItems)) {
             return;
         }
-        usort($allItems, fn($a, $b) => ($b['timestamp'] ?? 0) <=> ($a['timestamp'] ?? 0));
+        
+        usort($allItems, fn(array $a, array $b): int => ($b['timestamp'] ?? 0) <=> ($a['timestamp'] ?? 0));
+        
         foreach ($allItems as $item) {
             $this->items[] = $item;
         }
