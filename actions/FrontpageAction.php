@@ -49,8 +49,8 @@ final class FrontpageAction implements ActionInterface
         foreach ($this->safeLoader->getBrokenBridges() as $brokenBridgeName => $errorInfo) {
             $errorMessage = $errorInfo['message'];
             
-            if (strlen($errorMessage) > 200) {
-                $errorMessage = substr($errorMessage, 0, 200) . '...';
+            if (strlen($errorMessage) > 300) {
+                $errorMessage = substr($errorMessage, 0, 300) . '...';
             }
             
             $messages[] = [
