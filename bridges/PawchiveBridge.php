@@ -12,7 +12,7 @@ class PawchiveBridge extends BridgeAbstract
 
     const API_PREFIX = 'api/v1/';
 
-    const array PARAMETERS = [[
+    const PARAMETERS = [[
         'service' => [
             'name' => 'Content service',
             'type' => 'list',
@@ -155,7 +155,7 @@ class PawchiveBridge extends BridgeAbstract
         'preload',
     ];
 
-    const array CONFIGURATION = [
+    const CONFIGURATION = [
         'session' => [
             'required' => true,
         ],
@@ -168,45 +168,49 @@ class PawchiveBridge extends BridgeAbstract
     private const array DOMAINS = ['pawchive.pw', 'pawchive.st'];
     private const string CACHE_KEY_ACTIVE_DOMAIN = 'active_domain';
 
-    public private(set) ?string $author = null;
-    public private(set) ?string $authorAvatarUrl = null;
+    private ?string $author = null;
+    private ?string $authorAvatarUrl = null;
     private array $mimeCache = [];
-    
-private ?string $activeDomainHost = null {
-    get {
+    private ?string $activeDomainHost = null;
+
+    private function getActiveDomainHost(): string
+    {
         if ($this->activeDomainHost === null) {
             $cached = $this->loadCacheValue(self::CACHE_KEY_ACTIVE_DOMAIN);
             $this->activeDomainHost = match (true) {
-                is_string($cached) && in_array($cached, self::DOMAINS, true) => $cached,
+                is_string($cached) && in_array($cached, self::DOMAINS, true) === true => $cached,
                 default => self::DOMAINS[0],
             };
         }
+
         return $this->activeDomainHost;
     }
-    set(?string $host) {
+
+    private function setActiveDomainHost(string $host): void
+    {
         $this->activeDomainHost = $host;
         $this->saveCacheValue(self::CACHE_KEY_ACTIVE_DOMAIN, $host, self::CACHE_TIMEOUT);
     }
-}
 
     private function baseURI(): string
     {
-        return 'https://' . $this->activeDomainHost . '/';
+        return 'https://' . $this->getActiveDomainHost() . '/';
     }
 
     private function getFileDomain(): string
     {
-        return 'https://file.' . $this->activeDomainHost;
+        return 'https://file.' . $this->getActiveDomainHost();
     }
 
     private function getThumbnailDomain(): string
     {
-        return 'https://img.' . $this->activeDomainHost;
+        return 'https://img.' . $this->getActiveDomainHost();
     }
 
     private function getFileUrl(string $path, ?string $filename = null): string
     {
         $url = $this->getFileDomain() . '/data' . $path;
+
         return $filename !== null ? $url . '?f=' . urlencode($filename) : $url;
     }
 
@@ -222,7 +226,7 @@ private ?string $activeDomainHost = null {
 
     private function normalizeUrls(string $content): string
     {
-        $activeHost = $this->activeDomainHost;
+        $activeHost = $this->getActiveDomainHost();
 
         foreach (self::DOMAINS as $host) {
             if ($host !== $activeHost) {
@@ -253,6 +257,7 @@ private ?string $activeDomainHost = null {
     private function getMimeType(string $filename): string
     {
         $ext = $this->getExtension($filename);
+
         return $this->mimeCache[$ext] ??= self::MIME_TYPES[$ext] ?? 'application/octet-stream';
     }
 
@@ -260,6 +265,7 @@ private ?string $activeDomainHost = null {
     {
         $cleanFilename = (string)preg_replace('/[^\x20-\x7E]/', '', $filename);
         $cleanFilename = trim($cleanFilename);
+
         return strtolower(trim(pathinfo($cleanFilename, PATHINFO_EXTENSION)));
     }
 
@@ -275,23 +281,28 @@ private ?string $activeDomainHost = null {
 
     private function isMediaByExtension(string $filename): bool
     {
-        return $this->isImageByExtension($filename) || $this->isVideoByExtension($filename);
+        return match (true) {
+            $this->isImageByExtension($filename), $this->isVideoByExtension($filename) => true,
+            default => false,
+        };
     }
 
     private function hasMedia(array $post): bool
     {
-        if (!empty($post['file']['path'])) {
+        if (empty($post['file']['path']) === false) {
             $name = $post['file']['name'] ?? basename($post['file']['path']);
-            if ($this->isMediaByExtension((string)$name)) {
+
+            if ($this->isMediaByExtension((string)$name) === true) {
                 return true;
             }
         }
 
-        if (!empty($post['attachments']) && is_array($post['attachments'])) {
+        if (empty($post['attachments']) === false && is_array($post['attachments']) === true) {
             foreach ($post['attachments'] as $file) {
-                if (!empty($file['path'])) {
+                if (empty($file['path']) === false) {
                     $name = $file['name'] ?? basename($file['path']);
-                    if ($this->isMediaByExtension((string)$name)) {
+
+                    if ($this->isMediaByExtension((string)$name) === true) {
                         return true;
                     }
                 }
@@ -324,11 +335,11 @@ private ?string $activeDomainHost = null {
         $style = self::CSS['url-link'];
 
         foreach ($parts as $part) {
-            if (preg_match('/^<a\b/i', $part)) {
+            if (preg_match('/^<a\b/i', $part) === 1) {
                 $inAnchor = true;
-            } elseif (preg_match('/^<\/a>$/i', $part)) {
+            } elseif (preg_match('/^<\/a>$/i', $part) === 1) {
                 $inAnchor = false;
-            } elseif (!$inAnchor && trim($part) !== '' && !str_starts_with(ltrim($part), '<')) {
+            } elseif ($inAnchor === false && trim($part) !== '' && str_starts_with(ltrim($part), '<') === false) {
                 $part = (string)preg_replace_callback(
                     '/(https?:\/\/[^\s<>\"]+)/i',
                     fn(array $matches): string => sprintf(
@@ -434,7 +445,7 @@ private ?string $activeDomainHost = null {
             CURLOPT_MAXREDIRS => 0,
         ];
 
-        $activeHost = $this->activeDomainHost;
+        $activeHost = $this->getActiveDomainHost();
         $hostsToTry = [$activeHost];
 
         foreach (self::DOMAINS as $host) {
@@ -451,14 +462,14 @@ private ?string $activeDomainHost = null {
             try {
                 $apiResponse = getContents($url, $headers, $curlOptions);
 
-                if (!is_string($apiResponse)) {
+                if (is_string($apiResponse) === false) {
                     $lastException = new \Exception(
                         sprintf('getContents() returned non-string (%s) from %s', get_debug_type($apiResponse), $host)
                     );
                     continue;
                 }
 
-                if (!json_validate($apiResponse)) {
+                if (json_validate($apiResponse) === false) {
                     $lastException = new \Exception(
                         sprintf('Invalid JSON response from %s', $host)
                     );
@@ -467,21 +478,21 @@ private ?string $activeDomainHost = null {
 
                 $data = Json::decode($apiResponse);
 
-                if (!is_array($data)) {
+                if (is_array($data) === false) {
                     $lastException = new \Exception(
                         sprintf('Unexpected JSON type from %s: %s', $host, get_debug_type($data))
                     );
                     continue;
                 }
 
-                if (isset($data['error'])) {
+                if (isset($data['error']) === true) {
                     $lastException = new \Exception(
                         sprintf('API error from %s: %s', $host, (string)$data['error'])
                     );
                     continue;
                 }
 
-                $this->activeDomainHost = $host;
+                $this->setActiveDomainHost($host);
 
                 return $data;
             } catch (\Exception $e) {
@@ -507,7 +518,7 @@ private ?string $activeDomainHost = null {
         $files = [];
         $seenPaths = [];
 
-        if (!empty($post['file']['path'])) {
+        if (empty($post['file']['path']) === false) {
             $file = $post['file'];
             $file['name'] = isset($file['name']) ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
             $file['path'] = trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
@@ -515,13 +526,13 @@ private ?string $activeDomainHost = null {
             $files[] = $file;
         }
 
-        if (!empty($post['attachments']) && is_array($post['attachments'])) {
+        if (empty($post['attachments']) === false && is_array($post['attachments']) === true) {
             foreach ($post['attachments'] as $file) {
-                if (!empty($file['path'])) {
+                if (empty($file['path']) === false) {
                     $file['name'] = isset($file['name']) ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
                     $file['path'] = trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
 
-                    if (isset($seenPaths[$file['path']])) {
+                    if (isset($seenPaths[$file['path']]) === true) {
                         continue;
                     }
 
@@ -539,7 +550,7 @@ private ?string $activeDomainHost = null {
         return array_any($files, function (array $file): bool {
             $fileName = trim($file['name'] ?? basename($file['path']));
 
-            if ($fileName === '' || !$this->isImageByExtension($fileName)) {
+            if ($fileName === '' || $this->isImageByExtension($fileName) === false) {
                 return false;
             }
 
@@ -573,13 +584,13 @@ private ?string $activeDomainHost = null {
             $fullUrl = $this->getFileUrl($file['path'], $fileName);
 
             $fileType = match (true) {
-                $this->isImageByExtension($fileName) => 'image',
-                $this->isVideoByExtension($fileName) => 'video',
+                $this->isImageByExtension($fileName) === true => 'image',
+                $this->isVideoByExtension($fileName) === true => 'video',
                 default => 'file',
             };
 
             if ($fileType === 'image') {
-                $imageUrl = $useThumbnails ? $this->getThumbnailUrl($file['path']) : $fullUrl;
+                $imageUrl = $useThumbnails === true ? $this->getThumbnailUrl($file['path']) : $fullUrl;
 
                 $contentHtml .= sprintf(
                     '<div style="%s">%s</div>',
@@ -587,7 +598,7 @@ private ?string $activeDomainHost = null {
                     $this->renderImage($imageUrl, $fileName)
                 );
 
-                if (!$hideAttachments) {
+                if ($hideAttachments === false) {
                     $downloadLinks[] = ['url' => $fullUrl, 'name' => $fileName];
                 }
 
@@ -595,7 +606,7 @@ private ?string $activeDomainHost = null {
             }
 
             if ($fileType === 'video') {
-                if (!$hideAttachments) {
+                if ($hideAttachments === false) {
                     $contentHtml .= sprintf(
                         '<div style="%s">%s</div>',
                         $containerStyle,
@@ -608,7 +619,7 @@ private ?string $activeDomainHost = null {
                 continue;
             }
 
-            if (!$hideAttachments) {
+            if ($hideAttachments === false) {
                 $downloadLinks[] = ['url' => $fullUrl, 'name' => $fileName];
             }
         }
@@ -616,7 +627,7 @@ private ?string $activeDomainHost = null {
 
     private function renderAttachmentsBlock(array $downloadLinks): string
     {
-        if (empty($downloadLinks)) {
+        if (empty($downloadLinks) === true) {
             return '';
         }
 
@@ -646,6 +657,7 @@ private ?string $activeDomainHost = null {
     public function getIcon(): string
     {
         $icon = $this->authorAvatarUrl ?? parent::getIcon();
+
         return $this->normalizeUrls($icon);
     }
 
@@ -654,6 +666,7 @@ private ?string $activeDomainHost = null {
         $service = $this->getInput('service');
         $user = $this->getInput('user');
         $uri = $this->baseURI() . $service . '/user/' . $user;
+
         return $this->normalizeUrls($uri);
     }
 
@@ -690,7 +703,7 @@ private ?string $activeDomainHost = null {
         $count = 0;
 
         foreach ($json as $post) {
-            if ($hideEmpty && !$this->hasMedia($post)) {
+            if ($hideEmpty === true && $this->hasMedia($post) === false) {
                 continue;
             }
 
@@ -749,7 +762,7 @@ private ?string $activeDomainHost = null {
 
         $contentHtml = $item['content'];
 
-        if (!empty($post['embed']['url'])) {
+        if (empty($post['embed']['url']) === false) {
             $contentHtml .= $this->renderExternalLink($this->normalizeUrls((string)$post['embed']['url']));
         }
 
@@ -767,11 +780,11 @@ private ?string $activeDomainHost = null {
         $items = parent::getItems();
 
         foreach ($items as &$item) {
-            if (isset($item['content'])) {
+            if (isset($item['content']) === true) {
                 $item['content'] = $this->normalizeUrls($item['content']);
             }
 
-            if (isset($item['uri'])) {
+            if (isset($item['uri']) === true) {
                 $item['uri'] = $this->normalizeUrls($item['uri']);
             }
         }
