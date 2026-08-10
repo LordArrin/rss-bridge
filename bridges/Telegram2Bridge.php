@@ -874,22 +874,9 @@ CSS,
         }
         $duration = htmlspecialchars(string: $duration, flags: ENT_QUOTES);
 
-        $resolution = '';
-        if ($playerStyle !== '') {
-            if (
-                preg_match('/width:\s*(\d+)px/i', $playerStyle, $mw) === 1
-                && preg_match('/height:\s*(\d+)px/i', $playerStyle, $mh) === 1
-            ) {
-                $resolution = sprintf('%s?%s', $mw[1], $mh[1]);
-            }
-        }
-
         $label = 'Video: ' . $channel;
         if ($duration !== '') {
             $label .= ' (' . $duration . ')';
-        }
-        if ($resolution !== '') {
-            $label .= ' (' . $resolution . ')';
         }
 
         $html = '';
