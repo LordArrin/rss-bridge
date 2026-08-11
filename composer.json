@@ -14,7 +14,7 @@
         "ext-dom": "*"
     },
     "require-dev": {
-        "sebastianbergmann/phpunit": "^13.3.0",
+        "phpunit/phpunit": "^13.3.0",
         "phpcsstandards/php_codesniffer": "^4.0.4",
         "phpstan/phpstan": "^2.2.8"
     },
