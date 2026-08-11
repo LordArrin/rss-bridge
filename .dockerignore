@@ -4,9 +4,10 @@
 .gitattributes
 .github/*
 .travis.yml
-cache/*
 Dockerfile
-docs/*
+cache/*
 docker-compose.yml
+docs/*
 phpcs.xml
+pictures/*
 tests/*
