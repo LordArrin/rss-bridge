@@ -115,7 +115,7 @@ final class FrontpageAction implements ActionInterface
                 data-short-name="$shortName"
             >
 
-            <a style="position: absolute; top: 10px; left: 10px" href="#bridge-{$bridgeClassName}">
+            <a href="#bridge-{$bridgeClassName}">
                 <h1>#</h1>
             </a>
 

@@ -1,20 +1,25 @@
-<?php
-/**
- * This template renders a form for user to enter a auth token if it's enabled
- */
+<section class="token-page">
+    <h1>Authentication Required</h1>
+    
+    <p class="token-message">
+        <?= e($message) ?>
+    </p>
 
-?>
-
-<h1>
-    Authentication with token required
-</h1>
-
-<p>
-    <?= e($message) ?>
-</p>
-
-<form action="" method="get" autocomplete="off">
-    <label for="token">Token:</label>
-    <input type="text" name="token" id="token" placeholder="token" value="<?= e($token) ?>">
-    <input type="submit" value="OK">
-</form>
+    <form action="" method="get" autocomplete="off" class="token-form">
+        <div class="parameters">
+            <label for="token">Token</label>
+            <input 
+                type="password" 
+                name="token" 
+                id="token" 
+                placeholder="Enter your authentication token" 
+                value="<?= e($token) ?>"
+                autocomplete="off"
+                required
+            >
+            <i class="info" title="Your admin authentication token from config.ini.php"></i>
+        </div>
+        
+        <button type="submit">Authenticate</button>
+    </form>
+</section>
