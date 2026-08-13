@@ -15,13 +15,13 @@ final class CodebergReleasesBridge extends BridgeAbstract
             'owner' => [
                 'name' => 'Owner',
                 'title' => 'User or organization',
-                'exampleValue' => 'librewolf',
+                'exampleValue' => 'OpenRGB',
                 'required' => true,
                 'pattern' => '[A-Za-z0-9_.-]+',
             ],
             'repo' => [
                 'name' => 'Repository',
-                'exampleValue' => 'bsys6',
+                'exampleValue' => 'OpenRGB',
                 'required' => true,
                 'pattern' => '[A-Za-z0-9_.-]+',
             ],
@@ -47,7 +47,7 @@ final class CodebergReleasesBridge extends BridgeAbstract
                 'name' => 'Filter downloads',
                 'title' => 'Space, comma or newline separated patterns. Supports * and ? wildcards. Leave empty to show all.',
                 'type' => 'text',
-                'exampleValue' => 'x86_64-msix.msix *.apk',
+                'exampleValue' => '*Windows_64*.msi, *i386_trixie_*.deb',
                 'required' => false,
             ],
         ],
@@ -62,7 +62,12 @@ final class CodebergReleasesBridge extends BridgeAbstract
         $this->validateSlug($owner);
         $this->validateSlug($repo);
 
-        $limit = max(1, min(50, (int) ($this->getInput('limit') ?: 10)));
+        $limitInput = (int) ($this->getInput('limit') ?? 0);
+        if ($limitInput > 0) {
+            $limit = max(1, min(50, $limitInput));
+        } else {
+            $limit = 10;
+        }
 
         $prereleasesInput = strtolower(trim((string) $this->getInput('include_prereleases')));
         $excludeValues = ['0', 'false', 'off', 'no', 'exclude', 'disabled'];
@@ -412,10 +417,9 @@ final class CodebergReleasesBridge extends BridgeAbstract
         $index = max(0, min((int) floor(log($bytes, 1024)), count($units) - 1));
         $value = $bytes / (1024 ** $index);
 
+        $decimals = 1;
         if ($index === 0 || $value >= 100.0) {
             $decimals = 0;
-        } else {
-            $decimals = 1;
         }
 
         return sprintf(
