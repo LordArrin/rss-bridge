@@ -384,11 +384,11 @@ final class CodebergReleasesBridge extends BridgeAbstract
 
             $meta = [];
 
-            if (isset($asset['size']) && (float) $asset['size'] > 0.0) {
+            if (isset($asset['size']) === true && (float) $asset['size'] > 0.0) {
                 $meta[] = $this->formatBytes((float) $asset['size']);
             }
 
-            if (isset($asset['download_count']) && (int) $asset['download_count'] > 0) {
+            if (isset($asset['download_count']) === true && (int) $asset['download_count'] > 0) {
                 $meta[] = sprintf('%s downloads', number_format((int) $asset['download_count']));
             }
 
