@@ -221,7 +221,7 @@ class SearchFloorBridge extends BridgeAbstract
 
     private function findChapter(\simple_html_dom $html): string
     {
-        $chapterNode = $html->find('.alert.alert-warning.alert-dismissible.fade.show', 0) ?? $html->find('[data-bs-title="Last chapter"]', 0);
+        $chapterNode = $html->find('.alert.alert-warning.alert-dismissible.fade.show', 0) ?? $html->find('[data-bs-title="Последняя глава"]', 0);
 
         return $chapterNode !== null ? trim($chapterNode->plaintext) : '';
     }
