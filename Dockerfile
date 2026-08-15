@@ -69,7 +69,6 @@ COPY ./config/nginx.conf /etc/nginx/http.d/default.conf
 COPY LICENSE ./
 
 COPY --chown=nginx:nginx ./ /app/
-RUN chmod -R 755 /app/bridges/
 
 RUN chmod +x /app/docker-entrypoint.sh
 
