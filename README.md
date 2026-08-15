@@ -5,24 +5,24 @@ RSS-Bridge is a PHP web application. Works with PHP 8.5.
 [![LICENSE](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Docker Image](https://img.shields.io/badge/docker-lordarrin%2Frss--bridge-blue.svg?logo=docker)](https://hub.docker.com/r/lordarrin/rss-bridge)
 
-## A subset of bridges (15/426)
+## A subset of bridges (15/429)
 
-* `CssSelectorBridge`: [Scrape out a feed using CSS selectors](https://rss-bridge.org/bridge01/#bridge-CssSelectorBridge)
-* `FeedMergeBridge`: [Combine multiple feeds into one](https://rss-bridge.org/bridge01/#bridge-FeedMergeBridge)
-* `FeedReducerBridge`: [Reduce a noisy feed by some percentage](https://rss-bridge.org/bridge01/#bridge-FeedReducerBridge)
-* `FilterBridge`: [Filter a feed by excluding/including items by keyword](https://rss-bridge.org/bridge01/#bridge-FilterBridge)
-* `GettrBridge`: [Fetches the latest posts from a GETTR user](https://rss-bridge.org/bridge01/#bridge-GettrBridge)
-* `MastodonBridge`: [Fetches statuses from a Mastodon (ActivityPub) instance](https://rss-bridge.org/bridge01/#bridge-MastodonBridge)
-* `RedditBridge`: [Fetches posts from a user/subreddit (with filtering options)](https://rss-bridge.org/bridge01/#bridge-RedditBridge)
-* `RumbleBridge`: [Fetches channel/user videos](https://rss-bridge.org/bridge01/#bridge-RumbleBridge)
-* `SoundcloudBridge`: [Fetches music by username](https://rss-bridge.org/bridge01/#bridge-SoundcloudBridge)
-* `TelegramBridge`: [Fetches posts from a public channel](https://rss-bridge.org/bridge01/#bridge-TelegramBridge)
-* `ThePirateBayBridge`: [Fetches torrents by search/user/category](https://rss-bridge.org/bridge01/#bridge-ThePirateBayBridge)
-* `TikTokBridge`: [Fetches posts by username](https://rss-bridge.org/bridge01/#bridge-TikTokBridge)
-* `TwitchBridge`: [Fetches videos from channel](https://rss-bridge.org/bridge01/#bridge-TwitchBridge)
-* `XPathBridge`: [Scrape out a feed using XPath expressions](https://rss-bridge.org/bridge01/#bridge-XPathBridge)
-* `YoutubeBridge`: [Fetches videos by username/channel/playlist/search](https://rss-bridge.org/bridge01/#bridge-YoutubeBridge)
-* `YouTubeCommunityTabBridge`: [Fetches posts from a channel's Posts tab](https://rss-bridge.org/bridge01/#bridge-YouTubeCommunityTabBridge)
+* `Nginx`: Returns Nginx releases with changelogs and other news
+* `Pawchive`: Returns posts from Pawchive
+* `MSISupport`: Returns BIOS, drivers, manuals, and utilities updates for MSI products
+* `GigabyteSupport`: Returns BIOS and drivers updates for Gigabyte products
+* `AlpineReleases`: Alpine Linux releases with branch info
+* `Rule34`: Returns images from rule34.xxx search
+* `RuStore`: Returns application updates with its changelog
+* `Fimfiction`: Returns chapter updates for stories on Fimfiction
+* `AuthorToday`: Returns updates for stories by chapter
+* `SearchFloor`: Returns updates to all books by an author or a single book by ID
+* `Vk2`: Returns posts from the public feed
+* `Telegram2`: Returns the recent publications from a public Telegram channel. Supports embedded media content, hides ads and unsupported content
+* `IA Panorama`: News feed of the Russian satirical information agency "Panorama"
+* `GitHubRelease`: Returns releases for a GitHub repository (excludes tag-only entries)
+* `FirefoxReleaseNotes`: Returns recent Firefox releases with changelogs for each version
+* `CodebergReleases`: Returns releases for a Codeberg repository with changelogs and downloads
 
 ## Installation
 

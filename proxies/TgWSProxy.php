@@ -41,13 +41,20 @@ class TgWSProxy extends ProxyAbstract
             
             curl_setopt(self::$persistentHandle, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5_HOSTNAME);
             curl_setopt(self::$persistentHandle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+            
             curl_setopt(self::$persistentHandle, CURLOPT_FRESH_CONNECT, false);
-            curl_setopt(self::$persistentHandle, CURLOPT_FORBID_REUSE, false);
+            curl_setopt(self::$persistentHandle, CURLOPT_FORBID_REUSE, true); 
+            
+            curl_setopt(self::$persistentHandle, CURLOPT_TCP_KEEPALIVE, 1);
+            curl_setopt(self::$persistentHandle, CURLOPT_TCP_KEEPIDLE, 60);
+            curl_setopt(self::$persistentHandle, CURLOPT_TCP_KEEPINTVL, 30);
+            
             curl_setopt(self::$persistentHandle, CURLOPT_ENCODING, '');
             curl_setopt(self::$persistentHandle, CURLOPT_FOLLOWLOCATION, true);
             curl_setopt(self::$persistentHandle, CURLOPT_MAXREDIRS, 5);
-            curl_setopt(self::$persistentHandle, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt(self::$persistentHandle, CURLOPT_SSL_VERIFYHOST, 0);
+            
+            curl_setopt(self::$persistentHandle, CURLOPT_SSL_VERIFYPEER, true);
+            curl_setopt(self::$persistentHandle, CURLOPT_SSL_VERIFYHOST, 2);
             
             if ($this->proxyUrl) {
                 curl_setopt(self::$persistentHandle, CURLOPT_PROXY, $this->proxyUrl);
