@@ -59,13 +59,16 @@ class SearchFloorBridge extends BridgeAbstract
 
     public function getURI(): string
     {
-        return match ($this->queriedContext) {
-            'Author' => ($slug = $this->getInputString('author')) !== null
-                ? self::URI . '/a/' . rawurlencode($slug)
-                : self::URI,
-            'Work' => self::URI . '/b/' . $this->getInputInt('book_id'),
-            default => self::URI,
-        };
+        if ($this->queriedContext === 'Author') {
+            $slug = $this->getInputString('author');
+            return $slug !== null ? self::URI . '/a/' . rawurlencode($slug) : self::URI;
+        }
+
+        if ($this->queriedContext === 'Work') {
+            return self::URI . '/b/' . $this->getInputInt('book_id');
+        }
+
+        return self::URI;
     }
 
     public function collectData(): void
@@ -73,7 +76,7 @@ class SearchFloorBridge extends BridgeAbstract
         match ($this->queriedContext) {
             'Author' => $this->collectAuthor(),
             'Work' => $this->collectWork(),
-            default => returnClientError('Unknown context.'),
+            default => throw new \Exception('Unknown context.'),
         };
     }
 
@@ -86,7 +89,7 @@ class SearchFloorBridge extends BridgeAbstract
         $books = $this->extractBooks($html);
 
         if ($books === []) {
-            returnClientError('No books found on the author page.');
+            throw new \Exception('No books found on the author page.');
         }
 
         $books = $this->sortByDateDesc($books);
@@ -102,7 +105,7 @@ class SearchFloorBridge extends BridgeAbstract
         $book = $this->loadWorkBookData();
 
         if ($book === null) {
-            returnClientError('Failed to load book page or extract book data.');
+            throw new \Exception('Failed to load book page or extract book data.');
         }
 
         $this->items[] = $this->buildItem($book, $book['author']);
@@ -111,8 +114,8 @@ class SearchFloorBridge extends BridgeAbstract
     private function loadHtml(string $url, string $errorMessage): \simple_html_dom
     {
         $html = getSimpleHTMLDOM($url);
-        if (!$html) {
-            returnClientError($errorMessage);
+        if ($html === false) {
+            throw new \Exception($errorMessage);
         }
         return defaultLinkTo($html, self::URI);
     }
@@ -132,7 +135,7 @@ class SearchFloorBridge extends BridgeAbstract
 
         foreach ($html->find('div.series-item') as $node) {
             $linkNode = $node->find('p.mb-0.fw-medium a', 0);
-            if (!$linkNode || !preg_match('/\/b\/(\d+)/', $linkNode->href, $match)) {
+            if ($linkNode === null || preg_match('/\/b\/(\d+)/', $linkNode->href, $match) === 0) {
                 continue;
             }
             $dateNode = $node->find('span.date[data-date]', 0);
@@ -140,7 +143,7 @@ class SearchFloorBridge extends BridgeAbstract
                 'id' => (int) $match[1],
                 'title' => $this->decodeEntities(trim($linkNode->plaintext)),
                 'uri' => $linkNode->href,
-                'date' => $dateNode ? strtotime($dateNode->getAttribute('data-date')) : null,
+                'date' => $dateNode !== null ? strtotime($dateNode->getAttribute('data-date')) : null,
             ];
         }
 
@@ -150,7 +153,7 @@ class SearchFloorBridge extends BridgeAbstract
     private function extractBookFromPage(\simple_html_dom $html, int $bookId): ?array
     {
         $titleNode = $html->find('title', 0);
-        if (!$titleNode) {
+        if ($titleNode === null) {
             return null;
         }
 
@@ -170,7 +173,7 @@ class SearchFloorBridge extends BridgeAbstract
             'title' => $title,
             'author' => $author,
             'uri' => self::URI . '/b/' . $bookId,
-            'date' => $dateNode ? strtotime($dateNode->getAttribute('data-date')) : null,
+            'date' => $dateNode !== null ? strtotime($dateNode->getAttribute('data-date')) : null,
         ];
     }
 
@@ -201,14 +204,14 @@ class SearchFloorBridge extends BridgeAbstract
         $url = self::URI . '/b/' . $bookId;
         $html = getSimpleHTMLDOMCached($url);
 
-        if (!$html) {
+        if ($html === false) {
             return ['description' => '', 'chapter' => ''];
         }
 
         $html = defaultLinkTo($html, self::URI);
 
         $metaNode = $html->find('meta[name="description"]', 0);
-        $description = ($metaNode?->content) ? trim($metaNode->content) : '';
+        $description = $metaNode !== null ? trim($metaNode->content) : '';
 
         return [
             'description' => $description,
@@ -218,10 +221,9 @@ class SearchFloorBridge extends BridgeAbstract
 
     private function findChapter(\simple_html_dom $html): string
     {
-        $chapterNode = $html->find('.alert.alert-warning.alert-dismissible.fade.show', 0)
-            ?? $html->find('[data-bs-title="Последняя глава"]', 0);
+        $chapterNode = $html->find('.alert.alert-warning.alert-dismissible.fade.show', 0) ?? $html->find('[data-bs-title="Last chapter"]', 0);
 
-        return $chapterNode ? trim($chapterNode->plaintext) : '';
+        return $chapterNode !== null ? trim($chapterNode->plaintext) : '';
     }
 
     private function buildItemTitle(string $bookTitle, string $chapter): string
@@ -298,7 +300,7 @@ class SearchFloorBridge extends BridgeAbstract
 
     private function processCover(string $data): string
     {
-        if ($data === '' || !function_exists('imagecreatefromstring')) {
+        if ($data === '' || function_exists('imagecreatefromstring') === false) {
             return $data !== '' ? $this->fallbackDataUri($data) : '';
         }
 
@@ -334,7 +336,7 @@ class SearchFloorBridge extends BridgeAbstract
         imagedestroy($source);
         imagedestroy($resized);
 
-        if (!$ok || $jpegData === false || $jpegData === '') {
+        if ($ok === false || $jpegData === false || $jpegData === '') {
             return $this->fallbackDataUri($data);
         }
 
