@@ -20,8 +20,8 @@ $container[FrontpageAction::class] = function ($c) {
     return new FrontpageAction($c['bridge_factory'], $c['safe_bridge_loader']);
 };
 
-$container[HealthAction::class] = function () {
-    return new HealthAction();
+$container[HealthAction::class] = function ($c) {
+    return new HealthAction($c['safe_bridge_loader'], $c['cache']);
 };
 
 $container[ListAction::class] = function ($c) {

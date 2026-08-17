@@ -1,7 +1,7 @@
 ARG ALPINE_VERSION=3.24
 FROM alpine:${ALPINE_VERSION}
 
-ARG IMAGE_VERSION=1.1.6
+ARG IMAGE_VERSION=1.1.7
 ARG CURL_VERSION=2.1.0
 
 ENV RSSBRIDGE_SYSTEM_VERSION=${IMAGE_VERSION}
@@ -60,7 +60,8 @@ RUN set -xe && \
     chown nginx:nginx /run/php85 /app/cache
 
 RUN ln -sfT /dev/stderr /var/log/nginx/error.log && \
-    ln -sfT /dev/stdout /var/log/nginx/access.log
+    ln -sfT /dev/stdout /var/log/nginx/access.log && \
+    echo "libcurl" >> /etc/apk/protected_paths.d/lst
 
 COPY ./config/php-fpm.conf /etc/php85/php-fpm.conf
 COPY ./config/php-fpm-pool.conf /etc/php85/php-fpm.d/rss-bridge.conf
@@ -71,6 +72,9 @@ COPY LICENSE ./
 COPY --chown=nginx:nginx ./ /app/
 
 RUN chmod +x /app/docker-entrypoint.sh
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD curl -fsS --compressed "http://localhost/?action=health" || exit 1
 
 EXPOSE 80
 

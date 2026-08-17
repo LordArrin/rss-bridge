@@ -32,7 +32,7 @@ class ListAction implements ActionInterface
             $list->bridges[$bridgeClassName] = [
                 'status'        => $this->bridgeFactory->isEnabled($bridgeClassName) ? 'active' : 'inactive',
                 'uri'           => $bridge->getURI(),
-                'donationUri'   => $bridge->getDonationURI(),
+                // 'donationUri'   => $bridge->getDonationURI(), # Disable donations
                 'name'          => $bridge->getName(),
                 'icon'          => $bridge->getIcon(),
                 'parameters'    => $bridge->getParameters(),
