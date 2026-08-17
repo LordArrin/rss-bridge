@@ -1,13 +1,9 @@
-!.git/HEAD
-!.git/refs/heads/*
-.git
+.git/*
 .gitattributes
 .github/*
-.travis.yml
-Dockerfile
 cache/*
 docker-compose.yml
+Dockerfile
 docs/*
-phpcs.xml
 pictures/*
 tests/*

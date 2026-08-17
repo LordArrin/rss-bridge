@@ -178,7 +178,7 @@ const RssBridge = (() => {
             const tooltipRect = tooltip.getBoundingClientRect();
 
             const relTop = infoRect.top - cardRect.top;
-            const relLeft = infoRect.left - cardRect.left;
+            const relLeft = infoEl.offsetLeft;
             const cardHeight = cardRect.height;
             const cardWidth = cardRect.width;
 
@@ -189,7 +189,7 @@ const RssBridge = (() => {
             }
 
             const tooltipWidth = tooltipRect.width;
-            const iconCenterX = relLeft + infoRect.width / 2;
+            const iconCenterX = relLeft + infoEl.offsetWidth / 2;
             
             if (iconCenterX - tooltipWidth / 2 < 0) {
                 tooltip.classList.add('tooltip-left');
@@ -357,6 +357,236 @@ const RssBridge = (() => {
         }
     };
 
+    const FavoritesManager = {
+        STORAGE_KEY: 'rssbridge_favorites',
+        STAR_ICON: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>',
+        originalOrder: [],
+        cardsCache: [],
+        isInitialized: false,
+        isMobile: window.matchMedia('(max-width: 767px)').matches,
+        
+        getFavorites() {
+            try {
+                const stored = localStorage.getItem(this.STORAGE_KEY);
+                return stored ? JSON.parse(stored) : [];
+            } catch (e) {
+                return [];
+            }
+        },
+        
+        saveFavorites(favorites) {
+            try {
+                localStorage.setItem(this.STORAGE_KEY, JSON.stringify(favorites));
+            } catch (e) {
+                console.error('Failed to save favorites:', e);
+            }
+        },
+        
+        toggleFavorite(bridgeName) {
+            const favorites = this.getFavorites();
+            const index = favorites.indexOf(bridgeName);
+            
+            if (index === -1) {
+                favorites.push(bridgeName);
+            } else {
+                favorites.splice(index, 1);
+            }
+            
+            this.saveFavorites(favorites);
+            return index === -1;
+        },
+        
+        sortBridges(useAnimation = false) {
+            const favorites = this.getFavorites();
+            const cards = this.cardsCache;
+            
+            // Skip FLIP on mobile for performance
+            const shouldAnimate = useAnimation && !this.isMobile;
+            
+            // Phase 1: Read all positions (batch reads to avoid layout thrashing)
+            let firstPositions = null;
+            if (shouldAnimate) {
+                firstPositions = new Map();
+                for (const card of cards) {
+                    firstPositions.set(card, card.getBoundingClientRect());
+                }
+            }
+            
+            // Phase 2: Remove favorite class from all cards
+            for (const card of cards) {
+                card.classList.remove('favorite');
+            }
+            
+            // Phase 3: Split and sort
+            const favoriteCards = [];
+            const regularCards = [];
+            
+            for (const card of cards) {
+                const bridgeName = card.id.replace('bridge-', '');
+                if (favorites.includes(bridgeName)) {
+                    favoriteCards.push(card);
+                } else {
+                    regularCards.push(card);
+                }
+            }
+            
+            favoriteCards.sort((a, b) => {
+                return favorites.indexOf(a.id.replace('bridge-', '')) 
+                     - favorites.indexOf(b.id.replace('bridge-', ''));
+            });
+            
+            regularCards.sort((a, b) => {
+                return this.originalOrder.indexOf(a.id) - this.originalOrder.indexOf(b.id);
+            });
+            
+            // Phase 4: Apply CSS Grid order (no DOM manipulation!)
+            let orderIndex = 1;
+            for (const card of favoriteCards) {
+                card.classList.add('favorite');
+                card.style.order = orderIndex++;
+            }
+            for (const card of regularCards) {
+                card.style.order = orderIndex++;
+            }
+            
+            // Phase 5: Animate only cards that actually moved
+            if (shouldAnimate && firstPositions) {
+                // Read new positions in one batch
+                const movedCards = [];
+                for (const card of cards) {
+                    const first = firstPositions.get(card);
+                    const last = card.getBoundingClientRect();
+                    const deltaX = first.left - last.left;
+                    const deltaY = first.top - last.top;
+                    
+                    if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
+                        movedCards.push({ card, deltaX, deltaY });
+                    }
+                }
+                
+                // Animate only moved cards in next frame
+                requestAnimationFrame(() => {
+                    this.applyFlipAnimation(movedCards);
+                });
+            }
+        },
+        
+        applyFlipAnimation(movedCards) {
+            for (const { card, deltaX, deltaY } of movedCards) {
+                card.classList.add('sorted');
+                
+                // Enable GPU compositing
+                card.style.willChange = 'transform';
+                card.style.transform = `translate(${deltaX}px, ${deltaY}px) translateZ(0)`;
+                card.style.transition = 'none';
+            }
+            
+            // Force single reflow for all cards at once
+            if (movedCards.length > 0) {
+                void movedCards[0].card.offsetWidth;
+            }
+            
+            // Play animation
+            for (const { card } of movedCards) {
+                card.style.transition = 'transform 0.55s cubic-bezier(0.2, 0, 0, 1)';
+                card.style.transform = 'translateZ(0)';
+                
+                const cleanup = (e) => {
+                    if (e && e.propertyName !== 'transform') return;
+                    card.style.transition = '';
+                    card.style.transform = '';
+                    card.style.willChange = '';
+                    card.removeEventListener('transitionend', cleanup);
+                };
+                card.addEventListener('transitionend', cleanup);
+                
+                setTimeout(() => cleanup(), 700);
+            }
+        },
+        
+        updateButtons() {
+            const favorites = this.getFavorites();
+            
+            for (const card of this.cardsCache) {
+                const btn = card.querySelector('.favorite-btn');
+                if (!btn) continue;
+                
+                const bridgeName = btn.getAttribute('data-bridge');
+                const isFav = favorites.includes(bridgeName);
+                
+                if (isFav) {
+                    btn.classList.add('active');
+                    btn.setAttribute('aria-label', 'Remove from favorites');
+                    btn.setAttribute('title', 'Remove from favorites');
+                } else {
+                    btn.classList.remove('active');
+                    btn.setAttribute('aria-label', 'Add to favorites');
+                    btn.setAttribute('title', 'Add to favorites');
+                }
+            }
+        },
+        
+        init() {
+            // Cache DOM references once
+            this.cardsCache = Array.from(document.querySelectorAll('section.bridge-card'));
+            this.originalOrder = this.cardsCache.map(card => card.id);
+            
+            // Set initial order values for CSS Grid
+            this.cardsCache.forEach((card, index) => {
+                card.style.order = index + 1;
+            });
+            
+            document.addEventListener('click', (e) => {
+                const btn = e.target.closest('.favorite-btn');
+                if (!btn) return;
+                
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const bridgeName = btn.getAttribute('data-bridge');
+                const isAdded = this.toggleFavorite(bridgeName);
+                
+                this.updateButtons();
+                this.sortBridges(true);
+                this.showToast(isAdded ? 'Added to favorites' : 'Removed from favorites');
+            });
+            
+            if (this.isMobile) {
+                document.addEventListener('touchend', (e) => {
+                    const btn = e.target.closest('.favorite-btn');
+                    if (!btn) return;
+                    
+                    btn.classList.add('touch-active');
+                    setTimeout(() => btn.classList.remove('touch-active'), 150);
+                }, { passive: true });
+            }
+            
+            this.sortBridges(false);
+            this.updateButtons();
+            
+            document.documentElement.classList.add('favorites-loaded');
+            this.isInitialized = true;
+        },
+        
+        showToast(message) {
+            document.querySelectorAll('.favorite-toast').forEach(t => t.remove());
+            
+            const toast = document.createElement('div');
+            toast.className = 'favorite-toast';
+            toast.innerHTML = this.STAR_ICON + `<span>${Utils.escapeHtml(message)}</span>`;
+            document.body.appendChild(toast);
+            
+            requestAnimationFrame(() => {
+                toast.classList.add('visible');
+            });
+            
+            setTimeout(() => {
+                toast.classList.remove('visible');
+                setTimeout(() => toast.remove(), 500);
+            }, 2000);
+        }
+    };
+
     return {
         _init() {
             Search.init();
@@ -364,6 +594,7 @@ const RssBridge = (() => {
             PlaceholderHelper.init();
             TooltipManager.init();
             FormValidator.init();
+            FavoritesManager.init();
         }
     };
 })();

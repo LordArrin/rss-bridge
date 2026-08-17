@@ -59,10 +59,10 @@
     --md-elevation-2: 0 1px 2px 0 rgba(61,18,0,0.1), 0 2px 6px 2px rgba(61,18,0,0.08);
     --md-elevation-3: 0 4px 8px 3px rgba(61,18,0,0.08), 0 1px 3px 0 rgba(61,18,0,0.1);
 
-    /* Motion */
-    --md-motion-duration-short: 500ms;
-    --md-motion-duration-medium: 850ms;
-    --md-motion-duration-long: 1300ms;
+    /* Motion - balanced timing scale */
+    --md-motion-duration-short: 300ms;   /* Micro: buttons, icons, hovers */
+    --md-motion-duration-medium: 600ms;  /* Standard: cards, FLIP, toasts */
+    --md-motion-duration-long: 900ms;    /* Complex: page entrances */
     --md-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
     --md-motion-easing-decelerate: cubic-bezier(0, 0, 0, 1);
 
@@ -234,10 +234,29 @@ p {
     grid-column: 1 / -1;
 }
 
-/* Center searchbar within grid cell */
+/* 3.3 Grid Order - fixed positions for full-width elements
+   Bridge cards have dynamic order set by JS (FavoritesManager) */
+.container:has(.bridge-card) > header {
+    order: -3;
+}
+
+.container:has(.bridge-card) > [class^="alert-"] {
+    order: -2;
+}
+
 .container:has(.bridge-card) > .searchbar {
+    order: -1;
     justify-self: center;
     width: 100%;
+}
+
+.container:has(.bridge-card) > .footer {
+    order: 999999;
+}
+
+/* Bridge cards default order (overridden by JS) */
+.bridge-card {
+    order: 1;
 }
 
 /* ============================================================
@@ -666,7 +685,7 @@ input:focus::placeholder { opacity: 0; }
    5. BRIDGE CARD (Frontpage)
    ============================================================ */
 
-/* 5.1 Card Container - centered content with gap */
+/* 5.1 Card Container - centered content with GPU optimization */
 .bridge-card {
     position: relative;
     padding: 32px 16px 16px;
@@ -676,9 +695,15 @@ input:focus::placeholder { opacity: 0; }
     gap: 8px;
     animation: fadeInUp var(--md-motion-duration-long) var(--md-motion-easing-decelerate) both;
     
+    /* GPU compositing for smooth FLIP animations */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    
+    /* Performance: render only visible cards
+       Note: 'style paint' instead of 'layout style paint' to allow FLIP transform animations */
     content-visibility: auto;
     contain-intrinsic-size: auto 300px;
-    contain: layout style paint;
+    contain: style paint;
 }
 
 /* 5.2 Card Headings & Description */
@@ -822,21 +847,15 @@ input:focus::placeholder { opacity: 0; }
     min-height: 400px;
 }
 
-@media screen and (max-width: 599px) {
-    .bridge-card:has(.showmore-box:checked) {
-        grid-column: 1;
-        min-height: auto;
-    }
-}
-
-/* 5.8 Card Hover - only for closed cards */
+/* 5.8 Card Hover - only for closed cards
+   Preserve GPU layer with translateZ(0) during transform */
 .bridge-card:not(:has(.showmore-box:checked)) {
     transition: transform var(--md-motion-duration-short) var(--md-motion-easing-standard),
                 box-shadow var(--md-motion-duration-short) var(--md-motion-easing-standard);
 }
 
 .bridge-card:not(:has(.showmore-box:checked)):hover {
-    transform: translateY(-4px);
+    transform: translateY(-4px) translateZ(0);
     box-shadow: var(--md-elevation-2);
 }
 
@@ -1339,7 +1358,133 @@ a.button:active::after {
 }
 
 /* ============================================================
-   13. ANIMATIONS & MICRO-INTERACTIONS
+   13. FAVORITES SYSTEM
+   ============================================================ */
+
+/* Favorite button - star icon in top-right corner of card */
+.favorite-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 44px;
+    height: 44px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    padding: 10px;
+    border-radius: var(--md-shape-full);
+    transition: background-color var(--md-motion-duration-short) var(--md-motion-easing-standard);
+    z-index: 10;
+    box-shadow: none;
+    min-width: auto;
+    min-height: auto;
+    margin: 0;
+    -webkit-tap-highlight-color: transparent; /* Remove blue flash on mobile */
+    touch-action: manipulation; /* Prevent double-tap zoom, faster tap */
+}
+
+/* SVG must not intercept clicks — let clicks reach the button itself */
+.favorite-btn svg {
+    width: 100%;
+    height: 100%;
+    fill: var(--md-outline-variant);
+    transition: fill var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                transform var(--md-motion-duration-short) var(--md-motion-easing-standard);
+    pointer-events: none; /* Fix: clicks pass through to button */
+}
+
+.favorite-btn:hover {
+    background: color-mix(in srgb, var(--md-on-surface) 8%, transparent);
+    box-shadow: none;
+}
+
+.favorite-btn:hover svg {
+    fill: var(--md-warning);
+    transform: scale(1.1);
+}
+
+.favorite-btn.active svg {
+    fill: var(--md-warning);
+}
+
+/* Mobile touch feedback */
+.favorite-btn.touch-active svg {
+    fill: var(--md-warning);
+    transform: scale(0.9);
+}
+
+/* Favorite card - highlighted with left border and subtle background */
+.bridge-card.favorite {
+    border-left: 4px solid var(--md-warning);
+    background: color-mix(in srgb, var(--md-warning) 8%, var(--md-surface-container-low));
+}
+
+.bridge-card.favorite:hover {
+    background: color-mix(in srgb, var(--md-warning) 12%, var(--md-surface-container-low));
+}
+
+/* Favorite toast notification - Material Design style */
+.favorite-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: var(--md-surface-container-highest);
+    color: var(--md-on-surface);
+    padding: 14px 20px;
+    border-radius: var(--md-shape-sm);
+    font-size: 0.9rem;
+    font-weight: 500;
+    line-height: 1.4;
+    box-shadow: var(--md-elevation-3);
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity var(--md-motion-duration-medium) var(--md-motion-easing-standard),
+                transform var(--md-motion-duration-medium) var(--md-motion-easing-standard);
+    z-index: 9999;
+    pointer-events: none;
+    max-width: 320px;
+    width: max-content;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.favorite-toast.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.favorite-toast svg {
+    width: 20px;
+    height: 20px;
+    fill: var(--md-warning);
+    flex-shrink: 0;
+}
+
+/* Prevent FOUC: hide cards until favorites are sorted (initial load) */
+html.has-favorites .bridge-card {
+    opacity: 0;
+    visibility: hidden;
+}
+
+html.has-favorites.favorites-loaded .bridge-card {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+/* After first sort: disable fadeInUp to prevent FLIP animation conflicts */
+.bridge-card.sorted {
+    animation: none !important;
+}
+
+/* Prevent hover transform from overriding FLIP animation transform */
+.bridge-card.sorted:hover {
+    transform: translateZ(0) !important;
+}
+
+/* ============================================================
+   14. ANIMATIONS & MICRO-INTERACTIONS
    ============================================================ */
 
 /* Card Entrance Animation */
@@ -1372,9 +1517,10 @@ a.button:active::after {
 }
 
 /* ============================================================
-   14. RESPONSIVE (Mobile)
+   15. RESPONSIVE & ACCESSIBILITY
    ============================================================ */
 
+/* 15.1 Mobile (max-width: 767px) */
 @media screen and (max-width: 767px) {
     .container {
         width: 100%;
@@ -1441,22 +1587,55 @@ a.button:active::after {
     .inline-toast {
         max-width: calc(100% - 32px);
     }
+
+    /* Mobile: favorite toast full-width bottom */
+    .favorite-toast {
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        max-width: none;
+        width: auto;
+    }
+
+    /* Faster, simpler animations on mobile */
+    .bridge-card {
+        animation-duration: 0.4s;
+    }
+    
+    /* Optimize for touch: larger tap targets */
+    .favorite-btn {
+        width: 48px;
+        height: 48px;
+    }
+    
+    /* Disable hover lift on mobile (no hover state on touch devices) */
+    .bridge-card:not(:has(.showmore-box:checked)):hover {
+        transform: translateZ(0);
+    }
+
+    /* Open card spans single column on mobile */
+    .bridge-card:has(.showmore-box:checked) {
+        grid-column: 1;
+        min-height: auto;
+    }
 }
 
-/* ============================================================
-   15. ACCESSIBILITY
-   ============================================================ */
-
-/* 15.1 Reduced Motion */
+/* 15.2 Reduced Motion */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
+
+    .bridge-card,
+    .favorite-btn svg,
+    .favorite-toast {
+        animation: none !important;
+    }
 }
 
-/* 15.2 Global scrollbar styling in dark theme */
+/* 15.3 Global scrollbar styling in dark theme */
 @media (prefers-color-scheme: dark) {
     * {
         scrollbar-color: #352C28 #1F1714;

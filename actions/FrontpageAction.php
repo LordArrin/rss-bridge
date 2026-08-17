@@ -111,9 +111,21 @@ final class FrontpageAction implements ActionInterface
                 class="bridge-card"
                 id="bridge-{$bridgeClassName}"
                 data-ref="{$name}"
-                data-short-name="$shortName"
+                data-short-name="{$shortName}"
                 data-domain="{$domain}"
             >
+
+            <button 
+                type="button" 
+                class="favorite-btn" 
+                data-bridge="{$bridgeClassName}"
+                aria-label="Add to favorites"
+                title="Add to favorites"
+            >
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                </svg>
+            </button>
 
             <a href="#bridge-{$bridgeClassName}">
                 <h1>#</h1>
@@ -155,15 +167,15 @@ final class FrontpageAction implements ActionInterface
                 'for'   => "showmore-$bridgeClassName",
             ]) . "\n";
 
-        if (Configuration::getConfig('admin', 'donations') && $bridge->getDonationURI()) {
-            $card .= sprintf(
-                '<p class="maintainer">%s ~ <a href="%s">Donate</a></p>',
-                $bridge->getMaintainer(),
-                $bridge->getDonationURI()
-            );
-        } else {
+        // if (Configuration::getConfig('admin', 'donations') && $bridge->getDonationURI()) { # Disable donations
+        //     $card .= sprintf(
+        //         '<p class="maintainer">%s ~ <a href="%s">Donate</a></p>',
+        //         $bridge->getMaintainer(),
+        //         $bridge->getDonationURI()
+        //     );
+        // } else {
             $card .= html_tag('p', $bridge->getMaintainer(), ['class' => 'maintainer']) . "\n";
-        }
+        // }
         $card .= "</section>\n\n";
 
         return $card;

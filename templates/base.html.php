@@ -11,6 +11,16 @@
     <link rel="icon" type="image/svg+xml" href="static/favicon.svg?<?= filemtime(__DIR__ . '/../static/favicon.svg') ?>">
     <link rel="icon" type="image/png" href="static/favicon.png?<?= filemtime(__DIR__ . '/../static/favicon.png') ?>">
     <script src="static/rss-bridge.js?<?= filemtime(__DIR__ . '/../static/rss-bridge.js') ?>" defer></script>
+    <script>
+        (function() {
+            try {
+                var favorites = JSON.parse(localStorage.getItem('rssbridge_favorites') || '[]');
+                if (favorites.length > 0) {
+                    document.documentElement.classList.add('has-favorites');
+                }
+            } catch (e) {}
+        })();
+    </script>
 </head>
 
 <body>
