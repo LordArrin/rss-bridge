@@ -16,10 +16,6 @@ $container[DisplayAction::class] = function ($c) {
     return new DisplayAction($c['cache'], $c['logger'], $c['bridge_factory'], $c['safe_bridge_loader']);
 };
 
-$container[FindfeedAction::class] = function ($c) {
-    return new FindfeedAction($c['bridge_factory'], $c['safe_bridge_loader']);
-};
-
 $container[FrontpageAction::class] = function ($c) {
     return new FrontpageAction($c['bridge_factory'], $c['safe_bridge_loader']);
 };

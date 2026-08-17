@@ -32,10 +32,8 @@ final class FrontpageAction implements ActionInterface
         $body = '';
         foreach ($bridgeClassNames as $bridgeClassName) {
             if ($this->bridgeFactory->isEnabled($bridgeClassName)) {
-                // Using a secure bridge loader
                 $bridge = $this->safeLoader->createSafely($bridgeClassName);
                 
-                // Skipping broken bridges
                 if ($this->safeLoader->isBridgeBroken($bridge)) {
                     continue;
                 }
@@ -45,7 +43,6 @@ final class FrontpageAction implements ActionInterface
             }
         }
 
-        // Adding messages about broken bridges.
         foreach ($this->safeLoader->getBrokenBridges() as $brokenBridgeName => $errorInfo) {
             $errorMessage = $errorInfo['message'];
             
@@ -86,7 +83,9 @@ final class FrontpageAction implements ActionInterface
         $description = $bridge->getDescription();
         $parameters = $bridge->getParameters();
 
-        // Checkbox for disabling of proxy (if enabled)
+        // Extract domain from URI for unified search
+        $domain = self::extractDomain($uri);
+
         if (
             Configuration::getConfig('proxy', 'url')
             && Configuration::getConfig('proxy', 'by_bridge')
@@ -113,6 +112,7 @@ final class FrontpageAction implements ActionInterface
                 id="bridge-{$bridgeClassName}"
                 data-ref="{$name}"
                 data-short-name="$shortName"
+                data-domain="{$domain}"
             >
 
             <a href="#bridge-{$bridgeClassName}">
@@ -129,25 +129,20 @@ final class FrontpageAction implements ActionInterface
         CARD;
 
         if (count($parameters) === 0) {
-            // The bridge has zero parameters
             $card .= self::renderForm($bridgeClassName, '', [], $token);
         } elseif (count($parameters) === 1 && array_key_exists('global', $parameters)) {
-            // The bridge has a single context with key 'global'
             $card .= self::renderForm($bridgeClassName, '', $parameters['global'], $token);
         } else {
-            // The bridge has one or more contexts (named or unnamed)
             foreach ($parameters as $contextName => $contextParameters) {
                 if ($contextName === 'global') {
                     continue;
                 }
 
                 if (array_key_exists('global', $parameters)) {
-                    // Merge the global parameters into current context
                     $contextParameters = array_merge($contextParameters, $parameters['global']);
                 }
 
                 if (!is_numeric($contextName)) {
-                    // This is a named context
                     $card .= '<h5>' . $contextName . "</h5>\n";
                 }
 
@@ -172,6 +167,33 @@ final class FrontpageAction implements ActionInterface
         $card .= "</section>\n\n";
 
         return $card;
+    }
+
+    /**
+     * Extract domain from a URI
+     */
+    private static function extractDomain(string $uri): string
+    {
+        if (empty($uri)) {
+            return '';
+        }
+
+        if (!preg_match('#^https?://#', $uri)) {
+            $uri = 'https://' . $uri;
+        }
+
+        $parsed = parse_url($uri);
+        if (!$parsed || !isset($parsed['host'])) {
+            return '';
+        }
+
+        $domain = strtolower($parsed['host']);
+        
+        if (strpos($domain, 'www.') === 0) {
+            $domain = substr($domain, 4);
+        }
+
+        return $domain;
     }
 
     private static function renderForm(
@@ -231,7 +253,6 @@ final class FrontpageAction implements ActionInterface
                 $form .= self::getCheckboxInput($parameter, $idArg, $id) . "\n";
             } else {
                 $foo = 2;
-                // oops?
             }
 
             $params = [];

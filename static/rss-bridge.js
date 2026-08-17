@@ -19,6 +19,41 @@ const RssBridge = (() => {
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
+        },
+
+        extractDomain(url) {
+            if (!url) return '';
+            
+            if (!url.match(/^https?:\/\//)) {
+                url = 'https://' + url;
+            }
+
+            try {
+                const parsed = new URL(url);
+                let domain = parsed.hostname.toLowerCase();
+                
+                if (domain.startsWith('www.')) {
+                    domain = domain.substring(4);
+                }
+                
+                return domain;
+            } catch (e) {
+                return '';
+            }
+        },
+
+        isUrl(str) {
+            return /^https?:\/\/.+/.test(str) || /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(str);
+        },
+
+        domainsMatch(domain1, domain2) {
+            if (!domain1 || !domain2) return false;
+            
+            if (domain1 === domain2) return true;
+            if (domain1.endsWith('.' + domain2)) return true;
+            if (domain2.endsWith('.' + domain1)) return true;
+            
+            return false;
         }
     };
 
@@ -116,9 +151,11 @@ const RssBridge = (() => {
 
     const TooltipManager = {
         init() {
-            document.querySelectorAll('.info[title]').forEach(el => {
-                el.setAttribute('data-title', el.getAttribute('title'));
-                el.removeAttribute('title');
+            document.querySelectorAll('.info[data-title], .info[title]').forEach(el => {
+                if (el.getAttribute('title') && !el.getAttribute('data-title')) {
+                    el.setAttribute('data-title', el.getAttribute('title'));
+                    el.removeAttribute('title');
+                }
                 
                 el.addEventListener('mouseenter', (e) => this.show(e.target));
                 el.addEventListener('mouseleave', (e) => this.hide(e.target));
@@ -177,22 +214,105 @@ const RssBridge = (() => {
 
     const Search = {
         perform() {
-            const term = document.getElementById('searchfield')?.value.trim().toLowerCase() ?? '';
+            const f = document.getElementById('searchfield');
+            const term = f?.value.trim() ?? '';
+            const termLower = term.toLowerCase();
+            sessionStorage.setItem('rssbridge_search_query', term);
+            
+            const clearBtn = document.querySelector('.search-clear-btn');
+            if (clearBtn) {
+                if (term.length > 0) {
+                    clearBtn.classList.add('visible');
+                } else {
+                    clearBtn.classList.remove('visible');
+                }
+            }
+
+            const isUrlSearch = Utils.isUrl(term);
+            const searchDomain = isUrlSearch ? Utils.extractDomain(term) : '';
+            
+            let matchCount = 0;
+            let firstMatchCard = null;
+
             document.querySelectorAll('section.bridge-card').forEach(card => {
-                if (!term) { card.style.display = ''; return; }
+                if (!term) { 
+                    card.style.display = ''; 
+                    return; 
+                }
 
                 const name = card.getAttribute('data-ref')?.toLowerCase() ?? '';
                 const shortName = card.getAttribute('data-short-name')?.toLowerCase() ?? '';
                 const desc = card.querySelector('.description')?.textContent.toLowerCase() ?? '';
-                const url = card.querySelector('a')?.href.toLowerCase() ?? '';
+                const domain = card.getAttribute('data-domain')?.toLowerCase() ?? '';
 
-                card.style.display = (name + shortName + desc + url).includes(term) ? '' : 'none';
+                let isVisible = false;
+
+                if (!isUrlSearch) {
+                    isVisible = (name + shortName + desc).includes(termLower);
+                }
+                
+                if (isUrlSearch && searchDomain) {
+                    isVisible = Utils.domainsMatch(searchDomain, domain);
+                }
+
+                if (isVisible) {
+                    card.style.display = '';
+                    matchCount++;
+                    if (!firstMatchCard) {
+                        firstMatchCard = card;
+                    }
+                } else {
+                    card.style.display = 'none';
+                }
             });
+
+            if (isUrlSearch && matchCount === 1 && firstMatchCard) {
+                const showMoreLabel = firstMatchCard.querySelector('label.showmore');
+                if (showMoreLabel) {
+                    const checkbox = firstMatchCard.querySelector('.showmore-box');
+                    if (!checkbox.checked) {
+                        showMoreLabel.click();
+                    }
+                }
+                
+                setTimeout(() => {
+                    firstMatchCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    firstMatchCard.classList.add('highlight-pulse');
+                    setTimeout(() => firstMatchCard.classList.remove('highlight-pulse'), 2000);
+                }, 300);
+            }
         },
 
         init() {
             const f = document.getElementById('searchfield');
-            if (f) f.addEventListener('input', Utils.debounce(() => this.perform(), CONFIG.SEARCH_DELAY));
+            if (f) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'search-input-wrapper';
+                f.parentNode.insertBefore(wrapper, f);
+                wrapper.appendChild(f);
+                
+                const clearBtn = document.createElement('button');
+                clearBtn.type = 'button';
+                clearBtn.className = 'search-clear-btn';
+                clearBtn.setAttribute('aria-label', 'Clear search');
+                clearBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+                wrapper.appendChild(clearBtn);
+                
+                clearBtn.addEventListener('click', () => {
+                    f.value = '';
+                    f.dispatchEvent(new Event('input'));
+                    f.focus();
+                });
+
+                const savedQuery = sessionStorage.getItem('rssbridge_search_query');
+                if (savedQuery) {
+                    f.value = savedQuery;
+                }
+                
+                this.perform();
+                
+                f.addEventListener('input', Utils.debounce(() => this.perform(), CONFIG.SEARCH_DELAY));
+            }
         }
     };
 
@@ -209,9 +329,9 @@ const RssBridge = (() => {
             const hash = window.location.hash.slice(1);
             if (!hash) return;
             const bridge = document.getElementById(hash);
-            const cb = bridge?.querySelector('.showmore-box');
-            if (cb) {
-                cb.checked = true;
+            const showMoreLabel = bridge?.querySelector('label.showmore');
+            if (showMoreLabel) {
+                showMoreLabel.click();
                 setTimeout(() => bridge.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
             }
         },
@@ -237,91 +357,11 @@ const RssBridge = (() => {
         }
     };
 
-    const FeedFinder = {
-        async search() {
-            const input = document.getElementById('searchfield');
-            const out = document.getElementById('findfeedresults');
-            if (!input || !out) return;
-
-            const q = input.value.trim();
-            if (!q) { out.innerHTML = ''; return; }
-
-            out.innerHTML = '<div class="alert alert-info">Searching for matching feeds...</div>';
-
-            try {
-                const url = `${location.protocol}//${location.host}${location.pathname}?action=findfeed&format=Html&url=${encodeURIComponent(q)}`;
-                const r = await fetch(url);
-                
-                // 404 = server explicitly says "no feed found" — valid response, not an error
-                if (r.status === 404) {
-                    out.innerHTML = '<div class="alert alert-warning">No Feed found! Not every bridge supports feed detection.</div>';
-                    return;
-                }
-                
-                if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
-                
-                const feeds = await r.json();
-                if (!Array.isArray(feeds) || !feeds.length) {
-                    out.innerHTML = '<div class="alert alert-warning">No Feed found! Not every bridge supports feed detection.</div>';
-                    return;
-                }
-                this.render(feeds, out);
-            } catch (err) {
-                console.error('RssBridge FeedFinder error:', err);
-                out.innerHTML = `<div class="alert alert-error">Error: ${Utils.escapeHtml(err.message)}</div>`;
-            }
-        },
-
-        render(feeds, out) {
-            const esc = Utils.escapeHtml;
-            out.innerHTML = `<h3>Found Feed(s):</h3>` + feeds.map(f => {
-                const params = Object.values(f.bridgeData ?? {})
-                    .map(p => `<li>${esc(p.name)}: ${esc(p.value)}</li>`).join('');
-                return `
-                    <div class="search-result">
-                        <div class="icon"><img src="${esc(f.bridgeMeta?.icon)}" width="60" alt="" /></div>
-                        <div class="content">
-                            <h2><a href="${esc(f.url)}">${esc(f.bridgeMeta?.name ?? 'Unknown')}</a></h2>
-                            <p><span class="description"><a href="${esc(f.url)}">${esc(f.bridgeMeta?.description ?? '')}</a></span></p>
-                            <div><ul>${params}</ul></div>
-                        </div>
-                    </div>`;
-            }).join('') + `<div class="alert alert-info">This feed may be only one of the possible feeds.</div>`;
-        },
-
-        init() {
-            const btn = document.getElementById('findfeed');
-            const field = document.getElementById('searchfield');
-            const results = document.getElementById('findfeedresults');
-            
-            const clearSearch = () => {
-                if (field) {
-                    field.value = '';
-                    field.setAttribute('autocomplete', 'off');
-                }
-                if (results) results.innerHTML = '';
-            };
-            
-            clearSearch();
-            requestAnimationFrame(clearSearch);
-            
-            window.addEventListener('pageshow', (event) => {
-                if (event.persisted) clearSearch();
-            });
-            
-            if (btn) btn.addEventListener('click', () => this.search());
-            if (field) field.addEventListener('keypress', e => {
-                if (e.key === 'Enter') { e.preventDefault(); this.search(); }
-            });
-        }
-    };
-
     return {
         _init() {
             Search.init();
             CardManager.init();
             PlaceholderHelper.init();
-            FeedFinder.init();
             TooltipManager.init();
             FormValidator.init();
         }

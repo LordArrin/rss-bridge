@@ -468,12 +468,12 @@ input:focus::placeholder { opacity: 0; }
 .info {
     cursor: pointer;
     opacity: 0.7;
-    width: 28px;
-    height: 28px;
-    font-size: 14px;
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
     font-weight: bold;
-    font-style: italic;
-    line-height: 28px;
+    font-style: normal;
+    line-height: 18px;
     text-align: center;
     color: var(--md-on-primary-container);
     background: var(--md-primary-container);
@@ -484,17 +484,19 @@ input:focus::placeholder { opacity: 0; }
     justify-content: center;
     position: relative;
     z-index: 1;
+    margin-left: 6px;
+    flex-shrink: 0;
 }
 
 .info:hover {
     opacity: 1;
     background: var(--md-primary);
     color: var(--md-on-primary);
-    transform: scale(1.1);
+    transform: scale(1.15);
     z-index: 1000;
 }
 
-/* JavaScript Tooltip - created dynamically */
+/* 4.7 JavaScript Tooltip - created dynamically */
 .tooltip {
     position: absolute;
     bottom: calc(100% + 8px);
@@ -548,7 +550,7 @@ input:focus::placeholder { opacity: 0; }
     transform: none;
 }
 
-/* 4.7 Search Bar */
+/* 4.8 Search Bar */
 .searchbar {
     width: 100%;
     max-width: 700px;
@@ -597,16 +599,67 @@ input:focus::placeholder { opacity: 0; }
     border-radius: var(--md-shape-full);
 }
 
-/* Find Feed Results */
-#findfeedresults {
-    margin-top: 16px;
-    text-align: left;
+/* Search Input Wrapper & Clear Button */
+.search-input-wrapper {
+    position: relative;
+    width: 100%;
+    margin: 0 auto 16px;
 }
 
-#findfeedresults:not(:has(*)) {
+.search-input-wrapper input[type="text"] {
+    margin: 0 !important;
+    padding-left: 56px !important;
+    padding-right: 56px !important;
+}
+
+.search-clear-btn {
+    position: absolute;
+    top: 50%;
+    right: 16px;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
     display: none;
-    margin: 0;
+    align-items: center;
+    justify-content: center;
+    color: var(--md-on-surface-variant);
     padding: 0;
+    margin: 0;
+    box-shadow: none;
+    min-width: auto;
+    min-height: auto;
+    border-radius: var(--md-shape-full);
+    transition: background-color var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                color var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                opacity var(--md-motion-duration-short) var(--md-motion-easing-standard);
+}
+
+.search-clear-btn.visible {
+    display: flex;
+}
+
+.search-clear-btn:hover {
+    background-color: var(--md-surface-container-highest);
+    color: var(--md-on-surface);
+    box-shadow: none;
+    transform: translateY(-50%);
+}
+
+.search-clear-btn:active {
+    box-shadow: none;
+}
+
+.search-clear-btn::after {
+    display: none;
+}
+
+.search-clear-btn svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
 }
 
 /* ============================================================
@@ -758,17 +811,6 @@ input:focus::placeholder { opacity: 0; }
     animation: slideDown var(--md-motion-duration-long) var(--md-motion-easing-decelerate);
 }
 
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-12px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
 /* 5.7 Card States - Active / Inactive */
 .bridge-card:not(:has(.showmore-box:checked)) {
     height: 320px;
@@ -813,6 +855,7 @@ input:focus::placeholder { opacity: 0; }
     background-color: var(--md-surface-container-lowest);
     border-radius: var(--md-shape-sm);
     margin: 8px 0;
+    position: relative;
 }
 
 .parameters > * {
@@ -823,7 +866,7 @@ input:focus::placeholder { opacity: 0; }
 .parameters label {
     text-align: left;
     line-height: 1.5;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: flex-start;
     color: var(--md-on-surface);
@@ -831,7 +874,6 @@ input:focus::placeholder { opacity: 0; }
     font-size: var(--md-typescale-body-size);
     white-space: nowrap;
     
-    /* Match input field exactly */
     padding: 12px 16px;
     min-height: 48px;
     background-color: var(--md-surface-container-low);
@@ -848,15 +890,16 @@ input:focus::placeholder { opacity: 0; }
     border-color: var(--md-outline);
 }
 
+/* Remove first-letter and ::after as colon is now in HTML */
 .parameters label::first-letter {
-    text-transform: capitalize;
+    text-transform: none;
 }
 
 .parameters label::after {
-    content: ' :';
+    content: none;
 }
 
-/* Input fields - reset margins for perfect alignment */
+/* Input fields */
 .parameters input[type="text"],
 .parameters input[type="number"],
 .parameters input[type="checkbox"],
@@ -901,8 +944,79 @@ input:focus::placeholder { opacity: 0; }
     display: none;
 }
 
+/* Empty spacer for missing info icon - preserves grid alignment */
+.parameters .no-info {
+    width: 18px;
+    height: 18px;
+    visibility: hidden;
+}
+
 /* ============================================================
-   7. HTML FORMAT PAGE
+   7. TOAST NOTIFICATIONS & FORM VALIDATION
+   ============================================================ */
+
+/* Parameters grid - relative for toast positioning */
+.parameters {
+    position: relative;
+}
+
+/* Inline toast - positioned dynamically by JS above the invalid field */
+.inline-toast {
+    position: absolute;
+    left: 0;
+    background-color: var(--md-error-container);
+    color: var(--md-on-error-container);
+    padding: 8px 14px;
+    border-radius: var(--md-shape-sm);
+    font-size: 0.8rem;
+    font-weight: 500;
+    line-height: 1.4;
+    max-width: 320px;
+    width: max-content;
+    box-shadow: var(--md-elevation-2);
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--md-motion-duration-short) var(--md-motion-easing-standard);
+}
+
+.inline-toast.visible {
+    opacity: 1;
+}
+
+/* Small arrow pointing down to the field (when toast is above) */
+.inline-toast::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 16px;
+    width: 8px;
+    height: 8px;
+    background-color: var(--md-error-container);
+    transform: rotate(45deg);
+}
+
+/* When toast appears below field (if no room above) - arrow points up */
+.inline-toast.below::after {
+    bottom: auto;
+    top: -4px;
+}
+
+/* Invalid field - error state */
+input.invalid,
+select.invalid {
+    border-color: var(--md-error) !important;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--md-error-container) 60%, transparent) !important;
+}
+
+/* Label for invalid field - only the one associated with invalid input */
+.parameters label.invalid {
+    border-color: var(--md-error) !important;
+    color: var(--md-error) !important;
+}
+
+/* ============================================================
+   8. HTML FORMAT PAGE
    ============================================================ */
 
 h1.pagetitle {
@@ -927,8 +1041,71 @@ h1.pagetitle > a:hover {
     margin-bottom: 24px;
 }
 
+/* Feed item card styling */
+section.feeditem {
+    margin-bottom: 20px;
+    background-color: var(--md-surface-container-low);
+    padding: 24px;
+    box-shadow: var(--md-elevation-1);
+    border-radius: var(--md-shape-lg);
+}
+
+section.feeditem h2 {
+    font-size: 1.5rem;
+    margin-bottom: 8px;
+}
+
+section.feeditem h2 a {
+    color: var(--md-primary);
+    text-decoration: none;
+    transition: color var(--md-motion-duration-short) var(--md-motion-easing-standard);
+}
+
+section.feeditem h2 a:hover {
+    color: color-mix(in srgb, var(--md-primary) 75%, black);
+    text-decoration: underline;
+}
+
+/* Item content - limit image sizes */
+section.feeditem .item-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--md-shape-sm);
+    margin: 8px 0;
+}
+
+/* Categories and attachments - chip style lists */
+section.feeditem .item-categories ul,
+section.feeditem .item-attachments ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 0;
+    list-style: none;
+}
+
+section.feeditem .item-categories li,
+section.feeditem .item-attachments li {
+    background-color: var(--md-surface-container-high);
+    color: var(--md-on-surface);
+    padding: 6px 12px;
+    border-radius: var(--md-shape-sm);
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+section.feeditem .item-attachments li a {
+    color: var(--md-primary);
+    text-decoration: none;
+}
+
+section.feeditem .item-attachments li a:hover {
+    text-decoration: underline;
+}
+
 /* ============================================================
-   8. ERROR PAGE
+   9. ERROR PAGE
    ============================================================ */
 
 p.maintainer {
@@ -958,161 +1135,7 @@ form {
 }
 
 /* ============================================================
-   9. FIND FEED RESULTS
-   ============================================================ */
-
-.search-result {
-    background-color: var(--md-surface-container);
-    border-radius: var(--md-shape-lg);
-    padding: 20px;
-    display: flex;
-    position: relative;
-    text-align: left;
-    margin-bottom: 16px;
-    box-shadow: var(--md-elevation-1);
-    transition: box-shadow var(--md-motion-duration-medium) var(--md-motion-easing-standard);
-}
-
-.search-result:hover {
-    box-shadow: var(--md-elevation-1);
-}
-
-.search-result h2 {
-    color: var(--md-primary);
-    font-size: 1.25rem;
-    font-weight: 500;
-}
-
-.search-result a {
-    text-decoration: none;
-    color: var(--md-primary);
-}
-
-.search-result .icon {
-    margin: 0 16px 0 0;
-    flex-shrink: 0;
-}
-
-.search-result .icon img {
-    border-radius: var(--md-shape-sm);
-}
-
-.search-result span {
-    margin-right: 10px;
-}
-
-.search-result .description {
-    font-size: 1rem;
-    margin-right: 0 !important;
-    margin-top: 8px !important;
-    color: var(--md-on-surface);
-}
-
-/* ============================================================
-   10. RESPONSIVE (Mobile)
-   ============================================================ */
-
-@media screen and (max-width: 767px) {
-    .container {
-        width: 100%;
-        padding: 8px;
-    }
-
-    .searchbar {
-        width: 100%;
-        margin-bottom: 16px;
-        padding: 16px 8px;
-    }
-
-    .searchbar input[type="text"] {
-        padding: 12px 20px;
-    }
-
-    button,
-    a.button {
-        display: inline-block;
-        width: 45%;
-        min-width: auto;
-        padding: 12px 16px;
-        margin: 6px 2px;
-    }
-
-    .info, .no-info {
-        display: none;
-    }
-
-    .parameters {
-        grid-template-columns: 1fr;
-        grid-column-gap: 4px;
-        grid-row-gap: 4px;
-    }
-
-    .parameters label {
-        line-height: 1.5em;
-        word-break: break-word;
-        text-align: left;
-        justify-content: flex-start;
-        margin-top: 8px;
-        white-space: normal;
-        padding: 12px 16px;
-    }
-
-    .parameters label::after {
-        content: '';
-    }
-
-    h1.pagetitle {
-        font-size: 1.75rem;
-    }
-
-    section > h2 {
-        font-size: 1.5rem;
-    }
-}
-
-/* ============================================================
-   11. ACCESSIBILITY
-   ============================================================ */
-
-/* 11.1 Reduced Motion */
-@media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-    }
-}
-
-/* 11.2 Global scrollbar styling in dark theme */
-@media (prefers-color-scheme: dark) {
-    * {
-        scrollbar-color: #352C28 #1F1714;
-    }
-}
-
-/* ============================================================
-   12. ANIMATIONS & MICRO-INTERACTIONS
-   ============================================================ */
-
-/* Card Entrance Animation */
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* All cards appear simultaneously with smooth fade */
-.bridge-card {
-    animation: fadeInUp var(--md-motion-duration-medium) var(--md-motion-easing-decelerate) both;
-}
-
-/* ============================================================
-   13. BADGES (Footer)
+   10. BADGES (Footer)
    ============================================================ */
 
 .footer-badges {
@@ -1189,7 +1212,7 @@ form {
 }
 
 /* ============================================================
-   14. BUTTON LINKS
+   11. BUTTON LINKS
    ============================================================ */
 
 /* Link styled as button - same appearance as <button> */
@@ -1281,7 +1304,7 @@ a.button:active::after {
 }
 
 /* ============================================================
-   15. TOKEN PAGE (Authentication)
+   12. TOKEN PAGE (Authentication)
    ============================================================ */
 
 .token-page {
@@ -1316,139 +1339,126 @@ a.button:active::after {
 }
 
 /* ============================================================
-   16. HTML FORMAT PAGE ENHANCEMENTS
+   13. ANIMATIONS & MICRO-INTERACTIONS
    ============================================================ */
 
-/* Feed item card styling */
-section.feeditem {
-    margin-bottom: 20px;
-    background-color: var(--md-surface-container-low);
-    padding: 24px;
-    box-shadow: var(--md-elevation-1);
-    border-radius: var(--md-shape-lg);
+/* Card Entrance Animation */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
-section.feeditem h2 {
-    font-size: 1.5rem;
-    margin-bottom: 8px;
+/* All cards appear simultaneously with smooth fade */
+.bridge-card {
+    animation: fadeInUp var(--md-motion-duration-medium) var(--md-motion-easing-decelerate) both;
 }
 
-section.feeditem h2 a {
-    color: var(--md-primary);
-    text-decoration: none;
-    transition: color var(--md-motion-duration-short) var(--md-motion-easing-standard);
-}
-
-section.feeditem h2 a:hover {
-    color: color-mix(in srgb, var(--md-primary) 75%, black);
-    text-decoration: underline;
-}
-
-/* Item content - limit image sizes */
-section.feeditem .item-content img {
-    max-width: 100%;
-    height: auto;
-    border-radius: var(--md-shape-sm);
-    margin: 8px 0;
-}
-
-/* Categories and attachments - chip style lists */
-section.feeditem .item-categories ul,
-section.feeditem .item-attachments ul {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 8px;
-    padding: 0;
-    list-style: none;
-}
-
-section.feeditem .item-categories li,
-section.feeditem .item-attachments li {
-    background-color: var(--md-surface-container-high);
-    color: var(--md-on-surface);
-    padding: 6px 12px;
-    border-radius: var(--md-shape-sm);
-    font-size: 0.875rem;
-    margin: 0;
-}
-
-section.feeditem .item-attachments li a {
-    color: var(--md-primary);
-    text-decoration: none;
-}
-
-section.feeditem .item-attachments li a:hover {
-    text-decoration: underline;
+/* Form expansion animation */
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* ============================================================
-   17. TOAST NOTIFICATIONS & FORM VALIDATION
+   14. RESPONSIVE (Mobile)
    ============================================================ */
 
-/* Parameters grid - relative for toast positioning */
-.parameters {
-    position: relative;
-}
-
-/* Inline toast - positioned dynamically by JS above the invalid field */
-.inline-toast {
-    position: absolute;
-    left: 0;
-    background-color: var(--md-error-container);
-    color: var(--md-on-error-container);
-    padding: 8px 14px;
-    border-radius: var(--md-shape-sm);
-    font-size: 0.8rem;
-    font-weight: 500;
-    line-height: 1.4;
-    max-width: 320px;
-    width: max-content;
-    box-shadow: var(--md-elevation-2);
-    z-index: 1000;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--md-motion-duration-short) var(--md-motion-easing-standard);
-}
-
-.inline-toast.visible {
-    opacity: 1;
-}
-
-/* Small arrow pointing down to the field (when toast is above) */
-.inline-toast::after {
-    content: '';
-    position: absolute;
-    bottom: -4px;
-    left: 16px;
-    width: 8px;
-    height: 8px;
-    background-color: var(--md-error-container);
-    transform: rotate(45deg);
-}
-
-/* When toast appears below field (if no room above) - arrow points up */
-.inline-toast.below::after {
-    bottom: auto;
-    top: -4px;
-}
-
-/* Invalid field - error state */
-input.invalid,
-select.invalid {
-    border-color: var(--md-error) !important;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--md-error-container) 60%, transparent) !important;
-}
-
-/* Label for invalid field - only the one associated with invalid input */
-.parameters label.invalid {
-    border-color: var(--md-error) !important;
-    color: var(--md-error) !important;
-}
-
-/* Mobile: toast spans wider for readability */
 @media screen and (max-width: 767px) {
+    .container {
+        width: 100%;
+        padding: 8px;
+    }
+
+    .searchbar {
+        width: 100%;
+        margin-bottom: 16px;
+        padding: 16px 8px;
+    }
+
+    .searchbar input[type="text"] {
+        padding: 12px 20px;
+    }
+    
+    .search-input-wrapper input[type="text"] {
+        padding-top: 12px !important;
+        padding-bottom: 12px !important;
+    }
+
+    button,
+    a.button {
+        display: inline-block;
+        width: 45%;
+        min-width: auto;
+        padding: 12px 16px;
+        margin: 6px 2px;
+    }
+
+    .info, .no-info {
+        display: none;
+    }
+
+    .parameters {
+        grid-template-columns: 1fr;
+        grid-column-gap: 4px;
+        grid-row-gap: 4px;
+    }
+
+    .parameters label {
+        line-height: 1.5em;
+        word-break: break-word;
+        text-align: left;
+        justify-content: flex-start;
+        margin-top: 8px;
+        white-space: normal;
+        padding: 12px 16px;
+    }
+
+    .parameters label::after {
+        content: '';
+    }
+
+    h1.pagetitle {
+        font-size: 1.75rem;
+    }
+
+    section > h2 {
+        font-size: 1.5rem;
+    }
+
+    /* Mobile: toast spans wider for readability */
     .inline-toast {
         max-width: calc(100% - 32px);
+    }
+}
+
+/* ============================================================
+   15. ACCESSIBILITY
+   ============================================================ */
+
+/* 15.1 Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* 15.2 Global scrollbar styling in dark theme */
+@media (prefers-color-scheme: dark) {
+    * {
+        scrollbar-color: #352C28 #1F1714;
     }
 }

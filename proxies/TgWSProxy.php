@@ -146,6 +146,7 @@ class TgWSProxy extends ProxyAbstract
                 
                 if ($this->isConnectionError($errorMsg)) {
                     self::$persistentHandle = null;
+                    self::$requestCount = 0;
                 }
             }
         }
@@ -251,6 +252,7 @@ class TgWSProxy extends ProxyAbstract
                 
                 if ($this->isConnectionError($errorMsg)) {
                     self::$persistentHandle = null;
+                    self::$requestCount = 0;
                 }
             }
         }
@@ -286,6 +288,7 @@ class TgWSProxy extends ProxyAbstract
             'curl error 52',
             'socket',
             'eof',
+            'ssl',
         ];
         
         $errorMsgLower = strtolower($errorMsg);
