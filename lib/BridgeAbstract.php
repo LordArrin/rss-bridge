@@ -1,5 +1,7 @@
 <?php
 
+use RSSBridge\Caches\CacheInterface;
+
 abstract class BridgeAbstract
 {
     const NAME = null;

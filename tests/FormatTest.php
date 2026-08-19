@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace RssBridge\Tests;
 
 use PHPUnit\Framework\TestCase;
+use RSSBridge\Formats\MrssFormat;
+use RSSBridge\Formats\FormatAbstract;
+use BridgeAbstract;
 
 class FormatTest extends TestCase
 {
     public function testBridge()
     {
-        $sut = new \MrssFormat();
+        $sut = new MrssFormat();
 
         $expected = [
             'name'          => '',
@@ -56,14 +59,17 @@ class FormatTest extends TestCase
     }
 }
 
-class TestFormat extends \FormatAbstract
+class TestFormat extends FormatAbstract
 {
+    public const MIME_TYPE = 'text/plain';
+    
     public function render(): string
     {
+        return 'test';
     }
 }
 
-class TestBridge extends \BridgeAbstract
+class TestBridge extends BridgeAbstract
 {
     public function collectData()
     {

@@ -2,7 +2,16 @@
 
 declare(strict_types=1);
 
-class HealthAction implements ActionInterface
+namespace RSSBridge\Actions;
+
+use Configuration;
+use Json;
+use Request;
+use Response;
+use RSSBridge\Caches\CacheInterface;
+use SafeBridgeLoader;
+
+final class HealthAction implements ActionInterface
 {
     private SafeBridgeLoader $safeBridgeLoader;
     private CacheInterface $cache;
@@ -55,27 +64,57 @@ class HealthAction implements ActionInterface
         try {
             $testKey = 'health_check_' . uniqid();
             $testValue = 'test_' . time();
-            
+
+            // Measure set latency
+            $startSet = microtime(true);
             $this->cache->set($testKey, $testValue, 10);
+            $setLatency = round((microtime(true) - $startSet) * 1000, 2);
+
+            // Measure get latency
+            $startGet = microtime(true);
             $retrieved = $this->cache->get($testKey);
-            
+            $getLatency = round((microtime(true) - $startGet) * 1000, 2);
+
             if (method_exists($this->cache, 'delete')) {
                 $this->cache->delete($testKey);
             }
 
-            if ($retrieved === $testValue) {
-                return [
-                    'status' => 'ok',
-                    'message' => 'cache read/write working correctly',
-                    'type' => Configuration::getConfig('cache', 'type'),
-                ];
-            } else {
-                return [
-                    'status' => 'degraded',
-                    'message' => 'cache read/write mismatch',
-                    'type' => Configuration::getConfig('cache', 'type'),
-                ];
+            $result = [
+                'status' => 'ok',
+                'message' => 'cache read/write working correctly',
+                'type' => Configuration::getConfig('cache', 'type'),
+                'set_latency_ms' => $setLatency,
+                'get_latency_ms' => $getLatency,
+            ];
+
+            // Add memcached-specific stats
+            if (method_exists($this->cache, 'getStats')) {
+                $stats = $this->cache->getStats();
+                if (!empty($stats)) {
+                    $serverStats = reset($stats);
+                    $result['memcached'] = [
+                        'curr_items' => $serverStats['curr_items'] ?? 0,
+                        'total_items' => $serverStats['total_items'] ?? 0,
+                        'bytes' => $serverStats['bytes'] ?? 0,
+                        'get_hits' => $serverStats['get_hits'] ?? 0,
+                        'get_misses' => $serverStats['get_misses'] ?? 0,
+                        'hit_rate' => $this->calculateHitRate($serverStats),
+                    ];
+                }
             }
+
+            if ($retrieved !== $testValue) {
+                $result['status'] = 'degraded';
+                $result['message'] = 'cache read/write mismatch';
+            }
+
+            // Slow cache warnings
+            if ($setLatency > 50 || $getLatency > 50) {
+                $result['status'] = 'degraded';
+                $result['message'] = sprintf('Slow cache operations: set=%sms, get=%sms', $setLatency, $getLatency);
+            }
+
+            return $result;
         } catch (\Throwable $e) {
             return [
                 'status' => 'error',
@@ -85,17 +124,29 @@ class HealthAction implements ActionInterface
         }
     }
 
+    private function calculateHitRate(array $stats): string
+    {
+        $hits = $stats['get_hits'] ?? 0;
+        $misses = $stats['get_misses'] ?? 0;
+        $total = $hits + $misses;
+
+        if ($total === 0) {
+            return 'N/A';
+        }
+
+        return sprintf('%.1f%%', ($hits / $total) * 100);
+    }
+
     private function checkProxy(): array
     {
         $profiles = [];
-        
-        // We check for the presence of configured proxy_profile_* in the configuration
+
         $possibleProfiles = [
             'flaresolverr',
             'tgws',
             'custom',
         ];
-        
+
         foreach ($possibleProfiles as $profileName) {
             $type = Configuration::getConfig('proxy_profile_' . $profileName, 'type');
             if ($type) {
@@ -118,11 +169,11 @@ class HealthAction implements ActionInterface
                 $statuses[] = $check['status'];
             }
         }
-        
-        if (in_array('error', $statuses)) {
+
+        if (in_array('error', $statuses, true)) {
             return 'down';
         }
-        if (in_array('degraded', $statuses)) {
+        if (in_array('degraded', $statuses, true)) {
             return 'degraded';
         }
         return 'ok';

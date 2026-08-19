@@ -1,5 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
+namespace RSSBridge\Formats;
+
 /**
  * MrssFormat - RSS 2.0 + Media RSS
  * http://www.rssboard.org/rss-specification
@@ -8,29 +12,19 @@
  * Validators:
  * https://validator.w3.org/feed/
  * http://www.rssboard.org/rss-validator/
- *
- * Notes about the implementation:
- *
- * - The item author is not supported as it needs to be an e-mail address to be
- *   valid.
- * - The RSS specification does not explicitly allow to have more than one
- *   enclosure as every item is meant to provide one "story", thus having
- *   multiple enclosures per item may lead to unexpected behavior.
- *   On top of that, it requires to have a length specified, which RSS-Bridge
- *   can't provide.
- * - The Media RSS extension comes in handy, since it allows to have multiple
- *   enclosures, even though they recommend to have only one enclosure because
- *   of the one-story-per-item reason. It only requires to specify the URL,
- *   everything else is optional.
- * - Since the Media RSS extension has its own namespace, the output is a valid
- *   RSS 2.0 feed that works with feed readers that don't support the extension.
  */
-class MrssFormat extends FormatAbstract
+final class MrssFormat extends FormatAbstract
 {
-    const MIME_TYPE = 'application/rss+xml';
+    public const MIME_TYPE = 'application/rss+xml';
 
     protected const ATOM_NS = 'http://www.w3.org/2005/Atom';
     protected const MRSS_NS = 'http://search.yahoo.com/mrss/';
+    protected const ITUNES_NS = 'http://www.itunes.com/dtds/podcast-1.0.dtd';
+
+    public function getMimeType(): string
+    {
+        return self::MIME_TYPE;
+    }
 
     public function render(): string
     {
@@ -47,31 +41,31 @@ class MrssFormat extends FormatAbstract
         $feed->appendChild($channel);
 
         $feedArray = $this->getFeed();
-        $uri = $feedArray['uri'];
-        $title = $feedArray['name'];
+        $uri = $feedArray['uri'] ?? '';
+        $title = $feedArray['name'] ?? '';
 
         foreach ($feedArray as $feedKey => $feedValue) {
-            if (in_array($feedKey, ['atom', 'donationUri'])) {
+            if (in_array($feedKey, ['atom', 'donationUri'], true)) {
                 continue;
             }
             if ($feedKey === 'name') {
                 $channelTitle = $document->createElement('title');
                 $channel->appendChild($channelTitle);
-                $channelTitle->appendChild($document->createTextNode($title));
+                $channelTitle->appendChild($document->createTextNode((string) $title));
 
                 $description = $document->createElement('description');
                 $channel->appendChild($description);
-                $description->appendChild($document->createTextNode($title));
+                $description->appendChild($document->createTextNode((string) $title));
             } elseif ($feedKey === 'uri') {
                 $link = $document->createElement('link');
                 $channel->appendChild($link);
-                $link->appendChild($document->createTextNode($uri));
+                $link->appendChild($document->createTextNode((string) $uri));
 
                 $linkAlternate = $document->createElementNS(self::ATOM_NS, 'link');
                 $channel->appendChild($linkAlternate);
                 $linkAlternate->setAttribute('rel', 'alternate');
                 $linkAlternate->setAttribute('type', 'text/html');
-                $linkAlternate->setAttribute('href', $uri);
+                $linkAlternate->setAttribute('href', (string) $uri);
 
                 $linkSelf = $document->createElementNS(self::ATOM_NS, 'link');
                 $channel->appendChild($linkSelf);
@@ -85,26 +79,26 @@ class MrssFormat extends FormatAbstract
                     $feedImage = $document->createElement('image');
                     $channel->appendChild($feedImage);
                     $iconUrl = $document->createElement('url');
-                    $iconUrl->appendChild($document->createTextNode($icon));
+                    $iconUrl->appendChild($document->createTextNode((string) $icon));
                     $feedImage->appendChild($iconUrl);
                     $iconTitle = $document->createElement('title');
-                    $iconTitle->appendChild($document->createTextNode($title));
+                    $iconTitle->appendChild($document->createTextNode((string) $title));
                     $feedImage->appendChild($iconTitle);
                     $iconLink = $document->createElement('link');
-                    $iconLink->appendChild($document->createTextNode($uri));
+                    $iconLink->appendChild($document->createTextNode((string) $uri));
                     $feedImage->appendChild($iconLink);
                 }
             } elseif ($feedKey === 'itunes') {
                 $feed->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:itunes', self::ITUNES_NS);
-                foreach ($feedValue as $itunesKey => $itunesValue) {
-                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, $itunesKey);
+                foreach ((array) $feedValue as $itunesKey => $itunesValue) {
+                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, (string) $itunesKey);
                     $channel->appendChild($itunesProperty);
-                    $itunesProperty->appendChild($document->createTextNode($itunesValue));
+                    $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
                 }
             } else {
-                $element = $document->createElement($feedKey);
+                $element = $document->createElement((string) $feedKey);
                 $channel->appendChild($element);
-                $element->appendChild($document->createTextNode($feedValue));
+                $element->appendChild($document->createTextNode((string) $feedValue));
             }
         }
 
@@ -118,14 +112,12 @@ class MrssFormat extends FormatAbstract
             $isPermaLink = 'false';
 
             if (empty($itemUid) && !empty($itemUri)) {
-                // Fallback to provided URI
                 $itemUid = $itemUri;
                 $isPermaLink = 'true';
             }
 
             if (empty($itemUid)) {
-                // Fallback to title and content
-                $itemUid = hash('sha1', $itemTitle . $itemContent);
+                $itemUid = hash('sha1', (string) $itemTitle . $itemContent);
             }
 
             $entry = $document->createElement('item');
@@ -134,36 +126,36 @@ class MrssFormat extends FormatAbstract
             if (!empty($itemTitle)) {
                 $entryTitle = $document->createElement('title');
                 $entry->appendChild($entryTitle);
-                $entryTitle->appendChild($document->createTextNode($itemTitle));
+                $entryTitle->appendChild($document->createTextNode((string) $itemTitle));
             }
 
             if (isset($itemArray['itunes'])) {
                 $feed->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:itunes', self::ITUNES_NS);
-                foreach ($itemArray['itunes'] as $itunesKey => $itunesValue) {
-                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, $itunesKey);
+                foreach ((array) $itemArray['itunes'] as $itunesKey => $itunesValue) {
+                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, (string) $itunesKey);
                     $entry->appendChild($itunesProperty);
-                    $itunesProperty->appendChild($document->createTextNode($itunesValue));
+                    $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
                 }
 
                 if (isset($itemArray['enclosure'])) {
                     $itunesEnclosure = $document->createElement('enclosure');
                     $entry->appendChild($itunesEnclosure);
-                    $itunesEnclosure->setAttribute('url', $itemArray['enclosure']['url']);
-                    $itunesEnclosure->setAttribute('length', $itemArray['enclosure']['length']);
-                    $itunesEnclosure->setAttribute('type', $itemArray['enclosure']['type']);
+                    $itunesEnclosure->setAttribute('url', (string) $itemArray['enclosure']['url']);
+                    $itunesEnclosure->setAttribute('length', (string) $itemArray['enclosure']['length']);
+                    $itunesEnclosure->setAttribute('type', (string) $itemArray['enclosure']['type']);
                 }
             }
 
             if (!empty($itemUri)) {
                 $entryLink = $document->createElement('link');
                 $entry->appendChild($entryLink);
-                $entryLink->appendChild($document->createTextNode($itemUri));
+                $entryLink->appendChild($document->createTextNode((string) $itemUri));
             }
 
             $entryGuid = $document->createElement('guid');
             $entryGuid->setAttribute('isPermaLink', $isPermaLink);
             $entry->appendChild($entryGuid);
-            $entryGuid->appendChild($document->createTextNode($itemUid));
+            $entryGuid->appendChild($document->createTextNode((string) $itemUid));
 
             if (!empty($itemTimestamp)) {
                 $entryPublished = $document->createElement('pubDate');
@@ -180,18 +172,17 @@ class MrssFormat extends FormatAbstract
             foreach ($item->getEnclosures() as $enclosure) {
                 $entryEnclosure = $document->createElementNS(self::MRSS_NS, 'content');
                 $entry->appendChild($entryEnclosure);
-                $entryEnclosure->setAttribute('url', $enclosure);
+                $entryEnclosure->setAttribute('url', (string) $enclosure);
                 $entryEnclosure->setAttribute('type', parse_mime_type($enclosure));
             }
 
             foreach ($item->getCategories() as $category) {
                 $entryCategory = $document->createElement('category');
                 $entry->appendChild($entryCategory);
-                $entryCategory->appendChild($document->createTextNode($category));
+                $entryCategory->appendChild($document->createTextNode((string) $category));
             }
         }
 
-        $xml = $document->saveXML();
-        return $xml;
+        return $document->saveXML();
     }
 }

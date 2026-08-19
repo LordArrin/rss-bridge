@@ -2,14 +2,18 @@
 
 declare(strict_types=1);
 
+use RSSBridge\Caches\CacheFactory;
+use RSSBridge\Caches\CacheInterface;
+use RSSBridge\Actions\ConnectivityAction;
+use RSSBridge\Actions\DisplayAction;
+use RSSBridge\Actions\FrontpageAction;
+use RSSBridge\Actions\HealthAction;
+use RSSBridge\Actions\ListAction;
+
 $container = new Container();
 
 $container[ConnectivityAction::class] = function ($c) {
     return new ConnectivityAction($c['bridge_factory'], $c['safe_bridge_loader']);
-};
-
-$container[DetectAction::class] = function ($c) {
-    return new DetectAction($c['bridge_factory'], $c['safe_bridge_loader']);
 };
 
 $container[DisplayAction::class] = function ($c) {
@@ -17,7 +21,11 @@ $container[DisplayAction::class] = function ($c) {
 };
 
 $container[FrontpageAction::class] = function ($c) {
-    return new FrontpageAction($c['bridge_factory'], $c['safe_bridge_loader']);
+    return new FrontpageAction(
+        $c['bridge_factory'],
+        $c['safe_bridge_loader'],
+        $c['bridge_metadata_cache']
+    );
 };
 
 $container[HealthAction::class] = function ($c) {
@@ -65,8 +73,16 @@ $container['logger'] = function () {
 $container['cache'] = function ($c) {
     /** @var CacheFactory $cacheFactory */
     $cacheFactory = $c['cache_factory'];
+    /** @var CacheInterface $cache */
     $cache = $cacheFactory->create(Configuration::getConfig('cache', 'type'));
     return $cache;
+};
+
+$container['bridge_metadata_cache'] = function ($c) {
+    return new BridgeMetadataCache(
+        $c['cache'],
+        __DIR__ . '/../bridges'
+    );
 };
 
 return $container;

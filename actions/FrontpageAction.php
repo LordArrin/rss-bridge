@@ -1,16 +1,30 @@
 <?php
 
+declare(strict_types=1);
+
+namespace RSSBridge\Actions;
+
+use BridgeFactory;
+use BridgeMetadataCache;
+use Configuration;
+use Request;
+use Response;
+use SafeBridgeLoader;
+
 final class FrontpageAction implements ActionInterface
 {
     private BridgeFactory $bridgeFactory;
     private SafeBridgeLoader $safeLoader;
+    private BridgeMetadataCache $metadataCache;
 
     public function __construct(
         BridgeFactory $bridgeFactory,
-        SafeBridgeLoader $safeLoader
+        SafeBridgeLoader $safeLoader,
+        BridgeMetadataCache $metadataCache
     ) {
         $this->bridgeFactory = $bridgeFactory;
         $this->safeLoader = $safeLoader;
+        $this->metadataCache = $metadataCache;
     }
 
     public function __invoke(Request $request): Response
@@ -29,27 +43,35 @@ final class FrontpageAction implements ActionInterface
             ];
         }
 
+        $allMetadata = $this->metadataCache->getAll($this->bridgeFactory, $this->safeLoader);
+
         $body = '';
         foreach ($bridgeClassNames as $bridgeClassName) {
-            if ($this->bridgeFactory->isEnabled($bridgeClassName)) {
-                $bridge = $this->safeLoader->createSafely($bridgeClassName);
-                
-                if ($this->safeLoader->isBridgeBroken($bridge)) {
-                    continue;
-                }
-
-                $body .= self::render($bridge, $bridgeClassName, $token);
-                $activeBridges++;
+            if (!$this->bridgeFactory->isEnabled($bridgeClassName)) {
+                continue;
             }
+
+            if (!isset($allMetadata[$bridgeClassName])) {
+                continue;
+            }
+
+            $meta = $allMetadata[$bridgeClassName];
+            $body .= self::renderFromMetadata(
+                $meta,
+                $bridgeClassName,
+                $this->bridgeFactory->getShortClassName($bridgeClassName),
+                $token
+            );
+            $activeBridges++;
         }
 
         foreach ($this->safeLoader->getBrokenBridges() as $brokenBridgeName => $errorInfo) {
             $errorMessage = $errorInfo['message'];
-            
+
             if (strlen($errorMessage) > 300) {
                 $errorMessage = substr($errorMessage, 0, 300) . '...';
             }
-            
+
             $messages[] = [
                 'body' => sprintf(
                     'Bridge "%s" failed to load and was disabled. Error: %s',
@@ -72,19 +94,18 @@ final class FrontpageAction implements ActionInterface
         return $response;
     }
 
-    public static function render(
-        BridgeAbstract $bridge,
-        string $bridgeClassName,
+    public static function renderFromMetadata(
+        array $meta,
+        string $fullClassName,
+        string $shortClassName,
         ?string $token
     ): string {
-        $uri = $bridge->getURI();
-        $name = $bridge->getName();
-        $icon = $bridge->getIcon();
-        $description = $bridge->getDescription();
-        $parameters = $bridge->getParameters();
-
-        // Extract domain from URI for unified search
-        $domain = self::extractDomain($uri);
+        $uri = $meta['uri'];
+        $name = $meta['name'];
+        $description = $meta['description'];
+        $parameters = $meta['parameters'];
+        $domain = $meta['domain'];
+        $shortName = $meta['short_name'];
 
         if (
             Configuration::getConfig('proxy', 'url')
@@ -101,24 +122,23 @@ final class FrontpageAction implements ActionInterface
             $parameters['global']['_cache_timeout'] = [
                 'name' => 'Cache timeout in seconds',
                 'type' => 'number',
-                'defaultValue' => $bridge->getCacheTimeout()
+                'defaultValue' => $meta['cache_timeout']
             ];
         }
 
-        $shortName = $bridge->getShortName();
         $card = <<<CARD
             <section
                 class="bridge-card"
-                id="bridge-{$bridgeClassName}"
+                id="bridge-{$shortClassName}"
                 data-ref="{$name}"
                 data-short-name="{$shortName}"
                 data-domain="{$domain}"
             >
 
-            <button 
-                type="button" 
-                class="favorite-btn" 
-                data-bridge="{$bridgeClassName}"
+            <button
+                type="button"
+                class="favorite-btn"
+                data-bridge="{$shortClassName}"
                 aria-label="Add to favorites"
                 title="Add to favorites"
             >
@@ -127,23 +147,23 @@ final class FrontpageAction implements ActionInterface
                 </svg>
             </button>
 
-            <a href="#bridge-{$bridgeClassName}">
+            <a href="#bridge-{$shortClassName}">
                 <h1>#</h1>
             </a>
 
             <h2><a href="{$uri}">{$name}</a></h2>
             <p class="description">{$description}</p>
 
-            <input type="checkbox" class="showmore-box" id="showmore-{$bridgeClassName}" />
-            <label class="showmore" for="showmore-{$bridgeClassName}">Show more</label>
+            <input type="checkbox" class="showmore-box" id="showmore-{$shortClassName}" />
+            <label class="showmore" for="showmore-{$shortClassName}">Show more</label>
 
 
         CARD;
 
         if (count($parameters) === 0) {
-            $card .= self::renderForm($bridgeClassName, '', [], $token);
+            $card .= self::renderForm($shortClassName, '', [], $token);
         } elseif (count($parameters) === 1 && array_key_exists('global', $parameters)) {
-            $card .= self::renderForm($bridgeClassName, '', $parameters['global'], $token);
+            $card .= self::renderForm($shortClassName, '', $parameters['global'], $token);
         } else {
             foreach ($parameters as $contextName => $contextParameters) {
                 if ($contextName === 'global') {
@@ -154,58 +174,25 @@ final class FrontpageAction implements ActionInterface
                     $contextParameters = array_merge($contextParameters, $parameters['global']);
                 }
 
+                $contextNameStr = is_numeric($contextName) ? (string) $contextName : $contextName;
+
                 if (!is_numeric($contextName)) {
-                    $card .= '<h5>' . $contextName . "</h5>\n";
+                    $card .= '<h5>' . $contextNameStr . "</h5>\n";
                 }
 
-                $card .= self::renderForm($bridgeClassName, $contextName, $contextParameters, $token);
+                $card .= self::renderForm($shortClassName, $contextNameStr, $contextParameters, $token);
             }
         }
 
         $card .= html_tag('label', 'Show less', [
                 'class' => 'showless',
-                'for'   => "showmore-$bridgeClassName",
+                'for'   => "showmore-$shortClassName",
             ]) . "\n";
 
-        // if (Configuration::getConfig('admin', 'donations') && $bridge->getDonationURI()) { # Disable donations
-        //     $card .= sprintf(
-        //         '<p class="maintainer">%s ~ <a href="%s">Donate</a></p>',
-        //         $bridge->getMaintainer(),
-        //         $bridge->getDonationURI()
-        //     );
-        // } else {
-            $card .= html_tag('p', $bridge->getMaintainer(), ['class' => 'maintainer']) . "\n";
-        // }
+        $card .= html_tag('p', $meta['maintainer'], ['class' => 'maintainer']) . "\n";
         $card .= "</section>\n\n";
 
         return $card;
-    }
-
-    /**
-     * Extract domain from a URI
-     */
-    private static function extractDomain(string $uri): string
-    {
-        if (empty($uri)) {
-            return '';
-        }
-
-        if (!preg_match('#^https?://#', $uri)) {
-            $uri = 'https://' . $uri;
-        }
-
-        $parsed = parse_url($uri);
-        if (!$parsed || !isset($parsed['host'])) {
-            return '';
-        }
-
-        $domain = strtolower($parsed['host']);
-        
-        if (strpos($domain, 'www.') === 0) {
-            $domain = substr($domain, 4);
-        }
-
-        return $domain;
     }
 
     private static function renderForm(
@@ -248,7 +235,8 @@ final class FrontpageAction implements ActionInterface
                 $parameter['defaultValue'] = '';
             }
 
-            $idArg = 'arg-' . urlencode($bridgeClassName) . '-' . urlencode($contextName) . '-' . urlencode($id);
+            $idStr = is_numeric($id) ? (string) $id : $id;
+            $idArg = 'arg-' . urlencode($bridgeClassName) . '-' . urlencode($contextName) . '-' . urlencode($idStr);
 
             $form .= html_tag('label', $parameter['name'], ['for' => $idArg]) . "\n";
 
@@ -256,15 +244,15 @@ final class FrontpageAction implements ActionInterface
                 !isset($parameter['type'])
                 || $parameter['type'] === 'text'
             ) {
-                $form .= self::getTextInput($parameter, $idArg, $id) . "\n";
+                $form .= self::getTextInput($parameter, $idArg, $idStr) . "\n";
             } elseif ($parameter['type'] === 'number') {
-                $form .= self::getNumberInput($parameter, $idArg, $id) . "\n";
+                $form .= self::getNumberInput($parameter, $idArg, $idStr) . "\n";
             } elseif ($parameter['type'] === 'list') {
-                $form .= self::getListInput($parameter, $idArg, $id) . "\n";
+                $form .= self::getListInput($parameter, $idArg, $idStr) . "\n";
             } elseif ($parameter['type'] === 'checkbox') {
-                $form .= self::getCheckboxInput($parameter, $idArg, $id) . "\n";
+                $form .= self::getCheckboxInput($parameter, $idArg, $idStr) . "\n";
             } else {
-                $foo = 2;
+                continue;
             }
 
             $params = [];
@@ -354,15 +342,15 @@ final class FrontpageAction implements ActionInterface
 
         foreach ($parameter['values'] as $name => $value) {
             if (is_array($value)) {
-                $list .= '<optgroup label="' . htmlentities($name) . '">';
+                $list .= '<optgroup label="' . htmlentities((string) $name) . '">';
                 foreach ($value as $subname => $subvalue) {
                     if (
                         $parameter['defaultValue'] === $subname
                         || $parameter['defaultValue'] === $subvalue
                     ) {
-                        $list .= html_option($subname, $subvalue, true) . "\n";
+                        $list .= html_option((string) $subname, (string) $subvalue, true) . "\n";
                     } else {
-                        $list .= html_option($subname, $subvalue) . "\n";
+                        $list .= html_option((string) $subname, (string) $subvalue) . "\n";
                     }
                 }
                 $list .= '</optgroup>';
@@ -371,9 +359,9 @@ final class FrontpageAction implements ActionInterface
                     $parameter['defaultValue'] === $name
                     || $parameter['defaultValue'] === $value
                 ) {
-                    $list .= html_option($name, $value, true) . "\n";
+                    $list .= html_option((string) $name, (string) $value, true) . "\n";
                 } else {
-                    $list .= html_option($name, $value) . "\n";
+                    $list .= html_option((string) $name, (string) $value) . "\n";
                 }
             }
         }

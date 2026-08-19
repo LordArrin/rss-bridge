@@ -30,7 +30,7 @@ RUN set -xe && \
 # ============================================================
 FROM alpine:${ALPINE_VERSION} AS runtime
 
-ARG IMAGE_VERSION=1.1.7
+ARG IMAGE_VERSION=1.1.8
 ENV RSSBRIDGE_SYSTEM_VERSION=${IMAGE_VERSION}
 ENV CURL_IMPERSONATE=firefox147
 
@@ -56,6 +56,7 @@ RUN set -xe && \
       php85-mbstring \
       php85-openssl \
       php85-pdo_sqlite \
+      php85-pecl-igbinary \
       php85-pecl-memcached \
       php85-simplexml \
       php85-sqlite3 \
@@ -94,7 +95,9 @@ COPY LICENSE ./
 # Copy application
 COPY --chown=nginx:nginx ./ /app/
 
-RUN chmod +x /app/docker-entrypoint.sh
+# Make scripts executable
+RUN chmod +x /app/bin/* && \
+    chmod +x /app/docker-entrypoint.sh
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD curl -fsS --compressed "http://localhost/?action=health" || exit 1

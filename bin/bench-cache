@@ -1,0 +1,97 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Benchmark cache performance.
+ * 
+ * Tests:
+ * - Simple get/set operations
+ * - Large object serialization
+ * - Network latency (for memcached)
+ */
+
+require __DIR__ . '/../lib/bootstrap.php';
+require __DIR__ . '/../lib/config.php';
+
+$container = require __DIR__ . '/../lib/dependencies.php';
+
+/** @var \RSSBridge\Caches\CacheInterface $cache */
+$cache = $container['cache'];
+
+echo sprintf("Cache type: %s\n", get_class($cache));
+echo str_repeat('-', 60) . "\n";
+
+// Test 1: Simple string operations
+$iterations = 1000;
+$testKey = 'bench_simple_';
+$testValue = str_repeat('x', 100);
+
+$start = microtime(true);
+for ($i = 0; $i < $iterations; $i++) {
+    $cache->set($testKey . $i, $testValue, 60);
+}
+$setTime = round((microtime(true) - $start) * 1000, 2);
+
+$start = microtime(true);
+for ($i = 0; $i < $iterations; $i++) {
+    $cache->get($testKey . $i);
+}
+$getTime = round((microtime(true) - $start) * 1000, 2);
+
+echo sprintf("Simple set: %d ops in %sms (%.1f ops/s)\n", 
+    $iterations, $setTime, $iterations / $setTime * 1000);
+echo sprintf("Simple get: %d ops in %sms (%.1f ops/s)\n", 
+    $iterations, $getTime, $iterations / $getTime * 1000);
+
+// Cleanup
+for ($i = 0; $i < $iterations; $i++) {
+    $cache->delete($testKey . $i);
+}
+
+// Test 2: Large object (simulate BridgeMetadataCache)
+echo "\n";
+$largeData = [];
+for ($i = 0; $i < 431; $i++) {
+    $largeData['Bridge' . $i] = [
+        'name' => 'Bridge ' . $i,
+        'description' => str_repeat('Description text ', 10),
+        'parameters' => ['global' => ['param1' => ['name' => 'p1', 'type' => 'text']]],
+    ];
+}
+
+$largeKey = 'bench_large';
+
+$start = microtime(true);
+$cache->set($largeKey, $largeData, 60);
+$largeSetTime = round((microtime(true) - $start) * 1000, 2);
+
+$start = microtime(true);
+$result = $cache->get($largeKey);
+$largeGetTime = round((microtime(true) - $start) * 1000, 2);
+
+echo sprintf("Large object (%d bytes): set=%sms, get=%sms\n",
+    strlen(serialize($largeData)), $largeSetTime, $largeGetTime);
+
+// Cleanup
+$cache->delete($largeKey);
+
+// Test 3: Network latency (if memcached)
+if ($cache instanceof \RSSBridge\Caches\MemcachedCache) {
+    echo "\n";
+    $pingKey = 'bench_ping';
+    $latencies = [];
+    for ($i = 0; $i < 10; $i++) {
+        $start = microtime(true);
+        $cache->set($pingKey, 'ping', 5);
+        $cache->get($pingKey);
+        $latencies[] = (microtime(true) - $start) * 1000;
+    }
+    echo sprintf("Network latency (avg 10 pings): %.2fms\n", 
+        array_sum($latencies) / count($latencies));
+    echo sprintf("Latency range: %.2fms - %.2fms\n", 
+        min($latencies), max($latencies));
+}
+
+echo "\n";

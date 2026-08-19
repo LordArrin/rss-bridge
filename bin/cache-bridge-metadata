@@ -1,0 +1,48 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Build or rebuild bridge metadata cache.
+ * 
+ * This script pre-fetches metadata (names, descriptions, icons, parameters)
+ * from all bridges and stores it in cache for faster frontpage rendering.
+ */
+
+// Initialize application
+require __DIR__ . '/../lib/bootstrap.php';
+require __DIR__ . '/../lib/config.php';
+
+$container = require __DIR__ . '/../lib/dependencies.php';
+
+/** @var \BridgeMetadataCache $cache */
+$cache = $container['bridge_metadata_cache'];
+/** @var \BridgeFactory $factory */
+$factory = $container['bridge_factory'];
+/** @var \SafeBridgeLoader $loader */
+$loader = $container['safe_bridge_loader'];
+
+echo "Building bridge metadata cache...\n";
+
+$start = microtime(true);
+
+try {
+    $metadata = $cache->getAll($factory, $loader);
+    $elapsed = round((microtime(true) - $start) * 1000, 2);
+    
+    echo sprintf("? Cached %d bridges in %sms\n", count($metadata), $elapsed);
+    
+    $broken = $loader->getBrokenBridges();
+    if (count($broken) > 0) {
+        echo sprintf("\n? %d broken bridges:\n", count($broken));
+        foreach ($broken as $name => $info) {
+            echo sprintf("  - %s: %s\n", $name, substr($info['message'], 0, 100));
+        }
+    }
+    
+    exit(0);
+} catch (\Throwable $e) {
+    fprintf(STDERR, "? Failed to build cache: %s\n", $e->getMessage());
+    exit(1);
+}

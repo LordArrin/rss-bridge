@@ -1,5 +1,7 @@
 <?php
 
+use RSSBridge\Caches\CacheInterface;
+
 function get_sitemap(string $url): array
 {
     $doc = new \DOMDocument();

@@ -1,18 +1,21 @@
 <?php
 
+declare(strict_types=1);
+
+namespace RSSBridge\Formats;
+
 /**
- * JsonFormat - JSON Feed Version 1
- * https://jsonfeed.org/version/1
+ * JsonFormat - JSON Feed Version 1.1
+ * https://jsonfeed.org/version/1.1
  *
  * Validators:
  * https://validator.jsonfeed.org
- * https://github.com/vigetlabs/json-feed-validator
  */
-class JsonFormat extends FormatAbstract
+final class JsonFormat extends FormatAbstract
 {
-    const MIME_TYPE = 'application/json';
+    public const MIME_TYPE = 'application/json';
 
-    const VENDOR_EXCLUDES = [
+    private const VENDOR_EXCLUDES = [
         'author',
         'title',
         'uri',
@@ -23,18 +26,23 @@ class JsonFormat extends FormatAbstract
         'uid',
     ];
 
+    public function getMimeType(): string
+    {
+        return self::MIME_TYPE;
+    }
+
     public function render(): string
     {
         $feedArray = $this->getFeed();
 
         $data = [
-            'version'       => 'https://jsonfeed.org/version/1',
-            'title'         => $feedArray['name'],
-            'home_page_url' => $feedArray['uri'],
+            'version'       => 'https://jsonfeed.org/version/1.1',
+            'title'         => $feedArray['name'] ?? '',
+            'home_page_url' => $feedArray['uri'] ?? '',
             'feed_url'      => get_current_url(),
         ];
 
-        if ($feedArray['icon']) {
+        if (!empty($feedArray['icon'])) {
             $data['icon'] = $feedArray['icon'];
             $data['favicon'] = $feedArray['icon'];
         }
@@ -65,17 +73,22 @@ class JsonFormat extends FormatAbstract
             if (!empty($entryTitle)) {
                 $entry['title'] = $entryTitle;
             }
+            
             if (!empty($entryAuthor)) {
-                $entry['author'] = [
-                    'name' => $entryAuthor
+                // JSON Feed 1.1 uses 'authors' array instead of 'author'
+                $entry['authors'] = [
+                    ['name' => $entryAuthor]
                 ];
             }
+            
             if (!empty($entryTimestamp)) {
                 $entry['date_modified'] = gmdate(\DATE_ATOM, $entryTimestamp);
             }
+            
             if (!empty($entryUri)) {
                 $entry['url'] = $entryUri;
             }
+            
             if (!empty($entryContent)) {
                 if (is_html($entryContent)) {
                     $entry['content_html'] = $entryContent;
@@ -83,36 +96,37 @@ class JsonFormat extends FormatAbstract
                     $entry['content_text'] = $entryContent;
                 }
             }
+            
             if (!empty($entryEnclosures)) {
                 $entry['attachments'] = [];
                 foreach ($entryEnclosures as $enclosure) {
                     $entry['attachments'][] = [
-                        'url' => $enclosure,
+                        'url'       => $enclosure,
                         'mime_type' => parse_mime_type($enclosure)
                     ];
                 }
             }
+            
             if (!empty($entryCategories)) {
                 $entry['tags'] = [];
                 foreach ($entryCategories as $category) {
                     $entry['tags'][] = $category;
                 }
             }
+            
             if (!empty($vendorFields)) {
                 $entry['_rssbridge'] = $vendorFields;
             }
 
             if (empty($entry['id'])) {
-                $entry['id'] = hash('sha1', $entryTitle . $entryContent);
+                $entry['id'] = hash('sha1', (string) $entryTitle . $entryContent);
             }
 
             $items[] = $entry;
         }
+        
         $data['items'] = $items;
 
-        // Ignoring invalid json
-        $json = json_encode($data, \JSON_PRETTY_PRINT | \JSON_INVALID_UTF8_IGNORE);
-
-        return $json;
+        return json_encode($data, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
     }
 }

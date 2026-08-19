@@ -1,6 +1,16 @@
 <?php
 
-class ListAction implements ActionInterface
+declare(strict_types=1);
+
+namespace RSSBridge\Actions;
+
+use BridgeFactory;
+use Json;
+use Request;
+use Response;
+use SafeBridgeLoader;
+
+final class ListAction implements ActionInterface
 {
     private BridgeFactory $bridgeFactory;
     private SafeBridgeLoader $safeLoader;
@@ -20,27 +30,25 @@ class ListAction implements ActionInterface
         $list->total = 0;
 
         foreach ($this->bridgeFactory->getBridgeClassNames() as $bridgeClassName) {
-            // Using a secure bridge loader
             $bridge = $this->safeLoader->createSafely($bridgeClassName);
 
-            // Check to see if the bridge is broken.
             if ($this->safeLoader->isBridgeBroken($bridge)) {
-                // Skipping broken bridges
                 continue;
             }
 
             $list->bridges[$bridgeClassName] = [
-                'status'        => $this->bridgeFactory->isEnabled($bridgeClassName) ? 'active' : 'inactive',
-                'uri'           => $bridge->getURI(),
-                // 'donationUri'   => $bridge->getDonationURI(), # Disable donations
-                'name'          => $bridge->getName(),
-                'icon'          => $bridge->getIcon(),
-                'parameters'    => $bridge->getParameters(),
-                'maintainer'    => $bridge->getMaintainer(),
-                'description'   => $bridge->getDescription()
+                'status'      => $this->bridgeFactory->isEnabled($bridgeClassName) ? 'active' : 'inactive',
+                'uri'         => $bridge->getURI(),
+                'name'        => $bridge->getName(),
+                'icon'        => $bridge->getIcon(),
+                'parameters'  => $bridge->getParameters(),
+                'maintainer'  => $bridge->getMaintainer(),
+                'description' => $bridge->getDescription()
             ];
         }
+
         $list->total = count($list->bridges);
+
         return new Response(Json::encode($list), 200, ['content-type' => 'application/json']);
     }
 }

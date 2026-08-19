@@ -1,5 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
+use RSSBridge\Caches\CacheInterface;
+
 /**
  * SafeBridgeLoader - ensures safe loading of bridges without crashing the application.
  *
@@ -19,29 +23,29 @@ class SafeBridgeLoader
     }
 
     /**
-     * Safely creates a bridge instance
-     * In case of an error, returns a stub and remembers the error
+     * Safely creates a bridge instance.
+     * In case of an error, returns a stub and remembers the error.
      */
     public function createSafely(string $bridgeClassName): BridgeAbstract
     {
         try {
             $bridge = $this->bridgeFactory->create($bridgeClassName);
-            
+
             // Validating basic metadata
             $bridge->getName();
             $bridge->getURI();
             $bridge->getDescription();
             $bridge->getParameters();
-            
+
             return $bridge;
-            
+
         } catch (\Throwable $e) {
             $this->brokenBridges[$bridgeClassName] = [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ];
-            
+
             $this->logger->error(sprintf(
                 'Bridge "%s" is invalid: %s in %s:%d',
                 $bridgeClassName,
@@ -49,13 +53,13 @@ class SafeBridgeLoader
                 $e->getFile(),
                 $e->getLine()
             ));
-            
+
             return $this->createBrokenBridgeStub($bridgeClassName, $e->getMessage());
         }
     }
 
     /**
-     * Checks if the bridge is broken
+     * Checks if the bridge is broken.
      */
     public function isBridgeBroken(BridgeAbstract $bridge): bool
     {
@@ -71,7 +75,7 @@ class SafeBridgeLoader
     }
 
     /**
-     * Clears the list of broken bridges
+     * Clears the list of broken bridges.
      */
     public function resetBrokenBridges(): void
     {
@@ -79,7 +83,7 @@ class SafeBridgeLoader
     }
 
     /**
-     * Creates a safe plug for a broken bridge
+     * Creates a safe plug for a broken bridge.
      */
     private function createBrokenBridgeStub(string $originalName, string $errorMessage): BridgeAbstract
     {
@@ -94,59 +98,59 @@ class SafeBridgeLoader
                 $this->error = $error;
             }
 
-            public function isBrokenStub(): bool 
-            { 
-                return true; 
+            public function isBrokenStub(): bool
+            {
+                return true;
             }
 
-            public function collectData() 
-            { 
-                throw new \Exception('This bridge is broken: ' . $this->error); 
+            public function collectData()
+            {
+                throw new \Exception('This bridge is broken: ' . $this->error);
             }
 
-            public function getName() 
-            { 
-                return $this->originalName . ' (Broken)'; 
+            public function getName()
+            {
+                return $this->originalName . ' (Broken)';
             }
 
-            public function getURI() 
-            { 
-                return ''; 
+            public function getURI()
+            {
+                return '';
             }
 
-            public function getDonationURI(): string 
-            { 
-                return ''; 
+            public function getDonationURI(): string
+            {
+                return '';
             }
 
-            public function getIcon() 
-            { 
-                return ''; 
+            public function getIcon()
+            {
+                return '';
             }
 
-            public function getParameters(): array 
-            { 
-                return []; 
+            public function getParameters(): array
+            {
+                return [];
             }
 
-            public function getDescription() 
-            { 
-                return 'This bridge is broken: ' . $this->error; 
+            public function getDescription()
+            {
+                return 'This bridge is broken: ' . $this->error;
             }
 
-            public function getMaintainer(): string 
-            { 
-                return 'System'; 
+            public function getMaintainer(): string
+            {
+                return 'System';
             }
-            
-            public function detectParameters($url) 
-            { 
-                return null; 
+
+            public function detectParameters($url)
+            {
+                return null;
             }
-            
-            public function getCacheTimeout() 
-            { 
-                return 0; 
+
+            public function getCacheTimeout()
+            {
+                return 0;
             }
         };
     }

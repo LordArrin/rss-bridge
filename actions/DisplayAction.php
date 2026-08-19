@@ -1,6 +1,24 @@
 <?php
 
-class DisplayAction implements ActionInterface
+declare(strict_types=1);
+
+namespace RSSBridge\Actions;
+
+use BridgeAbstract;
+use BridgeFactory;
+use ClientException;
+use Configuration;
+use RSSBridge\Formats\FormatFactory;
+use HttpException;
+use Json;
+use Logger;
+use RateLimitException;
+use Request;
+use Response;
+use RSSBridge\Caches\CacheInterface;
+use SafeBridgeLoader;
+
+final class DisplayAction implements ActionInterface
 {
     private CacheInterface $cache;
     private Logger $logger;
@@ -28,6 +46,7 @@ class DisplayAction implements ActionInterface
         if (!$bridgeName) {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Missing bridge name parameter']), 400);
         }
+
         $bridgeClassName = $this->bridgeFactory->createBridgeClassName($bridgeName);
         if (!$bridgeClassName) {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Bridge not found']), 404);
@@ -36,23 +55,21 @@ class DisplayAction implements ActionInterface
         if (!$format) {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'You must specify a format']), 400);
         }
+
         if (!$this->bridgeFactory->isEnabled($bridgeClassName)) {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'This bridge is not whitelisted']), 400);
         }
 
-        // Disable proxy (if enabled and per user's request)
         if (
             Configuration::getConfig('proxy', 'url')
             && Configuration::getConfig('proxy', 'by_bridge')
             && $noproxy
         ) {
-            // This const is only used once in getContents()
             define('NOPROXY', true);
         }
 
         $cacheKey = 'http_' . json_encode($request->toArray());
 
-        // Using a secure bridge loader
         $bridge = $this->safeLoader->createSafely($bridgeClassName);
 
         $response = $this->createResponse($request, $bridge, $format);
@@ -70,13 +87,13 @@ class DisplayAction implements ActionInterface
         return $response;
     }
 
-    private function createResponse(Request $request, BridgeAbstract $bridge, string $format)
+    private function createResponse(Request $request, BridgeAbstract $bridge, string $format): Response
     {
         $items = [];
 
         try {
             $bridge->loadConfiguration();
-            // Remove parameters that don't concern bridges
+
             $remove = [
                 'token',
                 'action',
@@ -85,8 +102,9 @@ class DisplayAction implements ActionInterface
                 '_noproxy',
                 '_cache_timeout',
                 '_error_time',
-                '_', // Some RSS readers add a cache-busting parameter (_=<timestamp>) to feed URLs, detect and ignore them.
+                '_',
             ];
+
             $requestArray = $request->toArray();
             $input = array_diff_key($requestArray, array_fill_keys($remove, ''));
             $bridge->setInput($input);
@@ -99,85 +117,78 @@ class DisplayAction implements ActionInterface
                 $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
                 return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), 429);
             } elseif ($e instanceof HttpException) {
-                if (in_array($e->getCode(), [429, 503])) {
-                    // Log with debug, immediately reproduce and return
+                if (in_array($e->getCode(), [429, 503], true)) {
                     $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
                     return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $e->getCode());
                 }
-                // Some other status code which we let fail normally (but don't log it)
             } else {
                 $this->logger->error(sprintf('Exception in DisplayAction(%s)', $bridge->getShortName()), ['e' => $e]);
             }
+
             $errorOutput = Configuration::getConfig('error', 'output');
             $reportLimit = Configuration::getConfig('error', 'report_limit');
             $errorCount = 1;
+
             if ($reportLimit > 1) {
                 $errorCount = $this->logBridgeError($bridge->getName(), $e->getCode());
             }
-            // Let clients know about the error if we are passed the report limit
+
             if ($errorCount >= $reportLimit) {
                 if ($errorOutput === 'feed') {
-                    // Render the exception as a feed item
                     $items = [$this->createFeedItemFromException($e, $bridge)];
                 } elseif ($errorOutput === 'http') {
                     return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), 500);
-                } elseif ($errorOutput === 'none') {
-                    // Do nothing (produces an empty feed)
                 }
             }
         }
 
         $formatFactory = new FormatFactory();
-        $format = $formatFactory->create($format);
+        $formatObj = $formatFactory->create($format);
 
-        $format->setItems($items);
-        $format->setFeed($bridge->getFeed());
+        $formatObj->setItems($items);
+        $formatObj->setFeed($bridge->getFeed());
         $now = time();
-        $format->setLastModified($now);
+        $formatObj->setLastModified($now);
+
         $headers = [
             'last-modified' => gmdate('D, d M Y H:i:s ', $now) . 'GMT',
-            'content-type'  => $format->getMimeType() . '; charset=UTF-8',
+            'content-type'  => $formatObj->getMimeType() . '; charset=UTF-8',
         ];
-        $body = $format->render();
 
-        // This is supposed to remove non-utf8 byte sequences, but I'm unsure if it works
+        $body = $formatObj->render();
+
         ini_set('mbstring.substitute_character', 'none');
         $body = mb_convert_encoding($body, 'UTF-8', 'UTF-8');
 
         return new Response($body, 200, $headers);
     }
 
-    private function createFeedItemFromException($e, BridgeAbstract $bridge): array
+    private function createFeedItemFromException(\Throwable $e, BridgeAbstract $bridge): array
     {
-        $item = [];
-
-        // Create a unique identifier every 24 hours
-        $uniqueIdentifier = urlencode((int)(time() / 86400));
+        $uniqueIdentifier = urlencode((string)(int)(time() / 86400));
         $title = sprintf('Bridge returned error %s! (%s)', $e->getCode(), $uniqueIdentifier);
 
-        $item['title'] = $title;
-        $item['uri'] = get_current_url();
-        $item['timestamp'] = time();
-
-        // Create an item identifier for feed readers e.g. "staysafetv twitch videos_19389"
-        $item['uid'] = $bridge->getName() . '_' . $uniqueIdentifier;
-
-        $content = render_template(__DIR__ . '/../templates/bridge-error.html.php', [
-            'error' => render_template(__DIR__ . '/../templates/exception.html.php', ['e' => $e]),
-            'searchUrl' => self::createGithubSearchUrl($bridge),
-            'issueUrl' => self::createGithubIssueUrl($bridge, $e),
-            'maintainer' => $bridge->getMaintainer(),
-        ]);
-        $item['content'] = $content;
+        $item = [
+            'title' => $title,
+            'uri' => get_current_url(),
+            'timestamp' => time(),
+            'uid' => $bridge->getName() . '_' . $uniqueIdentifier,
+            'content' => render_template(__DIR__ . '/../templates/bridge-error.html.php', [
+                'error' => render_template(__DIR__ . '/../templates/exception.html.php', ['e' => $e]),
+                'searchUrl' => self::createGithubSearchUrl($bridge),
+                'issueUrl' => self::createGithubIssueUrl($bridge, $e),
+                'maintainer' => $bridge->getMaintainer(),
+            ]),
+        ];
 
         return $item;
     }
 
-    private function logBridgeError($bridgeName, $code)
+    private function logBridgeError(string $bridgeName, int $code): int
     {
-        // todo: it's not really necessary to json encode $report
         $cacheKey = 'error_reporting_' . $bridgeName . '_' . $code;
         $report = $this->cache->get($cacheKey);
+
         if ($report) {
             $report = Json::decode($report);
             $report['time'] = time();
@@ -189,8 +200,10 @@ class DisplayAction implements ActionInterface
                 'count' => 1,
             ];
         }
+
         $ttl = 86400 * 5;
         $this->cache->set($cacheKey, Json::encode($report), $ttl);
+
         return $report['count'];
     }
 
@@ -224,7 +237,7 @@ class DisplayAction implements ActionInterface
         return 'https://github.com/LordArrin/rss-bridge/issues/new?' . http_build_query($query);
     }
 
-    private static function createGithubSearchUrl($bridge): string
+    private static function createGithubSearchUrl(BridgeAbstract $bridge): string
     {
         return sprintf(
             'https://github.com/LordArrin/rss-bridge/issues?q=%s',

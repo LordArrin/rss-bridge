@@ -1,8 +1,12 @@
 #!/usr/bin/env php
 <?php
 
+declare(strict_types=1);
+
 /**
- * Remove all items from the cache
+ * Clear all cached data (except bridge metadata).
+ * 
+ * Useful for troubleshooting or when cache becomes corrupted.
  */
 
 require __DIR__ . '/../lib/bootstrap.php';
@@ -10,7 +14,17 @@ require __DIR__ . '/../lib/config.php';
 
 $container = require __DIR__ . '/../lib/dependencies.php';
 
-/** @var CacheInterface $cache */
+/** @var \RSSBridge\Caches\CacheInterface $cache */
 $cache = $container['cache'];
 
-$cache->clear();
+echo sprintf("Cache type: %s\n", get_class($cache));
+echo "Clearing cache...\n";
+
+try {
+    $cache->clear();
+    echo "Cache cleared successfully\n";
+    exit(0);
+} catch (\Throwable $e) {
+    fprintf(STDERR, "Failed to clear cache: %s\n", $e->getMessage());
+    exit(1);
+}

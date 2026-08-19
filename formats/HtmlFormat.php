@@ -1,63 +1,81 @@
 <?php
 
-class HtmlFormat extends FormatAbstract
+declare(strict_types=1);
+
+namespace RSSBridge\Formats;
+
+use Configuration;
+
+/**
+ * HTML format for displaying feed items in browser.
+ */
+final class HtmlFormat extends FormatAbstract
 {
-    const MIME_TYPE = 'text/html';
+    public const MIME_TYPE = 'text/html';
+
+    public function getMimeType(): string
+    {
+        return self::MIME_TYPE;
+    }
 
     public function render(): string
     {
-        // This query string is url encoded
-        $queryString = $_SERVER['QUERY_STRING'];
-
-        // TODO: this should be the proper bridge short name and not user provided string
-        $bridgeName = $_GET['bridge'];
+        $queryString = $_SERVER['QUERY_STRING'] ?? '';
+        $bridgeName = $_GET['bridge'] ?? 'Unknown';
 
         $feedArray = $this->getFeed();
-        $formatFactory = new FormatFactory();
+        
+        // Create links to other formats
         $formats = [];
-
-        // Create all formats (except HTML)
-        $formatNames = $formatFactory->getFormatNames();
+        $formatNames = ['Atom', 'Mrss', 'Json', 'Plaintext', 'Sfeed'];
+        
         foreach ($formatNames as $formatName) {
-            if ($formatName === 'Html') {
-                continue;
-            }
-            // The format url is relative, but should be absolute in order to help feed readers.
             $formatUrl = '?' . str_ireplace('format=Html', 'format=' . $formatName, $queryString);
-            $formatObject = $formatFactory->create($formatName);
             $formats[] = [
-                'url'       => $formatUrl,
-                'name'      => $formatName,
-                'type'      => $formatObject->getMimeType(),
+                'url'  => $formatUrl,
+                'name' => $formatName,
+                'type' => $this->getMimeTypeForFormat($formatName),
             ];
         }
 
         $items = [];
         foreach ($this->getItems() as $item) {
             $items[] = [
-                'url'           => $item->getURI() ?: $feedArray['uri'],
-                'title'         => $item->getTitle() ?? '(no title)',
-                'timestamp'     => $item->getTimestamp(),
-                'author'        => $item->getAuthor(),
-                'content'       => $item->getContent() ?? '',
-                'enclosures'    => $item->getEnclosures(),
-                'categories'    => $item->getCategories(),
+                'url'        => $item->getURI() ?: ($feedArray['uri'] ?? ''),
+                'title'      => $item->getTitle() ?? '(no title)',
+                'timestamp'  => $item->getTimestamp(),
+                'author'     => $item->getAuthor(),
+                'content'    => $item->getContent() ?? '',
+                'enclosures' => $item->getEnclosures(),
+                'categories' => $item->getCategories(),
             ];
         }
 
+        // Donations support is currently disabled
         $donationUri = null;
-        if (Configuration::getConfig('admin', 'donations') && $feedArray['donationUri']) {
-            $donationUri = $feedArray['donationUri'];
-        }
+        // if (Configuration::getConfig('admin', 'donations') && ($feedArray['donationUri'] ?? null)) {
+        //     $donationUri = $feedArray['donationUri'];
+        // }
 
-        $html = render_template(__DIR__ . '/../templates/html-format.html.php', [
-            'bridge_name'   => $bridgeName,
-            'title'         => $feedArray['name'],
-            'formats'       => $formats,
-            'uri'           => $feedArray['uri'],
-            'items'         => $items,
-            'donation_uri'  => $donationUri,
+        return render_template(__DIR__ . '/../templates/html-format.html.php', [
+            'bridge_name'  => $bridgeName,
+            'title'        => $feedArray['name'] ?? '',
+            'formats'      => $formats,
+            'uri'          => $feedArray['uri'] ?? '',
+            'items'        => $items,
+            'donation_uri' => $donationUri,
         ]);
-        return $html;
+    }
+
+    private function getMimeTypeForFormat(string $formatName): string
+    {
+        return match($formatName) {
+            'Atom' => 'application/atom+xml',
+            'Mrss' => 'application/rss+xml',
+            'Json' => 'application/json',
+            'Plaintext' => 'text/plain',
+            'Sfeed' => 'text/plain',
+            default => 'application/octet-stream',
+        };
     }
 }

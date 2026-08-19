@@ -2,37 +2,46 @@
 
 declare(strict_types=1);
 
+namespace RSSBridge\Caches;
+
 /**
- * Also known as an in-memory/runtime cache
+ * In-memory/runtime cache.
+ * Data is lost when the process ends.
+ * Useful for testing or single-request caching.
  */
-class ArrayCache implements CacheInterface
+final class ArrayCache implements CacheInterface
 {
+    /**
+     * @var array<string, array{value: mixed, expiration: int}>
+     */
     private array $data = [];
 
-    public function get(string $key, $default = null)
+    public function get(string $key, mixed $default = null): mixed
     {
-        $item = $this->data[$key] ?? null;
-        if (!$item) {
+        if (!array_key_exists($key, $this->data)) {
             return $default;
         }
+
+        $item = $this->data[$key];
         $expiration = $item['expiration'];
+
         if ($expiration === 0 || $expiration > time()) {
             return $item['value'];
         }
-        $this->delete($key);
+
+        unset($this->data[$key]);
         return $default;
     }
 
-    public function set(string $key, $value, ?int $ttl = null): void
+    public function set(string $key, mixed $value, ?int $ttl = null): void
     {
         if ($ttl === 0) {
-            return; // TTL is 0, do nothing
+            return;
         }
 
         $this->data[$key] = [
-            'key'           => $key,
-            'value'         => $value,
-            'expiration'    => $ttl === null ? 0 : time() + $ttl,
+            'value'      => $value,
+            'expiration' => $ttl === null ? 0 : time() + $ttl,
         ];
     }
 
@@ -48,12 +57,12 @@ class ArrayCache implements CacheInterface
 
     public function prune(): void
     {
+        $now = time();
         foreach ($this->data as $key => $item) {
             $expiration = $item['expiration'];
-            if ($expiration === 0 || $expiration > time()) {
-                continue;
+            if ($expiration !== 0 && $expiration <= $now) {
+                unset($this->data[$key]);
             }
-            $this->delete($key);
         }
     }
 }

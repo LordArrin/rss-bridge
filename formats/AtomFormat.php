@@ -1,18 +1,27 @@
 <?php
 
+declare(strict_types=1);
+
+namespace RSSBridge\Formats;
+
 /**
  * AtomFormat - RFC 4287: The Atom Syndication Format
  * https://tools.ietf.org/html/rfc4287
  *
- * Validator:
- * https://validator.w3.org/feed/
+ * Validator: https://validator.w3.org/feed/
  */
-class AtomFormat extends FormatAbstract
+final class AtomFormat extends FormatAbstract
 {
-    const MIME_TYPE = 'application/atom+xml';
+    public const MIME_TYPE = 'application/atom+xml';
 
     protected const ATOM_NS = 'http://www.w3.org/2005/Atom';
     protected const MRSS_NS = 'http://search.yahoo.com/mrss/';
+    protected const ITUNES_NS = 'http://www.itunes.com/dtds/podcast-1.0.dtd';
+
+    public function getMimeType(): string
+    {
+        return self::MIME_TYPE;
+    }
 
     public function render(): string
     {
@@ -27,23 +36,23 @@ class AtomFormat extends FormatAbstract
 
         $feedArray = $this->getFeed();
         foreach ($feedArray as $feedKey => $feedValue) {
-            if (in_array($feedKey, ['donationUri'])) {
+            if (in_array($feedKey, ['donationUri'], true)) {
                 continue;
             }
             if ($feedKey === 'name') {
                 $title = $document->createElement('title');
                 $feed->appendChild($title);
                 $title->setAttribute('type', 'text');
-                $title->appendChild($document->createTextNode($feedValue));
+                $title->appendChild($document->createTextNode((string) $feedValue));
             } elseif ($feedKey === 'icon') {
                 if ($feedValue) {
                     $icon = $document->createElement('icon');
                     $feed->appendChild($icon);
-                    $icon->appendChild($document->createTextNode($feedValue));
+                    $icon->appendChild($document->createTextNode((string) $feedValue));
 
                     $logo = $document->createElement('logo');
                     $feed->appendChild($logo);
-                    $logo->appendChild($document->createTextNode($feedValue));
+                    $logo->appendChild($document->createTextNode((string) $feedValue));
                 }
             } elseif ($feedKey === 'uri') {
                 if ($feedValue) {
@@ -51,7 +60,7 @@ class AtomFormat extends FormatAbstract
                     $feed->appendChild($linkAlternate);
                     $linkAlternate->setAttribute('rel', 'alternate');
                     $linkAlternate->setAttribute('type', 'text/html');
-                    $linkAlternate->setAttribute('href', $feedValue);
+                    $linkAlternate->setAttribute('href', (string) $feedValue);
 
                     $linkSelf = $document->createElement('link');
                     $feed->appendChild($linkSelf);
@@ -60,11 +69,16 @@ class AtomFormat extends FormatAbstract
                     $linkSelf->setAttribute('href', $feedUrl);
                 }
             } elseif ($feedKey === 'itunes') {
-                // todo: skip?
+                $feed->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:itunes', self::ITUNES_NS);
+                foreach ((array) $feedValue as $itunesKey => $itunesValue) {
+                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, (string) $itunesKey);
+                    $feed->appendChild($itunesProperty);
+                    $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
+                }
             } else {
-                $element = $document->createElement($feedKey);
+                $element = $document->createElement((string) $feedKey);
                 $feed->appendChild($element);
-                $element->appendChild($document->createTextNode($feedValue));
+                $element->appendChild($document->createTextNode((string) $feedValue));
             }
         }
 
@@ -74,10 +88,8 @@ class AtomFormat extends FormatAbstract
 
         $updated = $document->createElement('updated');
         $feed->appendChild($updated);
-        $updated->appendChild($document->createTextNode(gmdate(DATE_ATOM, $this->lastModified)));
+        $updated->appendChild($document->createTextNode(gmdate(\DATE_ATOM, $this->getLastModified())));
 
-        // since we can't guarantee that all items have an author,
-        // a global feed author is mandatory
         $feedAuthor = 'RSS-Bridge';
         $author = $document->createElement('author');
         $feed->appendChild($author);
@@ -98,17 +110,15 @@ class AtomFormat extends FormatAbstract
             }
 
             if (empty($entryID)) {
-                // Fallback to provided URI
                 $entryID = $entryUri;
             }
 
             if (empty($entryID)) {
-                // Fallback to title and content
-                $entryID = 'urn:sha1:' . hash('sha1', $entryTitle . $entryContent);
+                $entryID = 'urn:sha1:' . hash('sha1', (string) $entryTitle . (string) $entryContent);
             }
 
             if (empty($entryTitle)) {
-                $entryTitle = str_replace("\n", ' ', strip_tags($entryContent));
+                $entryTitle = str_replace("\n", ' ', strip_tags((string) $entryContent));
                 if (strlen($entryTitle) > 140) {
                     $wrapPos = strpos(wordwrap($entryTitle, 140), "\n");
                     $entryTitle = substr($entryTitle, 0, $wrapPos) . '...';
@@ -125,7 +135,7 @@ class AtomFormat extends FormatAbstract
             $title = $document->createElement('title');
             $entry->appendChild($title);
             $title->setAttribute('type', 'html');
-            $title->appendChild($document->createTextNode($entryTitle));
+            $title->appendChild($document->createTextNode((string) $entryTitle));
 
             if ($entryTimestamp) {
                 $timestamp = gmdate(\DATE_ATOM, $entryTimestamp);
@@ -145,24 +155,24 @@ class AtomFormat extends FormatAbstract
 
             if (isset($itemArray['itunes'])) {
                 $feed->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:itunes', self::ITUNES_NS);
-                foreach ($itemArray['itunes'] as $itunesKey => $itunesValue) {
-                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, $itunesKey);
+                foreach ((array) $itemArray['itunes'] as $itunesKey => $itunesValue) {
+                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, (string) $itunesKey);
                     $entry->appendChild($itunesProperty);
-                    $itunesProperty->appendChild($document->createTextNode($itunesValue));
+                    $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
                 }
                 if (isset($itemArray['enclosure'])) {
                     $itunesEnclosure = $document->createElement('enclosure');
                     $entry->appendChild($itunesEnclosure);
-                    $itunesEnclosure->setAttribute('url', $itemArray['enclosure']['url']);
-                    $itunesEnclosure->setAttribute('length', $itemArray['enclosure']['length']);
-                    $itunesEnclosure->setAttribute('type', $itemArray['enclosure']['type']);
+                    $itunesEnclosure->setAttribute('url', (string) $itemArray['enclosure']['url']);
+                    $itunesEnclosure->setAttribute('length', (string) $itemArray['enclosure']['length']);
+                    $itunesEnclosure->setAttribute('type', (string) $itemArray['enclosure']['type']);
                 }
             } elseif (!empty($entryUri)) {
                 $entryLinkAlternate = $document->createElement('link');
                 $entry->appendChild($entryLinkAlternate);
                 $entryLinkAlternate->setAttribute('rel', 'alternate');
                 $entryLinkAlternate->setAttribute('type', 'text/html');
-                $entryLinkAlternate->setAttribute('href', $entryUri);
+                $entryLinkAlternate->setAttribute('href', (string) $entryUri);
             }
 
             if (!empty($item->getAuthor())) {
@@ -170,12 +180,12 @@ class AtomFormat extends FormatAbstract
                 $entry->appendChild($author);
                 $authorName = $document->createElement('name');
                 $author->appendChild($authorName);
-                $authorName->appendChild($document->createTextNode($item->getAuthor()));
+                $authorName->appendChild($document->createTextNode((string) $item->getAuthor()));
             }
 
             $content = $document->createElement('content');
             $content->setAttribute('type', 'html');
-            $content->appendChild($document->createTextNode($entryContent));
+            $content->appendChild($document->createTextNode((string) $entryContent));
             $entry->appendChild($content);
 
             foreach ($item->getEnclosures() as $enclosure) {
@@ -183,23 +193,27 @@ class AtomFormat extends FormatAbstract
                 $entry->appendChild($entryEnclosure);
                 $entryEnclosure->setAttribute('rel', 'enclosure');
                 $entryEnclosure->setAttribute('type', parse_mime_type($enclosure));
-                $entryEnclosure->setAttribute('href', $enclosure);
+                $entryEnclosure->setAttribute('href', (string) $enclosure);
             }
 
             foreach ($item->getCategories() as $category) {
                 $entryCategory = $document->createElement('category');
                 $entry->appendChild($entryCategory);
-                $entryCategory->setAttribute('term', $category);
+                $entryCategory->setAttribute('term', (string) $category);
             }
 
-            if (!empty($item->thumbnail)) {
-                $thumbnail = $document->createElementNS(self::MRSS_NS, 'thumbnail');
-                $entry->appendChild($thumbnail);
-                $thumbnail->setAttribute('url', $item->thumbnail);
+            // Use getter if available, fallback to array access
+            $thumbnail = method_exists($item, 'getThumbnail') 
+                ? $item->getThumbnail() 
+                : ($itemArray['thumbnail'] ?? null);
+            
+            if (!empty($thumbnail)) {
+                $thumbnailElement = $document->createElementNS(self::MRSS_NS, 'thumbnail');
+                $entry->appendChild($thumbnailElement);
+                $thumbnailElement->setAttribute('url', (string) $thumbnail);
             }
         }
 
-        $xml = $document->saveXML();
-        return $xml;
+        return $document->saveXML();
     }
 }

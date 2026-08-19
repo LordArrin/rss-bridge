@@ -1,59 +1,66 @@
-<?PHP
+<?php
 
-class SfeedFormat extends FormatAbstract
+declare(strict_types=1);
+
+namespace RSSBridge\Formats;
+
+/**
+ * SfeedFormat - sfeed tab-separated format
+ * https://codemadness.org/sfeed-simple-feed-parser.html
+ */
+final class SfeedFormat extends FormatAbstract
 {
-    const MIME_TYPE = 'text/plain';
+    public const MIME_TYPE = 'text/plain';
+
+    public function getMimeType(): string
+    {
+        return self::MIME_TYPE;
+    }
 
     public function render(): string
     {
         $text = '';
+        
         foreach ($this->getItems() as $item) {
+            $itemArray = $item->toArray();
+            
+            $timestamp = $itemArray['timestamp'] ?? '';
+            $title = $this->escape((string) ($itemArray['title'] ?? ''));
+            $uri = (string) ($itemArray['uri'] ?? '');
+            $content = $this->escape((string) ($itemArray['content'] ?? ''));
+            $author = (string) ($itemArray['author'] ?? '');
+            $enclosure = $this->getFirstEnclosure($itemArray['enclosures'] ?? []);
+            $categories = $this->escape($this->getCategories($itemArray['categories'] ?? []));
+
             $text .= sprintf(
                 "%s\t%s\t%s\t%s\thtml\t\t%s\t%s\t%s\n",
-                $item->toArray()['timestamp'],
-                preg_replace('/\s/', ' ', $item->toArray()['title']),
-                $item->toArray()['uri'],
-                $this->escape($item->toArray()['content']),
-                $item->toArray()['author'],
-                $this->getFirstEnclosure(
-                    $item->toArray()['enclosures']
-                ),
-                $this->escape(
-                    $this->getCategories(
-                        $item->toArray()['categories']
-                    )
-                )
+                $timestamp,
+                preg_replace('/\s+/', ' ', $title),
+                $uri,
+                $content,
+                $author,
+                $enclosure,
+                $categories
             );
         }
 
         return $text;
     }
 
-    private function escape(string $str)
+    private function escape(string $str): string
     {
         $str = str_replace('\\', '\\\\', $str);
         $str = str_replace("\n", '\\n', $str);
         return str_replace("\t", '\\t', $str);
     }
 
-    private function getFirstEnclosure(array $enclosures)
+    private function getFirstEnclosure(array $enclosures): string
     {
-        if (count($enclosures) >= 1) {
-            return $enclosures[0];
-        }
-        return '';
+        return $enclosures[0] ?? '';
     }
 
-    private function getCategories(array $cats)
+    private function getCategories(array $cats): string
     {
-        $toReturn = '';
-        $i = 1;
-        foreach ($cats as $cat) {
-            $toReturn .= trim($cat);
-            if (count($cats) > $i++) {
-                $toReturn .= '|';
-            }
-        }
-        return $toReturn;
+        return implode('|', array_map('trim', $cats));
     }
 }

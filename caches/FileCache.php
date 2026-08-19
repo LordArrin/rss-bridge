@@ -2,123 +2,177 @@
 
 declare(strict_types=1);
 
-class FileCache implements CacheInterface
-{
-    private Logger $logger;
-    private array $config;
+namespace RSSBridge\Caches;
 
-    public function __construct(
-        Logger $logger,
-        array $config = []
-    ) {
+/**
+ * File-based cache storage with security hardening.
+ * Each cache entry is stored as a separate file with serialized data.
+ */
+final class FileCache implements CacheInterface
+{
+    private const ALLOWED_CLASSES = [
+        'stdClass',
+        'DateTime',
+        'DateTimeImmutable',
+    ];
+
+    private readonly string $path;
+    private readonly bool $enablePurge;
+    private readonly \Logger $logger;
+
+    public function __construct(\Logger $logger, array $config = [])
+    {
         $this->logger = $logger;
+
         $default = [
-            'path'          => null,
-            'enable_purge'  => true,
+            'path'         => null,
+            'enable_purge' => true,
         ];
-        $this->config = array_merge($default, $config);
-        if (!$this->config['path']) {
+
+        $config = array_merge($default, $config);
+
+        if (!$config['path']) {
             throw new \Exception('The FileCache needs a path value');
         }
-        // Normalize with a single trailing slash
-        $this->config['path'] = rtrim($this->config['path'], '/') . '/';
+
+        $this->path = rtrim((string) $config['path'], '/') . '/';
+        $this->enablePurge = (bool) $config['enable_purge'];
+
+        if (!is_dir($this->path)) {
+            throw new \Exception(sprintf('The FileCache path does not exist: %s', $this->path));
+        }
+
+        if (!is_writable($this->path)) {
+            throw new \Exception(sprintf('The FileCache path is not writable: %s', $this->path));
+        }
     }
 
-    public function get(string $key, $default = null)
+    public function get(string $key, mixed $default = null): mixed
     {
         $cacheFile = $this->createCacheFile($key);
+
         if (!file_exists($cacheFile)) {
             return $default;
         }
+
         $data = file_get_contents($cacheFile);
-        $item = unserialize($data);
+        if ($data === false) {
+            return $default;
+        }
+
+        $item = unserialize($data, ['allowed_classes' => self::ALLOWED_CLASSES]);
+
         if ($item === false) {
             $this->logger->warning(sprintf('Failed to unserialize: %s', $cacheFile));
             $this->delete($key);
             return $default;
         }
+
         $expiration = $item['expiration'] ?? time();
+
         if ($expiration === 0 || $expiration > time()) {
             return $item['value'];
         }
+
         $this->delete($key);
         return $default;
     }
 
-    public function set($key, $value, ?int $ttl = null): void
+    public function set(string $key, mixed $value, ?int $ttl = null): void
     {
         if ($ttl === 0) {
-            return; // ttl is 0, do nothing
+            return;
         }
 
         $item = [
-            'key'           => $key,
-            'expiration'    => $ttl === null ? 0 : time() + $ttl, // if ttl not provided, store forever
-            'value'         => $value,
+            'value'      => $value,
+            'expiration' => $ttl === null ? 0 : time() + $ttl,
         ];
-        $cacheFile = $this->createCacheFile($key);
-        $bytes = file_put_contents($cacheFile, serialize($item));
 
-        // TODO: Consider tightening the permissions of the created file.
-        // It usually allow others to read, depending on umask
+        $cacheFile = $this->createCacheFile($key);
+        $bytes = file_put_contents($cacheFile, serialize($item), LOCK_EX);
 
         if ($bytes === false) {
-            // Typically means no disk space remaining
             $this->logger->warning(sprintf('Failed to write to: %s', $cacheFile));
         }
     }
 
     public function delete(string $key): void
     {
-        unlink($this->createCacheFile($key));
+        $cacheFile = $this->createCacheFile($key);
+        if (file_exists($cacheFile)) {
+            unlink($cacheFile);
+        }
     }
 
     public function clear(): void
     {
-        foreach (scandir($this->config['path']) as $filename) {
-            $cacheFile = $this->config['path'] . $filename;
-            $excluded = ['.' => true, '..' => true, '.gitkeep' => true];
-            if (isset($excluded[$filename]) || !is_file($cacheFile)) {
+        foreach (scandir($this->path) as $filename) {
+            if ($this->isExcludedFile($filename)) {
                 continue;
             }
-            unlink($cacheFile);
+
+            $cacheFile = $this->path . $filename;
+            if (is_file($cacheFile)) {
+                unlink($cacheFile);
+            }
         }
     }
 
     public function prune(): void
     {
-        if (! $this->config['enable_purge']) {
+        if (!$this->enablePurge) {
             return;
         }
-        foreach (scandir($this->config['path']) as $filename) {
-            $cacheFile = $this->config['path'] . $filename;
-            $excluded = ['.' => true, '..' => true, '.gitkeep' => true];
-            if (isset($excluded[$filename]) || !is_file($cacheFile)) {
+
+        $now = time();
+
+        foreach (scandir($this->path) as $filename) {
+            if ($this->isExcludedFile($filename)) {
                 continue;
             }
+
+            $cacheFile = $this->path . $filename;
+            if (!is_file($cacheFile)) {
+                continue;
+            }
+
             $data = file_get_contents($cacheFile);
-            $item = unserialize($data);
+            if ($data === false) {
+                unlink($cacheFile);
+                continue;
+            }
+
+            $item = unserialize($data, ['allowed_classes' => self::ALLOWED_CLASSES]);
+
             if ($item === false) {
                 unlink($cacheFile);
                 continue;
             }
+
             $expiration = $item['expiration'] ?? time();
-            if ($expiration === 0 || $expiration > time()) {
-                // Cached forever, or not expired yet
-                continue;
+
+            if ($expiration !== 0 && $expiration <= $now) {
+                unlink($cacheFile);
             }
-            // Expired, so delete file
-            unlink($cacheFile);
         }
     }
 
     private function createCacheFile(string $key): string
     {
-        return $this->config['path'] . hash('md5', $key) . '.cache';
+        return $this->path . hash('sha256', $key) . '.cache';
     }
 
-    public function getConfig()
+    private function isExcludedFile(string $filename): bool
     {
-        return $this->config;
+        return in_array($filename, ['.', '..', '.gitkeep'], true);
+    }
+
+    public function getConfig(): array
+    {
+        return [
+            'path'         => $this->path,
+            'enable_purge' => $this->enablePurge,
+        ];
     }
 }

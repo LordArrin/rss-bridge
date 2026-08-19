@@ -1,20 +1,26 @@
 #!/usr/bin/env php
 <?php
 
+declare(strict_types=1);
+
 /**
- * Add log records to all three levels (for testing purposes)
+ * Run PHPUnit tests.
+ * 
+ * Usage:
+ *   bin/test              # Run all tests
+ *   bin/test CacheTest    # Run specific test
  */
 
 require __DIR__ . '/../lib/bootstrap.php';
-require __DIR__ . '/../lib/config.php';
 
-$container = require __DIR__ . '/../lib/dependencies.php';
+// Check if PHPUnit is available
+if (!file_exists(__DIR__ . '/../vendor/bin/phpunit')) {
+    fprintf(STDERR, "PHPUnit not found. Run 'composer install' first.\n");
+    exit(1);
+}
 
-/** @var Logger $logger */
-$logger = $container['logger'];
+// Forward all arguments to PHPUnit
+$args = array_slice($argv, 1);
+$command = [__DIR__ . '/../vendor/bin/phpunit', ...$args];
 
-$logger->debug('This is a test debug message');
-
-$logger->info('This is a test info message');
-
-$logger->error('This is a test error message');
+exit(passthru(implode(' ', array_map('escapeshellarg', $command)), $exitCode) ?? $exitCode);

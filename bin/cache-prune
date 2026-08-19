@@ -1,8 +1,12 @@
 #!/usr/bin/env php
 <?php
 
+declare(strict_types=1);
+
 /**
- * Remove all expired items from the cache
+ * Remove expired items from cache.
+ * 
+ * Should be run periodically (e.g., via cron) to free up space.
  */
 
 require __DIR__ . '/../lib/bootstrap.php';
@@ -10,15 +14,17 @@ require __DIR__ . '/../lib/config.php';
 
 $container = require __DIR__ . '/../lib/dependencies.php';
 
-if (
-    Configuration::getConfig('cache', 'type') === 'file'
-    && !Configuration::getConfig('FileCache', 'enable_purge')
-) {
-    // Override enable_purge for this particular execution
-    Configuration::setConfig('FileCache', 'enable_purge', true);
-}
-
-/** @var CacheInterface $cache */
+/** @var \RSSBridge\Caches\CacheInterface $cache */
 $cache = $container['cache'];
 
-$cache->prune();
+echo sprintf("Cache type: %s\n", get_class($cache));
+echo "Pruning expired items...\n";
+
+try {
+    $cache->prune();
+    echo "Cache pruned successfully\n";
+    exit(0);
+} catch (\Throwable $e) {
+    fprintf(STDERR, "Failed to prune cache: %s\n", $e->getMessage());
+    exit(1);
+}

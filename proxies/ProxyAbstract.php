@@ -2,12 +2,14 @@
 
 declare(strict_types=1);
 
+use RSSBridge\Caches\CacheInterface;
+
 abstract class ProxyAbstract implements ProxyInterface
 {
     protected array $config;
     protected int $timeout = 180;
     protected int $maxRetries = 3;
-    protected ?\CacheInterface $cache = null;
+    protected ?CacheInterface $cache = null;
     protected ?\Logger $logger = null;
 
     public function __construct(array $config = [])

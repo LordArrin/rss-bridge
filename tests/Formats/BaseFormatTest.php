@@ -1,9 +1,12 @@
 <?php
 
-namespace RssBridge\Tests\Formats;
+declare(strict_types=1);
+
+namespace Tests\Formats;
 
 use PHPUnit\Framework\TestCase;
-use FormatFactory;
+use RSSBridge\Formats\FormatFactory;
+use RSSBridge\Formats\FormatAbstract;
 
 abstract class BaseFormatTest extends TestCase
 {
