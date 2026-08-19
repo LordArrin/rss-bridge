@@ -2,7 +2,7 @@
     "name": "lordarrin/rss-bridge",
     "description": "RSS-Bridge - generate feeds for websites that don't have one",
     "license": "AGPL-3.0-or-later",
-    "version": "1.1.8",
+    "version": "1.1.9",
     "autoload": {
         "psr-4": {
             "RSSBridge\\Bridges\\": "bridges-v2/",

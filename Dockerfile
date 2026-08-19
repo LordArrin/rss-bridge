@@ -30,7 +30,7 @@ RUN set -xe && \
 # ============================================================
 FROM alpine:${ALPINE_VERSION} AS runtime
 
-ARG IMAGE_VERSION=1.1.8
+ARG IMAGE_VERSION=1.1.9
 ENV RSSBRIDGE_SYSTEM_VERSION=${IMAGE_VERSION}
 ENV CURL_IMPERSONATE=firefox147
 

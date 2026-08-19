@@ -41,7 +41,6 @@ if [ ! -f /app/vendor/autoload.php ]; then
 fi
 
 # Build bridge metadata cache
-echo "Building bridge metadata cache..."
 php /app/bin/cache-bridge-metadata || echo "Warning: cache build failed (non-fatal)"
 
 nginx

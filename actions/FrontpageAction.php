@@ -38,7 +38,7 @@ final class FrontpageAction implements ActionInterface
 
         foreach ($this->bridgeFactory->getMissingEnabledBridges() as $missingEnabledBridge) {
             $messages[] = [
-                'body' => sprintf('Warning : Bridge "%s" not found', $missingEnabledBridge),
+                'body' => sprintf('Warning :Bridge "%s" not found', $missingEnabledBridge),
                 'level' => 'warning'
             ];
         }
@@ -100,12 +100,24 @@ final class FrontpageAction implements ActionInterface
         string $shortClassName,
         ?string $token
     ): string {
+
+        $e = function($s) {
+            return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        };
+
         $uri = $meta['uri'];
         $name = $meta['name'];
         $description = $meta['description'];
         $parameters = $meta['parameters'];
         $domain = $meta['domain'];
         $shortName = $meta['short_name'];
+
+        $shortClassNameSafe = $e($shortClassName);
+        $nameSafe = $e($name);
+        $shortNameSafe = $e($shortName);
+        $domainSafe = $e($domain);
+        $uriSafe = $e($uri);
+        $descriptionSafe = $e($description);
 
         if (
             Configuration::getConfig('proxy', 'url')
@@ -129,16 +141,16 @@ final class FrontpageAction implements ActionInterface
         $card = <<<CARD
             <section
                 class="bridge-card"
-                id="bridge-{$shortClassName}"
-                data-ref="{$name}"
-                data-short-name="{$shortName}"
-                data-domain="{$domain}"
+                id="bridge-{$shortClassNameSafe}"
+                data-ref="{$nameSafe}"
+                data-short-name="{$shortNameSafe}"
+                data-domain="{$domainSafe}"
             >
 
             <button
                 type="button"
                 class="favorite-btn"
-                data-bridge="{$shortClassName}"
+                data-bridge="{$shortClassNameSafe}"
                 aria-label="Add to favorites"
                 title="Add to favorites"
             >
@@ -147,15 +159,15 @@ final class FrontpageAction implements ActionInterface
                 </svg>
             </button>
 
-            <a href="#bridge-{$shortClassName}">
+            <a href="#bridge-{$shortClassNameSafe}">
                 <h1>#</h1>
             </a>
 
-            <h2><a href="{$uri}">{$name}</a></h2>
-            <p class="description">{$description}</p>
+            <h2><a href="{$uriSafe}">{$nameSafe}</a></h2>
+            <p class="description">{$descriptionSafe}</p>
 
-            <input type="checkbox" class="showmore-box" id="showmore-{$shortClassName}" />
-            <label class="showmore" for="showmore-{$shortClassName}">Show more</label>
+            <input type="checkbox" class="showmore-box" id="showmore-{$shortClassNameSafe}" />
+            <label class="showmore" for="showmore-{$shortClassNameSafe}">Show more</label>
 
 
         CARD;
@@ -177,7 +189,7 @@ final class FrontpageAction implements ActionInterface
                 $contextNameStr = is_numeric($contextName) ? (string) $contextName : $contextName;
 
                 if (!is_numeric($contextName)) {
-                    $card .= '<h5>' . $contextNameStr . "</h5>\n";
+                    $card .= '<h5>' . e($contextNameStr) . "</h5>\n";
                 }
 
                 $card .= self::renderForm($shortClassName, $contextNameStr, $contextParameters, $token);
@@ -186,7 +198,7 @@ final class FrontpageAction implements ActionInterface
 
         $card .= html_tag('label', 'Show less', [
                 'class' => 'showless',
-                'for'   => "showmore-$shortClassName",
+                'for'   => "showmore-$shortClassNameSafe",
             ]) . "\n";
 
         $card .= html_tag('p', $meta['maintainer'], ['class' => 'maintainer']) . "\n";
@@ -266,7 +278,6 @@ final class FrontpageAction implements ActionInterface
                 $params = [
                     'title'         => sprintf("Example (right click to use):\n%s", $parameter['exampleValue']),
                     'class'         => 'info',
-                    'oncontextmenu' => 'rssbridge_use_placeholder_value(this);return false',
                     'data-for'      => $idArg,
                 ];
             }
@@ -338,11 +349,11 @@ final class FrontpageAction implements ActionInterface
 
     public static function getListInput(array $parameter, string $id, string $name): string
     {
-        $list = sprintf('<select id="%s" name="%s">', $id, $name) . "\n";
+        $list = sprintf('<select id="%s" name="%s">', e($id), e($name)) . "\n";
 
         foreach ($parameter['values'] as $name => $value) {
             if (is_array($value)) {
-                $list .= '<optgroup label="' . htmlentities((string) $name) . '">';
+                $list .= '<optgroup label="' . e((string) $name) . '">';
                 foreach ($value as $subname => $subvalue) {
                     if (
                         $parameter['defaultValue'] === $subname

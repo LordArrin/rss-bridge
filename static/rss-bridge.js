@@ -364,6 +364,7 @@ const RssBridge = (() => {
         cardsCache: [],
         isInitialized: false,
         isMobile: window.matchMedia('(max-width: 767px)').matches,
+        lastToggleTime: 0,
         
         getFavorites() {
             try {
@@ -383,6 +384,11 @@ const RssBridge = (() => {
         },
         
         toggleFavorite(bridgeName) {
+            // Throttle
+            const now = Date.now();
+            if (now - this.lastToggleTime < 200) return false;
+            this.lastToggleTime = now;
+
             const favorites = this.getFavorites();
             const index = favorites.indexOf(bridgeName);
             
@@ -472,6 +478,10 @@ const RssBridge = (() => {
         },
         
         applyFlipAnimation(movedCards) {
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                return;
+            }
+
             for (const { card, deltaX, deltaY } of movedCards) {
                 card.classList.add('sorted');
                 
@@ -600,7 +610,10 @@ const RssBridge = (() => {
 })();
 
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => RssBridge._init());
+    document.addEventListener('DOMContentLoaded', () => {
+        RssBridge._init();
+        setTimeout(() => Search.perform(), 100);
+    });
 } else {
     RssBridge._init();
 }

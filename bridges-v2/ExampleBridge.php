@@ -15,7 +15,7 @@ namespace RSSBridge\Bridges;
  */
 final class ExampleBridge extends \BridgeAbstract
 {
-    const NAME = 'Example Site';
+    const NAME = 'Example Bridge';
     const URI = 'https://example.com';
     const DESCRIPTION = 'Returns posts from Example Site';
     const MAINTAINER = 'YourName';

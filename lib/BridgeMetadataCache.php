@@ -6,16 +6,17 @@ use RSSBridge\Caches\CacheInterface;
 
 final class BridgeMetadataCache
 {
-    private const CACHE_PREFIX = 'bridge_metadata_v1';
-    private const DEFAULT_TTL = 86400;
+    private const CACHE_PREFIX = 'bridge_metadata_v2';
+    private const DEFAULT_TTL = 2592000;
 
     private CacheInterface $cache;
-    private string $bridgesDir;
+    private array $bridgesDirs;
+    private ?string $cachedHash = null;
 
-    public function __construct(CacheInterface $cache, string $bridgesDir)
+    public function __construct(CacheInterface $cache, array $bridgesDirs)
     {
         $this->cache = $cache;
-        $this->bridgesDir = $bridgesDir;
+        $this->bridgesDirs = $bridgesDirs;
     }
 
     public function getAll(BridgeFactory $factory, SafeBridgeLoader $loader): array
@@ -39,6 +40,14 @@ final class BridgeMetadataCache
         return $all[$bridgeClassName] ?? null;
     }
 
+    public function rebuild(BridgeFactory $factory, SafeBridgeLoader $loader): array
+    {
+        $cacheKey = $this->buildCacheKey();
+        $metadata = $this->buildMetadata($factory, $loader);
+        $this->cache->set($cacheKey, $metadata, self::DEFAULT_TTL);
+        return $metadata;
+    }
+
     public function invalidate(): void
     {
         $cacheKey = $this->buildCacheKey();
@@ -47,31 +56,55 @@ final class BridgeMetadataCache
         }
     }
 
+    public function isFresh(): bool
+    {
+        $cacheKey = $this->buildCacheKey();
+        $cached = $this->cache->get($cacheKey);
+        return $cached !== null && is_array($cached);
+    }
+
+    public function getCurrentHash(): string
+    {
+        return $this->calculateBridgesHash();
+    }
+
     private function buildCacheKey(): string
     {
-        $hash = $this->calculateBridgesHash();
-        return self::CACHE_PREFIX . '_' . $hash;
+        return self::CACHE_PREFIX . '_' . $this->calculateBridgesHash();
     }
 
     private function calculateBridgesHash(): string
     {
+        if ($this->cachedHash !== null) {
+            return $this->cachedHash;
+        }
+
         $mtimes = [];
 
-        if (!is_dir($this->bridgesDir)) {
-            return 'empty';
+        foreach ($this->bridgesDirs as $dir) {
+            if (!is_dir($dir)) {
+                continue;
+            }
+
+            $files = glob($dir . '/*Bridge.php');
+            if ($files === false) {
+                continue;
+            }
+
+            foreach ($files as $file) {
+                $relativeName = basename($dir) . '/' . basename($file);
+                $mtimes[] = $relativeName . ':' . filemtime($file);
+            }
         }
 
-        $files = glob($this->bridgesDir . '/*Bridge.php');
-        if ($files === false) {
-            return 'empty';
-        }
-
-        foreach ($files as $file) {
-            $mtimes[] = basename($file) . ':' . filemtime($file);
+        if ($mtimes === []) {
+            $this->cachedHash = 'empty';
+            return $this->cachedHash;
         }
 
         sort($mtimes);
-        return md5(implode('|', $mtimes));
+        $this->cachedHash = md5(implode('|', $mtimes));
+        return $this->cachedHash;
     }
 
     private function buildMetadata(BridgeFactory $factory, SafeBridgeLoader $loader): array
@@ -90,7 +123,6 @@ final class BridgeMetadataCache
                 continue;
             }
 
-            // Use FQCN as key for unambiguous identification
             $metadata[$className] = $this->extractMetadata($bridge);
         }
 

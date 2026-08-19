@@ -3,14 +3,6 @@
 
 declare(strict_types=1);
 
-/**
- * Build or rebuild bridge metadata cache.
- * 
- * This script pre-fetches metadata (names, descriptions, icons, parameters)
- * from all bridges and stores it in cache for faster frontpage rendering.
- */
-
-// Initialize application
 require __DIR__ . '/../lib/bootstrap.php';
 require __DIR__ . '/../lib/config.php';
 
@@ -23,16 +15,37 @@ $factory = $container['bridge_factory'];
 /** @var \SafeBridgeLoader $loader */
 $loader = $container['safe_bridge_loader'];
 
+$force = in_array('--force', $argv ?? [], true);
+$verbose = in_array('--verbose', $argv ?? [], true) || in_array('-v', $argv ?? [], true);
+
+$isFresh = $cache->isFresh();
+$currentHash = $cache->getCurrentHash();
+
+if ($verbose) {
+    fprintf(STDERR, "Current bridges hash: %s\n", substr($currentHash, 0, 12));
+    fprintf(STDERR, "Cache fresh: %s\n", $isFresh ? 'yes' : 'no');
+    fprintf(STDERR, "Force rebuild: %s\n", $force ? 'yes' : 'no');
+}
+
+if ($isFresh && !$force) {
+    if ($verbose) {
+        fprintf(STDERR, "Cache is fresh, skipping rebuild (use --force to override)\n");
+    } else {
+        echo sprintf("Cache is fresh [hash: %s], skipping\n", substr($currentHash, 0, 8));
+    }
+    exit(0);
+}
+
 echo "Building bridge metadata cache...\n";
 
 $start = microtime(true);
 
 try {
-    $metadata = $cache->getAll($factory, $loader);
+    $metadata = $cache->rebuild($factory, $loader);
     $elapsed = round((microtime(true) - $start) * 1000, 2);
-    
-    echo sprintf("? Cached %d bridges in %sms\n", count($metadata), $elapsed);
-    
+
+    echo sprintf("? Cached %d bridges in %sms [hash: %s]\n", count($metadata), $elapsed, substr($currentHash, 0, 8));
+
     $broken = $loader->getBrokenBridges();
     if (count($broken) > 0) {
         echo sprintf("\n? %d broken bridges:\n", count($broken));
@@ -40,9 +53,12 @@ try {
             echo sprintf("  - %s: %s\n", $name, substr($info['message'], 0, 100));
         }
     }
-    
+
     exit(0);
 } catch (\Throwable $e) {
     fprintf(STDERR, "? Failed to build cache: %s\n", $e->getMessage());
+    if ($verbose) {
+        fprintf(STDERR, "%s\n", $e->getTraceAsString());
+    }
     exit(1);
 }
