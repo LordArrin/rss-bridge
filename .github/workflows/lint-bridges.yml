@@ -54,6 +54,23 @@ jobs:
           composer install --no-interaction --no-progress --prefer-dist
           find vendor/bin -type f -exec chmod +x {} \;
 
+      - name: Debug environment
+        run: |
+          echo "=== PHP Version ==="
+          php -v
+          echo ""
+          echo "=== PHPCS Version ==="
+          ./vendor/bin/phpcs --version
+          echo ""
+          echo "=== phpcs.xml exists ==="
+          ls -la phpcs.xml
+          echo ""
+          echo "=== composer.lock info ==="
+          ls -la composer.lock
+          echo ""
+          echo "=== Installed packages ==="
+          composer show --direct
+
       - name: Determine changed bridge files
         id: changed
         run: |
@@ -109,6 +126,21 @@ jobs:
             echo "Files to check:"
             echo "$FILES" | tr ' ' '\n'
           fi
+
+      - name: Run phpcs on bridge files
+        if: steps.changed.outputs.has_files == 'true'
+        run: |
+          # Clear phpcs cache to avoid stale results
+          rm -f .phpcs.cache
+          
+          ./vendor/bin/phpcs \
+            ${{ steps.changed.outputs.files }} \
+            --standard=phpcs.xml \
+            --warning-severity=0 \
+            --extensions=php \
+            --no-cache \
+            --report=full \
+            -p
 
       - name: Run phpcbf on changed bridges (PR only)
         if: steps.changed.outputs.has_files == 'true' && github.event_name == 'pull_request'
