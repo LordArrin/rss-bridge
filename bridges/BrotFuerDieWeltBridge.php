@@ -105,4 +105,3 @@ class BrotFuerDieWeltBridge extends BridgeAbstract
         }
     }
 }
-

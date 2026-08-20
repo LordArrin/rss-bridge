@@ -125,4 +125,3 @@ class AllegroBridge extends BridgeAbstract
         }
     }
 }
-

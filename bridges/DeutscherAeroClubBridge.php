@@ -25,4 +25,3 @@ class DeutscherAeroClubBridge extends XPathAbstract
         return $dti->getTimestamp();
     }
 }
-

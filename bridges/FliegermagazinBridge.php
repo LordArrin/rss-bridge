@@ -19,4 +19,3 @@ class FliegermagazinBridge extends XPathAbstract
     const XPATH_EXPRESSION_ITEM_ENCLOSURES = './/img/@src';
     //const XPATH_EXPRESSION_ITEM_CATEGORIES = './/';
 }
-

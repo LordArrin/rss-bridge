@@ -43,4 +43,3 @@ class LuftfahrtBundesAmtBridge extends XPathAbstract
         return $parts[0];
     }
 }
-

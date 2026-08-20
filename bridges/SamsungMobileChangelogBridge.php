@@ -55,10 +55,10 @@ class SamsungMobileChangelogBridge extends BridgeAbstract
                 $reachedStart = true;
                 $item = [];
                 continue;
-            } else if (!$reachedStart) {
+            } elseif (!$reachedStart) {
                 // Skip non-changelog elements
                 continue;
-            } else if ($element->tag == 'div' && $element->getAttribute('class') == 'row') {
+            } elseif ($element->tag == 'div' && $element->getAttribute('class') == 'row') {
                 // Debug::log('Processing row element');
                 $build = $element->find('div', 0)->plaintext;
                 $build = str_replace(self::STR_BUILD_NUMBER . ' : ', '', $build);
