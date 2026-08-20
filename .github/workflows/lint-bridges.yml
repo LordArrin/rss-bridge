@@ -50,7 +50,9 @@ jobs:
           coverage: none
 
       - name: Install Composer dependencies
-        run: composer install --no-interaction --no-progress --prefer-dist
+        run: |
+          composer install --no-interaction --no-progress --prefer-dist
+          find vendor/bin -type f -exec chmod +x {} \;
 
       - name: Determine changed bridge files
         id: changed
