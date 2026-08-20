@@ -33,7 +33,7 @@ permissions:
 jobs:
   phpcs:
     name: PHP_CodeSniffer
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
 
     steps:
       - name: Checkout repository
@@ -74,11 +74,43 @@ jobs:
       - name: Determine changed bridge files
         id: changed
         run: |
-          BRIDGE_PATHS="bridges/*.php bridges-v2/*.php"
+          echo "=== DEBUG: Current directory ==="
+          pwd
+          echo ""
+          echo "=== DEBUG: Directory structure ==="
+          ls -la bridges/ | head -10
+          echo "---"
+          ls -la bridges-v2/ | head -10
+          echo ""
+          echo "=== DEBUG: Find results ==="
+          echo "bridges files:"
+          find bridges -maxdepth 1 -name '*.php' -type f | wc -l
+          echo "bridges-v2 files:"
+          find bridges-v2 -maxdepth 1 -name '*.php' -type f | wc -l
+          echo ""
           
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ "${{ github.event.inputs.check_mode }}" = "all_bridges" ]; then
-              FILES=$(find bridges bridges-v2 -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
+              echo "Mode: ALL BRIDGES"
+              
+              BRIDGES_FILES=$(find bridges -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
+              BRIDGES_V2_FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
+              
+              echo "=== DEBUG: Raw BRIDGES_FILES ==="
+              echo "$BRIDGES_FILES" | head -5
+              echo ""
+              echo "=== DEBUG: Raw BRIDGES_V2_FILES ==="
+              echo "$BRIDGES_V2_FILES" | head -5
+              echo ""
+              
+              FILES=$(echo -e "${BRIDGES_FILES}\n${BRIDGES_V2_FILES}" | grep -v '^$' | tr '\n' ' ')
+              
+              echo "=== DEBUG: Combined FILES ==="
+              echo "$FILES"
+              echo ""
+              echo "=== DEBUG: Files count ==="
+              echo "$FILES" | wc -w
+              
               echo "Running manual check on ALL bridge files"
             else
               if git rev-parse HEAD~1 >/dev/null 2>&1; then
@@ -87,16 +119,20 @@ jobs:
                 BASE=""
               fi
               
+              BRIDGE_PATHS="bridges/*.php bridges-v2/*.php"
+              
               if [ -n "$BASE" ]; then
                 FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
               else
-                FILES=$(find bridges bridges-v2 -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
+                BRIDGES_FILES=$(find bridges -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
+                BRIDGES_V2_FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
+                FILES=$(echo -e "${BRIDGES_FILES}\n${BRIDGES_V2_FILES}" | grep -v '^$' | tr '\n' ' ')
               fi
               echo "Running manual check on CHANGED bridge files only"
             fi
-          # Pull request
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="origin/${{ github.base_ref }}"
+            BRIDGE_PATHS="bridges/*.php bridges-v2/*.php"
             FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
             echo "Checking PR changes against $BASE"
           else
@@ -106,16 +142,30 @@ jobs:
               BASE=""
             fi
             
+            BRIDGE_PATHS="bridges/*.php bridges-v2/*.php"
+            
             if [ -n "$BASE" ]; then
               FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
               echo "Checking push changes against $BASE"
             else
-              FILES=$(find bridges bridges-v2 -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
+              BRIDGES_FILES=$(find bridges -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
+              BRIDGES_V2_FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
+              FILES=$(echo -e "${BRIDGES_FILES}\n${BRIDGES_V2_FILES}" | grep -v '^$' | tr '\n' ' ')
               echo "Initial commit - checking all files"
             fi
           fi
 
           FILES=$(echo "$FILES" | xargs)
+
+          echo ""
+          echo "=== DEBUG: Final FILES variable ==="
+          echo "$FILES"
+          echo ""
+          echo "=== DEBUG: Files count ==="
+          echo "$FILES" | wc -w
+          echo ""
+          echo "=== DEBUG: First 10 files ==="
+          echo "$FILES" | tr ' ' '\n' | head -10
 
           if [ -z "$FILES" ]; then
             echo "has_files=false" >> "$GITHUB_OUTPUT"
@@ -176,7 +226,7 @@ jobs:
 
   executable-check:
     name: Executable PHP files check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
 
     steps:
       - name: Checkout repository
