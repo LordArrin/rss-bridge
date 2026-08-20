@@ -8,15 +8,15 @@ use BridgeAbstract;
 
 final class Telegram2Bridge extends BridgeAbstract
 {
-    const NAME = 'Telegram2';
-    const URI = 'https://t.me';
-    const DESCRIPTION = 'Returns the recent publications from a public Telegram channel. Supports embedded media content, hides ads and unsupported content.';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 1200;
+    public const NAME = 'Telegram2';
+    public const URI = 'https://t.me';
+    public const DESCRIPTION = 'Returns the recent publications from a public Telegram channel. Supports embedded media content, hides ads and unsupported content.';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 1200;
 
     private const PROXY_PROFILE = 'tgws';
 
-    const PARAMETERS = [[
+    public const PARAMETERS = [[
         'username' => [
             'name' => 'Channel name',
             'type' => 'text',
@@ -97,7 +97,7 @@ TXT,
         ],
     ]];
 
-    const CONFIGURATION = [
+    public const CONFIGURATION = [
         'embed_max_size' => [
             'required' => false,
             'defaultValue' => '10m',

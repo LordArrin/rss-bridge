@@ -6,11 +6,11 @@ namespace RSSBridge\Bridges;
 
 final class DerpibooruBridge extends PhilomenaBase
 {
-    const NAME = 'Derpibooru';
-    const URI = 'https://derpibooru.org/';
-    const DESCRIPTION = 'Returns images and videos from Derpibooru search';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 1800;
+    public const NAME = 'Derpibooru';
+    public const URI = 'https://derpibooru.org/';
+    public const DESCRIPTION = 'Returns images and videos from Derpibooru search';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 1800;
 
     protected static function getAvailableFilters(): array
     {

@@ -8,13 +8,13 @@ use BridgeAbstract;
 
 final class MSISupportBridge extends BridgeAbstract
 {
-    const NAME = 'MSI Support';
-    const URI = 'https://www.msi.com/';
-    const DESCRIPTION = 'Returns BIOS, drivers, manuals, and utilities updates for MSI products via internal API';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 14400;
-    const VALID_TYPES = ['bios', 'driver', 'manual', 'utility'];
-    const PARAMETERS = [
+    public const NAME = 'MSI Support';
+    public const URI = 'https://www.msi.com/';
+    public const DESCRIPTION = 'Returns BIOS, drivers, manuals, and utilities updates for MSI products via internal API';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 14400;
+    public const VALID_TYPES = ['bios', 'driver', 'manual', 'utility'];
+    public const PARAMETERS = [
         [
             'url' => [
                 'name' => 'Support page URL',

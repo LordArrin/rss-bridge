@@ -8,13 +8,13 @@ use BridgeAbstract;
 
 final class GigabyteSupportBridge extends BridgeAbstract
 {
-    const NAME = 'Gigabyte Support';
-    const URI = 'https://www.gigabyte.com/';
-    const DESCRIPTION = 'Returns BIOS and drivers updates for Gigabyte products';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 14400;
-    const VALID_TYPES = ['driver', 'bios'];
-    const PARAMETERS = [[
+    public const NAME = 'Gigabyte Support';
+    public const URI = 'https://www.gigabyte.com/';
+    public const DESCRIPTION = 'Returns BIOS and drivers updates for Gigabyte products';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 14400;
+    public const VALID_TYPES = ['driver', 'bios'];
+    public const PARAMETERS = [[
         'url' => [
             'name' => 'Support page URL',
             'type' => 'text',
@@ -148,6 +148,10 @@ final class GigabyteSupportBridge extends BridgeAbstract
         $xpath = new \DOMXPath($dom);
         $nodes = $xpath->query("//*[contains(@class, 'model-base-info-title')]");
 
+        if ($nodes === false) {
+            return null;
+        }
+
         foreach ($nodes as $node) {
             $name = trim($node->textContent);
             if ($name !== '') {
@@ -174,21 +178,31 @@ final class GigabyteSupportBridge extends BridgeAbstract
         }
 
         $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $text = preg_replace('/Checksum\s*:\s*\S+/i', '', $text);
+        $result = preg_replace('/Checksum\s*:\s*\S+/i', '', $text);
+        $text = $result !== null ? $result : $text;
 
         if ($keepLinks === true) {
-            $text = preg_replace('/<li[^>]*>/i', '[[SEP]]', $text);
-            $text = preg_replace('/<\/li>/i', '', $text);
-            $text = preg_replace('/<br\s*\/?>/i', '[[SEP]]', $text);
-            $text = preg_replace('/<\/?p[^>]*>/i', '[[SEP]]', $text);
-            $text = preg_replace('/<\/?div[^>]*>/i', '[[SEP]]', $text);
-            $text = preg_replace('/<ol[^>]*>/i', '[[SEP]]', $text);
-            $text = preg_replace('/<\/ol>/i', '', $text);
-            $text = preg_replace('/<ul[^>]*>/i', '[[SEP]]', $text);
-            $text = preg_replace('/<\/ul>/i', '', $text);
+            $result = preg_replace('/<li[^>]*>/i', '[[SEP]]', $text);
+            $text = $result !== null ? $result : $text;
+            $result = preg_replace('/<\/li>/i', '', $text);
+            $text = $result !== null ? $result : $text;
+            $result = preg_replace('/<br\s*\/?>/i', '[[SEP]]', $text);
+            $text = $result !== null ? $result : $text;
+            $result = preg_replace('/<\/?p[^>]*>/i', '[[SEP]]', $text);
+            $text = $result !== null ? $result : $text;
+            $result = preg_replace('/<\/?div[^>]*>/i', '[[SEP]]', $text);
+            $text = $result !== null ? $result : $text;
+            $result = preg_replace('/<ol[^>]*>/i', '[[SEP]]', $text);
+            $text = $result !== null ? $result : $text;
+            $result = preg_replace('/<\/ol>/i', '', $text);
+            $text = $result !== null ? $result : $text;
+            $result = preg_replace('/<ul[^>]*>/i', '[[SEP]]', $text);
+            $text = $result !== null ? $result : $text;
+            $result = preg_replace('/<\/ul>/i', '', $text);
+            $text = $result !== null ? $result : $text;
 
             $linkStyle = self::CSS['link'];
-            $text = preg_replace_callback('/<a\s+([^>]*?)>(.*?)<\/a>/is', function (array $m) use ($linkStyle): string {
+            $result = preg_replace_callback('/<a\s+([^>]*?)>(.*?)<\/a>/is', function (array $m) use ($linkStyle): string {
                 $attrs = $m[1];
 
                 if (str_contains(strtolower($attrs), 'target=') === false) {
@@ -203,23 +217,29 @@ final class GigabyteSupportBridge extends BridgeAbstract
 
                 return '<a ' . trim($attrs) . '>' . $m[2] . '</a>';
             }, $text);
+            $text = $result !== null ? $result : $text;
 
             $text = strip_tags($text, '<a>');
-            $parts = preg_split('/\[\[SEP\]\]|\n|\r\n?/', $text);
+            $result = preg_split('/\[\[SEP\]\]|\n|\r\n?/', $text);
+            $parts = $result !== false ? $result : [$text];
 
             $cleanParts = array_filter(
-                array_map(fn(string $part): string => preg_replace('/\s+/', ' ', trim($part)), $parts),
+                array_map(fn(string $part): string => preg_replace('/\s+/', ' ', trim($part)) ?? '', $parts),
                 fn(string $part): bool => $part !== ''
             );
 
             return implode('<br>', $cleanParts);
         }
 
-        $text = preg_replace('/\s+/', ' ', $text);
-        $text = preg_replace('/<br\s*\/?>/i', ', ', $text);
-        $text = preg_replace('/(64bit|32bit)\s+(Windows|Linux|macOS)/i', '$1, $2', $text);
+        $result = preg_replace('/\s+/', ' ', $text);
+        $text = $result !== null ? $result : $text;
+        $result = preg_replace('/<br\s*\/?>/i', ', ', $text);
+        $text = $result !== null ? $result : $text;
+        $result = preg_replace('/(64bit|32bit)\s+(Windows|Linux|macOS)/i', '$1, $2', $text);
+        $text = $result !== null ? $result : $text;
         $text = strip_tags($text);
-        $text = preg_replace('/,\s*,/', ',', $text);
+        $result = preg_replace('/,\s*,/', ',', $text);
+        $text = $result !== null ? $result : $text;
 
         return trim($text, ', ');
     }
@@ -235,6 +255,10 @@ final class GigabyteSupportBridge extends BridgeAbstract
         $items = [];
 
         $h2Nodes = $xpath->query('//h2');
+        if ($h2Nodes === false) {
+            return [];
+        }
+
         foreach ($h2Nodes as $h2Node) {
             $category = trim($h2Node->textContent);
             if ($category === '') {
@@ -253,6 +277,10 @@ final class GigabyteSupportBridge extends BridgeAbstract
             }
 
             $rows = $xpath->query('.//tr', $tableNode);
+            if ($rows === false) {
+                continue;
+            }
+
             $hasOs = null;
 
             foreach ($rows as $row) {
@@ -271,21 +299,21 @@ final class GigabyteSupportBridge extends BridgeAbstract
 
                 $descriptionNode = $cells->item(0);
                 $versionNode = $cells->item(1);
-                $osNode = $hasOs ? $cells->item(2) : null;
-                $sizeNode = $cells->item($hasOs ? 3 : 2);
-                $dateNode = $cells->item($hasOs ? 4 : 3);
+                $osNode = ($hasOs === true) ? $cells->item(2) : null;
+                $sizeNode = $cells->item($hasOs === true ? 3 : 2);
+                $dateNode = $cells->item($hasOs === true ? 4 : 3);
 
                 $downloadUrl = '';
                 $links = $row->getElementsByTagName('a');
                 foreach ($links as $link) {
                     $href = $link->getAttribute('href');
-                    if (str_contains($href, 'download.gigabyte.com') || str_contains($href, '.zip')) {
+                    if (str_contains($href, 'download.gigabyte.com') === true || str_contains($href, '.zip') === true) {
                         $downloadUrl = $href;
                         break;
                     }
                 }
 
-                if ($downloadUrl !== '' && str_starts_with($downloadUrl, '/')) {
+                if ($downloadUrl !== '' && str_starts_with($downloadUrl, '/') === true) {
                     $downloadUrl = 'https://www.gigabyte.com' . $downloadUrl;
                 }
 
@@ -294,7 +322,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
                     'category' => $category,
                     'description' => $this->normalize($this->getInnerHTML($descriptionNode), true),
                     'version' => $this->normalize($versionNode->textContent),
-                    'os' => $osNode ? $this->normalize($osNode->textContent) : '',
+                    'os' => $osNode !== null ? $this->normalize($osNode->textContent) : '',
                     'size' => $this->normalize($sizeNode->textContent),
                     'date' => $this->normalize($dateNode->textContent),
                     'download' => $downloadUrl
@@ -312,7 +340,8 @@ final class GigabyteSupportBridge extends BridgeAbstract
         }
 
         $displayValue = $allowHtml === true ? $value : htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
-        $displayValue = preg_replace('/^(?:\s|<br\s*\/?>)+/i', '', $displayValue);
+        $result = preg_replace('/^(?:\s|<br\s*\/?>)+/i', '', $displayValue);
+        $displayValue = $result !== null ? $result : $displayValue;
         $displayValue = ltrim($displayValue);
 
         if ($displayValue === '') {
@@ -336,10 +365,12 @@ final class GigabyteSupportBridge extends BridgeAbstract
             $itemTitle = sprintf('[%s] %s', $data['category'], $data['version']);
         } else {
             $rawTitle = sprintf('[%s] %s', $data['category'], strip_tags($data['description']));
-            $rawTitle = preg_replace('/Checksum\s*:\s*\S+/i', '', $rawTitle);
-            $itemTitle = preg_replace('/\s+/', ' ', trim(trim($rawTitle)));
+            $result = preg_replace('/Checksum\s*:\s*\S+/i', '', $rawTitle);
+            $rawTitle = $result !== null ? $result : $rawTitle;
+            $result = preg_replace('/\s+/', ' ', trim(trim($rawTitle)));
+            $itemTitle = $result !== null ? $result : trim(trim($rawTitle));
 
-            if (empty($data['version']) === false) {
+            if (($data['version'] ?? '') !== '') {
                 $itemTitle .= ' - ' . $data['version'];
             }
         }
@@ -354,7 +385,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
         $content .= $this->render('OS', $data['os']);
         $content .= $this->render('Size', $data['size']);
 
-        if ($hideAttachments === false && empty($data['download']) === false) {
+        if ($hideAttachments === false && ($data['download'] ?? '') !== '') {
             $downloadUrl = htmlspecialchars($data['download'], ENT_QUOTES, 'UTF-8');
             $content .= sprintf(
                 '<p style="%s"><a href="%s" style="%s" target="_blank" rel="noopener noreferrer">Download</a></p>',
@@ -373,7 +404,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
             'uid' => md5($itemTitle . $data['version'])
         ];
 
-        if (empty($data['date']) === false) {
+        if (($data['date'] ?? '') !== '') {
             $timestamp = strtotime($data['date']);
             if ($timestamp !== false) {
                 $item['timestamp'] = $timestamp;
@@ -405,7 +436,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
             }
         }
 
-        if (empty($allItems) === true) {
+        if ($allItems === []) {
             return;
         }
 

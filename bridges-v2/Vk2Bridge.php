@@ -117,7 +117,7 @@ final class Vk2Bridge extends BridgeAbstract
     private array $ownerNames = [];
     private ?string $pageName = null;
     private ?string $iconUrl = null;
-    
+
     /** @var array<string, string> */
     private array $photoDescriptions = [];
 
@@ -157,7 +157,7 @@ final class Vk2Bridge extends BridgeAbstract
 
         $ownerId = $this->detectOwnerId($this->getInput('u'));
         $limitInput = $this->getInput('limit');
-        $targetCount = max(1, min(self::VK_API_MAX_COUNT, (int) ($limitInput ?: self::DEFAULT_POST_LIMIT)));
+        $targetCount = max(1, min(self::VK_API_MAX_COUNT, (int) ($limitInput ?? self::DEFAULT_POST_LIMIT)));
         $hideReposts = (bool) $this->getInput('hide_reposts');
         $filteredPosts = [];
         $offset = 0;
@@ -213,9 +213,7 @@ final class Vk2Bridge extends BridgeAbstract
         }
 
         if ($filteredPosts === []) {
-            $reason = $hideReposts === true
-                ? 'No original posts found after filtering reposts.'
-                : 'No posts found in the feed.';
+            $reason = $hideReposts === true ? 'No original posts found after filtering reposts.' : 'No posts found in the feed.';
             $this->handleError(self::ERR_NO_POSTS_FOUND, $reason);
         }
 
@@ -310,20 +308,14 @@ final class Vk2Bridge extends BridgeAbstract
             'video' => $this->renderVideo($d),
             'clip' => $this->renderClip($d),
             'audio' => $this->renderAudio($d),
-            'doc' => (($d['ext'] ?? '') === 'gif')
-                ? "<p>{$this->image($this->proxyImage($d['url'] ?? ''), $d['title'] ?? 'Document')}</p>"
-                : "<p>{$this->link($d['url'] ?? '#', 'Document: ' . ($d['title'] ?? 'Document'))}</p>",
+            'doc' => $this->renderDocAttachment($d),
             'link' => (function () use ($d): string {
                 $url = str_replace('https://m.vk.ru', 'https://vk.ru', $d['url'] ?? '#');
                 $normalized = $this->normalizePlaylistUrl($url);
                 $isPlaylist = $normalized !== $url;
                 $url = $normalized;
-                $img = ($isPlaylist === false && isset($d['photo']['sizes']))
-                    ? $this->getLargestImageUrl($d['photo']['sizes'])
-                    : '';
-                $title = $isPlaylist === true
-                    ? 'Playlist: ' . ($d['title'] ?? $url)
-                    : ($d['title'] ?? $url);
+                $img = ($isPlaylist === false && isset($d['photo']['sizes']) === true) ? $this->getLargestImageUrl($d['photo']['sizes']) : '';
+                $title = $isPlaylist === true ? 'Playlist: ' . ($d['title'] ?? $url) : ($d['title'] ?? $url);
                 return $this->renderLinkCard($url, $title, $img);
             })(),
             'note' => $this->renderLinkCard($d['view_url'] ?? '#', $d['title'] ?? 'Note'),
@@ -341,9 +333,7 @@ final class Vk2Bridge extends BridgeAbstract
             'wall' => $this->renderWall($d),
             'market' => (function () use ($d): string {
                 $price = $d['price']['text'] ?? '';
-                $display = $price !== ''
-                    ? ($d['title'] ?? 'Product') . ' - ' . $price
-                    : ($d['title'] ?? 'Product');
+                $display = $price !== '' ? ($d['title'] ?? 'Product') . ' - ' . $price : ($d['title'] ?? 'Product');
                 $img = ($d['thumb_photo'] ?? '') !== '' ? $this->proxyImage($d['thumb_photo']) : '';
                 return $this->renderLinkCard($d['url'] ?? '#', $display, $img);
             })(),
@@ -358,15 +348,11 @@ final class Vk2Bridge extends BridgeAbstract
             ),
             'podcast' => $this->renderPodcast($d),
             'event' => $this->renderEvent($d),
-            'graffiti' => (($url = $d['photo_586'] ?? $d['photo_200'] ?? '') !== '')
-                ? "<p>{$this->image($this->proxyImage($url), 'Graffiti')}</p>"
-                : '',
+            'graffiti' => (($url = $d['photo_586'] ?? $d['photo_200'] ?? '') !== '') ? "<p>{$this->image($this->proxyImage($url), 'Graffiti')}</p>" : '',
             'group' => $this->renderLinkCard(
                 ($d['screen_name'] ?? '') !== '' ? 'https://vk.ru/' . $d['screen_name'] : '#',
                 $d['name'] ?? 'Group',
-                ($img = $d['photo_200'] ?? $d['photo_100'] ?? $d['photo_50'] ?? '') !== ''
-                    ? $this->proxyImage($img)
-                    : ''
+                ($img = $d['photo_200'] ?? $d['photo_100'] ?? $d['photo_50'] ?? '') !== '' ? $this->proxyImage($img) : ''
             ),
             'donut_link' => $this->renderLinkCard($d['url'] ?? '#', $d['text'] ?? 'VK Donut'),
             'textlive', 'textpost', 'textpost_publish' => (function () use ($d): string {
@@ -630,6 +616,19 @@ final class Vk2Bridge extends BridgeAbstract
         }
 
         $this->handleError(self::ERR_OWNER_NOT_FOUND, "Short name '{$u}'");
+    }
+
+    private function renderDocAttachment(array $d): string
+    {
+        if (($d['ext'] ?? '') === 'gif') {
+            $imgUrl = $this->proxyImage($d['url'] ?? '');
+            $alt = $d['title'] ?? 'Document';
+            return "<p>{$this->image($imgUrl, $alt)}</p>";
+        }
+
+        $url = $d['url'] ?? '#';
+        $title = 'Document: ' . ($d['title'] ?? 'Document');
+        return "<p>{$this->link($url, $title)}</p>";
     }
 
     private function renderVideo(array $d): string
@@ -958,7 +957,7 @@ final class Vk2Bridge extends BridgeAbstract
         }
         $largest = array_reduce(
             $sizes,
-            static fn(array $carry, array $item): array => ($item['width'] ?? 0) > ($carry['width'] ?? 0) ? $item : $carry,
+            static fn(array $carry, array $item): array => ((($item['width'] ?? 0) > ($carry['width'] ?? 0)) === true) ? $item : $carry,
             []
         );
         return $this->proxyImage($largest['url'] ?? '');

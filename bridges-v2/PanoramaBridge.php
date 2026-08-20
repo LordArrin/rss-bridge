@@ -10,18 +10,18 @@ use function urljoin;
 
 final class PanoramaBridge extends BridgeAbstract
 {
-    const MAINTAINER = 'LordArrin';
-    const NAME = 'IA Panorama';
-    const URI = 'https://panorama.pub';
-    const DESCRIPTION = 'News feed of the Russian satirical information agency "Panorama"';
-    const CACHE_TIMEOUT = 3600;
-    const PARAMETERS = [];
+    public const MAINTAINER = 'LordArrin';
+    public const NAME = 'IA Panorama';
+    public const URI = 'https://panorama.pub';
+    public const DESCRIPTION = 'News feed of the Russian satirical information agency "Panorama"';
+    public const CACHE_TIMEOUT = 3600;
+    public const PARAMETERS = [];
 
-    const REQUEST_DELAY_US = 800000;
-    const ARTICLE_CACHE_TTL = 86400;
-    const DATE_FORMAT = 'd-m-Y';
-    const FETCH_DAYS_BACK = 1;
-    const DEFAULT_AUTHOR = self::NAME;
+    public const REQUEST_DELAY_US = 800000;
+    public const ARTICLE_CACHE_TTL = 86400;
+    public const DATE_FORMAT = 'd-m-Y';
+    public const FETCH_DAYS_BACK = 1;
+    public const DEFAULT_AUTHOR = self::NAME;
 
     public function collectData(): void
     {
@@ -48,7 +48,7 @@ final class PanoramaBridge extends BridgeAbstract
                 $uri = urljoin(self::URI, $href);
                 $path = parse_url($uri, PHP_URL_PATH);
 
-                if (!$this->isValidNewsUri($path, $processedUris)) {
+                if ($this->isValidNewsUri($path, $processedUris) === false) {
                     continue;
                 }
 
@@ -70,7 +70,7 @@ final class PanoramaBridge extends BridgeAbstract
     private function fetchHtml(string $url): \Dom\HTMLDocument
     {
         $html = getContents($url);
-        if (empty($html)) {
+        if ($html === '' || $html === null) {
             throw new \Exception("Failed to fetch {$url}");
         }
 
@@ -89,7 +89,7 @@ final class PanoramaBridge extends BridgeAbstract
         if ($cachedHtml === null) {
             try {
                 $cachedHtml = getContents($url);
-                if (!empty($cachedHtml)) {
+                if (($cachedHtml ?? '') !== '' && $cachedHtml !== null) {
                     $this->cache->set($cacheKey, $cachedHtml, $ttl);
                 }
             } catch (\Exception $e) {
@@ -97,7 +97,7 @@ final class PanoramaBridge extends BridgeAbstract
             }
         }
 
-        if (empty($cachedHtml)) {
+        if ($cachedHtml === '' || $cachedHtml === null) {
             return null;
         }
 
@@ -129,7 +129,7 @@ final class PanoramaBridge extends BridgeAbstract
             return false;
         }
 
-        if (preg_match('/^\/news\/\d{2}-\d{2}-\d{4}$/', $path)) {
+        if (preg_match('/^\/news\/\d{2}-\d{2}-\d{4}$/', $path) === 1) {
             return false;
         }
 
@@ -137,7 +137,7 @@ final class PanoramaBridge extends BridgeAbstract
             return false;
         }
 
-        if (in_array($path, $processedUris)) {
+        if (in_array($path, $processedUris, true) === true) {
             return false;
         }
 
@@ -246,7 +246,7 @@ final class PanoramaBridge extends BridgeAbstract
 
     private function normalizeUrl(string $url): string
     {
-        if (str_starts_with($url, '//')) {
+        if (str_starts_with($url, '//') === true) {
             return 'https:' . $url;
         }
 

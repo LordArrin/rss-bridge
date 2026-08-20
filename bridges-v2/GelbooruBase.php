@@ -8,13 +8,13 @@ use BridgeAbstract;
 
 abstract class GelbooruBase extends BridgeAbstract
 {
-    const NAME = 'Gelbooru';
-    const URI = 'https://gelbooru.com/';
-    const DESCRIPTION = 'Base bridge for Gelbooru-based imageboards (use a site-specific bridge instead)';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 1800;
+    public const NAME = 'Gelbooru';
+    public const URI = 'https://gelbooru.com/';
+    public const DESCRIPTION = 'Base bridge for Gelbooru-based imageboards (use a site-specific bridge instead)';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 1800;
 
-    const PARAMETERS = [
+    public const PARAMETERS = [
         'global' => [
             'api_key' => [
                 'name' => 'API Key',

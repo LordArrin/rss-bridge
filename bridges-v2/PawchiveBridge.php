@@ -8,15 +8,15 @@ use BridgeAbstract;
 
 final class PawchiveBridge extends BridgeAbstract
 {
-    const NAME = 'Pawchive';
-    const URI = 'https://pawchive.pw/';
-    const DESCRIPTION = 'Returns posts from Pawchive. Kemono is dead, long live the Pawchive!';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 3600;
+    public const NAME = 'Pawchive';
+    public const URI = 'https://pawchive.pw/';
+    public const DESCRIPTION = 'Returns posts from Pawchive. Kemono is dead, long live the Pawchive!';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 3600;
 
-    const API_PREFIX = 'api/v1/';
+    public const API_PREFIX = 'api/v1/';
 
-    const PARAMETERS = [[
+    public const PARAMETERS = [[
         'service' => [
             'name' => 'Content service',
             'type' => 'list',
@@ -159,7 +159,7 @@ final class PawchiveBridge extends BridgeAbstract
         'preload',
     ];
 
-    const CONFIGURATION = [
+    public const CONFIGURATION = [
         'session' => [
             'required' => true,
         ],

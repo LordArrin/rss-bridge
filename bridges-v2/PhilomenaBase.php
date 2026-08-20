@@ -8,13 +8,13 @@ use BridgeAbstract;
 
 abstract class PhilomenaBase extends BridgeAbstract
 {
-    const NAME = 'Philomena';
-    const URI = 'https://github.com/derpibooru/philomena';
-    const DESCRIPTION = 'Base bridge for Philomena-based imageboards (use a site-specific bridge instead)';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 1800;
+    public const NAME = 'Philomena';
+    public const URI = 'https://github.com/derpibooru/philomena';
+    public const DESCRIPTION = 'Base bridge for Philomena-based imageboards (use a site-specific bridge instead)';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 1800;
 
-    const PARAMETERS = [
+    public const PARAMETERS = [
         'Global' => [
             'q' => [
                 'name' => 'Query (Tags)',

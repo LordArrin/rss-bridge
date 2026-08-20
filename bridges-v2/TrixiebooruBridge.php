@@ -6,11 +6,11 @@ namespace RSSBridge\Bridges;
 
 final class TrixiebooruBridge extends PhilomenaBase
 {
-    const NAME = 'Trixiebooru';
-    const URI = 'https://trixiebooru.org/';
-    const DESCRIPTION = 'Returns images and videos from Trixiebooru search';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 1800;
+    public const NAME = 'Trixiebooru';
+    public const URI = 'https://trixiebooru.org/';
+    public const DESCRIPTION = 'Returns images and videos from Trixiebooru search';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 1800;
 
     protected static function getAvailableFilters(): array
     {

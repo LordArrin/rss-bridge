@@ -6,14 +6,14 @@ namespace RSSBridge\Bridges;
 
 final class Rule34Bridge extends GelbooruBase
 {
-    const NAME = 'Rule34';
-    const URI = 'https://api.rule34.xxx/';
-    const VIEW_URI = 'https://rule34.xxx/';
-    const DESCRIPTION = 'Returns images from rule34.xxx search';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 1800;
+    public const NAME = 'Rule34';
+    public const URI = 'https://api.rule34.xxx/';
+    public const VIEW_URI = 'https://rule34.xxx/';
+    public const DESCRIPTION = 'Returns images from rule34.xxx search';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 1800;
 
-    const CONFIGURATION = [
+    public const CONFIGURATION = [
         'api_key' => [
             'required' => false,
         ],
@@ -22,7 +22,7 @@ final class Rule34Bridge extends GelbooruBase
         ],
     ];
 
-    const PARAMETERS = [
+    public const PARAMETERS = [
         'global' => [
             'api_key' => [
                 'name' => 'API Key',

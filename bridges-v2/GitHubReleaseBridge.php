@@ -8,15 +8,15 @@ use BridgeAbstract;
 
 final class GitHubReleaseBridge extends BridgeAbstract
 {
-    const NAME = 'GitHub Releases';
-    const URI = 'https://github.com';
-    const DESCRIPTION = 'Returns releases for a GitHub repository (excluding tag-only entries)';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 3600;
+    public const NAME = 'GitHub Releases';
+    public const URI = 'https://github.com';
+    public const DESCRIPTION = 'Returns releases for a GitHub repository (excluding tag-only entries)';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 3600;
 
-    const CONFIGURATION = ['token' => ['required' => false]];
+    public const CONFIGURATION = ['token' => ['required' => false]];
 
-    const PARAMETERS = [[
+    public const PARAMETERS = [[
         'owner' => [
             'name' => 'Owner',
             'type' => 'text',
@@ -82,7 +82,8 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $repo = (string)$this->getInput('repo');
         $includePrereleases = (bool)$this->getInput('pre_release');
         $hideAssets = (bool)$this->getInput('hide_assets');
-        $limit = max(1, min(self::MAX_LIMIT, (int)($this->getInput('limit') ?: self::DEFAULT_LIMIT)));
+        $limitInput = $this->getInput('limit');
+        $limit = max(1, min(self::MAX_LIMIT, (int)($limitInput !== null ? $limitInput : self::DEFAULT_LIMIT)));
 
         $releases = $this->fetchReleases($owner, $repo);
 
@@ -91,7 +92,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
                 break;
             }
 
-            if ($this->shouldSkipRelease($release, $includePrereleases)) {
+            if ($this->shouldSkipRelease($release, $includePrereleases) === true) {
                 continue;
             }
 
@@ -104,7 +105,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $owner = $this->getInput('owner');
         $repo = $this->getInput('repo');
 
-        if ($owner && $repo) {
+        if ($owner !== '' && $repo !== '') {
             return sprintf('%s/%s - Releases', $owner, $repo);
         }
 
@@ -116,7 +117,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $owner = $this->getInput('owner');
         $repo = $this->getInput('repo');
 
-        if ($owner && $repo) {
+        if ($owner !== '' && $repo !== '') {
             return sprintf('%s/%s/%s/releases', self::URI, $owner, $repo);
         }
 
@@ -125,7 +126,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
     public function detectParameters($url): ?array
     {
-        if (!is_string($url)) {
+        if (is_string($url) === false) {
             return null;
         }
 
@@ -138,7 +139,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
             return null;
         }
 
-        if (preg_match('#^/([^/]+)/([^/]+?)(?:/(?:releases|tags))?/?$#', $path, $matches)) {
+        if (preg_match('#^/([^/]+)/([^/]+?)(?:/(?:releases|tags))?/?$#', $path, $matches) === 1) {
             return ['owner' => $matches[1], 'repo' => $matches[2]];
         }
 
@@ -151,7 +152,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $headers = ['Accept: application/vnd.github+json'];
 
         $token = $this->getOption('token');
-        if ($token) {
+        if ($token !== null && $token !== '') {
             $headers[] = 'Authorization: Bearer ' . $token;
         }
 
@@ -163,11 +164,11 @@ final class GitHubReleaseBridge extends BridgeAbstract
             throwServerException($message);
         }
 
-        if (!is_array($response)) {
+        if (is_array($response) === false) {
             throwServerException('Invalid response from GitHub API');
         }
 
-        if (!empty($response) && !isset($response[0])) {
+        if ($response !== [] && isset($response[0]) === false) {
             $errorMsg = $response['message'] ?? 'Unknown API error';
             throwServerException('GitHub API error: ' . $errorMsg);
         }
@@ -177,11 +178,11 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
     private function shouldSkipRelease(array $release, bool $includePrereleases): bool
     {
-        if (!empty($release['draft'])) {
+        if (($release['draft'] ?? false) === true) {
             return true;
         }
 
-        if (!empty($release['prerelease']) && !$includePrereleases) {
+        if (($release['prerelease'] ?? false) === true && $includePrereleases === false) {
             return true;
         }
 
@@ -190,10 +191,14 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
     private function buildFeedItem(array $release, string $owner, string $repo, bool $hideAssets): array
     {
-        $title = $release['name'] ?: ($release['tag_name'] ?? 'Untitled');
-        $content = !empty($release['body']) ? $this->processMarkdown((string)$release['body'], $owner, $repo) : '';
+        $name = $release['name'] ?? '';
+        $tagName = $release['tag_name'] ?? '';
+        $title = $name !== '' ? $name : ($tagName !== '' ? $tagName : 'Untitled');
 
-        if (!$hideAssets && !empty($release['assets']) && is_array($release['assets'])) {
+        $body = $release['body'] ?? '';
+        $content = $body !== '' ? $this->processMarkdown((string)$body, $owner, $repo) : '';
+
+        if ($hideAssets === false && isset($release['assets']) === true && is_array($release['assets']) === true) {
             $assetsHtml = $this->buildAssetsBlock($release['assets']);
             if ($assetsHtml !== '') {
                 $content .= $assetsHtml;
@@ -201,7 +206,10 @@ final class GitHubReleaseBridge extends BridgeAbstract
         }
 
         $dateStr = $release['published_at'] ?? $release['created_at'] ?? '';
-        $timestamp = strtotime($dateStr) ?: time();
+        $timestamp = $dateStr !== '' ? strtotime($dateStr) : false;
+        if ($timestamp === false) {
+            $timestamp = time();
+        }
 
         return [
             'title' => $title,
@@ -209,9 +217,9 @@ final class GitHubReleaseBridge extends BridgeAbstract
             'content' => $content,
             'timestamp' => $timestamp,
             'author' => $release['author']['login'] ?? '',
-            'uid' => $release['tag_name'] ?? (string)($release['id'] ?? uniqid()),
+            'uid' => $tagName !== '' ? $tagName : (string)($release['id'] ?? uniqid()),
             'enclosures' => [],
-            'categories' => [$release['tag_name'] ?? ''],
+            'categories' => [$tagName !== '' ? $tagName : ''],
         ];
     }
 
@@ -235,7 +243,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
             $links[] = "<li><a href=\"{$url}\">{$label}</a></li>";
         }
 
-        if (empty($links)) {
+        if ($links === []) {
             return '';
         }
 
@@ -288,7 +296,8 @@ final class GitHubReleaseBridge extends BridgeAbstract
             $markdown
         );
 
-        return preg_replace('/:[a-zA-Z0-9_+\-]+:/', '', $markdown);
+        $result = preg_replace('/:[a-zA-Z0-9_+\-]+:/', '', $markdown);
+        return $result !== null ? $result : $markdown;
     }
 
     private function processHtml(string $html, string $owner, string $repo): string
@@ -306,7 +315,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $this->sanitizeHtml($xpath);
 
         $wrapper = $dom->getElementById('w');
-        if (!$wrapper) {
+        if ($wrapper === null) {
             return '';
         }
 
@@ -322,20 +331,25 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
     private function sanitizeHtml(\DOMXPath $xpath): void
     {
-        foreach ($xpath->query('//*') as $node) {
+        $nodes = $xpath->query('//*');
+        if ($nodes === false) {
+            return;
+        }
+
+        foreach ($nodes as $node) {
             $attrsToRemove = [];
 
             foreach ($node->attributes as $attr) {
                 $name = strtolower($attr->nodeName);
                 $value = strtolower(trim($attr->nodeValue));
 
-                if (str_starts_with($name, 'on')) {
+                if (str_starts_with($name, 'on') === true) {
                     $attrsToRemove[] = $attr->nodeName;
                     continue;
                 }
 
-                if (in_array($name, ['href', 'src', 'action', 'formaction', 'xlink:href'])) {
-                    if (preg_match('/^\s*(javascript|vbscript|data(?!:image\/))/i', $value)) {
+                if (in_array($name, ['href', 'src', 'action', 'formaction', 'xlink:href'], true) === true) {
+                    if (preg_match('/^\s*(javascript|vbscript|data(?!:image\/))/i', $value) === 1) {
                         $attrsToRemove[] = $attr->nodeName;
                     }
                 }
@@ -346,18 +360,20 @@ final class GitHubReleaseBridge extends BridgeAbstract
             }
 
             foreach (['src', 'href'] as $attr) {
-                if ($node->hasAttribute($attr)) {
+                if ($node->hasAttribute($attr) === true) {
                     $value = $node->getAttribute($attr);
-                    if (str_starts_with($value, '/')) {
+                    if (str_starts_with($value, '/') === true) {
                         $node->setAttribute($attr, self::URI . $value);
                     }
                 }
             }
 
-            if ($node->hasAttribute('srcset')) {
+            if ($node->hasAttribute('srcset') === true) {
                 $srcset = $node->getAttribute('srcset');
-                $srcset = preg_replace('#(^|[\s,])(/[^,\s]+)#', '$1' . self::URI . '$2', $srcset);
-                $node->setAttribute('srcset', $srcset);
+                $result = preg_replace('#(^|[\s,])(/[^,\s]+)#', '$1' . self::URI . '$2', $srcset);
+                if ($result !== null) {
+                    $node->setAttribute('srcset', $result);
+                }
             }
         }
     }
@@ -367,10 +383,15 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $types = array_keys(self::CSS['alerts']);
         $pattern = '/\[!(' . implode('|', $types) . ')\]\s*/i';
 
-        foreach ($xpath->query('//blockquote') as $bq) {
+        $blockquotes = $xpath->query('//blockquote');
+        if ($blockquotes === false) {
+            return;
+        }
+
+        foreach ($blockquotes as $bq) {
             $found = $this->detectAlertType($xpath, $bq, $pattern);
 
-            if (!$found) {
+            if ($found === null) {
                 continue;
             }
 
@@ -380,26 +401,34 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
             $existing = $bq->getAttribute('style');
             $borderStyle = sprintf('border-left:4px solid %s;', $color);
-            $style = trim(($existing ? $existing . ' ' : '') . $borderStyle . ' ' . self::CSS['alert_base']);
+            $style = trim(($existing !== '' ? $existing . ' ' : '') . $borderStyle . ' ' . self::CSS['alert_base']);
             $bq->setAttribute('style', $style);
         }
     }
 
     private function detectAlertType(\DOMXPath $xpath, \DOMElement $bq, string $pattern): ?string
     {
-        foreach ($xpath->query('.//text()', $bq) as $node) {
-            if (preg_match($pattern, $node->nodeValue, $matches)) {
-                return strtoupper($matches[1]);
+        $textNodes = $xpath->query('.//text()', $bq);
+        if ($textNodes !== false) {
+            foreach ($textNodes as $node) {
+                if (preg_match($pattern, $node->nodeValue, $matches) === 1) {
+                    return strtoupper($matches[1]);
+                }
             }
         }
 
-        foreach ($xpath->query('.//strong', $bq) as $strong) {
-            $text = strtolower(trim($strong->textContent));
-            $types = array_map('strtolower', array_keys(self::CSS['alerts']));
+        $strongs = $xpath->query('.//strong', $bq);
+        if ($strongs !== false) {
+            foreach ($strongs as $strong) {
+                $text = strtolower(trim($strong->textContent));
+                $types = array_map('strtolower', array_keys(self::CSS['alerts']));
 
-            if (in_array($text, $types, true)) {
-                $strong->parentNode?->removeChild($strong);
-                return $text;
+                if (in_array($text, $types, true) === true) {
+                    if ($strong->parentNode !== null) {
+                        $strong->parentNode->removeChild($strong);
+                    }
+                    return strtoupper($text);
+                }
             }
         }
 
@@ -408,9 +437,17 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
     private function removeAlertMarkers(\DOMXPath $xpath, \DOMElement $bq, string $pattern): void
     {
-        foreach ($xpath->query('.//text()', $bq) as $node) {
-            if (preg_match($pattern, $node->nodeValue)) {
-                $node->nodeValue = preg_replace($pattern, '', $node->nodeValue);
+        $textNodes = $xpath->query('.//text()', $bq);
+        if ($textNodes === false) {
+            return;
+        }
+
+        foreach ($textNodes as $node) {
+            if (preg_match($pattern, $node->nodeValue) === 1) {
+                $result = preg_replace($pattern, '', $node->nodeValue);
+                if ($result !== null) {
+                    $node->nodeValue = $result;
+                }
             }
         }
     }
@@ -420,7 +457,12 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $ownerQuoted = preg_quote($owner, '~');
         $repoQuoted = preg_quote($repo, '~');
 
-        foreach ($xpath->query('//a[@href]') as $link) {
+        $links = $xpath->query('//a[@href]');
+        if ($links === false) {
+            return;
+        }
+
+        foreach ($links as $link) {
             $href = $link->getAttribute('href');
             $text = trim($link->textContent);
 
@@ -428,11 +470,11 @@ final class GitHubReleaseBridge extends BridgeAbstract
                 continue;
             }
 
-            if (preg_match('~^' . preg_quote(self::URI, '~') . '/' . $ownerQuoted . '/' . $repoQuoted . '/(?:issues|pull)/(\d+)(?:[/?#].*)?$~i', $href, $matches)) {
+            if (preg_match('~^' . preg_quote(self::URI, '~') . '/' . $ownerQuoted . '/' . $repoQuoted . '/(?:issues|pull)/(\d+)(?:[/?#].*)?$~i', $href, $matches) === 1) {
                 $link->nodeValue = '#' . $matches[1];
-            } elseif (preg_match('~^' . preg_quote(self::URI, '~') . '/([^/]+)/([^/]+)/(?:issues|pull)/(\d+)(?:[/?#].*)?$~i', $href, $matches)) {
+            } elseif (preg_match('~^' . preg_quote(self::URI, '~') . '/([^/]+)/([^/]+)/(?:issues|pull)/(\d+)(?:[/?#].*)?$~i', $href, $matches) === 1) {
                 $link->nodeValue = $matches[1] . '/' . $matches[2] . '#' . $matches[3];
-            } elseif (preg_match('~^' . preg_quote(self::URI, '~') . '/([a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38})$~', $href, $matches)) {
+            } elseif (preg_match('~^' . preg_quote(self::URI, '~') . '/([a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38})$~', $href, $matches) === 1) {
                 $link->nodeValue = '@' . $matches[1];
             }
         }
@@ -440,10 +482,15 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
     private function applyListStyles(\DOMXPath $xpath): void
     {
-        foreach ($xpath->query('//ul | //ol') as $list) {
+        $lists = $xpath->query('//ul | //ol');
+        if ($lists === false) {
+            return;
+        }
+
+        foreach ($lists as $list) {
             $existing = $list->getAttribute('style');
             $newStyle = $list->nodeName === 'ul' ? self::CSS['ul'] : self::CSS['ol'];
-            $list->setAttribute('style', trim(($existing ? $existing . ' ' : '') . $newStyle));
+            $list->setAttribute('style', trim(($existing !== '' ? $existing . ' ' : '') . $newStyle));
         }
     }
 }

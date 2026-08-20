@@ -6,11 +6,13 @@ namespace RSSBridge\Bridges;
 
 use BridgeAbstract;
 
+use function urljoin;
+
 abstract class NginxBase extends BridgeAbstract
 {
-    const CACHE_TIMEOUT = 3600;
+    public const CACHE_TIMEOUT = 3600;
 
-    const PARAMETERS = [
+    public const PARAMETERS = [
         [
             'source' => [
                 'name' => 'Source',
@@ -209,33 +211,46 @@ abstract class NginxBase extends BridgeAbstract
 
     private function collectNews(): void
     {
-        $html = getSimpleHTMLDOM($this->getNewsUrl());
-        if ($html === false) {
+        $html = getContents($this->getNewsUrl());
+        if ($html === false || $html === '') {
             throw new \Exception('Failed to load news page');
         }
 
-        $newsTable = $html->find('table', 0);
-        if ($newsTable === false || $newsTable === null) {
+        libxml_use_internal_errors(true);
+        $dom = \Dom\HTMLDocument::createFromString($html);
+        libxml_use_internal_errors(false);
+
+        $newsTable = $dom->querySelector('table');
+        if ($newsTable === null) {
             throw new \Exception('News table not found');
         }
 
-        foreach ($newsTable->find('tr') as $row) {
-            $cells = $row->find('td');
-            if (count($cells) < 2) {
+        foreach ($newsTable->querySelectorAll('tr') as $row) {
+            $cells = $row->querySelectorAll('td');
+            if ($cells->count() < 2) {
                 continue;
             }
 
-            $dateText = trim($cells[0]->plaintext);
-            $content = trim($cells[1]->innertext);
+            $dateText = trim($cells[0]->textContent);
+            $content = trim($cells[1]->innerHTML);
 
             if ($dateText === '' || $content === '') {
                 continue;
             }
 
-            $dom = str_get_html($content);
-            if ($dom !== false) {
-                $dom = defaultLinkTo($dom, $this->getURI());
-                $content = $dom->save();
+            libxml_use_internal_errors(true);
+            $contentDom = \Dom\HTMLDocument::createFromString('<div>' . $content . '</div>');
+            libxml_use_internal_errors(false);
+
+            $wrapper = $contentDom->querySelector('div');
+            if ($wrapper !== null) {
+                foreach ($wrapper->querySelectorAll('a[href]') as $link) {
+                    $href = $link->getAttribute('href');
+                    if ($href !== null && $href !== '' && str_starts_with($href, '/') === true) {
+                        $link->setAttribute('href', urljoin($this->getURI(), $href));
+                    }
+                }
+                $content = $wrapper->innerHTML;
             }
 
             $this->items[] = [

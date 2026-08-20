@@ -6,10 +6,10 @@ namespace RSSBridge\Bridges;
 
 final class NginxBridge extends NginxBase
 {
-    const NAME = 'Nginx';
-    const URI = 'https://nginx.org/';
-    const DESCRIPTION = 'Returns Nginx releases with changelogs and other news';
-    const MAINTAINER = 'LordArrin';
+    public const NAME = 'Nginx';
+    public const URI = 'https://nginx.org/';
+    public const DESCRIPTION = 'Returns Nginx releases with changelogs and other news';
+    public const MAINTAINER = 'LordArrin';
 
     protected function getSoftwareName(): string
     {

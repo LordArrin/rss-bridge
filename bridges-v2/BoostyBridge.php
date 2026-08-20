@@ -8,13 +8,13 @@ use BridgeAbstract;
 
 final class BoostyBridge extends BridgeAbstract
 {
-    const NAME = 'Boosty';
-    const URI = 'https://boosty.to';
-    const DESCRIPTION = 'Parser for Boosty (free posts and paid announcements). No auth required';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 3600;
+    public const NAME = 'Boosty';
+    public const URI = 'https://boosty.to';
+    public const DESCRIPTION = 'Parser for Boosty (free posts and paid announcements). No auth required';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 3600;
 
-    const PARAMETERS = [[
+    public const PARAMETERS = [[
         'blog'     => ['name' => 'Blog', 'type' => 'text', 'required' => true, 'title' => 'Channel name, for example, rebel_jack from https://boosty.to/rebel_jack'],
         'limit'    => ['name' => 'Posts limit', 'type' => 'number', 'defaultValue' => 10],
         'hideTags' => ['name' => 'Hide tags', 'type' => 'checkbox', 'title' => 'Check this box to completely hide the tags list from the post content'],

@@ -8,22 +8,22 @@ use BridgeAbstract;
 
 final class FimfictionBridge extends BridgeAbstract
 {
-    const MAINTAINER = 'LordArrin';
-    const NAME = 'Fimfiction Updates';
-    const URI = 'https://www.fimfiction.net/';
-    const DESCRIPTION = 'Returns chapter updates for stories on Fimfiction';
-    const CACHE_TIMEOUT = 3600;
+    public const MAINTAINER = 'LordArrin';
+    public const NAME = 'Fimfiction Updates';
+    public const URI = 'https://www.fimfiction.net/';
+    public const DESCRIPTION = 'Returns chapter updates for stories on Fimfiction';
+    public const CACHE_TIMEOUT = 3600;
 
     private const PROXY_PROFILE = 'flaresolverr';
     private const MAX_RETRIES = 5;
     private const RETRY_DELAY_US = 1500000;
 
-    const CONFIGURATION = [
+    public const CONFIGURATION = [
         'session_token' => ['required' => false],
         'signing_key' => ['required' => false],
     ];
 
-    const PARAMETERS = [
+    public const PARAMETERS = [
         [
             'story_id' => [
                 'name' => 'Story ID',
@@ -39,7 +39,7 @@ final class FimfictionBridge extends BridgeAbstract
         ],
     ];
 
-    const FETCH_LIMIT = 3;
+    public const FETCH_LIMIT = 3;
 
     private const CSS = [
         'wrapper'      => 'font-size:14px; line-height:1.6; word-wrap:break-word;',
@@ -119,7 +119,7 @@ final class FimfictionBridge extends BridgeAbstract
             try {
                 $html = getProtectedContents($url, self::PROXY_PROFILE, $options);
 
-                if (empty($html)) {
+                if ($html === '' || $html === null) {
                     throw new \Exception('Received empty HTML response');
                 }
 
@@ -261,7 +261,7 @@ final class FimfictionBridge extends BridgeAbstract
             }
 
             $uri = $link->getAttribute('href') ?? '';
-            if ($uri !== '' && !str_starts_with($uri, 'http')) {
+            if ($uri !== '' && str_starts_with($uri, 'http') === false) {
                 $uri = self::URI . ltrim($uri, '/');
             }
 
@@ -357,20 +357,23 @@ final class FimfictionBridge extends BridgeAbstract
 
     private function removeEventHandlers(string $content): string
     {
-        return preg_replace('/\s+on\w+\s*=\s*["\'][^"\']*["\']/i', '', $content);
+        $result = preg_replace('/\s+on\w+\s*=\s*["\'][^"\']*["\']/i', '', $content);
+        return $result !== null ? $result : $content;
     }
 
     private function removeJavascriptUrls(string $content): string
     {
-        return preg_replace('/(href|src)\s*=\s*["\']javascript:[^"\']*["\']/i', '$1="#"', $content);
+        $result = preg_replace('/(href|src)\s*=\s*["\']javascript:[^"\']*["\']/i', '$1="#"', $content);
+        return $result !== null ? $result : $content;
     }
 
     private function styleSceneBreaks(string $content): string
     {
-        return preg_replace(
+        $result = preg_replace(
             '/<hr[^>]*>/i',
             '<p style="' . self::CSS['scene-break'] . '">• • •</p>',
             $content
         );
+        return $result !== null ? $result : $content;
     }
 }

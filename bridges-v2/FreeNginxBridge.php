@@ -6,10 +6,10 @@ namespace RSSBridge\Bridges;
 
 final class FreeNginxBridge extends NginxBase
 {
-    const NAME = 'FreeNginx';
-    const URI = 'https://freenginx.org/';
-    const DESCRIPTION = 'Returns FreeNginx releases with changelogs and other news';
-    const MAINTAINER = 'LordArrin';
+    public const NAME = 'FreeNginx';
+    public const URI = 'https://freenginx.org/';
+    public const DESCRIPTION = 'Returns FreeNginx releases with changelogs and other news';
+    public const MAINTAINER = 'LordArrin';
 
     protected function getSoftwareName(): string
     {

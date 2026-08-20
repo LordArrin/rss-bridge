@@ -10,15 +10,15 @@ use function urljoin;
 
 final class FirefoxReleaseNotesBridge extends BridgeAbstract
 {
-    const NAME = 'Firefox Release Notes';
-    const URI = 'https://www.firefox.com/en-US/releases/';
-    const DESCRIPTION = 'Returns recent Firefox releases with changelogs for each version';
-    const MAINTAINER = 'LordArrin';
-    const PARAMETERS = [];
+    public const NAME = 'Firefox Release Notes';
+    public const URI = 'https://www.firefox.com/en-US/releases/';
+    public const DESCRIPTION = 'Returns recent Firefox releases with changelogs for each version';
+    public const MAINTAINER = 'LordArrin';
+    public const PARAMETERS = [];
 
-    const RELEASE_LIMIT = 8;
-    const RELEASE_NOTES_CACHE_TTL = 604800;
-    const RELEASES_LIST_CACHE_TTL = 86400;
+    public const RELEASE_LIMIT = 8;
+    public const RELEASE_NOTES_CACHE_TTL = 604800;
+    public const RELEASES_LIST_CACHE_TTL = 86400;
 
     private const DATE_PATTERNS = [
         '/([A-Z][a-z]+ \d{1,2}, \d{4})/',
@@ -75,7 +75,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         }
 
         $html = getContents(self::URI);
-        if (empty($html)) {
+        if ($html === '' || $html === null) {
             throwClientException('Failed to load Firefox releases page.');
         }
 
@@ -92,7 +92,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         foreach ($links as $link) {
             $text = trim($link->textContent);
             $href = (string) $link->getAttribute('href');
-            if (preg_match(self::VERSION_PATTERN, $text, $matches)) {
+            if (preg_match(self::VERSION_PATTERN, $text, $matches) === 1) {
                 $releases[] = [
                     'version' => $matches[1],
                     'url' => urljoin(self::URI, $href)
@@ -131,7 +131,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         if ($cachedHtml === null) {
             try {
                 $html = getContents($release['url']);
-                if (!empty($html)) {
+                if (($html ?? '') !== '' && $html !== null) {
                     $this->cache->set($cacheKey, $html, self::RELEASE_NOTES_CACHE_TTL);
                     $cachedHtml = $html;
                 }
@@ -140,7 +140,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
             }
         }
 
-        if (empty($cachedHtml)) {
+        if ($cachedHtml === '' || $cachedHtml === null) {
             $item['content'] = '<p>Failed to load release notes page.</p>';
             return $item;
         }
@@ -172,7 +172,8 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
 
         $timeTag = $html->querySelector('time');
         if ($timeTag !== null) {
-            $dateText = $timeTag->getAttribute('datetime') ?: $timeTag->textContent;
+            $datetime = $timeTag->getAttribute('datetime');
+            $dateText = ($datetime !== null && $datetime !== '') ? $datetime : $timeTag->textContent;
             $timestamp = strtotime($dateText);
             if ($timestamp !== false) {
                 return $timestamp;
@@ -181,7 +182,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
 
         $pageText = $html->documentElement->textContent ?? '';
         foreach (self::DATE_PATTERNS as $pattern) {
-            if (preg_match($pattern, $pageText, $matches)) {
+            if (preg_match($pattern, $pageText, $matches) === 1) {
                 $timestamp = strtotime($matches[1]);
                 if ($timestamp !== false) {
                     return $timestamp;
@@ -208,7 +209,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
 
         foreach ($notesBlock->querySelectorAll('div[id]') as $div) {
             $sectionId = $div->getAttribute('id') ?? '';
-            if (in_array($sectionId, self::EXCLUDED_SECTIONS, true)) {
+            if (in_array($sectionId, self::EXCLUDED_SECTIONS, true) === true) {
                 continue;
             }
 
@@ -240,7 +241,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
                 }
             }
 
-            if (empty($items)) {
+            if ($items === []) {
                 continue;
             }
 
@@ -274,7 +275,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
 
     private function cleanHtml(string $html): string
     {
-        if (empty($html)) {
+        if ($html === '' || $html === null) {
             return '';
         }
 
