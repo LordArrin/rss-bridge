@@ -54,72 +54,33 @@ jobs:
           composer install --no-interaction --no-progress --prefer-dist
           find vendor/bin -type f -exec chmod +x {} \;
 
-      - name: Debug environment
+      - name: Show environment info
         run: |
-          echo "=== PHP Version ==="
-          php -v
+          echo "### Environment ###"
+          echo "PHP: $(php -v | head -n 1)"
+          echo "PHPCS: $(./vendor/bin/phpcs --version)"
+          echo "Composer: $(composer --version)"
           echo ""
-          echo "=== PHPCS Version ==="
-          ./vendor/bin/phpcs --version
-          echo ""
-          echo "=== phpcs.xml exists ==="
-          ls -la phpcs.xml
-          echo ""
-          echo "=== composer.lock info ==="
-          ls -la composer.lock
-          echo ""
-          echo "=== Installed packages ==="
-          composer show --direct
+          echo "### Direct packages ###"
+          composer show --direct | awk '{print $1 ": " $2}'
 
       - name: Determine changed bridge files
         id: changed
         run: |
-          echo "=== DEBUG: Current directory ==="
-          pwd
-          echo ""
-          echo "=== DEBUG: Directory structure ==="
-          ls -la bridges/ | head -10
-          echo "---"
-          ls -la bridges-v2/ | head -10
-          echo ""
-          echo "=== DEBUG: Find results ==="
-          echo "bridges files:"
-          find bridges -maxdepth 1 -name '*.php' -type f | wc -l
-          echo "bridges-v2 files:"
-          find bridges-v2 -maxdepth 1 -name '*.php' -type f | wc -l
-          echo ""
+          BRIDGE_PATHS="bridges/*.php bridges-v2/*.php"
           
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ "${{ github.event.inputs.check_mode }}" = "all_bridges" ]; then
-              echo "Mode: ALL BRIDGES"
-              
               BRIDGES_FILES=$(find bridges -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
               BRIDGES_V2_FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
-              
-              echo "=== DEBUG: Raw BRIDGES_FILES ==="
-              echo "$BRIDGES_FILES" | head -5
-              echo ""
-              echo "=== DEBUG: Raw BRIDGES_V2_FILES ==="
-              echo "$BRIDGES_V2_FILES" | head -5
-              echo ""
-              
               FILES=$(echo -e "${BRIDGES_FILES}\n${BRIDGES_V2_FILES}" | grep -v '^$' | tr '\n' ' ')
-              
-              echo "=== DEBUG: Combined FILES ==="
-              echo "$FILES"
-              echo ""
-              echo "=== DEBUG: Files count ==="
-              echo "$FILES" | wc -w
-              
-              echo "Running manual check on ALL bridge files"
+              echo "Mode: manual check on ALL bridge files"
             else
               if git rev-parse HEAD~1 >/dev/null 2>&1; then
                 BASE="HEAD~1"
               else
                 BASE=""
               fi
-              
-              BRIDGE_PATHS="bridges/*.php bridges-v2/*.php"
               
               if [ -n "$BASE" ]; then
                 FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
@@ -128,13 +89,12 @@ jobs:
                 BRIDGES_V2_FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
                 FILES=$(echo -e "${BRIDGES_FILES}\n${BRIDGES_V2_FILES}" | grep -v '^$' | tr '\n' ' ')
               fi
-              echo "Running manual check on CHANGED bridge files only"
+              echo "Mode: manual check on CHANGED bridge files only"
             fi
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="origin/${{ github.base_ref }}"
-            BRIDGE_PATHS="bridges/*.php bridges-v2/*.php"
             FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
-            echo "Checking PR changes against $BASE"
+            echo "Mode: PR changes against $BASE"
           else
             if git rev-parse HEAD~1 >/dev/null 2>&1; then
               BASE="HEAD~1"
@@ -142,30 +102,18 @@ jobs:
               BASE=""
             fi
             
-            BRIDGE_PATHS="bridges/*.php bridges-v2/*.php"
-            
             if [ -n "$BASE" ]; then
               FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
-              echo "Checking push changes against $BASE"
+              echo "Mode: push changes against $BASE"
             else
               BRIDGES_FILES=$(find bridges -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
               BRIDGES_V2_FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
               FILES=$(echo -e "${BRIDGES_FILES}\n${BRIDGES_V2_FILES}" | grep -v '^$' | tr '\n' ' ')
-              echo "Initial commit - checking all files"
+              echo "Mode: initial commit - checking all files"
             fi
           fi
 
           FILES=$(echo "$FILES" | xargs)
-
-          echo ""
-          echo "=== DEBUG: Final FILES variable ==="
-          echo "$FILES"
-          echo ""
-          echo "=== DEBUG: Files count ==="
-          echo "$FILES" | wc -w
-          echo ""
-          echo "=== DEBUG: First 10 files ==="
-          echo "$FILES" | tr ' ' '\n' | head -10
 
           if [ -z "$FILES" ]; then
             echo "has_files=false" >> "$GITHUB_OUTPUT"
@@ -173,24 +121,10 @@ jobs:
           else
             echo "has_files=true" >> "$GITHUB_OUTPUT"
             echo "files=$FILES" >> "$GITHUB_OUTPUT"
+            echo ""
             echo "Files to check:"
             echo "$FILES" | tr ' ' '\n'
           fi
-
-      - name: Run phpcs on bridge files
-        if: steps.changed.outputs.has_files == 'true'
-        run: |
-          # Clear phpcs cache to avoid stale results
-          rm -f .phpcs.cache
-          
-          ./vendor/bin/phpcs \
-            ${{ steps.changed.outputs.files }} \
-            --standard=phpcs.xml \
-            --warning-severity=0 \
-            --extensions=php \
-            --no-cache \
-            --report=full \
-            -p
 
       - name: Run phpcbf on changed bridges (PR only)
         if: steps.changed.outputs.has_files == 'true' && github.event_name == 'pull_request'
@@ -214,15 +148,53 @@ jobs:
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           commit_options: '--no-verify'
 
-      - name: Run phpcs on bridge files
+      - name: Run phpcs on bridges-v2 (strict mode with warnings)
         if: steps.changed.outputs.has_files == 'true'
         run: |
-          ./vendor/bin/phpcs \
-            ${{ steps.changed.outputs.files }} \
-            --standard=phpcs.xml \
-            --warning-severity=0 \
-            --extensions=php \
-            -p
+          rm -f .phpcs.cache
+          
+          V2_FILES=$(echo "${{ steps.changed.outputs.files }}" | tr ' ' '\n' | grep '^bridges-v2/' | tr '\n' ' ')
+          
+          if [ -n "$V2_FILES" ]; then
+            echo "### Checking bridges-v2 (warnings enabled) ###"
+            ./vendor/bin/phpcs \
+              $V2_FILES \
+              --standard=phpcs.xml \
+              --warning-severity=5 \
+              --extensions=php \
+              --no-cache \
+              -p
+            EXIT_CODE=$?
+            
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "::warning::Warnings found in bridges-v2. Consider fixing them."
+            elif [ $EXIT_CODE -gt 1 ]; then
+              echo "::error::Errors found in bridges-v2!"
+              exit 1
+            fi
+          else
+            echo "No bridges-v2 files to check."
+          fi
+
+      - name: Run phpcs on legacy bridges (errors only)
+        if: steps.changed.outputs.has_files == 'true'
+        run: |
+          rm -f .phpcs.cache
+          
+          LEGACY_FILES=$(echo "${{ steps.changed.outputs.files }}" | tr ' ' '\n' | grep '^bridges/' | tr '\n' ' ')
+          
+          if [ -n "$LEGACY_FILES" ]; then
+            echo "### Checking legacy bridges (errors only) ###"
+            ./vendor/bin/phpcs \
+              $LEGACY_FILES \
+              --standard=phpcs.xml \
+              --warning-severity=0 \
+              --extensions=php \
+              --no-cache \
+              -p
+          else
+            echo "No legacy bridge files to check."
+          fi
 
   executable-check:
     name: Executable PHP files check

@@ -227,9 +227,7 @@ final class AuthorTodayBridge extends BridgeAbstract
     {
         return $url
             |> trim(...)
-            |> (fn($u) => $u === '' || preg_match(pattern: '#^https?://#i', subject: $u) === 1
-                ? ($u !== '' ? $u : self::URI)
-                : self::URI . '/' . ltrim($u, '/'))(...);
+            |> (fn($u) => $u === '' || preg_match(pattern: '#^https?://#i', subject: $u) === 1 ? ($u !== '' ? $u : self::URI) : self::URI . '/' . ltrim($u, '/'))(...);
     }
 
     private function timestamp(string $value): ?int

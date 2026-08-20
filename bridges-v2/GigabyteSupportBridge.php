@@ -144,17 +144,17 @@ final class GigabyteSupportBridge extends BridgeAbstract
         libxml_use_internal_errors(true);
         $dom->loadHTML('<?xml encoding="UTF-8">' . $html);
         libxml_clear_errors();
-        
+
         $xpath = new \DOMXPath($dom);
         $nodes = $xpath->query("//*[contains(@class, 'model-base-info-title')]");
-        
+
         foreach ($nodes as $node) {
             $name = trim($node->textContent);
             if ($name !== '') {
                 return $name;
             }
         }
-        
+
         return null;
     }
 
@@ -284,7 +284,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
                         break;
                     }
                 }
-                
+
                 if ($downloadUrl !== '' && str_starts_with($downloadUrl, '/')) {
                     $downloadUrl = 'https://www.gigabyte.com' . $downloadUrl;
                 }

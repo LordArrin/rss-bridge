@@ -95,7 +95,7 @@ final class AlpineReleasesBridge extends BridgeAbstract
     {
         $cacheKey = 'alpine_branches_' . md5(self::URI);
         $cached = $this->cache->get($cacheKey);
-        
+
         if ($cached !== null) {
             return $cached;
         }

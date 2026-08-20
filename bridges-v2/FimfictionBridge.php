@@ -218,8 +218,7 @@ final class FimfictionBridge extends BridgeAbstract
 
     private function extractAuthor(\Dom\HTMLDocument $dom): string
     {
-        $authorNode = $dom->querySelector('div.info-container a[href*="/user/"]')
-            ?? $dom->querySelector('a[href*="/user/"]');
+        $authorNode = $dom->querySelector('div.info-container a[href*="/user/"]') ?? $dom->querySelector('a[href*="/user/"]');
 
         if ($authorNode !== null) {
             $author = trim($authorNode->textContent);

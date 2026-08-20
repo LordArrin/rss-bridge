@@ -206,9 +206,7 @@ final class Vk2Bridge extends BridgeAbstract
         }
 
         if ($filteredPosts === []) {
-            $reason = $hideReposts
-                ? 'No original posts found after filtering reposts.'
-                : 'No posts found in the feed.';
+            $reason = $hideReposts ? 'No original posts found after filtering reposts.' : 'No posts found in the feed.';
             $this->handleError(self::ERR_NO_POSTS_FOUND, $reason);
         }
 
@@ -303,9 +301,7 @@ final class Vk2Bridge extends BridgeAbstract
             'video' => $this->renderVideo($d),
             'clip' => $this->renderClip($d),
             'audio' => $this->renderAudio($d),
-            'doc' => (($d['ext'] ?? '') === 'gif')
-                ? "<p>{$this->image($this->proxyImage($d['url'] ?? ''), $d['title'] ?? 'Document')}</p>"
-                : "<p>{$this->link($d['url'] ?? '#', 'Document: ' . ($d['title'] ?? 'Document'))}</p>",
+            'doc' => (($d['ext'] ?? '') === 'gif') ? "<p>{$this->image($this->proxyImage($d['url'] ?? ''), $d['title'] ?? 'Document')}</p>" : "<p>{$this->link($d['url'] ?? '#', 'Document: ' . ($d['title'] ?? 'Document'))}</p>",
             'link' => (function () use ($d): string {
                 $url = str_replace('https://m.vk.ru', 'https://vk.ru', $d['url'] ?? '#');
                 $normalized = $this->normalizePlaylistUrl($url);
@@ -345,9 +341,7 @@ final class Vk2Bridge extends BridgeAbstract
             ),
             'podcast' => $this->renderPodcast($d),
             'event' => $this->renderEvent($d),
-            'graffiti' => (($url = $d['photo_586'] ?? $d['photo_200'] ?? '') !== '')
-                ? "<p>{$this->image($this->proxyImage($url), 'Graffiti')}</p>"
-                : '',
+            'graffiti' => (($url = $d['photo_586'] ?? $d['photo_200'] ?? '') !== '') ? "<p>{$this->image($this->proxyImage($url), 'Graffiti')}</p>" : '',
             'group' => $this->renderLinkCard(
                 ($d['screen_name'] ?? '') !== '' ? 'https://vk.ru/' . $d['screen_name'] : '#',
                 $d['name'] ?? 'Group',
