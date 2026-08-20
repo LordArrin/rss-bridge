@@ -1,48 +1,48 @@
 <?php
 
+declare(strict_types=1);
+
 use Facebook\WebDriver\Chrome\ChromeOptions;
 use Facebook\WebDriver\Remote\DesiredCapabilities;
 use Facebook\WebDriver\Remote\RemoteWebDriver;
 use Facebook\WebDriver\WebDriverCapabilities;
 
 /**
- * An alternative abstract class for bridges depending on webdriver
+ * An alternative abstract class for bridges depending on a WebDriver.
  *
- * This class is meant a solution for active websites that use
- * XMLHttpRequest (XHR) to load content and/or use JavaScript to
- * change content. This class depends on a working webdriver setup.
+ * This class is meant for active websites that use XMLHttpRequest (XHR)
+ * to load content and/or use JavaScript to change content.
+ * This class depends on a working WebDriver setup (e.g. Selenium).
  */
 abstract class WebDriverAbstract extends BridgeAbstract
 {
     /**
-     * Holds the remote webdriver object, including configuration and
-     * connection.
+     * Holds the remote WebDriver object, including configuration and connection.
      *
-     * @var RemoteWebDriver
+     * @var RemoteWebDriver|null
      */
-    protected RemoteWebDriver $driver;
+    protected $driver;
 
     /**
-     * Holds the uri of the feed's icon.
+     * Holds the URI of the feed's icon.
      *
-     * @var string | null
+     * @var string|null
      */
     private $feedIcon;
 
     /**
-     * Returns the webdriver object.
+     * Returns the WebDriver object.
      *
-     * @return RemoteWebDriver
+     * @return RemoteWebDriver|null
      */
-    protected function getDriver(): RemoteWebDriver
+    protected function getDriver()
     {
         return $this->driver;
     }
 
     /**
-     * Returns the uri of the feed's icon.
-     *
-     * @return string
+     * Returns the URI of the feed's icon.
+     * Falls back to {@see BridgeAbstract::getIcon()} if no custom icon was set.
      */
     public function getIcon()
     {
@@ -50,9 +50,9 @@ abstract class WebDriverAbstract extends BridgeAbstract
     }
 
     /**
-     * Sets the uri of the feed's icon.
+     * Sets the URI of the feed's icon.
      *
-     * @param $iconurl string
+     * @param string $iconurl Icon URL
      */
     protected function setIcon($iconurl)
     {
@@ -62,9 +62,9 @@ abstract class WebDriverAbstract extends BridgeAbstract
     /**
      * Returns the ChromeOptions object.
      *
-     * If the configuration parameter 'headless' is set to true, the
-     * argument '--headless' is added. Override this to change or add
-     * more options.
+     * If the configuration parameter 'headless' is set to true,
+     * the argument '--headless' is added. Override this to change
+     * or add more options.
      *
      * @return ChromeOptions
      */
@@ -72,7 +72,7 @@ abstract class WebDriverAbstract extends BridgeAbstract
     {
         $chromeOptions = new ChromeOptions();
         if (Configuration::getConfig('webdriver', 'headless')) {
-            $chromeOptions->addArguments(['--headless']);   // --window-size=1024,1024
+            $chromeOptions->addArguments(['--headless']);
         }
         return $chromeOptions;
     }
@@ -80,12 +80,12 @@ abstract class WebDriverAbstract extends BridgeAbstract
     /**
      * Returns the DesiredCapabilities object for the Chrome browser.
      *
-     * The Chrome options are added. Override this to change or add
-     * more capabilities.
+     * The Chrome options are added. Override this to change
+     * or add more capabilities.
      *
      * @return WebDriverCapabilities
      */
-    protected function getDesiredCapabilities(): WebDriverCapabilities
+    protected function getDesiredCapabilities()
     {
         $desiredCapabilities = DesiredCapabilities::chrome();
         $desiredCapabilities->setCapability(ChromeOptions::CAPABILITY, $this->getBrowserOptions());
@@ -93,8 +93,8 @@ abstract class WebDriverAbstract extends BridgeAbstract
     }
 
     /**
-     * Constructs the remote webdriver with the url of the remote (Selenium)
-     * webdriver server and the desired capabilities.
+     * Constructs the remote WebDriver with the URL of the remote (Selenium)
+     * WebDriver server and the desired capabilities.
      *
      * This should be called in collectData() first.
      */
@@ -107,7 +107,7 @@ abstract class WebDriverAbstract extends BridgeAbstract
     /**
      * Maximizes the remote browser window (often important for reactive sites
      * which change their appearance depending on the window size) and opens
-     * the uri set in the constant URI.
+     * the URI set in the constant URI.
      */
     protected function prepareWindow()
     {
@@ -116,7 +116,7 @@ abstract class WebDriverAbstract extends BridgeAbstract
     }
 
     /**
-     * Closes the remote browser window and shuts down the remote webdriver
+     * Closes the remote browser window and shuts down the remote WebDriver
      * connection.
      *
      * This must be called at the end of scraping, for example within a

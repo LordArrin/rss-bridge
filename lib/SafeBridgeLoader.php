@@ -5,73 +5,90 @@ declare(strict_types=1);
 use RSSBridge\Caches\CacheInterface;
 
 /**
- * SafeBridgeLoader - ensures safe loading of bridges without crashing the application.
+ * Safe bridge loader that wraps BridgeFactory to prevent application crashes.
  *
- * This class wraps BridgeFactory and intercepts errors when creating bridges,
- * returning safe stubs instead of crashing the script.
+ * When a bridge cannot be loaded (due to syntax errors, signature mismatches,
+ * or any other fatal failure), this loader returns a {@see BrokenBridgeStub}
+ * instead of propagating the exception, allowing the rest of the application
+ * to continue functioning.
  */
 class SafeBridgeLoader
 {
     private BridgeFactory $bridgeFactory;
     private Logger $logger;
+    private CacheInterface $cache;
     private array $brokenBridges = [];
 
-    public function __construct(BridgeFactory $bridgeFactory, Logger $logger)
+    public function __construct(BridgeFactory $bridgeFactory, Logger $logger, CacheInterface $cache)
     {
         $this->bridgeFactory = $bridgeFactory;
         $this->logger = $logger;
+        $this->cache = $cache;
     }
 
     /**
      * Safely creates a bridge instance.
-     * In case of an error, returns a stub and remembers the error.
+     *
+     * If the bridge cannot be instantiated for any reason, returns a
+     * {@see BrokenBridgeStub} and records the error for later reporting.
+     *
+     * @param string $bridgeClassName Full class name (FQCN or legacy global name)
+     * @return BridgeAbstract Either the real bridge or a broken stub
      */
     public function createSafely(string $bridgeClassName): BridgeAbstract
     {
+        if (empty($bridgeClassName) || !preg_match('/^[a-zA-Z0-9_\\\\]+$/', $bridgeClassName)) {
+            return $this->createStub($bridgeClassName ?: 'Unknown', 'Invalid bridge class name');
+        }
+
         try {
             $bridge = $this->bridgeFactory->create($bridgeClassName);
 
-            // Validating basic metadata
             $bridge->getName();
             $bridge->getURI();
             $bridge->getDescription();
             $bridge->getParameters();
 
             return $bridge;
-
         } catch (\Throwable $e) {
-            $this->brokenBridges[$bridgeClassName] = [
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-            ];
-
-            $this->logger->error(sprintf(
-                'Bridge "%s" is invalid: %s in %s:%d',
-                $bridgeClassName,
-                $e->getMessage(),
-                $e->getFile(),
-                $e->getLine()
-            ));
-
-            return $this->createBrokenBridgeStub($bridgeClassName, $e->getMessage());
+            $this->registerBrokenBridge($bridgeClassName, $e);
+            return $this->createStub($bridgeClassName, $e->getMessage(), $e->getFile(), $e->getLine());
         }
     }
 
     /**
-     * Checks if the bridge is broken.
+     * Checks whether a bridge instance is a broken stub.
+     *
+     * @param BridgeAbstract $bridge Bridge instance to check
      */
     public function isBridgeBroken(BridgeAbstract $bridge): bool
     {
-        return method_exists($bridge, 'isBrokenStub') && $bridge->isBrokenStub();
+        return $bridge instanceof BrokenBridgeStub || (method_exists($bridge, 'isBrokenStub') && $bridge->isBrokenStub());
     }
 
     /**
-     * Returns a list of all broken bridges.
+     * Returns the list of all broken bridges encountered during loading.
+     *
+     * @return array<string, array{message: string, file: string, line: int, class: string}>
      */
     public function getBrokenBridges(): array
     {
         return $this->brokenBridges;
+    }
+
+    /**
+     * Restores a broken bridge entry from cache.
+     *
+     * This is used by {@see BridgeMetadataCache} to restore the broken bridges
+     * list when metadata is served from cache, so that the frontend can display
+     * warnings even without re-loading all bridges.
+     *
+     * @param string $bridgeName Bridge class name
+     * @param array $errorInfo Error information array
+     */
+    public function restoreBrokenBridge(string $bridgeName, array $errorInfo): void
+    {
+        $this->brokenBridges[$bridgeName] = $errorInfo;
     }
 
     /**
@@ -83,75 +100,40 @@ class SafeBridgeLoader
     }
 
     /**
-     * Creates a safe plug for a broken bridge.
+     * Creates a safe stub for a broken bridge.
+     *
+     * @param string $originalName Original bridge class name
+     * @param string $errorMessage Error message describing the failure
+     * @param string $file File where the error occurred
+     * @param int $line Line number where the error occurred
      */
-    private function createBrokenBridgeStub(string $originalName, string $errorMessage): BridgeAbstract
+    private function createStub(string $originalName, string $errorMessage, string $file = '', int $line = 0): BrokenBridgeStub
     {
-        return new class($originalName, $errorMessage) extends BridgeAbstract {
-            private string $error;
-            private string $originalName;
+        return new BrokenBridgeStub($originalName, $errorMessage, $this->cache, $this->logger);
+    }
 
-            public function __construct(string $originalName, string $error)
-            {
-                // We don't call parent::__construct because we don't have a cache/logger.
-                $this->originalName = $originalName;
-                $this->error = $error;
-            }
+    /**
+     * Records a broken bridge and logs the error.
+     *
+     * @param string $bridgeClassName Bridge class name that failed to load
+     * @param \Throwable $e Exception or error that caused the failure
+     */
+    private function registerBrokenBridge(string $bridgeClassName, \Throwable $e): void
+    {
+        $this->brokenBridges[$bridgeClassName] = [
+            'message' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'class' => get_class($e),
+        ];
 
-            public function isBrokenStub(): bool
-            {
-                return true;
-            }
-
-            public function collectData()
-            {
-                throw new \Exception('This bridge is broken: ' . $this->error);
-            }
-
-            public function getName()
-            {
-                return $this->originalName . ' (Broken)';
-            }
-
-            public function getURI()
-            {
-                return '';
-            }
-
-            public function getDonationURI(): string
-            {
-                return '';
-            }
-
-            public function getIcon()
-            {
-                return '';
-            }
-
-            public function getParameters(): array
-            {
-                return [];
-            }
-
-            public function getDescription()
-            {
-                return 'This bridge is broken: ' . $this->error;
-            }
-
-            public function getMaintainer(): string
-            {
-                return 'System';
-            }
-
-            public function detectParameters($url)
-            {
-                return null;
-            }
-
-            public function getCacheTimeout()
-            {
-                return 0;
-            }
-        };
+        $this->logger->error(sprintf(
+            '[SafeBridgeLoader] Bridge "%s" failed to load: [%s] %s in %s:%d',
+            $bridgeClassName,
+            get_class($e),
+            $e->getMessage(),
+            $e->getFile(),
+            $e->getLine()
+        ));
     }
 }

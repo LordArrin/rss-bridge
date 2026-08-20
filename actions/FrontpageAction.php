@@ -38,7 +38,7 @@ final class FrontpageAction implements ActionInterface
 
         foreach ($this->bridgeFactory->getMissingEnabledBridges() as $missingEnabledBridge) {
             $messages[] = [
-                'body' => sprintf('Warning :Bridge "%s" not found', $missingEnabledBridge),
+                'body' => sprintf('Warning: Bridge "%s" not found', $missingEnabledBridge),
                 'level' => 'warning'
             ];
         }
@@ -65,18 +65,16 @@ final class FrontpageAction implements ActionInterface
             $activeBridges++;
         }
 
-        foreach ($this->safeLoader->getBrokenBridges() as $brokenBridgeName => $errorInfo) {
-            $errorMessage = $errorInfo['message'];
+        $brokenBridges = $this->safeLoader->getBrokenBridges();
+        $brokenCount = count($brokenBridges);
 
-            if (strlen($errorMessage) > 300) {
-                $errorMessage = substr($errorMessage, 0, 300) . '...';
-            }
-
+        if ($brokenCount > 0) {
             $messages[] = [
                 'body' => sprintf(
-                    'Bridge "%s" failed to load and was disabled. Error: %s',
-                    $brokenBridgeName,
-                    $errorMessage
+                    'Warning: %d bridge%s failed to load and %s been disabled. Check logs for details.',
+                    $brokenCount,
+                    $brokenCount === 1 ? '' : 's',
+                    $brokenCount === 1 ? 'has' : 'have'
                 ),
                 'level' => 'warning'
             ];
@@ -189,7 +187,7 @@ final class FrontpageAction implements ActionInterface
                 $contextNameStr = is_numeric($contextName) ? (string) $contextName : $contextName;
 
                 if (!is_numeric($contextName)) {
-                    $card .= '<h5>' . e($contextNameStr) . "</h5>\n";
+                    $card .= '<h5>' . $e($contextNameStr) . "</h5>\n";
                 }
 
                 $card .= self::renderForm($shortClassName, $contextNameStr, $contextParameters, $token);
@@ -349,11 +347,11 @@ final class FrontpageAction implements ActionInterface
 
     public static function getListInput(array $parameter, string $id, string $name): string
     {
-        $list = sprintf('<select id="%s" name="%s">', e($id), e($name)) . "\n";
+        $list = sprintf('<select id="%s" name="%s">', htmlspecialchars($id), htmlspecialchars($name)) . "\n";
 
         foreach ($parameter['values'] as $name => $value) {
             if (is_array($value)) {
-                $list .= '<optgroup label="' . e((string) $name) . '">';
+                $list .= '<optgroup label="' . htmlspecialchars((string) $name) . '">';
                 foreach ($value as $subname => $subvalue) {
                     if (
                         $parameter['defaultValue'] === $subname

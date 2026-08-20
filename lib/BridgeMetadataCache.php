@@ -4,6 +4,15 @@ declare(strict_types=1);
 
 use RSSBridge\Caches\CacheInterface;
 
+/**
+ * Cache for bridge metadata to improve page load performance.
+ *
+ * This class builds and caches metadata (name, description, parameters, etc.)
+ * for all bridges, avoiding the need to instantiate every bridge on each request.
+ *
+ * It also caches the list of broken bridges that failed to load, so that
+ * the frontend can display warnings even when metadata is served from cache.
+ */
 final class BridgeMetadataCache
 {
     private const CACHE_PREFIX = 'bridge_metadata_v2';
@@ -19,145 +28,191 @@ final class BridgeMetadataCache
         $this->bridgesDirs = $bridgesDirs;
     }
 
+    /**
+     * Returns metadata for all bridges, using cache when available.
+     *
+     * @param BridgeFactory $factory Factory for resolving bridge class names
+     * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
+     * @return array<string, array> Metadata indexed by bridge class name
+     */
     public function getAll(BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
         $cacheKey = $this->buildCacheKey();
         $cached = $this->cache->get($cacheKey);
 
-        if ($cached !== null && is_array($cached)) {
-            return $cached;
+        if ($cached !== null && is_array($cached) && isset($cached['metadata'])) {
+            // Restore broken bridges list to the loader so FrontpageAction can access it
+            if (isset($cached['broken_bridges'])) {
+                foreach ($cached['broken_bridges'] as $bridgeName => $errorInfo) {
+                    $loader->restoreBrokenBridge($bridgeName, $errorInfo);
+                }
+            }
+            return $cached['metadata'];
         }
 
-        $metadata = $this->buildMetadata($factory, $loader);
-        $this->cache->set($cacheKey, $metadata, self::DEFAULT_TTL);
+        $result = $this->buildMetadata($factory, $loader);
+        $this->cache->set($cacheKey, $result, self::DEFAULT_TTL);
 
-        return $metadata;
+        return $result['metadata'];
     }
 
+    /**
+     * Returns metadata for a specific bridge.
+     *
+     * @param string $bridgeClassName Bridge class name
+     * @param BridgeFactory $factory Factory for resolving bridge class names
+     * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
+     * @return array|null Metadata array or null if not found
+     */
     public function get(string $bridgeClassName, BridgeFactory $factory, SafeBridgeLoader $loader): ?array
     {
         $all = $this->getAll($factory, $loader);
         return $all[$bridgeClassName] ?? null;
     }
 
+    /**
+     * Rebuilds the cache and returns the fresh metadata.
+     *
+     * @param BridgeFactory $factory Factory for resolving bridge class names
+     * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
+     * @return array<string, array> Fresh metadata indexed by bridge class name
+     */
     public function rebuild(BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
         $cacheKey = $this->buildCacheKey();
-        $metadata = $this->buildMetadata($factory, $loader);
-        $this->cache->set($cacheKey, $metadata, self::DEFAULT_TTL);
-        return $metadata;
+        $result = $this->buildMetadata($factory, $loader);
+        $this->cache->set($cacheKey, $result, self::DEFAULT_TTL);
+        return $result['metadata'];
     }
 
-    public function invalidate(): void
-    {
-        $cacheKey = $this->buildCacheKey();
-        if (method_exists($this->cache, 'delete')) {
-            $this->cache->delete($cacheKey);
-        }
-    }
-
+    /**
+     * Checks whether the current cache entry is fresh (exists and matches current hash).
+     *
+     * @return bool True if cache is fresh, false otherwise
+     */
     public function isFresh(): bool
     {
         $cacheKey = $this->buildCacheKey();
         $cached = $this->cache->get($cacheKey);
-        return $cached !== null && is_array($cached);
+        return $cached !== null && is_array($cached) && isset($cached['metadata']);
     }
 
+    /**
+     * Returns the current hash of bridge directories.
+     *
+     * This hash changes whenever any bridge file is modified, added, or removed.
+     *
+     * @return string MD5 hash of bridge directory contents
+     */
     public function getCurrentHash(): string
     {
-        return $this->calculateBridgesHash();
+        $this->buildCacheKey();
+        return $this->cachedHash ?? '';
     }
 
-    private function buildCacheKey(): string
+    /**
+     * Builds metadata for all bridges in the configured directories.
+     *
+     * @param BridgeFactory $factory Factory for resolving bridge class names
+     * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
+     * @return array{metadata: array<string, array>, broken_bridges: array<string, array>}
+     */
+    private function buildMetadata(BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
-        return self::CACHE_PREFIX . '_' . $this->calculateBridgesHash();
-    }
-
-    private function calculateBridgesHash(): string
-    {
-        if ($this->cachedHash !== null) {
-            return $this->cachedHash;
-        }
-
-        $mtimes = [];
+        $metadata = [];
 
         foreach ($this->bridgesDirs as $dir) {
             if (!is_dir($dir)) {
                 continue;
             }
 
-            $files = glob($dir . '/*Bridge.php');
-            if ($files === false) {
-                continue;
-            }
-
-            foreach ($files as $file) {
-                $relativeName = basename($dir) . '/' . basename($file);
-                $mtimes[] = $relativeName . ':' . filemtime($file);
-            }
-        }
-
-        if ($mtimes === []) {
-            $this->cachedHash = 'empty';
-            return $this->cachedHash;
-        }
-
-        sort($mtimes);
-        $this->cachedHash = md5(implode('|', $mtimes));
-        return $this->cachedHash;
-    }
-
-    private function buildMetadata(BridgeFactory $factory, SafeBridgeLoader $loader): array
-    {
-        $metadata = [];
-        $classNames = $factory->getBridgeClassNames();
-
-        foreach ($classNames as $className) {
-            if (!$factory->isEnabled($className)) {
-                continue;
-            }
-
-            $bridge = $loader->createSafely($className);
-
-            if ($loader->isBridgeBroken($bridge)) {
-                continue;
-            }
-
-            $metadata[$className] = $this->extractMetadata($bridge);
-        }
-
-        return $metadata;
-    }
-
-    private function extractMetadata(BridgeAbstract $bridge): array
-    {
-        $uri = $bridge->getURI();
-        $domain = '';
-
-        if (!empty($uri)) {
-            if (!preg_match('#^https?://#', $uri)) {
-                $uri = 'https://' . $uri;
-            }
-            $parsed = parse_url($uri);
-            if ($parsed && isset($parsed['host'])) {
-                $domain = strtolower($parsed['host']);
-                if (strpos($domain, 'www.') === 0) {
-                    $domain = substr($domain, 4);
+            foreach (scandir($dir) as $file) {
+                if (!preg_match('/^([^.]+Bridge)\.php$/U', $file, $m)) {
+                    continue;
                 }
+
+                $shortName = $m[1];
+
+                // Determine full class name based on directory
+                if (str_contains($dir, 'bridges-v2')) {
+                    $className = 'RSSBridge\\Bridges\\' . $shortName;
+                } else {
+                    $className = $shortName;
+                }
+
+                if (!$factory->isEnabled($className)) {
+                    continue;
+                }
+
+                $bridge = $loader->createSafely($className);
+
+                // Skip broken bridges - they will be reported separately
+                if ($loader->isBridgeBroken($bridge)) {
+                    continue;
+                }
+
+                $metadata[$className] = [
+                    'name' => $bridge->getName(),
+                    'uri' => $bridge->getURI(),
+                    'description' => $bridge->getDescription(),
+                    'parameters' => $bridge->getParameters(),
+                    'domain' => $this->extractDomain($bridge->getURI()),
+                    'short_name' => $shortName,
+                    'maintainer' => $bridge->getMaintainer(),
+                    'cache_timeout' => $bridge->getCacheTimeout(),
+                ];
             }
         }
 
         return [
-            'name' => $bridge->getName(),
-            'short_name' => $bridge->getShortName(),
-            'uri' => $bridge->getURI(),
-            'icon' => $bridge->getIcon(),
-            'description' => $bridge->getDescription(),
-            'maintainer' => $bridge->getMaintainer(),
-            'donation_uri' => $bridge->getDonationURI(),
-            'cache_timeout' => $bridge->getCacheTimeout(),
-            'parameters' => $bridge->getParameters(),
-            'domain' => $domain,
+            'metadata' => $metadata,
+            'broken_bridges' => $loader->getBrokenBridges(),
         ];
+    }
+
+    /**
+     * Extracts the domain from a URL for search functionality.
+     *
+     * @param string $url Bridge URI
+     * @return string Domain name without www. prefix
+     */
+    private function extractDomain(string $url): string
+    {
+        if (empty($url)) {
+            return '';
+        }
+
+        $domain = parse_url($url, PHP_URL_HOST);
+        if ($domain && str_starts_with($domain, 'www.')) {
+            $domain = substr($domain, 4);
+        }
+
+        return $domain ?: '';
+    }
+
+    /**
+     * Builds the cache key based on bridge directories and their modification times.
+     *
+     * @return string Unique cache key
+     */
+    private function buildCacheKey(): string
+    {
+        if ($this->cachedHash === null) {
+            $hashParts = [];
+            foreach ($this->bridgesDirs as $dir) {
+                if (is_dir($dir)) {
+                    $hashParts[] = $dir;
+                    foreach (scandir($dir) as $file) {
+                        if ($file !== '.' && $file !== '..') {
+                            $filepath = $dir . '/' . $file;
+                            $hashParts[] = filemtime($filepath);
+                        }
+                    }
+                }
+            }
+            $this->cachedHash = md5(implode('|', $hashParts));
+        }
+
+        return self::CACHE_PREFIX . '_' . $this->cachedHash;
     }
 }

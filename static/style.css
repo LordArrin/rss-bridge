@@ -29,10 +29,10 @@
     --md-on-error-container: #410002;
 
     /* Warning */
-    --md-warning: #F9A825;
-    --md-on-warning: #2B1A00;
-    --md-warning-container: #FFF3C4;
-    --md-on-warning-container: #3A2300;
+    --md-warning: #E89500;
+    --md-on-warning: #FFFFFF;
+    --md-warning-container: #FFE9A6;
+    --md-on-warning-container: #3D2200;
 
     /* Surfaces - warm tones */
     --md-surface: #FFF8F5;
@@ -105,10 +105,10 @@
         --md-error-container: #93000A;
         --md-on-error-container: #FFDAD6;
 
-        --md-warning: #FFD54F;
-        --md-on-warning: #432B00;
-        --md-warning-container: #614F00;
-        --md-on-warning-container: #FFF3C4;
+        --md-warning: #FFB300;
+        --md-on-warning: #3F2800;
+        --md-warning-container: #453000;
+        --md-on-warning-container: #FFE1A0;
 
         /* Surfaces - dark, AMOLED-friendly */
         --md-surface: #120D0B;

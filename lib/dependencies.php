@@ -41,7 +41,7 @@ $container['bridge_factory'] = function ($c) {
 };
 
 $container['safe_bridge_loader'] = function ($c) {
-    return new SafeBridgeLoader($c['bridge_factory'], $c['logger']);
+    return new SafeBridgeLoader($c['bridge_factory'], $c['logger'], $c['cache']);
 };
 
 $container['http_client'] = function () {
@@ -71,9 +71,7 @@ $container['logger'] = function () {
 };
 
 $container['cache'] = function ($c) {
-    /** @var CacheFactory $cacheFactory */
     $cacheFactory = $c['cache_factory'];
-    /** @var CacheInterface $cache */
     $cache = $cacheFactory->create(Configuration::getConfig('cache', 'type'));
     return $cache;
 };

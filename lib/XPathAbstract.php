@@ -1,11 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * An alternative abstract class for bridges utilizing XPath expressions
+ * An alternative abstract class for bridges utilizing XPath expressions.
  *
  * This class is meant as an alternative base class for bridge implementations.
  * It offers preliminary functionality for generating feeds based on XPath
  * expressions.
+ *
  * As a minimum, extending classes should define XPath expressions pointing
  * to the feed items contents in the class constants below. In case there is
  * more manual fine tuning required, it offers a bunch of methods which can
@@ -14,186 +17,197 @@
  *
  * This class extends {@see BridgeAbstract}, which means it incorporates and
  * extends all of its functionality.
- **/
+ */
 abstract class XPathAbstract extends BridgeAbstract
 {
     /**
-     * Source Web page URL (should provide either HTML or XML content)
+     * Source Web page URL (should provide either HTML or XML content).
      * You can specify any website URL which serves data suited for display in RSS feeds
      * (for example a news blog).
      *
-     * Use {@see XPathAbstract::getSourceUrl()} to read this parameter
+     * Use {@see XPathAbstract::getSourceUrl()} to read this parameter.
      */
     const FEED_SOURCE_URL = '';
 
     /**
      * XPath expression for extracting the feed title from the source page.
-     * If this is left blank or does not provide any data {@see BridgeAbstract::getName()}
+     * If this is left blank or does not provide any data, {@see BridgeAbstract::getName()}
      * is used instead as the feed's title.
      *
-     * Use {@see XPathAbstract::getExpressionTitle()} to read this parameter
+     * Use {@see XPathAbstract::getExpressionTitle()} to read this parameter.
      */
     const XPATH_EXPRESSION_FEED_TITLE = './/title';
 
     /**
      * XPath expression for extracting the feed favicon URL from the source page.
-     * If this is left blank or does not provide any data {@see BridgeAbstract::getIcon()}
+     * If this is left blank or does not provide any data, {@see BridgeAbstract::getIcon()}
      * is used instead as the feed's favicon URL.
      *
-     * Use {@see XPathAbstract::getExpressionIcon()} to read this parameter
+     * Use {@see XPathAbstract::getExpressionIcon()} to read this parameter.
      */
     const XPATH_EXPRESSION_FEED_ICON = './/link[@rel="icon"]/@href';
 
     /**
-     * XPath expression for extracting the feed items from the source page
+     * XPath expression for extracting the feed items from the source page.
      * Enter an XPath expression matching a list of dom nodes, each node containing one
      * feed article item in total (usually a surrounding <div> or <span> tag). This will
      * be the context nodes for all of the following expressions. This expression usually
      * starts with a single forward slash.
      *
-     * Use {@see XPathAbstract::getExpressionItem()} to read this parameter
+     * Use {@see XPathAbstract::getExpressionItem()} to read this parameter.
      */
     const XPATH_EXPRESSION_ITEM = '';
 
     /**
-     * XPath expression for extracting an item title from the item context
+     * XPath expression for extracting an item title from the item context.
      * This expression should match a node contained within each article item node
      * containing the article headline. It should start with a dot followed by two
      * forward slashes, referring to any descendant nodes of the article item node.
      *
-     * Use {@see XPathAbstract::getExpressionItemTitle()} to read this parameter
+     * Use {@see XPathAbstract::getExpressionItemTitle()} to read this parameter.
      */
     const XPATH_EXPRESSION_ITEM_TITLE = '';
 
     /**
-     * XPath expression for extracting an item's content from the item context
+     * XPath expression for extracting an item's content from the item context.
      * This expression should match a node contained within each article item node
      * containing the article content or description. It should start with a dot
      * followed by two forward slashes, referring to any descendant nodes of the
      * article item node.
      *
-     * Use {@see XPathAbstract::getExpressionItemContent()} to read this parameter
+     * Use {@see XPathAbstract::getExpressionItemContent()} to read this parameter.
      */
     const XPATH_EXPRESSION_ITEM_CONTENT = '';
 
     /**
-     * XPath expression for extracting an item link from the item context
+     * XPath expression for extracting an item link from the item context.
      * This expression should match a node's attribute containing the article URL
      * (usually the href attribute of an <a> tag). It should start with a dot
      * followed by two forward slashes, referring to any descendant nodes of
      * the article item node. Attributes can be selected by prepending an @ char
      * before the attributes name.
      *
-     * Use {@see XPathAbstract::getExpressionItemUri()} to read this parameter
+     * Use {@see XPathAbstract::getExpressionItemUri()} to read this parameter.
      */
     const XPATH_EXPRESSION_ITEM_URI = '';
 
     /**
-     * XPath expression for extracting an item author from the item context
+     * XPath expression for extracting an item author from the item context.
      * This expression should match a node contained within each article item
      * node containing the article author's name. It should start with a dot
      * followed by two forward slashes, referring to any descendant nodes of
      * the article item node.
      *
-     * Use {@see XPathAbstract::getExpressionItemAuthor()} to read this parameter
+     * Use {@see XPathAbstract::getExpressionItemAuthor()} to read this parameter.
      */
     const XPATH_EXPRESSION_ITEM_AUTHOR = '';
 
     /**
-     * XPath expression for extracting an item timestamp from the item context
+     * XPath expression for extracting an item timestamp from the item context.
      * This expression should match a node or node's attribute containing the
      * article timestamp or date (parsable by PHP's strtotime function). It
      * should start with a dot followed by two forward slashes, referring to
      * any descendant nodes of the article item node. Attributes can be
      * selected by prepending an @ char before the attributes name.
      *
-     * Use {@see XPathAbstract::getExpressionItemTimestamp()} to read this parameter
+     * Use {@see XPathAbstract::getExpressionItemTimestamp()} to read this parameter.
      */
     const XPATH_EXPRESSION_ITEM_TIMESTAMP = '';
 
     /**
      * XPath expression for extracting item enclosures (media content like
-     * images or movies) from the item context
+     * images or movies) from the item context.
      * This expression should match a node's attribute containing an article
      * image URL (usually the src attribute of an <img> tag or a style
      * attribute). It should start with a dot followed by two forward slashes,
      * referring to any descendant nodes of the article item node. Attributes
      * can be selected by prepending an @ char before the attributes name.
      *
-     * Use {@see XPathAbstract::getExpressionItemEnclosures()} to read this parameter
+     * Use {@see XPathAbstract::getExpressionItemEnclosures()} to read this parameter.
      */
     const XPATH_EXPRESSION_ITEM_ENCLOSURES = '';
 
     /**
-     * XPath expression for extracting an item category from the item context
+     * XPath expression for extracting an item category from the item context.
      * This expression should match a node or node's attribute contained
      * within each article item node containing the article category. This
      * could be inside <div> or <span> tags or sometimes be hidden
      * in a data attribute. It should start with a dot followed by two
-     * forward slashes, referring to any descendant nodes of the article
-     * item node. Attributes can be selected by prepending an @ char
+     * forward slashes, referring to any descendant nodes of the
+     * article item node. Attributes can be selected by prepending an @ char
      * before the attributes name.
      *
-     * Use {@see XPathAbstract::getExpressionItemCategories()} to read this parameter
+     * Use {@see XPathAbstract::getExpressionItemCategories()} to read this parameter.
      */
     const XPATH_EXPRESSION_ITEM_CATEGORIES = '';
 
     /**
-     * Fix encoding
+     * Fix encoding.
      * Set this to true for fixing feed encoding by converting from UTF-8 to ISO-8859-1
      * function on all extracted texts. Try this in case you see "broken" or
      * "weird" characters in your feed where you'd normally expect umlauts
      * or any other non-ascii characters.
      *
-     * Use {@see XPathAbstract::getSettingFixEncoding()} to read this parameter
+     * Use {@see XPathAbstract::getSettingFixEncoding()} to read this parameter.
      */
     const SETTING_FIX_ENCODING = false;
 
     /**
-     * Use raw item content
+     * Use raw item content.
      * Whether to use the raw item content or to replace certain characters with
      * special significance in HTML by HTML entities (using the PHP function htmlspecialchars).
      *
-     * Use {@see XPathAbstract::getSettingUseRawItemContent()} to read this parameter
+     * Use {@see XPathAbstract::getSettingUseRawItemContent()} to read this parameter.
      */
     const SETTING_USE_RAW_ITEM_CONTENT = true;
 
     /**
-     * Internal storage for resulting feed name, automatically detected
-     * @var string
+     * Internal storage for resulting feed name, automatically detected.
+     * @var string|null
      */
     private $feedName;
 
     /**
-     * Internal storage for resulting feed name, automatically detected
-     * @var string
+     * Internal storage for resulting feed uri, automatically detected.
+     * @var string|null
      */
     private $feedUri;
 
     /**
-     * Internal storage for resulting feed favicon, automatically detected
-     * @var string
+     * Internal storage for resulting feed favicon, automatically detected.
+     * @var string|null
      */
     private $feedIcon;
 
+    /**
+     * Returns the feed name.
+     * Falls back to {@see BridgeAbstract::getName()} if no title was extracted.
+     */
     public function getName()
     {
         return $this->feedName ?: parent::getName();
     }
 
+    /**
+     * Returns the feed URI.
+     * Falls back to {@see BridgeAbstract::getURI()} if no URI was detected.
+     */
     public function getURI()
     {
         return $this->feedUri ?: parent::getURI();
     }
 
+    /**
+     * Returns the feed icon URL.
+     * Falls back to {@see BridgeAbstract::getIcon()} if no icon was extracted.
+     */
     public function getIcon()
     {
         return $this->feedIcon ?: parent::getIcon();
     }
 
     /**
-     * Source Web page URL (should provide either HTML or XML content)
-     * @return string
+     * Returns the source Web page URL.
      */
     protected function getSourceUrl()
     {
@@ -201,8 +215,7 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * XPath expression for extracting the feed title from the source page
-     * @return string
+     * Returns the XPath expression for the feed title.
      */
     protected function getExpressionTitle()
     {
@@ -210,8 +223,7 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * XPath expression for extracting the feed favicon from the source page
-     * @return string
+     * Returns the XPath expression for the feed favicon.
      */
     protected function getExpressionIcon()
     {
@@ -219,8 +231,7 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * XPath expression for extracting the feed items from the source page
-     * @return string
+     * Returns the XPath expression for the feed items.
      */
     protected function getExpressionItem()
     {
@@ -228,8 +239,7 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * XPath expression for extracting an item title from the item context
-     * @return string
+     * Returns the XPath expression for an item title.
      */
     protected function getExpressionItemTitle()
     {
@@ -237,8 +247,7 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * XPath expression for extracting an item's content from the item context
-     * @return string
+     * Returns the XPath expression for an item content.
      */
     protected function getExpressionItemContent()
     {
@@ -246,8 +255,7 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * XPath expression for extracting an item link from the item context
-     * @return string
+     * Returns the XPath expression for an item URI.
      */
     protected function getExpressionItemUri()
     {
@@ -255,8 +263,7 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * XPath expression for extracting an item author from the item context
-     * @return string
+     * Returns the XPath expression for an item author.
      */
     protected function getExpressionItemAuthor()
     {
@@ -264,8 +271,7 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * XPath expression for extracting an item timestamp from the item context
-     * @return string
+     * Returns the XPath expression for an item timestamp.
      */
     protected function getExpressionItemTimestamp()
     {
@@ -273,9 +279,7 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * XPath expression for extracting item enclosures (media content like
-     * images or movies) from the item context
-     * @return string
+     * Returns the XPath expression for item enclosures.
      */
     protected function getExpressionItemEnclosures()
     {
@@ -283,8 +287,7 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * XPath expression for extracting an item category from the item context
-     * @return string
+     * Returns the XPath expression for item categories.
      */
     protected function getExpressionItemCategories()
     {
@@ -292,64 +295,51 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * Use raw item content
-     * @return bool
+     * Returns the setting for using raw item content.
      */
-    protected function getSettingUseRawItemContent(): bool
+    protected function getSettingUseRawItemContent()
     {
         return static::SETTING_USE_RAW_ITEM_CONTENT;
     }
+
     /**
-     * Fix encoding
-     * @return bool
+     * Returns the setting for fixing feed encoding.
      */
-    protected function getSettingFixEncoding(): bool
+    protected function getSettingFixEncoding()
     {
         return static::SETTING_FIX_ENCODING;
     }
 
     /**
      * Internal helper method for quickly accessing all the user defined constants
-     * in derived classes
+     * in derived classes.
      *
-     * @param $name
-     * @return bool|string
+     * @param string $name Parameter name
+     * @return bool|string|null
      */
     private function getParam($name)
     {
         switch ($name) {
-            case 'url':
-                return $this->getSourceUrl();
-            case 'feed_title':
-                return $this->getExpressionTitle();
-            case 'feed_icon':
-                return $this->getExpressionIcon();
-            case 'item':
-                return $this->getExpressionItem();
-            case 'title':
-                return $this->getExpressionItemTitle();
-            case 'content':
-                return $this->getExpressionItemContent();
-            case 'uri':
-                return $this->getExpressionItemUri();
-            case 'author':
-                return $this->getExpressionItemAuthor();
-            case 'timestamp':
-                return $this->getExpressionItemTimestamp();
-            case 'enclosures':
-                return $this->getExpressionItemEnclosures();
-            case 'categories':
-                return $this->getExpressionItemCategories();
-            case 'fix_encoding':
-                return $this->getSettingFixEncoding();
-            case 'raw_content':
-                return $this->getSettingUseRawItemContent();
+            case 'url': return $this->getSourceUrl();
+            case 'feed_title': return $this->getExpressionTitle();
+            case 'feed_icon': return $this->getExpressionIcon();
+            case 'item': return $this->getExpressionItem();
+            case 'title': return $this->getExpressionItemTitle();
+            case 'content': return $this->getExpressionItemContent();
+            case 'uri': return $this->getExpressionItemUri();
+            case 'author': return $this->getExpressionItemAuthor();
+            case 'timestamp': return $this->getExpressionItemTimestamp();
+            case 'enclosures': return $this->getExpressionItemEnclosures();
+            case 'categories': return $this->getExpressionItemCategories();
+            case 'fix_encoding': return $this->getSettingFixEncoding();
+            case 'raw_content': return $this->getSettingUseRawItemContent();
         }
     }
 
     /**
-     * Should provide the source website HTML content
-     * can be easily overwritten for example if special headers or auth infos are required
+     * Should provide the source website HTML content.
+     * Can be easily overwritten for example if special headers or auth infos are required.
+     *
      * @return string
      */
     protected function provideWebsiteContent()
@@ -358,10 +348,10 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * Should provide the feeds title
+     * Should provide the feed's title.
      *
      * @param \DOMXPath $xpath
-     * @return string
+     * @return string|null
      */
     protected function provideFeedTitle(\DOMXPath $xpath)
     {
@@ -372,10 +362,10 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * Should provide the URL of the feed's favicon
+     * Should provide the URL of the feed's favicon.
      *
      * @param \DOMXPath $xpath
-     * @return string
+     * @return string|null
      */
     protected function provideFeedIcon(\DOMXPath $xpath)
     {
@@ -396,6 +386,9 @@ abstract class XPathAbstract extends BridgeAbstract
         return @$xpath->query($this->getParam('item'));
     }
 
+    /**
+     * Main entry point for collecting feed data.
+     */
     public function collectData()
     {
         $this->feedUri = $this->getParam('url');
@@ -406,7 +399,6 @@ abstract class XPathAbstract extends BridgeAbstract
         libxml_clear_errors();
         libxml_use_internal_errors(false);
 
-        // fix relative links
         defaultLinkTo($webPageHtml, $webPageHtml->baseURI ?? $this->feedUri);
 
         $xpath = new \DOMXPath($webPageHtml);
@@ -416,7 +408,6 @@ abstract class XPathAbstract extends BridgeAbstract
 
         $entries = $this->provideFeedItems($xpath);
         if ($entries === false) {
-            // malformed
             return;
         }
 
@@ -431,16 +422,17 @@ abstract class XPathAbstract extends BridgeAbstract
                 'enclosures',
                 'categories',
             ];
+
             foreach ($parameters as $parameter) {
                 $expression = $this->getParam($parameter);
                 if ('' === $expression) {
                     continue;
                 }
 
-                //can be a string or DOMNodeList, depending on the expression result
                 $typedResult = @$xpath->evaluate($expression, $entry);
                 if (
-                    $typedResult === false || ($typedResult instanceof \DOMNodeList && count($typedResult) === 0)
+                    $typedResult === false
+                    || ($typedResult instanceof \DOMNodeList && count($typedResult) === 0)
                     || (is_string($typedResult) && strlen(trim($typedResult)) === 0)
                 ) {
                     continue;
@@ -468,39 +460,35 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * @param $param
-     * @param $value
+     * Formats a parameter value before it is added to the item array.
+     *
+     * @param string $param Parameter name
+     * @param string|array $value Extracted value
      * @return string|array
      */
     protected function formatParamValue($param, $value)
     {
         $value = is_array($value) ? array_map('trim', $value) : trim($value);
         $value = is_array($value) ? array_map([$this, 'fixEncoding'], $value) : $this->fixEncoding($value);
+
         switch ($param) {
-            case 'title':
-                return $this->formatItemTitle($value);
-            case 'content':
-                return $this->formatItemContent($value);
-            case 'uri':
-                return $this->formatItemUri($value);
-            case 'author':
-                return $this->formatItemAuthor($value);
-            case 'timestamp':
-                return $this->formatItemTimestamp($value);
-            case 'enclosures':
-                return $this->formatItemEnclosures($value);
-            case 'categories':
-                return $this->formatItemCategories($value);
+            case 'title': return $this->formatItemTitle($value);
+            case 'content': return $this->formatItemContent($value);
+            case 'uri': return $this->formatItemUri($value);
+            case 'author': return $this->formatItemAuthor($value);
+            case 'timestamp': return $this->formatItemTimestamp($value);
+            case 'enclosures': return $this->formatItemEnclosures($value);
+            case 'categories': return $this->formatItemCategories($value);
         }
+
         return $value;
     }
 
     /**
-     * Formats the title of a feed item. Takes extracted raw title and returns it formatted
-     * as string.
-     * Can be easily overwritten for in case the value needs to be transformed into something
-     * else.
-     * @param string $value
+     * Formats the title of a feed item.
+     * Can be easily overwritten in case the value needs to be transformed.
+     *
+     * @param string $value Raw title
      * @return string
      */
     protected function formatItemTitle($value)
@@ -509,11 +497,10 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * Formats the timestamp of a feed item. Takes extracted raw timestamp and returns unix
-     * timestamp as integer.
-     * Can be easily overwritten for example if a special format has to be expected on the
-     * source website.
-     * @param string $value
+     * Formats the content of a feed item.
+     * Can be easily overwritten in case the value needs to be transformed.
+     *
+     * @param string $value Raw content
      * @return string
      */
     protected function formatItemContent($value)
@@ -522,11 +509,10 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * Formats the URI of a feed item. Takes extracted raw URI and returns it formatted
-     * as string.
-     * Can be easily overwritten for in case the value needs to be transformed into something
-     * else.
-     * @param string $value
+     * Formats the URI of a feed item.
+     * Can be easily overwritten in case the value needs to be transformed.
+     *
+     * @param string $value Raw URI
      * @return string
      */
     protected function formatItemUri($value)
@@ -534,10 +520,8 @@ abstract class XPathAbstract extends BridgeAbstract
         if (strlen($value) === 0) {
             return '';
         }
-        if (
-            strpos($value, 'http://') === 0
-            || strpos($value, 'https://') === 0
-        ) {
+
+        if (strpos($value, 'http://') === 0 || strpos($value, 'https://') === 0) {
             return $value;
         }
 
@@ -545,11 +529,10 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * Formats the author of a feed item. Takes extracted raw author and returns it formatted
-     * as string.
-     * Can be easily overwritten for in case the value needs to be transformed into something
-     * else.
-     * @param string $value
+     * Formats the author of a feed item.
+     * Can be easily overwritten in case the value needs to be transformed.
+     *
+     * @param string $value Raw author
      * @return string
      */
     protected function formatItemAuthor($value)
@@ -558,12 +541,13 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * Formats the timestamp of a feed item. Takes extracted raw timestamp and returns unix
-     * timestamp as integer.
-     * Can be easily overwritten for example if a special format has to be expected on the
-     * source website.
-     * @param string $value
-     * @return false|int
+     * Formats the timestamp of a feed item.
+     * Takes extracted raw timestamp and returns unix timestamp as integer.
+     * Can be easily overwritten for example if a special format has to be expected
+     * on the source website.
+     *
+     * @param string $value Raw timestamp
+     * @return int|false
      */
     protected function formatItemTimestamp($value)
     {
@@ -571,11 +555,10 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * Formats the enclosures of a feed item. Takes extracted raw enclosures and returns them
-     * formatted as array.
-     * Can be easily overwritten for in case the values need to be transformed into something
-     * else.
-     * @param string $value
+     * Formats the enclosures of a feed item.
+     * Can be easily overwritten in case the values need to be transformed.
+     *
+     * @param string $value Raw enclosure URL
      * @return array
      */
     protected function formatItemEnclosures($value)
@@ -584,11 +567,10 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * Formats the categories of a feed item. Takes extracted raw categories and returns them
-     * formatted as array.
-     * Can be easily overwritten for in case the values need to be transformed into something
-     * else.
-     * @param string|array $value
+     * Formats the categories of a feed item.
+     * Can be easily overwritten in case the values need to be transformed.
+     *
+     * @param string|array $value Raw categories
      * @return array
      */
     protected function formatItemCategories($value)
@@ -597,7 +579,9 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * @param $mediaUrl
+     * Cleans a media URL and joins it with the feed URI if necessary.
+     *
+     * @param string $mediaUrl Raw media URL
      * @return string|void
      */
     protected function cleanMediaUrl($mediaUrl)
@@ -611,11 +595,12 @@ abstract class XPathAbstract extends BridgeAbstract
     }
 
     /**
-     * @param $typedResult
-     * @param bool $returnXML
-     * @param bool $escapeHtml
+     * Extracts a value from a typed result (DOMNodeList, DOMElement, DOMAttr, etc.).
+     *
+     * @param mixed $typedResult Result from XPath evaluation
+     * @param bool $returnXML Whether to return the node as XML
      * @return string
-     * @throws Exception
+     * @throws \Exception
      */
     protected function getItemValueOrNodeValue($typedResult, $returnXML = false)
     {
@@ -624,7 +609,9 @@ abstract class XPathAbstract extends BridgeAbstract
         }
 
         if ($typedResult instanceof \DOMElement) {
-            return $returnXML ? ($typedResult->ownerDocument ?? $typedResult)->saveXML($typedResult) : $typedResult->nodeValue;
+            return $returnXML
+                ? ($typedResult->ownerDocument ?? $typedResult)->saveXML($typedResult)
+                : $typedResult->nodeValue;
         } elseif ($typedResult instanceof \DOMAttr) {
             return $typedResult->value;
         } elseif ($typedResult instanceof \DOMText) {
@@ -643,20 +630,23 @@ abstract class XPathAbstract extends BridgeAbstract
      * Useful in case of "broken" or "weird" characters in the feed where you'd normally
      * expect umlauts or other non-ASCII characters.
      *
-     * @param string $input
+     * @param string $input Input string
      * @return string
      */
     protected function fixEncoding($input)
     {
-        return $this->getParam('fix_encoding') ? mb_convert_encoding($input, 'ISO-8859-1', 'UTF-8') : $input;
+        return $this->getParam('fix_encoding')
+            ? mb_convert_encoding($input, 'ISO-8859-1', 'UTF-8')
+            : $input;
     }
 
     /**
-     * Allows overriding default mechanism determining items Uid's
+     * Allows overriding default mechanism for determining items UIDs.
      *
-     * @return string|null
+     * @param array $item Item data
+     * @return string|null Unique identifier, or null to skip
      */
-    protected function generateItemId(array $item)
+    protected function generateItemId($item)
     {
         return null;
     }

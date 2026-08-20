@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use RSSBridge\Caches\CacheInterface;
 
 abstract class BridgeAbstract
@@ -8,50 +10,35 @@ abstract class BridgeAbstract
     const URI = null;
     const DONATION_URI = '';
     const DESCRIPTION = 'No description provided';
-
-    /**
-     * Preferably a github username
-     */
     const MAINTAINER = 'No maintainer';
-
-    /**
-     * Cache TTL in seconds
-     */
     const CACHE_TIMEOUT = 3600;
-
     const CONFIGURATION = [];
     const PARAMETERS = [];
     const TEST_DETECT_PARAMETERS = [];
 
-    /**
-     * This is a convenient const for the limit option in bridge contexts.
-     * Can be inlined and modified if necessary.
-     */
     protected const LIMIT = [
         'name'          => 'Limit',
         'type'          => 'number',
         'title'         => 'Maximum number of items to return',
     ];
 
-    protected array $items = [];
-    protected array $inputs = [];
-    protected ?string $queriedContext = '';
-    private array $configuration = [];
+    protected $items = [];
+    protected $inputs = [];
+    protected $queriedContext = null;
+    private $configuration = [];
 
-    protected CacheInterface $cache;
-    protected Logger $logger;
+    protected $cache;
+    protected $logger;
 
-    public function __construct(
-        CacheInterface $cache,
-        Logger $logger
-    ) {
+    public function __construct($cache = null, $logger = null)
+    {
         $this->cache = $cache;
         $this->logger = $logger;
     }
 
     abstract public function collectData();
 
-    public function getFeed(): array
+    public function getFeed()
     {
         return [
             'name'          => $this->getName(),
@@ -71,7 +58,7 @@ abstract class BridgeAbstract
         return static::URI ?? 'https://github.com/RSS-Bridge/rss-bridge/';
     }
 
-    public function getDonationURI(): string
+    public function getDonationURI()
     {
         return static::DONATION_URI;
     }
@@ -79,31 +66,27 @@ abstract class BridgeAbstract
     public function getIcon()
     {
         if (static::URI) {
-            // This favicon may or may not exist
             return rtrim(static::URI, '/') . '/favicon.ico';
         }
         return '';
     }
 
-    public function getOption(string $name)
+    public function getOption($name)
     {
         return $this->configuration[$name] ?? null;
     }
 
-    /**
-     * The description is only used in bridge card rendering on frontpage
-     */
     public function getDescription()
     {
         return static::DESCRIPTION;
     }
 
-    public function getMaintainer(): string
+    public function getMaintainer()
     {
         return static::MAINTAINER;
     }
 
-    public function getParameters(): array
+    public function getParameters()
     {
         return static::PARAMETERS;
     }
@@ -139,10 +122,8 @@ abstract class BridgeAbstract
 
     public function setInput(array $input)
     {
-        // This is the submitted context
         $contextName = $input['context'] ?? null;
-        if ($contextName) {
-            // Context hinting (optional)
+        if ($contextName !== null) {
             $this->queriedContext = $contextName;
             unset($input['context']);
         }
@@ -157,21 +138,18 @@ abstract class BridgeAbstract
         }
 
         $validator = new ParameterValidator();
-
-        // $input IS PASSED BY REFERENCE!
         $errors = $validator->validateInput($input, $parameters);
         if ($errors !== []) {
             $invalidParameterKeys = array_column($errors, 'name');
             throwClientException(sprintf('Invalid parameters value(s): %s', implode(', ', $invalidParameterKeys)));
         }
 
-        // Guess the context from input data
         if (empty($this->queriedContext)) {
             $queriedContext = $validator->getQueriedContext($input, $parameters);
             $this->queriedContext = $queriedContext;
         }
 
-        if (is_null($this->queriedContext)) {
+        if ($this->queriedContext === null) {
             throwClientException('Required parameter(s) missing');
         } elseif ($this->queriedContext === false) {
             throw new \Exception('Mixed context parameters');
@@ -184,7 +162,6 @@ abstract class BridgeAbstract
     {
         $parameters = $this->getParameters();
 
-        // Import and assign all inputs to their context
         foreach ($input as $name => $value) {
             foreach ($parameters as $context => $set) {
                 if (array_key_exists($name, $parameters[$context])) {
@@ -193,7 +170,6 @@ abstract class BridgeAbstract
             }
         }
 
-        // Apply default values to missing data
         $contextNames = [$queriedContext];
         if (array_key_exists('global', $parameters)) {
             $contextNames[] = 'global';
@@ -201,7 +177,7 @@ abstract class BridgeAbstract
 
         foreach ($contextNames as $context) {
             if (!isset($parameters[$context])) {
-                // unknown context provided by client, throw exception here? or continue?
+                continue;
             }
 
             foreach ($parameters[$context] as $name => $parameter) {
@@ -233,10 +209,8 @@ abstract class BridgeAbstract
                         break;
                 }
             }
-            unset($parameter);
         }
 
-        // Copy global parameter values to the guessed context
         if (array_key_exists('global', $parameters)) {
             foreach ($parameters['global'] as $name => $parameter) {
                 if (isset($input[$name])) {
@@ -254,7 +228,6 @@ abstract class BridgeAbstract
             }
         }
 
-        // Only keep guessed context parameters values
         if (isset($this->inputs[$queriedContext])) {
             $this->inputs = [
                 $queriedContext => $this->inputs[$queriedContext],
@@ -269,13 +242,6 @@ abstract class BridgeAbstract
         return $this->inputs[$this->queriedContext][$input]['value'] ?? null;
     }
 
-    /**
-     * Get the key name of a given input
-     * Can process multilevel arrays with two levels, the max level a list can have
-     *
-     * @param string $input The input name
-     * @return string|null The accompaning key to a given input or null if the input is not defined
-     */
     public function getKey($input)
     {
         if (!isset($this->inputs[$this->queriedContext][$input]['value'])) {
@@ -283,34 +249,30 @@ abstract class BridgeAbstract
         }
 
         $contexts = $this->getParameters();
+        $contextName = $this->queriedContext;
 
-        if (array_key_exists('global', $contexts)) {
-            if (array_key_exists($input, $contexts['global'])) {
-                $contextName = 'global';
-            }
-        }
-        if (!isset($contextName)) {
-            $contextName = $this->queriedContext;
+        if (array_key_exists('global', $contexts) && array_key_exists($input, $contexts['global'])) {
+            $contextName = 'global';
         }
 
-        $needle = $this->inputs[$this->queriedContext][$input]['value'];
+        $needle = (string)$this->inputs[$this->queriedContext][$input]['value'];
         foreach ($contexts[$contextName][$input]['values'] as $first_level_key => $first_level_value) {
             if (!is_array($first_level_value) && $needle === (string)$first_level_value) {
-                return $first_level_key;
+                return (string)$first_level_key;
             } elseif (is_array($first_level_value)) {
                 foreach ($first_level_value as $second_level_key => $second_level_value) {
                     if ($needle === (string)$second_level_value) {
-                        return $second_level_key;
+                        return (string)$second_level_key;
                     }
                 }
             }
         }
+        return null;
     }
 
     public function detectParameters($url)
     {
         $regex = '/^(https?:\/\/)?(www\.)?(.+?)(\/)?$/';
-
         $contexts = $this->getParameters();
 
         if (
@@ -324,17 +286,17 @@ abstract class BridgeAbstract
         return null;
     }
 
-    protected function loadCacheValue(string $key, $default = null)
+    protected function loadCacheValue($key, $default = null)
     {
         return $this->cache->get($this->getShortName() . '_' . $key, $default);
     }
 
-    protected function saveCacheValue(string $key, $value, int $ttl = 86400)
+    protected function saveCacheValue($key, $value, $ttl = 86400)
     {
         $this->cache->set($this->getShortName() . '_' . $key, $value, $ttl);
     }
 
-    public function getShortName(): string
+    public function getShortName()
     {
         return (new \ReflectionClass($this))->getShortName();
     }
