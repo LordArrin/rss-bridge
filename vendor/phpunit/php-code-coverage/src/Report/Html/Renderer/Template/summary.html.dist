@@ -1,2 +1,0 @@
-   <div class="summary" data-coverage="{{coverage_data}}">
-{{metrics}}   </div>
