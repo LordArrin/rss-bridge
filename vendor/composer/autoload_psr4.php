@@ -6,6 +6,8 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
+    'voku\\helper\\' => array($vendorDir . '/voku/simple_html_dom/src/voku/helper'),
+    'Symfony\\Component\\CssSelector\\' => array($vendorDir . '/symfony/css-selector'),
     'RSSBridge\\Formats\\' => array($baseDir . '/formats'),
     'RSSBridge\\Caches\\' => array($baseDir . '/caches'),
     'RSSBridge\\Bridges\\' => array($baseDir . '/bridges-v2'),

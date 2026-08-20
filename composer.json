@@ -11,7 +11,7 @@
             "RSSBridge\\Formats\\": "formats/"
         },
         "files": [
-            "lib/simplehtmldom/simple_html_dom.php"
+            "lib/compatibility.php"
         ]
     },
     "require": {
@@ -25,7 +25,8 @@
         "ext-zip": "*",
         "ext-dom": "*",
         "erusev/parsedown": "^1.8",
-        "busybee/urljoin": "^1.0"
+        "busybee/urljoin": "^1.0",
+        "voku/simple_html_dom": "^5.0.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^13.3.1",

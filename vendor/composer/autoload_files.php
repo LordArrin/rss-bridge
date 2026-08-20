@@ -10,5 +10,5 @@ return array(
     'b44de396fa12c0e6ddc15c0bfa06b0ff' => $vendorDir . '/busybee/urljoin/src/urljoin.php',
     '9b38cf48e83f5d8f60375221cd213eee' => $vendorDir . '/phpstan/phpstan/bootstrap.php',
     'ec07570ca5a812141189b1fa81503674' => $vendorDir . '/phpunit/phpunit/src/Framework/Assert/Functions.php',
-    '05213509eefcb0cf7cead15980a104a3' => $baseDir . '/lib/simplehtmldom/simple_html_dom.php',
+    '6ad6b23e76e29a6a6d121a2d4b271ce1' => $baseDir . '/lib/compatibility.php',
 );

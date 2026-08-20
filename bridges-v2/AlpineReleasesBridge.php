@@ -93,29 +93,41 @@ final class AlpineReleasesBridge extends BridgeAbstract
 
     private function getBranchesInfo(): array
     {
-        $html = getSimpleHTMLDOMCached(self::URI, 86400);
-        if ($html === false) {
+        $cacheKey = 'alpine_branches_' . md5(self::URI);
+        $cached = $this->cache->get($cacheKey);
+        
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $html = getContents(self::URI);
+        if (empty($html)) {
             return [];
         }
 
+        libxml_use_internal_errors(true);
+        $dom = \Dom\HTMLDocument::createFromString($html);
+        libxml_use_internal_errors(false);
+
         $branches = [];
 
-        foreach ($html->find('table tr') as $row) {
-            $cells = $row->find('td');
-            if (count($cells) < 5) {
+        foreach ($dom->querySelectorAll('table tr') as $row) {
+            $cells = $row->querySelectorAll('td');
+            if ($cells->count() < 5) {
                 continue;
             }
 
-            $branchName = $this->cleanText((string)($cells[0]->plaintext ?? ''));
-            if (str_starts_with($branchName, 'v') === true) {
+            $branchName = $this->cleanText($cells[0]->textContent);
+            if (str_starts_with($branchName, 'v')) {
                 $branchName = substr($branchName, 1);
             }
 
-            $branchDate = $this->cleanText((string)($cells[1]->plaintext ?? ''));
-            $endOfSupport = $this->cleanText((string)($cells[4]->plaintext ?? ''));
+            $branchDate = $this->cleanText($cells[1]->textContent);
+            $endOfSupport = $this->cleanText($cells[4]->textContent);
 
+            $versionText = $cells[3]->textContent;
             $matches = [];
-            if (preg_match_all('/(\d+\.\d+(?:\.\d+)?)/', (string)$cells[3]->plaintext, $matches) > 0) {
+            if (preg_match_all('/(\d+\.\d+(?:\.\d+)?)/', $versionText, $matches) > 0) {
                 foreach ($matches[1] as $version) {
                     $branches[$version] = [
                         'branchName' => $branchName,
@@ -125,6 +137,8 @@ final class AlpineReleasesBridge extends BridgeAbstract
                 }
             }
         }
+
+        $this->cache->set($cacheKey, $branches, 86400);
 
         return $branches;
     }

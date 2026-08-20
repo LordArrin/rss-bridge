@@ -88,49 +88,54 @@ final class AuthorTodayBridge extends BridgeAbstract
         $this->addSortedItems($items);
     }
 
-    private function loadPage(string $workId): \simple_html_dom
+    private function loadPage(string $workId): \Dom\HTMLDocument
     {
         $url = self::URI . '/work/' . $workId;
-        $html = getSimpleHTMLDOM($url);
+        $html = getContents($url);
 
-        if ($html === false) {
+        if (empty($html)) {
             throwServerException("Unable to load page: {$url}");
         }
 
-        return $html;
+        libxml_use_internal_errors(true);
+        $dom = \Dom\HTMLDocument::createFromString($html);
+        libxml_use_internal_errors(false);
+
+        return $dom;
     }
 
-    private function extractFeedTitle(\simple_html_dom $html): string
+    private function extractFeedTitle(\Dom\HTMLDocument $html): string
     {
-        $titleNode = $html->find('h1.book-title', 0);
+        $titleNode = $html->querySelector('h1.book-title');
 
         if ($titleNode === null) {
             return '';
         }
 
-        return trim((string)$titleNode->plaintext);
+        return trim($titleNode->textContent);
     }
 
-    private function parseChapters(\simple_html_dom $html): array
+    private function parseChapters(\Dom\HTMLDocument $html): array
     {
-        $authorNode = $html->find('.book-authors a', 0);
-        $author = $authorNode !== null ? trim((string)$authorNode->plaintext) : '';
+        $authorNode = $html->querySelector('.book-authors a');
+        $author = $authorNode !== null ? trim($authorNode->textContent) : '';
 
-        $coverNode = $html->find('img.cover-image', 0);
+        $coverNode = $html->querySelector('img.cover-image');
         $coverUrl = $coverNode !== null ? $this->absoluteUrl((string)$coverNode->getAttribute('src')) : '';
 
         $statusHtml = $this->statusHtml($html);
         $tags = $this->getInput('notags') === true ? [] : $this->tags($html);
 
-        $chapters = $html->find('#tab-chapters ul.table-of-content li');
+        $chapters = $html->querySelectorAll('#tab-chapters ul.table-of-content li');
 
-        if ($chapters === []) {
+        if ($chapters->length === 0) {
             throwServerException('Chapter list not found. The work may be unavailable or markup has changed.');
         }
 
         $items = [];
+        $chaptersArray = iterator_to_array($chapters);
 
-        foreach (array_reverse($chapters) as $position => $chapter) {
+        foreach (array_reverse($chaptersArray) as $position => $chapter) {
             $item = $this->buildChapterItem($chapter, $position, $statusHtml, $coverUrl, $author, $tags);
 
             if ($item !== null) {
@@ -142,22 +147,22 @@ final class AuthorTodayBridge extends BridgeAbstract
     }
 
     private function buildChapterItem(
-        \simple_html_dom_node $chapter,
+        \Dom\Element $chapter,
         int $position,
         string $statusHtml,
         string $coverUrl,
         string $author,
         array $tags
     ): ?array {
-        $link = $chapter->find('a', 0);
+        $link = $chapter->querySelector('a');
 
         if ($link === null) {
             return null;
         }
 
-        $title = trim((string)$link->plaintext);
+        $title = trim($link->textContent);
         $uri = $this->absoluteUrl((string)$link->getAttribute('href'));
-        $timeNode = $chapter->find('[data-time]', 0);
+        $timeNode = $chapter->querySelector('[data-time]');
         $timestamp = $timeNode !== null ? $this->timestamp((string)$timeNode->getAttribute('data-time')) : null;
 
         $content = $statusHtml;
@@ -222,8 +227,8 @@ final class AuthorTodayBridge extends BridgeAbstract
     {
         return $url
             |> trim(...)
-            |> (fn($u) => $u === '' || preg_match(pattern: '#^https?://#i', subject: $u) === 1 
-                ? ($u !== '' ? $u : self::URI) 
+            |> (fn($u) => $u === '' || preg_match(pattern: '#^https?://#i', subject: $u) === 1
+                ? ($u !== '' ? $u : self::URI)
                 : self::URI . '/' . ltrim($u, '/'))(...);
     }
 
@@ -254,18 +259,23 @@ final class AuthorTodayBridge extends BridgeAbstract
         return $date->getTimestamp();
     }
 
-    private function plainText(\simple_html_dom_node $node): string
+    private function plainText(\Dom\Node $node): string
     {
-        $text = html_entity_decode(strip_tags((string)$node->innertext), ENT_QUOTES, 'UTF-8');
+        $innerHtml = '';
+        foreach ($node->childNodes as $child) {
+            $innerHtml .= $node->ownerDocument->saveHTML($child);
+        }
+
+        $text = html_entity_decode(strip_tags($innerHtml), ENT_QUOTES, 'UTF-8');
 
         return trim((string)preg_replace(pattern: '/\s+/u', replacement: ' ', subject: $text));
     }
 
-    private function tags(\simple_html_dom $html): array
+    private function tags(\Dom\HTMLDocument $html): array
     {
         $tags = [];
 
-        foreach ($html->find('.mb-v-lg .tags a') as $node) {
+        foreach ($html->querySelectorAll('.mb-v-lg .tags a') as $node) {
             $tag = $this->plainText($node);
 
             if ($tag !== '') {
@@ -297,22 +307,23 @@ final class AuthorTodayBridge extends BridgeAbstract
         return self::CSS['label'] . ';' . $color;
     }
 
-    private function isInsideFooter(\simple_html_dom_node $node): bool
+    private function isInsideFooter(\Dom\Node $node): bool
     {
-        for ($i = 0; $i < self::FOOTER_SEARCH_DEPTH && $node !== null; $i++) {
-            if (strtolower((string)$node->tag) === 'footer') {
+        $current = $node;
+        for ($i = 0; $i < self::FOOTER_SEARCH_DEPTH && $current !== null; $i++) {
+            if ($current instanceof \Dom\Element && strtolower($current->tagName) === 'footer') {
                 return true;
             }
 
-            $node = $node->parent();
+            $current = $current->parentNode;
         }
 
         return false;
     }
 
-    private function adultText(\simple_html_dom $html): string
+    private function adultText(\Dom\HTMLDocument $html): string
     {
-        foreach ($html->find('.label-adult-only') as $node) {
+        foreach ($html->querySelectorAll('.label-adult-only') as $node) {
             if ($this->isInsideFooter($node) === true) {
                 continue;
             }
@@ -327,9 +338,9 @@ final class AuthorTodayBridge extends BridgeAbstract
         return '';
     }
 
-    private function likeCount(\simple_html_dom $html): string
+    private function likeCount(\Dom\HTMLDocument $html): string
     {
-        $source = (string)$html->save();
+        $source = $html->saveHTML();
 
         if (preg_match(pattern: '/likeCount["\']?\s*:\s*["\']?(\d+)/i', subject: $source, matches: $matches) === 1) {
             return $matches[1];
@@ -338,10 +349,10 @@ final class AuthorTodayBridge extends BridgeAbstract
         return '';
     }
 
-    private function statusHtml(\simple_html_dom $html): string
+    private function statusHtml(\Dom\HTMLDocument $html): string
     {
-        $label = $html->find('.book-meta-panel .label', 0);
-        $time = $html->find('.book-meta-panel [data-format="calendar-short"]', 0);
+        $label = $html->querySelector('.book-meta-panel .label');
+        $time = $html->querySelector('.book-meta-panel [data-format="calendar-short"]');
 
         if ($label === null && $time === null) {
             return '';
@@ -397,9 +408,9 @@ final class AuthorTodayBridge extends BridgeAbstract
         return "<div style=\"{$statusStyle}\">" . implode($separator, $parts) . '</div>';
     }
 
-    private function buildLabelSpan(\simple_html_dom_node $label, string $labelText): string
+    private function buildLabelSpan(\Dom\Element $label, string $labelText): string
     {
-        $iconNode = $label->find('i', 0);
+        $iconNode = $label->querySelector('i');
         $iconClass = $iconNode !== null ? (string)$iconNode->getAttribute('class') : '';
         $labelClass = (string)$label->getAttribute('class');
 
@@ -410,7 +421,7 @@ final class AuthorTodayBridge extends BridgeAbstract
         return "<span style=\"{$labelStyle}\">{$statusIcon}&#160;{$escapedLabel}</span>";
     }
 
-    private function buildTimeSpan(\simple_html_dom_node $time): string
+    private function buildTimeSpan(\Dom\Element $time): string
     {
         $timestamp = $this->timestamp((string)$time->getAttribute('data-time'));
 
@@ -423,10 +434,10 @@ final class AuthorTodayBridge extends BridgeAbstract
         return "<span>{$formattedDate}</span>";
     }
 
-    private function extractSizeText(?\simple_html_dom_node $label, string $labelText, string $adultText): string
+    private function extractSizeText(?\Dom\Element $label, string $labelText, string $adultText): string
     {
-        $statusNode = $label !== null ? $label->parent() : null;
-        
+        $statusNode = $label !== null ? $label->parentElement : null;
+
         if ($statusNode === null) {
             return '';
         }

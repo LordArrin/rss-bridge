@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use BridgeAbstract;
 
+use function urljoin;
+
 final class PanoramaBridge extends BridgeAbstract
 {
     const MAINTAINER = 'LordArrin';
@@ -30,16 +32,20 @@ final class PanoramaBridge extends BridgeAbstract
             $url = self::URI . '/news/' . $date;
 
             try {
-                $html = getSimpleHTMLDOM($url);
+                $html = $this->fetchHtml($url);
             } catch (\Exception $e) {
                 continue;
             }
 
-            $html = defaultLinkTo($html, self::URI);
-            $cards = $html->find('a.flex-col');
+            $cards = $html->querySelectorAll('a.flex-col');
 
             foreach ($cards as $card) {
-                $uri = $card->href;
+                $href = $card->getAttribute('href');
+                if ($href === null) {
+                    continue;
+                }
+
+                $uri = urljoin(self::URI, $href);
                 $path = parse_url($uri, PHP_URL_PATH);
 
                 if (!$this->isValidNewsUri($path, $processedUris)) {
@@ -59,6 +65,47 @@ final class PanoramaBridge extends BridgeAbstract
 
             usleep(self::REQUEST_DELAY_US);
         }
+    }
+
+    private function fetchHtml(string $url): \Dom\HTMLDocument
+    {
+        $html = getContents($url);
+        if (empty($html)) {
+            throw new \Exception("Failed to fetch {$url}");
+        }
+
+        libxml_use_internal_errors(true);
+        $dom = \Dom\HTMLDocument::createFromString($html);
+        libxml_use_internal_errors(false);
+
+        return $dom;
+    }
+
+    private function fetchHtmlCached(string $url, int $ttl): ?\Dom\HTMLDocument
+    {
+        $cacheKey = 'panorama_article_' . md5($url);
+        $cachedHtml = $this->cache->get($cacheKey);
+
+        if ($cachedHtml === null) {
+            try {
+                $cachedHtml = getContents($url);
+                if (!empty($cachedHtml)) {
+                    $this->cache->set($cacheKey, $cachedHtml, $ttl);
+                }
+            } catch (\Exception $e) {
+                return null;
+            }
+        }
+
+        if (empty($cachedHtml)) {
+            return null;
+        }
+
+        libxml_use_internal_errors(true);
+        $dom = \Dom\HTMLDocument::createFromString($cachedHtml);
+        libxml_use_internal_errors(false);
+
+        return $dom;
     }
 
     private function getDatesToFetch(): array
@@ -97,22 +144,15 @@ final class PanoramaBridge extends BridgeAbstract
         return true;
     }
 
-    private function processNewsCard($card, string $uri): ?array
+    private function processNewsCard(\Dom\Element $card, string $uri): ?array
     {
         $previewTitle = $this->extractPreviewTitle($card);
         $previewImage = $this->extractPreviewImage($card);
 
-        try {
-            $articleHTML = getSimpleHTMLDOMCached($uri, self::ARTICLE_CACHE_TTL);
-        } catch (\Exception $e) {
+        $articleHTML = $this->fetchHtmlCached($uri, self::ARTICLE_CACHE_TTL);
+        if ($articleHTML === null) {
             return null;
         }
-
-        if (!$articleHTML) {
-            return null;
-        }
-
-        $articleHTML = defaultLinkTo($articleHTML, self::URI);
 
         return [
             'uri' => $uri,
@@ -128,95 +168,134 @@ final class PanoramaBridge extends BridgeAbstract
         ];
     }
 
-    private function extractPreviewTitle($card): string
+    private function extractPreviewTitle(\Dom\Element $card): string
     {
-        $titleDiv = $card->find('div.font-semibold', 0);
-        return $titleDiv ? trim($titleDiv->plaintext) : '';
+        $titleDiv = $card->querySelector('div.font-semibold');
+        return $titleDiv !== null ? trim($titleDiv->textContent) : '';
     }
 
-    private function extractPreviewImage($card): string
+    private function extractPreviewImage(\Dom\Element $card): string
     {
-        $imgTag = $card->find('img', 0);
-        if (!$imgTag) {
+        $imgTag = $card->querySelector('img');
+        if ($imgTag === null) {
             return '';
         }
 
-        return $this->normalizeUrl($imgTag->src);
+        $src = $imgTag->getAttribute('src');
+        return $src !== null ? $this->normalizeUrl($src) : '';
     }
 
-    private function extractTitle($articleHTML, string $fallbackTitle): string
+    private function extractTitle(\Dom\HTMLDocument $articleHTML, string $fallbackTitle): string
     {
-        $h1 = $articleHTML->find('h1[itemprop=headline]', 0);
-        if ($h1) {
-            return trim($h1->plaintext);
+        $h1 = $articleHTML->querySelector('h1[itemprop="headline"]');
+        if ($h1 !== null) {
+            return trim($h1->textContent);
         }
 
-        $ogTitle = $articleHTML->find('meta[property="og:title"]', 0);
-        return $ogTitle ? trim($ogTitle->content) : $fallbackTitle;
+        $ogTitle = $articleHTML->querySelector('meta[property="og:title"]');
+        if ($ogTitle !== null) {
+            $content = $ogTitle->getAttribute('content');
+            return $content !== null ? trim($content) : $fallbackTitle;
+        }
+
+        return $fallbackTitle;
     }
 
-    private function extractTimestamp($articleHTML): int
+    private function extractTimestamp(\Dom\HTMLDocument $articleHTML): int
     {
-        $publishedTime = $articleHTML->find('meta[property="article:published_time"]', 0);
-        return $publishedTime ? strtotime($publishedTime->content) : time();
+        $publishedTime = $articleHTML->querySelector('meta[property="article:published_time"]');
+        if ($publishedTime !== null) {
+            $content = $publishedTime->getAttribute('content');
+            if ($content !== null) {
+                $timestamp = strtotime($content);
+                if ($timestamp !== false) {
+                    return $timestamp;
+                }
+            }
+        }
+
+        return time();
     }
 
-    private function extractAuthor($articleHTML): string
+    private function extractAuthor(\Dom\HTMLDocument $articleHTML): string
     {
-        $authorTag = $articleHTML->find('meta[property="article:author"]', 0);
-        return $authorTag ? $authorTag->content : self::DEFAULT_AUTHOR;
+        $authorTag = $articleHTML->querySelector('meta[property="article:author"]');
+        if ($authorTag !== null) {
+            $content = $authorTag->getAttribute('content');
+            return $content !== null ? $content : self::DEFAULT_AUTHOR;
+        }
+
+        return self::DEFAULT_AUTHOR;
     }
 
-    private function extractImage($articleHTML, string $fallbackImage): string
+    private function extractImage(\Dom\HTMLDocument $articleHTML, string $fallbackImage): string
     {
-        $ogImage = $articleHTML->find('meta[property="og:image"]', 0);
-        $imageUrl = $ogImage ? trim($ogImage->content) : $fallbackImage;
+        $ogImage = $articleHTML->querySelector('meta[property="og:image"]');
+        if ($ogImage !== null) {
+            $content = $ogImage->getAttribute('content');
+            if ($content !== null) {
+                $imageUrl = trim($content);
+                if ($imageUrl !== '') {
+                    return $this->normalizeUrl($imageUrl);
+                }
+            }
+        }
 
-        return $this->normalizeUrl($imageUrl);
+        return $this->normalizeUrl($fallbackImage);
     }
 
     private function normalizeUrl(string $url): string
     {
-        if (strpos($url, '//') === 0) {
+        if (str_starts_with($url, '//')) {
             return 'https:' . $url;
         }
 
         return $url;
     }
 
-    private function extractContent($articleHTML, string $fallbackDescription): string
+    private function extractContent(\Dom\HTMLDocument $articleHTML, string $fallbackDescription): string
     {
-        $contentElem = $articleHTML->find('div[itemprop=articleBody]', 0);
-        if (!$contentElem) {
-            $contentElem = $articleHTML->find('.entry-contents', 0);
+        $contentElem = $articleHTML->querySelector('div[itemprop="articleBody"]');
+        if ($contentElem === null) {
+            $contentElem = $articleHTML->querySelector('.entry-contents');
         }
 
-        if ($contentElem) {
+        if ($contentElem !== null) {
             $junkSelectors = [
                 'script',
                 'style',
-                'div[id*=yandex_rtb]',
+                'div[id*="yandex_rtb"]',
                 '.sharethis-inline-share-buttons',
                 '.alert'
             ];
 
-            foreach ($contentElem->find(implode(',', $junkSelectors)) as $junk) {
-                $junk->outertext = '';
+            foreach ($contentElem->querySelectorAll(implode(',', $junkSelectors)) as $junk) {
+                $junk->remove();
             }
-            return $contentElem->innertext;
+
+            return $contentElem->innerHTML;
         }
 
-        $ogDesc = $articleHTML->find('meta[property="og:description"]', 0);
-        $description = $ogDesc ? trim($ogDesc->content) : $fallbackDescription;
-        return '<p><em>' . htmlspecialchars($description) . '</em></p>';
+        $ogDesc = $articleHTML->querySelector('meta[property="og:description"]');
+        if ($ogDesc !== null) {
+            $content = $ogDesc->getAttribute('content');
+            if ($content !== null) {
+                $description = trim($content);
+                if ($description !== '') {
+                    return '<p><em>' . htmlspecialchars($description) . '</em></p>';
+                }
+            }
+        }
+
+        return '<p><em>' . htmlspecialchars($fallbackDescription) . '</em></p>';
     }
 
     private function buildFinalContent(string $imageUrl, string $content, string $title): string
     {
         $finalContent = '';
 
-        if (!empty($imageUrl)) {
-            $finalContent .= '<figure><img src="' . $imageUrl . '" alt="' . htmlspecialchars($title) . '" /></figure><br/>';
+        if ($imageUrl !== '') {
+            $finalContent .= '<figure><img src="' . htmlspecialchars($imageUrl) . '" alt="' . htmlspecialchars($title) . '" /></figure><br/>';
         }
 
         $finalContent .= $content;

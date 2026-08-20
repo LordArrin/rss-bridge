@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use BridgeAbstract;
 
+use function urljoin;
+
 final class FirefoxReleaseNotesBridge extends BridgeAbstract
 {
     const NAME = 'Firefox Release Notes';
@@ -66,21 +68,39 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
 
     private function fetchReleaseLinks(): array
     {
-        $html = getSimpleHTMLDOMCached(self::URI, self::RELEASES_LIST_CACHE_TTL);
-        if (!$html) {
+        $cacheKey = 'firefox_releases_list';
+        $cached = $this->cache->get($cacheKey);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $html = getContents(self::URI);
+        if (empty($html)) {
             throwClientException('Failed to load Firefox releases page.');
         }
 
-        $html = defaultLinkTo($html, self::URI);
-        $links = $html->find('a[href*="/releasenotes/"]') ?: $html->find('a[href*="/firefox/"]');
+        libxml_use_internal_errors(true);
+        $dom = \Dom\HTMLDocument::createFromString($html);
+        libxml_use_internal_errors(false);
+
+        $links = $dom->querySelectorAll('a[href*="/releasenotes/"]');
+        if ($links->length === 0) {
+            $links = $dom->querySelectorAll('a[href*="/firefox/"]');
+        }
 
         $releases = [];
         foreach ($links as $link) {
-            $text = trim($link->plaintext);
+            $text = trim($link->textContent);
+            $href = (string) $link->getAttribute('href');
             if (preg_match(self::VERSION_PATTERN, $text, $matches)) {
-                $releases[] = ['version' => $matches[1], 'url' => $link->href];
+                $releases[] = [
+                    'version' => $matches[1],
+                    'url' => urljoin(self::URI, $href)
+                ];
             }
         }
+
+        $this->cache->set($cacheKey, $releases, self::RELEASES_LIST_CACHE_TTL);
 
         return $releases;
     }
@@ -105,13 +125,29 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
             'uid' => $release['url'],
         ];
 
-        $notesHtml = getSimpleHTMLDOMCached($release['url'], self::RELEASE_NOTES_CACHE_TTL);
-        if (!$notesHtml) {
+        $cacheKey = 'firefox_release_notes_' . md5($release['url']);
+        $cachedHtml = $this->cache->get($cacheKey);
+
+        if ($cachedHtml === null) {
+            try {
+                $html = getContents($release['url']);
+                if (!empty($html)) {
+                    $this->cache->set($cacheKey, $html, self::RELEASE_NOTES_CACHE_TTL);
+                    $cachedHtml = $html;
+                }
+            } catch (\Exception $e) {
+                // Ignore
+            }
+        }
+
+        if (empty($cachedHtml)) {
             $item['content'] = '<p>Failed to load release notes page.</p>';
             return $item;
         }
 
-        $notesHtml = defaultLinkTo($notesHtml, $release['url']);
+        libxml_use_internal_errors(true);
+        $notesHtml = \Dom\HTMLDocument::createFromString($cachedHtml);
+        libxml_use_internal_errors(false);
 
         $timestamp = $this->extractReleaseDate($notesHtml);
         if ($timestamp !== null) {
@@ -123,27 +159,27 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         return $item;
     }
 
-    private function extractReleaseDate(object $html): ?int
+    private function extractReleaseDate(\Dom\HTMLDocument $html): ?int
     {
-        $dateElement = $html->find('.c-release-date', 0);
-        if ($dateElement) {
-            $dateText = trim($dateElement->plaintext);
+        $dateElement = $html->querySelector('.c-release-date');
+        if ($dateElement !== null) {
+            $dateText = trim($dateElement->textContent);
             $timestamp = strtotime($dateText);
             if ($timestamp !== false) {
                 return $timestamp;
             }
         }
 
-        $timeTag = $html->find('time', 0);
-        if ($timeTag) {
-            $dateText = $timeTag->datetime ?: $timeTag->plaintext;
+        $timeTag = $html->querySelector('time');
+        if ($timeTag !== null) {
+            $dateText = $timeTag->getAttribute('datetime') ?: $timeTag->textContent;
             $timestamp = strtotime($dateText);
             if ($timestamp !== false) {
                 return $timestamp;
             }
         }
 
-        $pageText = $html->plaintext;
+        $pageText = $html->documentElement->textContent ?? '';
         foreach (self::DATE_PATTERNS as $pattern) {
             if (preg_match($pattern, $pageText, $matches)) {
                 $timestamp = strtotime($matches[1]);
@@ -156,49 +192,49 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         return null;
     }
 
-    private function buildReleaseContent(object $html): string
+    private function buildReleaseContent(\Dom\HTMLDocument $html): string
     {
         $parts = [];
 
-        $firstText = $html->find('.c-release-first-text', 0);
-        if ($firstText && trim($firstText->plaintext)) {
-            $parts[] = $this->cleanHtml($firstText->innertext);
+        $firstText = $html->querySelector('.c-release-first-text');
+        if ($firstText !== null && trim($firstText->textContent) !== '') {
+            $parts[] = $this->cleanHtml($firstText->innerHTML);
         }
 
-        $notesBlock = $html->find('section.c-release-notes', 0);
-        if (!$notesBlock) {
+        $notesBlock = $html->querySelector('section.c-release-notes');
+        if ($notesBlock === null) {
             return implode("\n", $parts);
         }
 
-        foreach ($notesBlock->find('div[id]') as $div) {
-            $sectionId = $div->id;
+        foreach ($notesBlock->querySelectorAll('div[id]') as $div) {
+            $sectionId = $div->getAttribute('id') ?? '';
             if (in_array($sectionId, self::EXCLUDED_SECTIONS, true)) {
                 continue;
             }
 
-            $heading = $div->find('.fl-c-release-notes-heading', 0);
-            if (!$heading) {
+            $heading = $div->querySelector('.fl-c-release-notes-heading');
+            if ($heading === null) {
                 continue;
             }
 
-            $title = trim($heading->plaintext);
+            $title = trim($heading->textContent);
             if ($title === '') {
                 continue;
             }
 
-            $main = $div->find('.mzp-l-main', 0);
-            if (!$main) {
+            $main = $div->querySelector('.mzp-l-main');
+            if ($main === null) {
                 continue;
             }
 
             $items = [];
-            foreach ($main->find('li.release-note') as $note) {
-                $content = $note->find('.release-note-content', 0);
-                if (!$content) {
+            foreach ($main->querySelectorAll('li.release-note') as $note) {
+                $content = $note->querySelector('.release-note-content');
+                if ($content === null) {
                     continue;
                 }
 
-                $cleaned = $this->cleanHtml($content->innertext);
+                $cleaned = $this->cleanHtml($content->innerHTML);
                 if ($cleaned !== '') {
                     $items[] = $cleaned;
                 }
@@ -238,22 +274,30 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
 
     private function cleanHtml(string $html): string
     {
-        $dom = str_get_html($html);
-        if (!$dom) {
+        if (empty($html)) {
             return '';
         }
 
-        foreach ($dom->find(implode(',', self::JUNK_SELECTORS)) as $junk) {
-            $junk->outertext = '';
+        libxml_use_internal_errors(true);
+        $dom = \Dom\HTMLDocument::createFromString('<div>' . $html . '</div>');
+        libxml_use_internal_errors(false);
+
+        $wrapper = $dom->querySelector('div');
+        if ($wrapper === null) {
+            return $html;
         }
 
-        foreach ($dom->find('img') as $img) {
-            $img->width = null;
-            $img->height = null;
+        foreach ($wrapper->querySelectorAll(implode(',', self::JUNK_SELECTORS)) as $junk) {
+            $junk->remove();
+        }
+
+        foreach ($wrapper->querySelectorAll('img') as $img) {
+            $img->removeAttribute('width');
+            $img->removeAttribute('height');
             $img->setAttribute('style', 'max-width:100%;height:auto;');
         }
 
-        return trim((string) $dom);
+        return trim($wrapper->innerHTML);
     }
 
     private function sortItemsByDate(): void

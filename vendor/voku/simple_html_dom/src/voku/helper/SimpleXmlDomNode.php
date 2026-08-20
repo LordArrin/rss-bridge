@@ -1,0 +1,208 @@
+<?php
+
+declare(strict_types=1);
+
+namespace voku\helper;
+
+/**
+ * {@inheritdoc}
+ */
+class SimpleXmlDomNode extends AbstractSimpleXmlDomNode implements SimpleXmlDomNodeInterface
+{
+    /**
+     * Find list of nodes with a CSS or xPath selector.
+     *
+     * @param string   $selector
+     * @param int|null $idx
+     *
+     * @return SimpleXmlDomInterface|SimpleXmlDomNodeInterface<SimpleXmlDomInterface>|null
+     */
+    public function find(string $selector, $idx = null)
+    {
+        // init
+        $elements = $this->createNodeList();
+
+        foreach ($this as $node) {
+            /** @var SimpleXmlDomNodeInterface<SimpleXmlDomInterface> $matches */
+            $matches = $node->find($selector);
+
+            foreach ($matches as $res) {
+                $elements->append($res);
+            }
+        }
+
+        // return all elements
+        if ($idx === null) {
+            if (\count($elements) === 0) {
+                return new SimpleXmlDomNodeBlank();
+            }
+
+            return $elements;
+        }
+
+        // handle negative values
+        if ($idx < 0) {
+            $idx = \count($elements) + $idx;
+        }
+
+        // return one element
+        return $elements[$idx] ?? null;
+    }
+
+    /**
+     * Find nodes with a CSS or xPath selector.
+     *
+     * @param string $selector
+     *
+     * @return SimpleXmlDomInterface[]|SimpleXmlDomNodeInterface<SimpleXmlDomInterface>
+     */
+    public function findMulti(string $selector): SimpleXmlDomNodeInterface
+    {
+        /** @var SimpleXmlDomNodeInterface<SimpleXmlDomInterface> $return */
+        $return = $this->find($selector, null);
+
+        return $return;
+    }
+
+    /**
+     * Find nodes with a CSS or xPath selector.
+     *
+     * @param string $selector
+     *
+     * @return false|SimpleXmlDomInterface[]|SimpleXmlDomNodeInterface<SimpleXmlDomInterface>
+     */
+    public function findMultiOrFalse(string $selector)
+    {
+        /** @var SimpleXmlDomNodeInterface<SimpleXmlDomInterface> $return */
+        $return = $this->find($selector, null);
+
+        if ($return instanceof SimpleXmlDomNodeBlank) {
+            return false;
+        }
+
+        return $return;
+    }
+
+    /**
+     * Find nodes with a CSS or xPath selector or null, if no element is found.
+     *
+     * @param string $selector
+     *
+     * @return null|SimpleXmlDomInterface[]|SimpleXmlDomNodeInterface<SimpleXmlDomInterface>
+     */
+    public function findMultiOrNull(string $selector)
+    {
+        /** @var SimpleXmlDomNodeInterface<SimpleXmlDomInterface> $return */
+        $return = $this->find($selector, null);
+
+        if ($return instanceof SimpleXmlDomNodeBlank) {
+            return null;
+        }
+
+        return $return;
+    }
+
+    /**
+     * Find one node with a CSS or xPath selector.
+     *
+     * @param string $selector
+     *
+     * @return SimpleXmlDomInterface|SimpleXmlDomNodeInterface<SimpleXmlDomInterface>
+     */
+    public function findOne(string $selector)
+    {
+        $return = $this->find($selector, 0);
+
+        return $return ?? new SimpleXmlDomNodeBlank();
+    }
+
+    /**
+     * Find one node with a CSS or xPath selector or false, if no element is found.
+     *
+     * @param string $selector
+     *
+     * @return false|SimpleXmlDomInterface
+     */
+    public function findOneOrFalse(string $selector)
+    {
+        /** @var SimpleXmlDomInterface|null $return */
+        $return = $this->find($selector, 0);
+
+        return $return ?? false;
+    }
+
+    /**
+     * Find one node with a CSS or xPath selector or null, if no element is found.
+     *
+     * @param string $selector
+     *
+     * @return null|SimpleXmlDomInterface
+     */
+    public function findOneOrNull(string $selector)
+    {
+        /** @var SimpleXmlDomInterface|null $return */
+        $return = $this->find($selector, 0);
+
+        return $return;
+    }
+
+    /**
+     * Get html of elements.
+     *
+     * @return string[]
+     */
+    public function innerHtml(): array
+    {
+        // init
+        $html = [];
+
+        foreach ($this as $node) {
+            $html[] = $node->outertext;
+        }
+
+        return $html;
+    }
+
+    /**
+     * alias for "$this->innerHtml()" (added for compatibly-reasons with v1.x)
+     *
+     * @return string[]
+     */
+    public function innertext()
+    {
+        return $this->innerHtml();
+    }
+
+    /**
+     * alias for "$this->innerHtml()" (added for compatibly-reasons with v1.x)
+     *
+     * @return string[]
+     */
+    public function outertext()
+    {
+        return $this->innerHtml();
+    }
+
+    /**
+     * Get plain text.
+     *
+     * @return string[]
+     */
+    public function text(): array
+    {
+        // init
+        $text = [];
+
+        foreach ($this as $node) {
+            $text[] = $node->plaintext;
+        }
+
+        return $text;
+    }
+
+    private function createNodeList(): self
+    {
+        // @phpstan-ignore new.static (node list wrappers intentionally preserve late static binding)
+        return new static();
+    }
+}

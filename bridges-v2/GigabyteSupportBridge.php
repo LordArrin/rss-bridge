@@ -140,12 +140,31 @@ final class GigabyteSupportBridge extends BridgeAbstract
 
     private function extractProductName(string $html): ?string
     {
-        if (preg_match('/<[^>]*class="[^"]*model-base-info-title[^"]*"[^>]*>(.*?)<\/[^>]+>/is', $html, $match) === false) {
-            return null;
+        $dom = new \DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml encoding="UTF-8">' . $html);
+        libxml_clear_errors();
+        
+        $xpath = new \DOMXPath($dom);
+        $nodes = $xpath->query("//*[contains(@class, 'model-base-info-title')]");
+        
+        foreach ($nodes as $node) {
+            $name = trim($node->textContent);
+            if ($name !== '') {
+                return $name;
+            }
         }
+        
+        return null;
+    }
 
-        $name = trim(strip_tags($match[1]));
-        return $name === '' ? null : $name;
+    private function getInnerHTML(\DOMNode $node): string
+    {
+        $innerHTML = '';
+        foreach ($node->childNodes as $child) {
+            $innerHTML .= $node->ownerDocument->saveHTML($child);
+        }
+        return $innerHTML;
     }
 
     private function normalize(string $text, bool $keepLinks = false): string
@@ -163,6 +182,10 @@ final class GigabyteSupportBridge extends BridgeAbstract
             $text = preg_replace('/<br\s*\/?>/i', '[[SEP]]', $text);
             $text = preg_replace('/<\/?p[^>]*>/i', '[[SEP]]', $text);
             $text = preg_replace('/<\/?div[^>]*>/i', '[[SEP]]', $text);
+            $text = preg_replace('/<ol[^>]*>/i', '[[SEP]]', $text);
+            $text = preg_replace('/<\/ol>/i', '', $text);
+            $text = preg_replace('/<ul[^>]*>/i', '[[SEP]]', $text);
+            $text = preg_replace('/<\/ul>/i', '', $text);
 
             $linkStyle = self::CSS['link'];
             $text = preg_replace_callback('/<a\s+([^>]*?)>(.*?)<\/a>/is', function (array $m) use ($linkStyle): string {
@@ -181,7 +204,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
                 return '<a ' . trim($attrs) . '>' . $m[2] . '</a>';
             }, $text);
 
-            $text = strip_tags($text);
+            $text = strip_tags($text, '<a>');
             $parts = preg_split('/\[\[SEP\]\]|\n|\r\n?/', $text);
 
             $cleanParts = array_filter(
@@ -201,74 +224,81 @@ final class GigabyteSupportBridge extends BridgeAbstract
         return trim($text, ', ');
     }
 
-    private function extractDownloadUrl(string $row): string
-    {
-        if (preg_match('/href="([^"]*(?:download\.gigabyte\.com|\.zip)[^"]*)"/i', $row, $match) === false) {
-            return '';
-        }
-
-        $url = $match[1];
-        return str_starts_with($url, '/') === true ? 'https://www.gigabyte.com' . $url : $url;
-    }
-
-    private function parseTableRow(string $row, bool $hasOs): ?array
-    {
-        if (str_contains($row, '<th') === true) {
-            return null;
-        }
-
-        preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $row, $matches);
-        $cells = $matches[1];
-
-        if (count($cells) < 4) {
-            return null;
-        }
-
-        return [
-            'description' => $this->normalize($cells[0], true),
-            'version' => $this->normalize($cells[1]),
-            'os' => $hasOs === true ? $this->normalize($cells[2]) : '',
-            'size' => $this->normalize($cells[$hasOs === true ? 3 : 2]),
-            'date' => $this->normalize($cells[$hasOs === true ? 4 : 3]),
-            'download' => $this->extractDownloadUrl($row)
-        ];
-    }
-
-    private function extractRowsFromTable(string $tableHtml): array
-    {
-        preg_match_all('/<tr[^>]*>(.*?)<\/tr>/is', $tableHtml, $matches);
-        $rows = [];
-        $hasOs = null;
-
-        foreach ($matches[1] as $row) {
-            preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $row, $cellMatches);
-
-            if ($hasOs === null && count($cellMatches[1]) > 0) {
-                $hasOs = count($cellMatches[1]) >= 6;
-            }
-
-            $parsed = $this->parseTableRow($row, $hasOs === true ? true : false);
-            if ($parsed !== null) {
-                $rows[] = $parsed;
-            }
-        }
-
-        return $rows;
-    }
-
     private function parseSections(string $html): array
     {
-        preg_match_all('/<h2[^>]*>([^<]+)<\/h2>\s*(?:<[^>]+>\s*)*<table[^>]*>(.*?)<\/table>/is', $html, $matches, PREG_SET_ORDER);
+        $dom = new \DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml encoding="UTF-8">' . $html);
+        libxml_clear_errors();
+
+        $xpath = new \DOMXPath($dom);
         $items = [];
 
-        foreach ($matches as $match) {
-            $category = trim($match[1]);
+        $h2Nodes = $xpath->query('//h2');
+        foreach ($h2Nodes as $h2Node) {
+            $category = trim($h2Node->textContent);
+            if ($category === '') {
+                continue;
+            }
+
             $type = strtolower($category) === 'bios' ? 'bios' : 'driver';
 
-            foreach ($this->extractRowsFromTable($match[2]) as $row) {
-                $row['type'] = $type;
-                $row['category'] = $category;
-                $items[] = $row;
+            $tableNode = $h2Node->nextSibling;
+            while ($tableNode !== null && $tableNode->nodeName !== 'table') {
+                $tableNode = $tableNode->nextSibling;
+            }
+
+            if ($tableNode === null) {
+                continue;
+            }
+
+            $rows = $xpath->query('.//tr', $tableNode);
+            $hasOs = null;
+
+            foreach ($rows as $row) {
+                if ($row->getElementsByTagName('th')->length > 0) {
+                    continue;
+                }
+
+                $cells = $row->getElementsByTagName('td');
+                if ($cells->length < 4) {
+                    continue;
+                }
+
+                if ($hasOs === null) {
+                    $hasOs = $cells->length >= 6;
+                }
+
+                $descriptionNode = $cells->item(0);
+                $versionNode = $cells->item(1);
+                $osNode = $hasOs ? $cells->item(2) : null;
+                $sizeNode = $cells->item($hasOs ? 3 : 2);
+                $dateNode = $cells->item($hasOs ? 4 : 3);
+
+                $downloadUrl = '';
+                $links = $row->getElementsByTagName('a');
+                foreach ($links as $link) {
+                    $href = $link->getAttribute('href');
+                    if (str_contains($href, 'download.gigabyte.com') || str_contains($href, '.zip')) {
+                        $downloadUrl = $href;
+                        break;
+                    }
+                }
+                
+                if ($downloadUrl !== '' && str_starts_with($downloadUrl, '/')) {
+                    $downloadUrl = 'https://www.gigabyte.com' . $downloadUrl;
+                }
+
+                $items[] = [
+                    'type' => $type,
+                    'category' => $category,
+                    'description' => $this->normalize($this->getInnerHTML($descriptionNode), true),
+                    'version' => $this->normalize($versionNode->textContent),
+                    'os' => $osNode ? $this->normalize($osNode->textContent) : '',
+                    'size' => $this->normalize($sizeNode->textContent),
+                    'date' => $this->normalize($dateNode->textContent),
+                    'download' => $downloadUrl
+                ];
             }
         }
 

@@ -13,8 +13,7 @@ final class MSISupportBridge extends BridgeAbstract
     const DESCRIPTION = 'Returns BIOS, drivers, manuals, and utilities updates for MSI products via internal API';
     const MAINTAINER = 'LordArrin';
     const CACHE_TIMEOUT = 14400;
-    const array VALID_TYPES = ['bios', 'driver', 'manual', 'utility'];
-    const API_BASE_URL = 'https://www.msi.com/api/v1/product/support/panel';
+    const VALID_TYPES = ['bios', 'driver', 'manual', 'utility'];
     const PARAMETERS = [
         [
             'url' => [
@@ -31,7 +30,7 @@ final class MSISupportBridge extends BridgeAbstract
         ]
     ];
 
-    private const array CSS = [
+    private const CSS = [
         'item'     => 'font-family:sans-serif;line-height:1.6',
         'p'        => 'margin:8px 0',
         'link'     => 'color:#cc0000;text-decoration:none;font-weight:500',
@@ -140,7 +139,7 @@ final class MSISupportBridge extends BridgeAbstract
         }
 
         $apiProduct = empty($info['sub_product']) === false ? $info['sub_product'] : $info['product'];
-        $url = self::API_BASE_URL . '?product=' . urlencode($apiProduct) . '&type=' . urlencode($type);
+        $url = self::URI . 'api/v1/product/support/panel?product=' . urlencode($apiProduct) . '&type=' . urlencode($type);
 
         try {
             $json = getContents($url, ['Accept: application/json']);

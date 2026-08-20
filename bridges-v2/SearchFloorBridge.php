@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use BridgeAbstract;
 
+use function urljoin;
+
 final class SearchFloorBridge extends BridgeAbstract
 {
     public const MAINTAINER = 'LordArrin';
@@ -115,13 +117,18 @@ final class SearchFloorBridge extends BridgeAbstract
         $this->items[] = $this->buildItem($book, $book['author']);
     }
 
-    private function loadHtml(string $url, string $errorMessage): \simple_html_dom
+    private function loadHtml(string $url, string $errorMessage): \Dom\HTMLDocument
     {
-        $html = getSimpleHTMLDOM($url);
-        if ($html === false) {
+        $html = getContents($url);
+        if (empty($html)) {
             throw new \Exception($errorMessage);
         }
-        return defaultLinkTo($html, self::URI);
+
+        libxml_use_internal_errors(true);
+        $dom = \Dom\HTMLDocument::createFromString($html);
+        libxml_use_internal_errors(false);
+
+        return $dom;
     }
 
     private function loadWorkBookData(): ?array
@@ -133,35 +140,44 @@ final class SearchFloorBridge extends BridgeAbstract
         return $this->extractBookFromPage($html, $bookId);
     }
 
-    private function extractBooks(\simple_html_dom $html): array
+    private function extractBooks(\Dom\HTMLDocument $html): array
     {
         $books = [];
 
-        foreach ($html->find('div.series-item') as $node) {
-            $linkNode = $node->find('p.mb-0.fw-medium a', 0);
-            if ($linkNode === null || preg_match('/\/b\/(\d+)/', $linkNode->href, $match) === 0) {
+        foreach ($html->querySelectorAll('div.series-item') as $node) {
+            $linkNode = $node->querySelector('p.mb-0.fw-medium a');
+            if ($linkNode === null) {
                 continue;
             }
-            $dateNode = $node->find('span.date[data-date]', 0);
+
+            $href = (string) $linkNode->getAttribute('href');
+            if (preg_match('/\/b\/(\d+)/', $href, $match) === 0) {
+                continue;
+            }
+
+            $dateNode = $node->querySelector('span.date[data-date]');
+            $dateAttr = $dateNode !== null ? $dateNode->getAttribute('data-date') : null;
+            $timestamp = $dateAttr !== null ? strtotime($dateAttr) : null;
+
             $books[] = [
                 'id' => (int) $match[1],
-                'title' => $this->decodeEntities(trim($linkNode->plaintext)),
-                'uri' => $linkNode->href,
-                'date' => $dateNode !== null ? strtotime($dateNode->getAttribute('data-date')) : null,
+                'title' => $this->decodeEntities(trim($linkNode->textContent)),
+                'uri' => urljoin(self::URI, $href),
+                'date' => $timestamp !== false ? $timestamp : null,
             ];
         }
 
         return $books;
     }
 
-    private function extractBookFromPage(\simple_html_dom $html, int $bookId): ?array
+    private function extractBookFromPage(\Dom\HTMLDocument $html, int $bookId): ?array
     {
-        $titleNode = $html->find('title', 0);
+        $titleNode = $html->querySelector('title');
         if ($titleNode === null) {
             return null;
         }
 
-        $rawTitle = $this->decodeEntities(trim($titleNode->plaintext));
+        $rawTitle = $this->decodeEntities(trim($titleNode->textContent));
         $parts = explode('/', $rawTitle, 2);
         $title = trim($parts[0]);
         $author = trim($parts[1] ?? '');
@@ -170,14 +186,16 @@ final class SearchFloorBridge extends BridgeAbstract
             return null;
         }
 
-        $dateNode = $html->find('span.badge.date[data-date]', 0);
+        $dateNode = $html->querySelector('span.badge.date[data-date]');
+        $dateAttr = $dateNode !== null ? $dateNode->getAttribute('data-date') : null;
+        $timestamp = $dateAttr !== null ? strtotime($dateAttr) : null;
 
         return [
             'id' => $bookId,
             'title' => $title,
             'author' => $author,
             'uri' => self::URI . '/b/' . $bookId,
-            'date' => $dateNode !== null ? strtotime($dateNode->getAttribute('data-date')) : null,
+            'date' => $timestamp !== false ? $timestamp : null,
         ];
     }
 
@@ -196,7 +214,7 @@ final class SearchFloorBridge extends BridgeAbstract
         return [
             'uri' => $book['uri'],
             'title' => $this->buildItemTitle($book['title'], $meta['chapter']),
-            'timestamp' => $book['date'],
+            'timestamp' => $book['date'] ?? time(),
             'author' => $author,
             'content' => $this->buildItemContent($book['title'], $meta['description'], $readerLink, $coverDataUri),
             'enclosures' => $coverDataUri !== '' ? [$coverDataUri] : [],
@@ -205,29 +223,46 @@ final class SearchFloorBridge extends BridgeAbstract
 
     private function fetchBookMeta(int $bookId): array
     {
-        $url = self::URI . '/b/' . $bookId;
-        $html = getSimpleHTMLDOMCached($url);
+        $cacheKey = 'searchfloor_book_meta_' . $bookId;
+        $cached = $this->cache->get($cacheKey);
+        if ($cached !== null) {
+            return $cached;
+        }
 
-        if ($html === false) {
+        $url = self::URI . '/b/' . $bookId;
+
+        try {
+            $htmlContent = getContents($url);
+            if (empty($htmlContent)) {
+                return ['description' => '', 'chapter' => ''];
+            }
+
+            libxml_use_internal_errors(true);
+            $html = \Dom\HTMLDocument::createFromString($htmlContent);
+            libxml_use_internal_errors(false);
+        } catch (\Throwable) {
             return ['description' => '', 'chapter' => ''];
         }
 
-        $html = defaultLinkTo($html, self::URI);
+        $metaNode = $html->querySelector('meta[name="description"]');
+        $description = $metaNode !== null ? trim((string) $metaNode->getAttribute('content')) : '';
 
-        $metaNode = $html->find('meta[name="description"]', 0);
-        $description = $metaNode !== null ? trim($metaNode->content) : '';
-
-        return [
+        $meta = [
             'description' => $description,
             'chapter' => $this->findChapter($html),
         ];
+
+        $this->cache->set($cacheKey, $meta, self::CACHE_TIMEOUT);
+
+        return $meta;
     }
 
-    private function findChapter(\simple_html_dom $html): string
+    private function findChapter(\Dom\HTMLDocument $html): string
     {
-        $chapterNode = $html->find('.alert.alert-warning.alert-dismissible.fade.show', 0) ?? $html->find('[data-bs-title="Последняя глава"]', 0);
+        $chapterNode = $html->querySelector('.alert.alert-warning.alert-dismissible.fade.show')
+            ?? $html->querySelector('[data-bs-title="Последняя глава"]');
 
-        return $chapterNode !== null ? trim($chapterNode->plaintext) : '';
+        return $chapterNode !== null ? trim($chapterNode->textContent) : '';
     }
 
     private function buildItemTitle(string $bookTitle, string $chapter): string

@@ -1,0 +1,53 @@
+#!/usr/bin/env php
+<?php
+
+require __DIR__ . '/../lib/bootstrap.php';
+require __DIR__ . '/../lib/config.php';
+
+$container = require __DIR__ . '/../lib/dependencies.php';
+
+$bridgeFactory = $container['bridge_factory'];
+$safeLoader = $container['safe_bridge_loader'];
+
+$bridgeNames = $bridgeFactory->getBridgeClassNames();
+$total = count($bridgeNames);
+$passed = 0;
+$failed = 0;
+$errors = [];
+
+echo "Testing {$total} bridges...\n\n";
+
+foreach ($bridgeNames as $bridgeClass) {
+    $shortName = $bridgeFactory->getShortClassName($bridgeClass);
+    echo "[{$shortName}] ";
+
+    try {
+        $bridge = $safeLoader->createSafely($bridgeClass);
+        
+        if ($safeLoader->isBridgeBroken($bridge)) {
+            echo "Broken stub created\n";
+            $failed++;
+            $errors[] = "{$shortName}: Bridge is broken (see logs)";
+        } else {
+            echo "OK\n";
+            $passed++;
+        }
+    } catch (Throwable $e) {
+        echo "? {$e->getMessage()}\n";
+        $failed++;
+        $errors[] = "{$shortName}: {$e->getMessage()}";
+    }
+}
+
+echo "\n";
+echo "Results: {$passed} passed, {$failed} failed out of {$total} bridges\n";
+
+if ($failed > 0) {
+    echo "\nFailed bridges:\n";
+    foreach ($errors as $error) {
+        echo "  - {$error}\n";
+    }
+    exit(1);
+}
+
+exit(0);

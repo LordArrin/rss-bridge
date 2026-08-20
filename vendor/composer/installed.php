@@ -289,6 +289,15 @@
             'aliases' => array(),
             'dev_requirement' => true,
         ),
+        'symfony/css-selector' => array(
+            'pretty_version' => 'v8.1.0',
+            'version' => '8.1.0.0',
+            'reference' => 'dc0e2be45c9b5588c82414f02ac574b4b986abcd',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../symfony/css-selector',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
         'theseer/tokenizer' => array(
             'pretty_version' => '2.0.1',
             'version' => '2.0.1.0',
@@ -297,6 +306,15 @@
             'install_path' => __DIR__ . '/../theseer/tokenizer',
             'aliases' => array(),
             'dev_requirement' => true,
+        ),
+        'voku/simple_html_dom' => array(
+            'pretty_version' => '5.0.0',
+            'version' => '5.0.0.0',
+            'reference' => '091de9ee6daf73a7ee3a062fb53e3687bc54ef70',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../voku/simple_html_dom',
+            'aliases' => array(),
+            'dev_requirement' => false,
         ),
     ),
 );
