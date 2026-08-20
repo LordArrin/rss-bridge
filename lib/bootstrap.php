@@ -7,27 +7,23 @@ if (is_file(__DIR__ . '/../vendor/autoload.php')) {
 const PATH_LIB_CACHES = __DIR__ . '/../caches/';
 const PATH_CACHE = __DIR__ . '/../cache/';
 
-// Files
+// Core library files (still loaded manually)
 $files = [
     __DIR__ . '/../lib/html.php',
     __DIR__ . '/../lib/contents.php',
-    __DIR__ . '/../lib/php8backports.php',
     __DIR__ . '/../lib/utils.php',
     __DIR__ . '/../lib/http.php',
     __DIR__ . '/../lib/logger.php',
     __DIR__ . '/../lib/url.php',
     __DIR__ . '/../lib/seotags.php',
-    // Vendor
-    __DIR__ . '/../lib/parsedown/Parsedown.php',
-    __DIR__ . '/../lib/php-urljoin/src/urljoin.php',
-    __DIR__ . '/../lib/simplehtmldom/simple_html_dom.php',
 ];
+
 foreach ($files as $file) {
     require_once $file;
 }
 
 // Legacy autoloader for old bridges in global namespace.
-// Note: caches are now handled by Composer PSR-4 autoloader (loaded above).
+// Note: caches, parsedown, and urljoin are now handled by Composer PSR-4 autoloader.
 spl_autoload_register(function ($className) {
     // Skip namespaced classes - Composer handles those
     if (str_contains($className, '\\')) {

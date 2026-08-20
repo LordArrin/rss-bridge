@@ -46,5 +46,3 @@ php /app/bin/cache-bridge-metadata || echo "Warning: cache build failed (non-fat
 nginx
 
 exec php-fpm85 --nodaemonize
-
-fi

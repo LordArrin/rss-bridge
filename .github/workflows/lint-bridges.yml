@@ -5,12 +5,14 @@ on:
     branches: [master]
     paths:
       - 'bridges/**'
+      - 'bridges-v2/**'
       - 'phpcs.xml'
       - '.github/workflows/lint-bridges.yml'
   pull_request:
     branches: [master]
     paths:
       - 'bridges/**'
+      - 'bridges-v2/**'
       - 'phpcs.xml'
       - '.github/workflows/lint-bridges.yml'
   workflow_dispatch:
@@ -31,7 +33,7 @@ permissions:
 jobs:
   phpcs:
     name: PHP_CodeSniffer
-    runs-on: ubuntu-26.04-arm
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
@@ -53,9 +55,11 @@ jobs:
       - name: Determine changed bridge files
         id: changed
         run: |
+          BRIDGE_PATHS="bridges/*.php bridges-v2/*.php"
+          
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ "${{ github.event.inputs.check_mode }}" = "all_bridges" ]; then
-              FILES=$(find bridges -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
+              FILES=$(find bridges bridges-v2 -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
               echo "Running manual check on ALL bridge files"
             else
               if git rev-parse HEAD~1 >/dev/null 2>&1; then
@@ -65,16 +69,16 @@ jobs:
               fi
               
               if [ -n "$BASE" ]; then
-                FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- 'bridges/*.php' | tr '\n' ' ')
+                FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
               else
-                FILES=$(find bridges -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
+                FILES=$(find bridges bridges-v2 -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
               fi
               echo "Running manual check on CHANGED bridge files only"
             fi
           # Pull request
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="origin/${{ github.base_ref }}"
-            FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- 'bridges/*.php' | tr '\n' ' ')
+            FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
             echo "Checking PR changes against $BASE"
           else
             if git rev-parse HEAD~1 >/dev/null 2>&1; then
@@ -84,10 +88,10 @@ jobs:
             fi
             
             if [ -n "$BASE" ]; then
-              FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- 'bridges/*.php' | tr '\n' ' ')
+              FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
               echo "Checking push changes against $BASE"
             else
-              FILES=$(find bridges -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
+              FILES=$(find bridges bridges-v2 -maxdepth 1 -name '*.php' -type f | tr '\n' ' ')
               echo "Initial commit - checking all files"
             fi
           fi
@@ -138,17 +142,28 @@ jobs:
 
   executable-check:
     name: Executable PHP files check
-    runs-on: ubuntu-26.04-arm
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Check for executable PHP files in bridges/
+      - name: Check for executable PHP files in bridges/ and bridges-v2/
         run: |
-          if find bridges -name "*.php" -executable -type f -print -exec false {} +
-          then
-            echo 'Good, no executable php scripts found in bridges/'
+          FOUND=0
+          
+          echo "Checking bridges/..."
+          if ! find bridges -name "*.php" -executable -type f -print -exec false {} +; then
+            FOUND=1
+          fi
+          
+          echo "Checking bridges-v2/..."
+          if ! find bridges-v2 -name "*.php" -executable -type f -print -exec false {} +; then
+            FOUND=1
+          fi
+          
+          if [ "$FOUND" -eq 0 ]; then
+            echo 'Good, no executable php scripts found in bridges/ or bridges-v2/'
           else
             echo '::error::Please unmark php scripts above as non-executable'
             echo 'You can do it with: git update-index --chmod=-x <file>'

@@ -10,8 +10,13 @@
 
   <!-- Default check paths -->
   <file>./bridges</file>
+  <file>./bridges-v2</file>
   <file>./lib</file>
   <file>./actions</file>
+  <file>./caches</file>
+  <file>./formats</file>
+  <file>./middlewares</file>
+  <file>./proxies</file>
 
   <!-- Exceptions (Legacy code, vendors, and statics only) -->
   <exclude-pattern>./vendor/*</exclude-pattern>
@@ -27,7 +32,7 @@
   <rule ref="PSR12">
     <!-- 
       NOTE: The MissingNamespace exception is retained for compatibility with older bridges.
-      Ideally, all new bridges should use namespaces (e.g., RssBridge\Bridge\...).
+      Ideally, all new bridges should use namespaces (e.g., RSSBridge\Bridges\...).
       The MultipleClasses, SideEffects, EndFileNewline, and ConstantVisibility exceptions have been removed,
       as they violate modern code quality standards.
     -->

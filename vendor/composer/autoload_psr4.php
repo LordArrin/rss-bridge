@@ -10,4 +10,6 @@ return array(
     'RSSBridge\\Caches\\' => array($baseDir . '/caches'),
     'RSSBridge\\Bridges\\' => array($baseDir . '/bridges-v2'),
     'RSSBridge\\Actions\\' => array($baseDir . '/actions'),
+    'PhpParser\\' => array($vendorDir . '/nikic/php-parser/lib/PhpParser'),
+    'DeepCopy\\' => array($vendorDir . '/myclabs/deep-copy/src/DeepCopy'),
 );

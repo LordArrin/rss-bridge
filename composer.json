@@ -9,7 +9,10 @@
             "RSSBridge\\Caches\\": "caches/",
             "RSSBridge\\Actions\\": "actions/",
             "RSSBridge\\Formats\\": "formats/"
-        }
+        },
+        "files": [
+            "lib/simplehtmldom/simple_html_dom.php"
+        ]
     },
     "require": {
         "php": ">=8.5",
@@ -20,11 +23,13 @@
         "ext-simplexml": "*",
         "ext-sqlite3": "*",
         "ext-zip": "*",
-        "ext-dom": "*"
+        "ext-dom": "*",
+        "erusev/parsedown": "^1.8",
+        "busybee/urljoin": "^1.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^13.3.1",
-        "phpcsstandards/php_codesniffer": "^4.0.4",
+        "squizlabs/php_codesniffer": "^4.0.4",
         "phpstan/phpstan": "^2.2.8"
     },
     "scripts": {

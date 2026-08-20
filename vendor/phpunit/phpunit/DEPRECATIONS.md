@@ -1,0 +1,48 @@
+# Deprecations
+
+## Soft Deprecations
+
+This functionality is currently [soft-deprecated](https://phpunit.de/backward-compatibility.html#soft-deprecation):
+
+### Writing Tests
+
+#### Assertions, Constraints, and Expectations
+
+| Issue                                                             | Description                                       | Since  | Replacement                            |
+|-------------------------------------------------------------------|---------------------------------------------------|--------|----------------------------------------|
+| [#6537](https://github.com/sebastianbergmann/phpunit/issues/6537) | `id()` and `after()` for mock object expectations | 13.1.0 |                                        |
+| [#6560](https://github.com/sebastianbergmann/phpunit/issues/6560) | `expectExceptionMessage()`                        | 13.2.0 | `expectExceptionMessageIsOrContains()` |
+
+## Hard Deprecations
+
+This functionality is currently [hard-deprecated](https://phpunit.de/backward-compatibility.html#hard-deprecation):
+
+### Writing Tests
+
+#### Assertions, Constraints, and Expectations
+
+| Issue                                                             | Description                                               | Since  | Replacement                                                                                                          |
+|-------------------------------------------------------------------|-----------------------------------------------------------|--------|----------------------------------------------------------------------------------------------------------------------|
+| [#6461](https://github.com/sebastianbergmann/phpunit/issues/6461) | `TestCase::any()`                                         | 12.5.5 | Use a test stub instead or configure a real invocation count expectation                                             |
+| [#6505](https://github.com/sebastianbergmann/phpunit/issues/6505) | Calling `atLeast()` with an argument that is not positive | 13.0.2 | Use a positive argument instead                                                                                      |
+| [#6507](https://github.com/sebastianbergmann/phpunit/issues/6507) | Support for using `with*()` without `expects()`           | 13.0.2 | Either configure an expected invocation count using `expects()`or use a test stub without the `with*()` call instead |
+
+### Running Tests
+
+| Issue                                                             | Description                                                   | Since  | Replacement                                                     |
+|-------------------------------------------------------------------|---------------------------------------------------------------|--------|-----------------------------------------------------------------|
+| [#6075](https://github.com/sebastianbergmann/phpunit/issues/6075) | `--order-by duration` CLI option                              | 13.2.0 | Use `--order-by duration-ascending` instead                     |
+| [#6075](https://github.com/sebastianbergmann/phpunit/issues/6075) | `--order-by size` CLI option                                  | 13.2.0 | Use `--order-by size-ascending` instead                         |
+| [#6075](https://github.com/sebastianbergmann/phpunit/issues/6075) | `executionOrder="duration"` XML configuration attribute value | 13.2.0 | Use `executionOrder="duration-ascending"` instead               |
+| [#6075](https://github.com/sebastianbergmann/phpunit/issues/6075) | `executionOrder="size"` XML configuration attribute value     | 13.2.0 | Use `executionOrder="size-ascending"` instead                   |
+| [#6515](https://github.com/sebastianbergmann/phpunit/issues/6515) | `--log-events-verbose-text <file>` CLI option                 | 13.1.0 | Use `--log-events-verbose-text <file> --with-telemetry` instead |
+|                                                                   | `--cache-result` CLI option                                   | 13.3.0 | Use `--record-test-run-history` instead                         |
+|                                                                   | `--do-not-cache-result` CLI option                            | 13.3.0 | Use `--do-not-record-test-run-history` instead                  |
+|                                                                   | `cacheResult` XML configuration attribute                     | 13.3.0 | Use `recordTestRunHistory` instead                              |
+
+### Extending PHPUnit
+
+| Issue                                                             | Description                                                   | Since  | Replacement                                                     |
+|-------------------------------------------------------------------|---------------------------------------------------------------|--------|-----------------------------------------------------------------|
+|                                                                   | `TextUI\Configuration\Configuration::cacheResult()`           | 13.3.0 | Use `recordTestRunHistory()` instead                            |
+|                                                                   | `TextUI\Configuration\Configuration::testResultCacheFile()`   | 13.3.0 | Use `testRunHistoryFile()` instead                              |

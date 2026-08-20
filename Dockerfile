@@ -58,10 +58,14 @@ RUN set -xe && \
       php85-pdo_sqlite \
       php85-pecl-igbinary \
       php85-pecl-memcached \
+      php85-phar \
       php85-simplexml \
       php85-sqlite3 \
+      php85-tokenizer \
       php85-xml \
+      php85-xmlwriter \
       php85-zip \
+      composer \
       curl \
     && \
     # Remove default PHP-FPM pool config
@@ -94,6 +98,10 @@ COPY LICENSE ./
 
 # Copy application
 COPY --chown=nginx:nginx ./ /app/
+
+# Install Composer dependencies
+WORKDIR /app
+RUN composer install --optimize-autoloader --no-interaction --ignore-platform-reqs
 
 # Make scripts executable
 RUN chmod +x /app/bin/* && \
