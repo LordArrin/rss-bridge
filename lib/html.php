@@ -244,9 +244,9 @@ function backgroundToImg($htmlContent)
  * @param string $url Fully qualified URL to the page containing relative links
  * @return string|object Content with fixed URLs.
  */
-function defaultLinkTo($dom, $url)
+function defaultLinkTo($dom, string $url)
 {
-    if ($dom === '') {
+    if ($dom === '' || $dom === null) {
         return $url;
     }
 
@@ -254,32 +254,44 @@ function defaultLinkTo($dom, $url)
     if (is_string($dom)) {
         $string_convert = true;
         $dom = str_get_html($dom);
+        
+        if ($dom === null) {
+            return $url;
+        }
     }
 
-    // Use long method names for compatibility with simple_html_dom and DOMDocument
-
-    // Work around bug in simple_html_dom->getElementsByTagName
-    if ($dom instanceof simple_html_dom) {
-        $findByTag = function ($name) use ($dom) {
-            return $dom->getElementsByTagName($name, null);
-        };
-    } else {
-        $findByTag = function ($name) use ($dom) {
-            return $dom->getElementsByTagName($name);
-        };
+    // Process images
+    foreach ($dom->getElementsByTagName('img', null) as $image) {
+        $src = $image->getAttribute('src');
+        if ($src !== null && $src !== '') {
+            $image->setAttribute('src', urljoin($url, $src));
+        }
     }
 
-    foreach ($findByTag('img') as $image) {
-        $image->setAttribute('src', urljoin($url, $image->getAttribute('src')));
+    // Process anchors
+    foreach ($dom->getElementsByTagName('a', null) as $anchor) {
+        $href = $anchor->getAttribute('href');
+        if ($href !== null && $href !== '') {
+            $anchor->setAttribute('href', urljoin($url, $href));
+        }
     }
 
-    foreach ($findByTag('a') as $anchor) {
-        $anchor->setAttribute('href', urljoin($url, $anchor->getAttribute('href')));
+    // Process scripts, links, sources, etc.
+    $tags = ['script', 'link', 'source', 'video', 'audio', 'iframe'];
+    foreach ($tags as $tag) {
+        foreach ($dom->getElementsByTagName($tag, null) as $element) {
+            $attributes = ['src', 'href', 'data-src', 'data-href', 'poster', 'action'];
+            foreach ($attributes as $attr) {
+                $value = $element->getAttribute($attr);
+                if ($value !== null && $value !== '') {
+                    $element->setAttribute($attr, urljoin($url, $value));
+                }
+            }
+        }
     }
 
-    // Will never be true for DOMDocument
     if ($string_convert) {
-        $dom = $dom->outertext;
+        return $dom->outertext ?? '';
     }
 
     return $dom;

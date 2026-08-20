@@ -101,7 +101,7 @@ COPY --chown=nginx:nginx ./ /app/
 
 # Install Composer dependencies
 WORKDIR /app
-RUN composer install --optimize-autoloader --no-interaction --ignore-platform-reqs
+RUN composer install --optimize-autoloader --no-interaction --ignore-platform-reqs --classmap-authoritative
 
 # Make scripts executable
 RUN chmod +x /app/bin/* && \
