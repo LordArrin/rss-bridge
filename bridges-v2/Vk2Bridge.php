@@ -8,11 +8,11 @@ use BridgeAbstract;
 
 final class Vk2Bridge extends BridgeAbstract
 {
-    const NAME = 'VK';
-    const URI = 'https://vk.ru';
-    const DESCRIPTION = 'Returns posts from the public feed. Needs personal API key';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 900;
+    public const NAME = 'VK';
+    public const URI = 'https://vk.ru';
+    public const DESCRIPTION = 'Returns posts from the public feed. Needs personal API key';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 900;
 
     private const VK_API_VER = 5.199;
     private const VK_API_MAX_COUNT = 100;
@@ -82,7 +82,7 @@ final class Vk2Bridge extends BridgeAbstract
         'pg_empty' => 'margin:0;padding:0;line-height:0;font-size:0',
     ];
 
-    const PARAMETERS = [
+    public const PARAMETERS = [
         [
             'u' => [
                 'name' => 'Name of group or profile',
@@ -103,20 +103,23 @@ final class Vk2Bridge extends BridgeAbstract
         ],
     ];
 
-    const CONFIGURATION = [
+    public const CONFIGURATION = [
         'access_token' => [
             'required' => true,
         ],
     ];
 
-    const TEST_DETECT_PARAMETERS = [
+    public const TEST_DETECT_PARAMETERS = [
         'https://vk.ru/rebel_jack' => ['u' => 'rebel_jack'],
     ];
 
-    private $ownerNames = [];
-    private $pageName = null;
-    private $iconUrl = null;
-    private $photoDescriptions = [];
+    /** @var array<int, string> */
+    private array $ownerNames = [];
+    private ?string $pageName = null;
+    private ?string $iconUrl = null;
+    
+    /** @var array<string, string> */
+    private array $photoDescriptions = [];
 
     public function getURI(): string
     {
@@ -136,11 +139,11 @@ final class Vk2Bridge extends BridgeAbstract
 
     public function detectParameters($url): ?array
     {
-        if (!preg_match(self::URL_REGEX, $url, $m)) {
+        if (preg_match(self::URL_REGEX, $url, $m) === 0) {
             return null;
         }
         $name = strtolower($m[1]);
-        if (in_array($name, self::SYSTEM_PAGES, true)) {
+        if (in_array($name, self::SYSTEM_PAGES, true) === true) {
             return null;
         }
         return ['u' => $m[1]];
@@ -148,7 +151,7 @@ final class Vk2Bridge extends BridgeAbstract
 
     public function collectData(): void
     {
-        if ($this->cache->get($this->getRateLimitCacheKey())) {
+        if ($this->cache->get($this->getRateLimitCacheKey()) === true) {
             throwRateLimitException();
         }
 
@@ -159,7 +162,11 @@ final class Vk2Bridge extends BridgeAbstract
         $filteredPosts = [];
         $offset = 0;
 
-        for ($page = 0; $page < self::MAX_PAGES && count($filteredPosts) < $targetCount; $page++) {
+        for (
+            $page = 0;
+            ($page < self::MAX_PAGES) === true && (count($filteredPosts) < $targetCount) === true;
+            $page++
+        ) {
             $batchSize = min(self::VK_API_MAX_COUNT, max($targetCount - count($filteredPosts) + 10, 10));
 
             $r = $this->api('wall.get', [
@@ -170,7 +177,7 @@ final class Vk2Bridge extends BridgeAbstract
                 'fields' => 'photo_200,photo_100,photo_50',
             ]);
 
-            if (!isset($r['response']['items'])) {
+            if (isset($r['response']['items']) === false) {
                 $this->handleError(self::ERR_INVALID_API_RESPONSE, 'wall.get');
             }
 
@@ -185,13 +192,13 @@ final class Vk2Bridge extends BridgeAbstract
                 if (($post['marked_as_ads'] ?? 0) === 1 || ($post['is_pinned'] ?? 0) === 1) {
                     continue;
                 }
-                if ($hideReposts && $this->isRepost($post)) {
+                if ($hideReposts === true && $this->isRepost($post) === true) {
                     continue;
                 }
                 if (
                     ($post['is_deleted'] ?? false) === true
                     && trim($post['text'] ?? '') === ''
-                    && empty($post['attachments'])
+                    && ($post['attachments'] ?? []) === []
                 ) {
                     continue;
                 }
@@ -200,13 +207,15 @@ final class Vk2Bridge extends BridgeAbstract
 
             $offset += count($items);
 
-            if (count($items) < $batchSize) {
+            if ((count($items) < $batchSize) === true) {
                 break;
             }
         }
 
         if ($filteredPosts === []) {
-            $reason = $hideReposts ? 'No original posts found after filtering reposts.' : 'No posts found in the feed.';
+            $reason = $hideReposts === true
+                ? 'No original posts found after filtering reposts.'
+                : 'No posts found in the feed.';
             $this->handleError(self::ERR_NO_POSTS_FOUND, $reason);
         }
 
@@ -220,7 +229,7 @@ final class Vk2Bridge extends BridgeAbstract
             $post['owner_id'] ?? 0,
             $post['id'] ?? 0
         );
-        if (!isset($post['reply_post_id'])) {
+        if (isset($post['reply_post_id']) === false) {
             return $uri;
         }
         $threadId = $post['parents_stack'][0] ?? $post['reply_post_id'];
@@ -230,7 +239,7 @@ final class Vk2Bridge extends BridgeAbstract
     protected function generateContentFromPost(array $post, bool $extractTitle = true): string
     {
         $text = $post['text'] ?? '';
-        if ($extractTitle) {
+        if ($extractTitle === true) {
             [, $text] = $this->splitFirstLine($text);
         }
 
@@ -263,10 +272,10 @@ final class Vk2Bridge extends BridgeAbstract
                 $counter,
                 '~(https?://[^\s<|]+)|((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:/[^\s<|]*)?)~i',
                 function (array $m): ?string {
-                    if (!empty($m[1])) {
+                    if (($m[1] ?? '') !== '') {
                         return $this->safeLink($m[1], $m[1]);
                     }
-                    if (!empty($m[2])) {
+                    if (($m[2] ?? '') !== '') {
                         return $this->safeLink('https://' . $m[2], $m[2]);
                     }
                     return null;
@@ -301,14 +310,20 @@ final class Vk2Bridge extends BridgeAbstract
             'video' => $this->renderVideo($d),
             'clip' => $this->renderClip($d),
             'audio' => $this->renderAudio($d),
-            'doc' => (($d['ext'] ?? '') === 'gif') ? "<p>{$this->image($this->proxyImage($d['url'] ?? ''), $d['title'] ?? 'Document')}</p>" : "<p>{$this->link($d['url'] ?? '#', 'Document: ' . ($d['title'] ?? 'Document'))}</p>",
+            'doc' => (($d['ext'] ?? '') === 'gif')
+                ? "<p>{$this->image($this->proxyImage($d['url'] ?? ''), $d['title'] ?? 'Document')}</p>"
+                : "<p>{$this->link($d['url'] ?? '#', 'Document: ' . ($d['title'] ?? 'Document'))}</p>",
             'link' => (function () use ($d): string {
                 $url = str_replace('https://m.vk.ru', 'https://vk.ru', $d['url'] ?? '#');
                 $normalized = $this->normalizePlaylistUrl($url);
                 $isPlaylist = $normalized !== $url;
                 $url = $normalized;
-                $img = (!$isPlaylist && isset($d['photo']['sizes'])) ? $this->getLargestImageUrl($d['photo']['sizes']) : '';
-                $title = $isPlaylist ? 'Playlist: ' . ($d['title'] ?? $url) : ($d['title'] ?? $url);
+                $img = ($isPlaylist === false && isset($d['photo']['sizes']))
+                    ? $this->getLargestImageUrl($d['photo']['sizes'])
+                    : '';
+                $title = $isPlaylist === true
+                    ? 'Playlist: ' . ($d['title'] ?? $url)
+                    : ($d['title'] ?? $url);
                 return $this->renderLinkCard($url, $title, $img);
             })(),
             'note' => $this->renderLinkCard($d['view_url'] ?? '#', $d['title'] ?? 'Note'),
@@ -326,7 +341,9 @@ final class Vk2Bridge extends BridgeAbstract
             'wall' => $this->renderWall($d),
             'market' => (function () use ($d): string {
                 $price = $d['price']['text'] ?? '';
-                $display = $price !== '' ? ($d['title'] ?? 'Product') . ' - ' . $price : ($d['title'] ?? 'Product');
+                $display = $price !== ''
+                    ? ($d['title'] ?? 'Product') . ' - ' . $price
+                    : ($d['title'] ?? 'Product');
                 $img = ($d['thumb_photo'] ?? '') !== '' ? $this->proxyImage($d['thumb_photo']) : '';
                 return $this->renderLinkCard($d['url'] ?? '#', $display, $img);
             })(),
@@ -341,11 +358,15 @@ final class Vk2Bridge extends BridgeAbstract
             ),
             'podcast' => $this->renderPodcast($d),
             'event' => $this->renderEvent($d),
-            'graffiti' => (($url = $d['photo_586'] ?? $d['photo_200'] ?? '') !== '') ? "<p>{$this->image($this->proxyImage($url), 'Graffiti')}</p>" : '',
+            'graffiti' => (($url = $d['photo_586'] ?? $d['photo_200'] ?? '') !== '')
+                ? "<p>{$this->image($this->proxyImage($url), 'Graffiti')}</p>"
+                : '',
             'group' => $this->renderLinkCard(
                 ($d['screen_name'] ?? '') !== '' ? 'https://vk.ru/' . $d['screen_name'] : '#',
                 $d['name'] ?? 'Group',
-                ($img = $d['photo_200'] ?? $d['photo_100'] ?? $d['photo_50'] ?? '') !== '' ? $this->proxyImage($img) : ''
+                ($img = $d['photo_200'] ?? $d['photo_100'] ?? $d['photo_50'] ?? '') !== ''
+                    ? $this->proxyImage($img)
+                    : ''
             ),
             'donut_link' => $this->renderLinkCard($d['url'] ?? '#', $d['text'] ?? 'VK Donut'),
             'textlive', 'textpost', 'textpost_publish' => (function () use ($d): string {
@@ -397,24 +418,27 @@ final class Vk2Bridge extends BridgeAbstract
                 $this->handleError(self::ERR_API_ERROR, 'Network error: ' . $e->getMessage());
             }
 
-            if (!json_validate($response)) {
+            if (json_validate($response) === false) {
                 $this->handleError(self::ERR_INVALID_JSON);
             }
 
             $r = json_decode($response, true);
 
-            if (!is_array($r)) {
+            if (is_array($r) === false) {
                 $this->handleError(self::ERR_INVALID_JSON);
             }
 
-            if (!isset($r['error'])) {
+            if (isset($r['error']) === false) {
                 return $r;
             }
 
             $errorCode = $r['error']['error_code'] ?? 0;
             $apiError = $this->mapApiErrorCode($errorCode);
 
-            if ($apiError === self::ERR_RATE_LIMIT && $attempt < self::MAX_RETRIES) {
+            if (
+                $apiError === self::ERR_RATE_LIMIT
+                && ($attempt < self::MAX_RETRIES) === true
+            ) {
                 usleep($retryDelayUs);
                 $retryDelayUs *= 2;
                 continue;
@@ -437,11 +461,11 @@ final class Vk2Bridge extends BridgeAbstract
                 $this->handleError(self::ERR_UNKNOWN_METHOD, $r['error']['error_msg'] ?? 'Unknown method');
             }
 
-            if (in_array($errorCode, $expectedErrorCodes, true)) {
+            if (in_array($errorCode, $expectedErrorCodes, true) === true) {
                 return $r;
             }
 
-            if (isset(self::RATE_LIMIT_DELAYS[$errorCode])) {
+            if (isset(self::RATE_LIMIT_DELAYS[$errorCode]) === true) {
                 $this->cache->set($this->getRateLimitCacheKey(), true, self::RATE_LIMIT_DELAYS[$errorCode]);
             }
 
@@ -472,7 +496,7 @@ final class Vk2Bridge extends BridgeAbstract
         $this->fetchPhotoDescriptions($posts);
 
         foreach ($posts as $post) {
-            $displayPost = $this->isRepost($post) ? $post['copy_history'][0] : $post;
+            $displayPost = $this->isRepost($post) === true ? $post['copy_history'][0] : $post;
             $uri = $this->getPostURI($displayPost);
 
             $cacheKey = 'vk2_post_' . md5(
@@ -490,7 +514,7 @@ final class Vk2Bridge extends BridgeAbstract
             $isDeleted = ($displayPost['is_deleted'] ?? false) === true;
 
             $content = $this->generateContentFromPost($displayPost, true);
-            if ($isDeleted) {
+            if ($isDeleted === true) {
                 $content = '<p><em>[Deleted]</em></p>' . $content;
             }
 
@@ -498,7 +522,7 @@ final class Vk2Bridge extends BridgeAbstract
                 'content' => $content,
                 'timestamp' => $displayPost['date'] ?? time(),
                 'author' => $author,
-                'title' => ($isDeleted ? '[Deleted] ' : '') . $this->getTitle($displayPost),
+                'title' => ($isDeleted === true ? '[Deleted] ' : '') . $this->getTitle($displayPost),
                 'uri' => $uri,
                 'uid' => sprintf('vk:wall%d_%d', $displayPost['owner_id'] ?? 0, $displayPost['id'] ?? 0),
             ];
@@ -507,7 +531,7 @@ final class Vk2Bridge extends BridgeAbstract
             $this->items[] = $item;
         }
 
-        if (isset($this->ownerNames[$ownerId])) {
+        if (isset($this->ownerNames[$ownerId]) === true) {
             $this->pageName = $this->ownerNames[$ownerId];
         }
     }
@@ -566,22 +590,22 @@ final class Vk2Bridge extends BridgeAbstract
 
     private function isRepost(array $post): bool
     {
-        return isset($post['copy_history'][0]);
+        return isset($post['copy_history'][0]) === true;
     }
 
     private function detectOwnerId(string $u): int
     {
-        if (preg_match('/^(club|public)(\d+)$/', $u, $m)) {
+        if (preg_match('/^(club|public)(\d+)$/', $u, $m) === 1) {
             return -intval($m[2]);
         }
-        if (preg_match('/^id(\d+)$/', $u, $m)) {
+        if (preg_match('/^id(\d+)$/', $u, $m) === 1) {
             return intval($m[1]);
         }
 
         $cacheKey = 'vk2_owner_' . md5(strtolower($u));
         $cached = $this->cache->get($cacheKey);
 
-        if (is_array($cached) && isset($cached['ownerId'])) {
+        if (is_array($cached) === true && isset($cached['ownerId']) === true) {
             $this->iconUrl = $cached['iconUrl'] ?? null;
             return (int) $cached['ownerId'];
         }
@@ -589,7 +613,7 @@ final class Vk2Bridge extends BridgeAbstract
         $r = $this->api('groups.getById', ['group_ids' => $u, 'fields' => 'photo_200,photo_100,photo_50'], [self::API_ERR_RATE_LIMIT]);
         $group = $r['response']['groups'][0] ?? $r['response'][0] ?? null;
 
-        if ($group !== null && isset($group['id'])) {
+        if ($group !== null && isset($group['id']) === true) {
             $ownerId = -(int) $group['id'];
             $this->iconUrl = $group['photo_200'] ?? $group['photo_100'] ?? $group['photo_50'] ?? null;
             $this->cache->set($cacheKey, ['ownerId' => $ownerId, 'iconUrl' => $this->iconUrl], 86400);
@@ -598,7 +622,7 @@ final class Vk2Bridge extends BridgeAbstract
 
         $r = $this->api('users.get', ['user_ids' => $u, 'fields' => 'photo_100,photo_50']);
 
-        if (isset($r['response'][0]['id'])) {
+        if (isset($r['response'][0]['id']) === true) {
             $user = $r['response'][0];
             $this->iconUrl = $user['photo_100'] ?? $user['photo_50'] ?? null;
             $this->cache->set($cacheKey, ['ownerId' => $user['id'], 'iconUrl' => $this->iconUrl], 86400);
@@ -620,9 +644,9 @@ final class Vk2Bridge extends BridgeAbstract
         $dur = $duration > 0 ? ' (' . gmdate('i:s', $duration) . ')' : '';
         $w = $d['width'] ?? 0;
         $h = $d['height'] ?? 0;
-        $res = ($w > 0 && $h > 0) ? " ({$w}x{$h})" : '';
+        $res = ($w > 0 && $h > 0) === true ? " ({$w}x{$h})" : '';
 
-        if ($isLive) {
+        if ($isLive === true) {
             $labels = ['waiting' => 'Scheduled', 'started' => 'LIVE', 'finished' => 'Ended', 'failed' => 'Failed', 'upcoming' => 'Upcoming'];
             $status = $labels[$d['live_status'] ?? ''] ?? ($d['live_status'] ?? 'unknown');
             $title = "[{$status}] {$title}";
@@ -644,7 +668,7 @@ final class Vk2Bridge extends BridgeAbstract
         $dur = $duration > 0 ? ' (' . gmdate('i:s', $duration) . ')' : '';
         $w = $d['width'] ?? 0;
         $h = $d['height'] ?? 0;
-        $res = ($w > 0 && $h > 0) ? " ({$w}x{$h})" : '';
+        $res = ($w > 0 && $h > 0) === true ? " ({$w}x{$h})" : '';
         $title = "Clip: {$title}{$dur}{$res}";
         $url = 'https://vk.ru/clip' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0);
         return $this->renderLinkCard($url, $title, $this->getLargestImageUrl($d['image'] ?? []));
@@ -697,13 +721,13 @@ final class Vk2Bridge extends BridgeAbstract
         }
 
         $h .= '<p' . $s('poll_f') . '>Total votes: ' . (int) ($d['votes'] ?? 0);
-        if (!empty($d['anonymous'])) {
+        if (($d['anonymous'] ?? false) !== false) {
             $h .= ' &#183; Anonymous';
         }
-        if (!empty($d['multiple'])) {
+        if (($d['multiple'] ?? false) !== false) {
             $h .= ' &#183; Multiple choice';
         }
-        if (!empty($d['closed'])) {
+        if (($d['closed'] ?? false) !== false) {
             $h .= ' &#183; Closed';
         } elseif (($d['end_date'] ?? 0) > 0) {
             $h .= ' &#183; Ends ' . date('Y-m-d', $d['end_date']);
@@ -757,7 +781,7 @@ final class Vk2Bridge extends BridgeAbstract
         $cover = '';
 
         foreach ($d['podcast_cover'] ?? [] as $img) {
-            if (isset($img['url'])) {
+            if (isset($img['url']) === true) {
                 $cover = $img['url'];
                 break;
             }
@@ -814,7 +838,7 @@ final class Vk2Bridge extends BridgeAbstract
 
         foreach ($lines as $i => $line) {
             $trimmed = trim($line);
-            if ($trimmed !== '' && !$this->isLinkOnly($trimmed)) {
+            if ($trimmed !== '' && $this->isLinkOnly($trimmed) === false) {
                 $meaningfulIndex = $i;
                 break;
             }
@@ -826,7 +850,7 @@ final class Vk2Bridge extends BridgeAbstract
 
         $cleanLine = preg_replace('/\[([^\]|]+)\|([^\]]+)\]/u', '$2', trim($lines[$meaningfulIndex]));
 
-        if (empty(trim($cleanLine))) {
+        if (trim($cleanLine) === '') {
             return ['', $text];
         }
 
@@ -862,12 +886,12 @@ final class Vk2Bridge extends BridgeAbstract
 
     private function cutAtFirstUrl(string $text): array
     {
-        if (preg_match('~\s+https?://~iu', $text, $m, PREG_OFFSET_CAPTURE)) {
+        if (preg_match('~\s+https?://~iu', $text, $m, PREG_OFFSET_CAPTURE) === 1) {
             $pos = $m[0][1];
             return [rtrim(trim(substr($text, 0, $pos)), ':;,'), trim(substr($text, $pos))];
         }
 
-        if (preg_match('~\s+(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}/~iu', $text, $m, PREG_OFFSET_CAPTURE)) {
+        if (preg_match('~\s+(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}/~iu', $text, $m, PREG_OFFSET_CAPTURE) === 1) {
             $pos = $m[0][1];
             return [rtrim(trim(substr($text, 0, $pos)), ':;,'), trim(substr($text, $pos))];
         }
@@ -877,7 +901,7 @@ final class Vk2Bridge extends BridgeAbstract
 
     private function normalizePlaylistUrl(string $url): string
     {
-        if (preg_match('/act=audio_playlist(-?\d+)_(\d+)/', $url, $m)) {
+        if (preg_match('/act=audio_playlist(-?\d+)_(\d+)/', $url, $m) === 1) {
             return "https://vk.ru/music/playlist/{$m[1]}_{$m[2]}";
         }
         return $url;
@@ -897,7 +921,7 @@ final class Vk2Bridge extends BridgeAbstract
         if ($line === '') {
             return false;
         }
-        return (bool) preg_match('~^(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?)$~i', $line);
+        return preg_match('~^(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?)$~i', $line) === 1;
     }
 
     private function applyPlaceholders(string $text, array &$placeholders, int &$counter, string $pattern, callable $resolver): string
@@ -918,10 +942,10 @@ final class Vk2Bridge extends BridgeAbstract
 
     private function resolveVkLink(string $target, string $linkText): string
     {
-        if (preg_match('/^https?:\/\//i', $target)) {
+        if (preg_match('/^https?:\/\//i', $target) === 1) {
             return $this->safeLink($target, $linkText);
         }
-        if (preg_match('/^(id|club|public|wall|post|event|market)([\-0-9_]+)$/i', $target, $tm)) {
+        if (preg_match('/^(id|club|public|wall|post|event|market)([\-0-9_]+)$/i', $target, $tm) === 1) {
             return $this->safeLink('https://vk.ru/' . strtolower($tm[1]) . $tm[2], $linkText);
         }
         return $this->safeLink('https://vk.ru/' . $target, $linkText);
@@ -948,7 +972,7 @@ final class Vk2Bridge extends BridgeAbstract
     private function safeLink(string $url, string $text = ''): string
     {
         $url = trim($url);
-        if ($url === '' || preg_match('/^(javascript|data|vbscript):/i', $url)) {
+        if ($url === '' || preg_match('/^(javascript|data|vbscript):/i', $url) === 1) {
             return $this->e($text !== '' ? $text : $url);
         }
         return "<a href='{$this->e($url)}' target='_blank' rel='noopener noreferrer'>{$this->e($text !== '' ? $text : $url)}</a>";
@@ -974,7 +998,7 @@ final class Vk2Bridge extends BridgeAbstract
         if ($url === '') {
             return '';
         }
-        if (function_exists('getProxiedUri')) {
+        if (function_exists('getProxiedUri') === true) {
             return getProxiedUri($url);
         }
         return $url;

@@ -8,11 +8,11 @@ use BridgeAbstract;
 
 final class AlpineReleasesBridge extends BridgeAbstract
 {
-    const NAME = 'Alpine Releases';
-    const URI = 'https://alpinelinux.org/releases/';
-    const DESCRIPTION = 'Alpine Linux releases with branch info';
-    const MAINTAINER = 'LordArrin';
-    const CACHE_TIMEOUT = 3600;
+    public const NAME = 'Alpine Releases';
+    public const URI = 'https://alpinelinux.org/releases/';
+    public const DESCRIPTION = 'Alpine Linux releases with branch info';
+    public const MAINTAINER = 'LordArrin';
+    public const CACHE_TIMEOUT = 3600;
 
     private const CSS = [
         'table'      => 'border-collapse:collapse;margin-bottom:16px;font-size:0.9em;width:100%;max-width:600px',
@@ -101,7 +101,7 @@ final class AlpineReleasesBridge extends BridgeAbstract
         }
 
         $html = getContents(self::URI);
-        if (empty($html)) {
+        if ($html === '' || $html === null) {
             return [];
         }
 
@@ -118,7 +118,7 @@ final class AlpineReleasesBridge extends BridgeAbstract
             }
 
             $branchName = $this->cleanText($cells[0]->textContent);
-            if (str_starts_with($branchName, 'v')) {
+            if (str_starts_with($branchName, 'v') === true) {
                 $branchName = substr($branchName, 1);
             }
 
