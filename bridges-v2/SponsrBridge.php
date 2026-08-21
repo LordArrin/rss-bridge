@@ -10,7 +10,7 @@ final class SponsrBridge extends BridgeAbstract
 {
     public const NAME = 'Sponsr';
     public const URI = 'https://sponsr.ru/';
-    public const DESCRIPTION = 'Returns posts from Sponsr.ru author pages';
+    public const DESCRIPTION = 'Returns posts from Sponsr (free posts and paid announcements). No auth required';
     public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 3600;
 

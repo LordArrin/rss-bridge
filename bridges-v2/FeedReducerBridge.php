@@ -10,7 +10,7 @@ final class FeedReducerBridge extends FeedExpander
 {
     public const NAME = 'Feed Reducer';
     public const URI = 'http://github.com/RSS-Bridge/rss-bridge/';
-    public const DESCRIPTION = 'Choose a percentage of a feed you want to see.';
+    public const DESCRIPTION = 'Choose a percentage of a feed you want to see';
     public const MAINTAINER = 'no maintainer';
     public const CACHE_TIMEOUT = 3600;
 

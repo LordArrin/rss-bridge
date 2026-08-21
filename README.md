@@ -5,10 +5,12 @@ RSS-Bridge is a PHP web application. Works with PHP 8.5.
 [![LICENSE](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Docker Image](https://img.shields.io/badge/docker-lordarrin%2Frss--bridge-blue.svg?logo=docker)](https://hub.docker.com/r/lordarrin/rss-bridge)
 
-## A subset of bridges (16/375)
+## A subset of bridges (18/365)
 
 * `Nginx`: Returns Nginx releases with changelogs and other news
 * `Pawchive`: Returns posts from Pawchive
+* `Boosty`: Parser for Boosty (free posts and paid announcements)
+* `Sponsr`: Returns posts from Sponsr (free posts and paid announcements)
 * `MSISupport`: Returns BIOS, drivers, manuals, and utilities updates for MSI products
 * `GigabyteSupport`: Returns BIOS and drivers updates for Gigabyte products
 * `AlpineReleases`: Alpine Linux releases with branch info

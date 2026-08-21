@@ -10,7 +10,7 @@ final class BoostyBridge extends BridgeAbstract
 {
     public const NAME = 'Boosty';
     public const URI = 'https://boosty.to';
-    public const DESCRIPTION = 'Parser for Boosty (free posts and paid announcements). No auth required';
+    public const DESCRIPTION = 'Returns posts from Boosty (free posts and paid announcements). No auth required';
     public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 3600;
 
