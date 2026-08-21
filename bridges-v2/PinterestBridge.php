@@ -1,13 +1,21 @@
 <?php
 
-class PinterestBridge extends FeedExpander
-{
-    const MAINTAINER = 'pauder';
-    const NAME = 'Pinterest';
-    const URI = 'https://www.pinterest.com';
-    const DESCRIPTION = 'Returns the newest images on a board';
+declare(strict_types=1);
 
-    const PARAMETERS = [
+namespace RSSBridge\Bridges;
+
+use FeedExpander;
+
+final class PinterestBridge extends FeedExpander
+{
+    public const NAME = 'Pinterest';
+    public const URI = 'https://www.pinterest.com';
+    public const DESCRIPTION = 'Returns the newest images on a board';
+    public const MAINTAINER = 'no maintainer';
+
+    public const CACHE_TIMEOUT = 3600;
+
+    public const PARAMETERS = [
         'By username and board' => [
             'u' => [
                 'name' => 'username',
@@ -22,41 +30,48 @@ class PinterestBridge extends FeedExpander
         ]
     ];
 
-    public function getIcon()
+    public function getIcon(): string
     {
         return 'https://s.pinimg.com/webapp/style/images/favicon-9f8f9adf.png';
     }
 
-    public function collectData()
+    public function collectData(): void
     {
         $this->collectExpandableDatas($this->getURI() . '.rss');
         $this->fixLowRes();
     }
 
-    private function fixLowRes()
+    private function fixLowRes(): void
     {
         $newitems = [];
         $pattern = '/https\:\/\/i\.pinimg\.com\/[a-zA-Z0-9]*x\//';
+
         foreach ($this->items as $item) {
-            $item['content'] = preg_replace($pattern, 'https://i.pinimg.com/originals/', $item['content']);
+            $content = $item['content'] ?? '';
+            $replaced = preg_replace($pattern, 'https://i.pinimg.com/originals/', $content);
+            if ($replaced !== null) {
+                $item['content'] = $replaced;
+            }
+
             $item['enclosures'] = [
-                $item['uri'],
+                $item['uri'] ?? '',
             ];
             $newitems[] = $item;
         }
+
         $this->items = $newitems;
     }
 
-    public function getURI()
+    public function getURI(): string
     {
         if ($this->queriedContext === 'By username and board') {
-            return self::URI . '/' . urlencode($this->getInput('u')) . '/' . urlencode($this->getInput('b'));
+            return self::URI . '/' . urlencode((string)$this->getInput('u')) . '/' . urlencode((string)$this->getInput('b'));
         }
 
         return parent::getURI();
     }
 
-    public function getName()
+    public function getName(): string
     {
         if ($this->queriedContext === 'By username and board') {
             return $this->getInput('u') . ' - ' . $this->getInput('b') . ' - ' . self::NAME;

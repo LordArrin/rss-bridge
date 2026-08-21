@@ -33,17 +33,20 @@ class TgWSProxy extends ProxyAbstract
     private function getPersistentHandle(): \CurlHandle
     {
         if (self::$persistentHandle === null || self::$requestCount >= self::$maxRequestsBeforeReset) {
-            if (self::$persistentHandle !== null) {
-                curl_close(self::$persistentHandle);
-            }
+            self::$persistentHandle = null;
+            
             self::$persistentHandle = curl_init();
+            if (self::$persistentHandle === false) {
+                throw new \RuntimeException('Failed to initialize cURL handle');
+            }
             self::$requestCount = 0;
             
             curl_setopt(self::$persistentHandle, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5_HOSTNAME);
             curl_setopt(self::$persistentHandle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
             
+            // Allow connection reuse for persistent handle
             curl_setopt(self::$persistentHandle, CURLOPT_FRESH_CONNECT, false);
-            curl_setopt(self::$persistentHandle, CURLOPT_FORBID_REUSE, true); 
+            curl_setopt(self::$persistentHandle, CURLOPT_FORBID_REUSE, false);
             
             curl_setopt(self::$persistentHandle, CURLOPT_TCP_KEEPALIVE, 1);
             curl_setopt(self::$persistentHandle, CURLOPT_TCP_KEEPIDLE, 60);
@@ -52,6 +55,10 @@ class TgWSProxy extends ProxyAbstract
             curl_setopt(self::$persistentHandle, CURLOPT_ENCODING, '');
             curl_setopt(self::$persistentHandle, CURLOPT_FOLLOWLOCATION, true);
             curl_setopt(self::$persistentHandle, CURLOPT_MAXREDIRS, 5);
+            
+            // Security: restrict protocols
+            curl_setopt(self::$persistentHandle, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+            curl_setopt(self::$persistentHandle, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
             
             curl_setopt(self::$persistentHandle, CURLOPT_SSL_VERIFYPEER, true);
             curl_setopt(self::$persistentHandle, CURLOPT_SSL_VERIFYHOST, 2);
@@ -145,6 +152,7 @@ class TgWSProxy extends ProxyAbstract
                 }
                 
                 if ($this->isConnectionError($errorMsg)) {
+                    // Reset persistent handle on connection error
                     self::$persistentHandle = null;
                     self::$requestCount = 0;
                 }

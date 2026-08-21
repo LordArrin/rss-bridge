@@ -1,15 +1,9 @@
 <?php
 
-/**
- * Thrown by bridges
- */
 final class RateLimitException extends \Exception
 {
 }
 
-/**
- * @internal Do not use this class in bridges
- */
 class HttpException extends \Exception
 {
     public ?Response $response;
@@ -44,10 +38,11 @@ final class CloudFlareException extends HttpException
             '<title>Please Wait...',
             '<title>Attention Required!',
             '<title>Security | Glassdoor',
-            '<title>Access denied</title>', // cf as seen on patreon.com
+            '<title>Access denied</title>',
         ];
-        foreach ($cloudflareTitles as $cloudflareTitle) {
-            if (str_contains($response->getBody(), $cloudflareTitle)) {
+        $body = $response->getBody();
+        foreach ($cloudflareTitles as $title) {
+            if (str_contains($body, $title)) {
                 return true;
             }
         }
@@ -64,105 +59,94 @@ final class CurlHttpClient implements HttpClient
 {
     public function request(string $url, array $config = []): Response
     {
-        // Remove null values
         $config = array_filter($config, fn ($value) => $value !== null);
 
         $ch = curl_init($url);
+        if ($ch === false) {
+            throw new HttpException('Failed to initialize cURL');
+        }
 
         $defaultConfig = [
-            'useragent' => null,
-            'timeout' => 5,
-            'headers' => [],
-            'proxy' => null,
-            'curl_options' => [],
+            'useragent'             => null,
+            'timeout'               => 5,
+            'headers'               => [],
+            'proxy'                 => null,
+            'curl_options'          => [],
             'if_not_modified_since' => null,
-            'retries' => 2,
-            'max_filesize' => null,
-            'max_redirections' => 5,
+            'retries'               => 2,
+            'max_filesize'          => null,
+            'max_redirections'      => 5,
         ];
 
-        // Snagged from https://github.com/lwthiker/curl-impersonate/blob/main/firefox/curl_ff102
-        $defaultHeaders = [
-            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language' => 'en-US,en;q=0.5',
-            'Upgrade-Insecure-Requests' => '1',
-            'Sec-Fetch-Dest' => 'document',
-            'Sec-Fetch-Mode' => 'navigate',
-            'Sec-Fetch-Site' => 'none',
-            'Sec-Fetch-User' => '?1',
-            'TE' => 'trailers',
-        ];
-
-        if (curl_version()['ssl_version'] == 'BoringSSL') {
-            $config = array_merge($defaultConfig, $config);
-        } else {
-            $defaultConfig['useragent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Firefox/102.0';
-            curl_setopt($ch, CURLOPT_HEADER, false);
-            $headers = array_merge($defaultHeaders, $config['headers']);
-            $config = array_merge($defaultConfig, $config);
-            $config['headers'] = $headers;
-        }
-        unset($headers);
+        $config = array_merge($defaultConfig, $config);
 
         $httpHeaders = [];
         foreach ($config['headers'] as $name => $value) {
             $httpHeaders[] = sprintf('%s: %s', $name, $value);
         }
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $httpHeaders);
-        if ($config['useragent']) {
-            curl_setopt($ch, CURLOPT_USERAGENT, $config['useragent']);
-        }
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_MAXREDIRS, $config['max_redirections']);
-        curl_setopt($ch, CURLOPT_TIMEOUT, $config['timeout']);
-        curl_setopt($ch, CURLOPT_ENCODING, '');
-        curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
 
-        if ($config['max_filesize']) {
-            // This option inspects the Content-Length header
-            curl_setopt($ch, CURLOPT_MAXFILESIZE, $config['max_filesize']);
-            curl_setopt($ch, CURLOPT_NOPROGRESS, false);
-            // This progress function will monitor responses who omit the Content-Length header
-            curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($config) {
-                if ($downloaded > $config['max_filesize']) {
-                    // Return a non-zero value to abort the transfer
-                    return -1;
-                }
-                return 0;
-            });
+        $curlOptions = [
+            CURLOPT_HEADER          => false,
+            CURLOPT_HTTPHEADER      => $httpHeaders,
+            CURLOPT_RETURNTRANSFER  => true,
+            CURLOPT_FOLLOWLOCATION  => true,
+            CURLOPT_MAXREDIRS       => $config['max_redirections'],
+            CURLOPT_TIMEOUT         => $config['timeout'],
+            CURLOPT_ENCODING        => '',
+            CURLOPT_PROTOCOLS       => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+        ];
+
+        if ($config['useragent'] !== null) {
+            $curlOptions[CURLOPT_USERAGENT] = $config['useragent'];
         }
 
-        if ($config['proxy']) {
-            curl_setopt($ch, CURLOPT_PROXY, $config['proxy']);
+        if ($config['proxy'] !== null) {
+            $curlOptions[CURLOPT_PROXY] = $config['proxy'];
         }
 
-        if (curl_setopt_array($ch, $config['curl_options']) === false) {
-            throw new \Exception('Tried to set an illegal curl option');
+        if ($config['if_not_modified_since'] !== null) {
+            $curlOptions[CURLOPT_TIMEVALUE] = $config['if_not_modified_since'];
+            $curlOptions[CURLOPT_TIMECONDITION] = CURL_TIMECOND_IFMODSINCE;
         }
 
-        if ($config['if_not_modified_since']) {
-            curl_setopt($ch, CURLOPT_TIMEVALUE, $config['if_not_modified_since']);
-            curl_setopt($ch, CURLOPT_TIMECONDITION, CURL_TIMECOND_IFMODSINCE);
+        if ($config['max_filesize'] !== null) {
+            $curlOptions[CURLOPT_MAXFILESIZE] = $config['max_filesize'];
+            $curlOptions[CURLOPT_NOPROGRESS] = false;
+            if (defined('CURLOPT_XFERINFOFUNCTION')) {
+                $curlOptions[CURLOPT_XFERINFOFUNCTION] = function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($config) {
+                    return ($downloaded > $config['max_filesize']) ? 1 : 0;
+                };
+            } else {
+                $curlOptions[CURLOPT_PROGRESSFUNCTION] = function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($config) {
+                    return ($downloaded > $config['max_filesize']) ? -1 : 0;
+                };
+            }
         }
 
-        $responseStatusLines = [];
+        foreach ($config['curl_options'] as $option => $value) {
+            $curlOptions[$option] = $value;
+        }
+
+        if (!curl_setopt_array($ch, $curlOptions)) {
+            throw new HttpException('Failed to set cURL options: tried to set an illegal curl option');
+        }
+
         $responseHeaders = [];
-        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, $rawHeader) use (&$responseHeaders, &$responseStatusLines) {
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, $rawHeader) use (&$responseHeaders) {
             $len = strlen($rawHeader);
             if ($rawHeader === "\r\n") {
                 return $len;
             }
-            if (preg_match('#^HTTP/(2|1.1|1.0)#', $rawHeader)) {
-                $responseStatusLines[] = trim($rawHeader);
+            if (preg_match('#^HTTP/(2|1\.1|1\.0)#', $rawHeader)) {
                 return $len;
             }
-            $header = explode(':', $rawHeader);
-            if (count($header) === 1) {
+            $header = explode(':', $rawHeader, 2);
+            if (count($header) !== 2) {
                 return $len;
             }
             $name = mb_strtolower(trim($header[0]));
-            $value = trim(implode(':', array_slice($header, 1)));
+            $value = trim($header[1]);
             if (!isset($responseHeaders[$name])) {
                 $responseHeaders[$name] = [];
             }
@@ -170,31 +154,40 @@ final class CurlHttpClient implements HttpClient
             return $len;
         });
 
-        // This retry logic is a bit hard to understand, but it works
-        $tries = 0;
-        while (true) {
-            $tries++;
+        $maxAttempts = 1 + (int)$config['retries'];
+        $lastError = '';
+        $lastErrno = 0;
+        $body = false;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             $body = curl_exec($ch);
             if ($body !== false) {
-                // The network call was successful, so break out of the loop
                 break;
             }
-            if ($tries <= $config['retries']) {
-                continue;
+            $lastError = curl_error($ch);
+            $lastErrno = curl_errno($ch);
+            if (in_array($lastErrno, [
+                CURLE_SSL_CERTPROBLEM,
+                CURLE_SSL_CIPHER,
+                CURLE_BAD_CONTENT_ENCODING,
+                CURLE_URL_MALFORMAT,
+                CURLE_COULDNT_RESOLVE_HOST,
+            ], true)) {
+                break;
             }
-            // Max retries reached, give up
-            $curl_error = curl_error($ch);
-            $curl_errno = curl_errno($ch);
+        }
+
+        $statusCode = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+
+        if ($body === false) {
             throw new HttpException(sprintf(
-                'cURL error %s: %s (%s) for %s',
-                $curl_error,
-                $curl_errno,
-                'https://curl.haxx.se/libcurl/c/libcurl-errors.html',
+                'cURL error %d: %s (see https://curl.se/libcurl/c/libcurl-errors.html) for %s',
+                $lastErrno,
+                $lastError,
                 $url
             ));
         }
 
-        $statusCode = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         return new Response($body, $statusCode, $responseHeaders);
     }
 }
@@ -256,69 +249,66 @@ final class Request
 final class Response
 {
     public const STATUS_CODES = [
-        '100' => 'Continue',
-        '101' => 'Switching Protocols',
-        '200' => 'OK',
-        '201' => 'Created',
-        '202' => 'Accepted',
-        '203' => 'Non-Authoritative Information',
-        '204' => 'No Content',
-        '205' => 'Reset Content',
-        '206' => 'Partial Content',
-        '300' => 'Multiple Choices',
-        '301' => 'Moved Permanently',
-        '302' => 'Found',
-        '303' => 'See Other',
-        '304' => 'Not Modified',
-        '305' => 'Use Proxy',
-        '400' => 'Bad Request',
-        '401' => 'Unauthorized',
-        '402' => 'Payment Required',
-        '403' => 'Forbidden',
-        '404' => 'Not Found',
-        '405' => 'Method Not Allowed',
-        '406' => 'Not Acceptable',
-        '407' => 'Proxy Authentication Required',
-        '408' => 'Request Timeout',
-        '409' => 'Conflict',
-        '410' => 'Gone',
-        '411' => 'Length Required',
-        '412' => 'Precondition Failed',
-        '413' => 'Request Entity Too Large',
-        '414' => 'Request-URI Too Long',
-        '415' => 'Unsupported Media Type',
-        '416' => 'Requested Range Not Satisfiable',
-        '417' => 'Expectation Failed',
-        '429' => 'Too Many Requests',
-        '500' => 'Internal Server Error',
-        '501' => 'Not Implemented',
-        '502' => 'Bad Gateway',
-        '503' => 'Service Unavailable',
-        '504' => 'Gateway Timeout',
-        '505' => 'HTTP Version Not Supported'
+        100 => 'Continue',
+        101 => 'Switching Protocols',
+        200 => 'OK',
+        201 => 'Created',
+        202 => 'Accepted',
+        203 => 'Non-Authoritative Information',
+        204 => 'No Content',
+        205 => 'Reset Content',
+        206 => 'Partial Content',
+        300 => 'Multiple Choices',
+        301 => 'Moved Permanently',
+        302 => 'Found',
+        303 => 'See Other',
+        304 => 'Not Modified',
+        305 => 'Use Proxy',
+        400 => 'Bad Request',
+        401 => 'Unauthorized',
+        402 => 'Payment Required',
+        403 => 'Forbidden',
+        404 => 'Not Found',
+        405 => 'Method Not Allowed',
+        406 => 'Not Acceptable',
+        407 => 'Proxy Authentication Required',
+        408 => 'Request Timeout',
+        409 => 'Conflict',
+        410 => 'Gone',
+        411 => 'Length Required',
+        412 => 'Precondition Failed',
+        413 => 'Request Entity Too Large',
+        414 => 'Request-URI Too Long',
+        415 => 'Unsupported Media Type',
+        416 => 'Requested Range Not Satisfiable',
+        417 => 'Expectation Failed',
+        429 => 'Too Many Requests',
+        500 => 'Internal Server Error',
+        501 => 'Not Implemented',
+        502 => 'Bad Gateway',
+        503 => 'Service Unavailable',
+        504 => 'Gateway Timeout',
+        505 => 'HTTP Version Not Supported',
     ];
+
     private string $body;
     private int $code;
     private array $headers;
 
-    public function __construct(
-        string $body = '',
-        int $code = 200,
-        array $headers = []
-    ) {
+    public function __construct(string $body = '', int $code = 200, array $headers = [])
+    {
         $this->body = $body;
         $this->code = $code;
         $this->headers = [];
 
         foreach ($headers as $name => $value) {
-            $name = mb_strtolower($name);
+            $name = mb_strtolower((string)$name);
             if (!isset($this->headers[$name])) {
                 $this->headers[$name] = [];
             }
             if (is_string($value)) {
                 $this->headers[$name][] = $value;
-            }
-            if (is_array($value)) {
+            } elseif (is_array($value)) {
                 $this->headers[$name] = $value;
             }
         }
@@ -344,30 +334,23 @@ final class Response
         return $this->headers;
     }
 
-    /**
-     * HTTP response may have multiple headers with the same name.
-     *
-     * This method by default, returns only the last header.
-     *
-     * @return string[]|string|null
-     */
     public function getHeader(string $name, bool $all = false)
     {
         $name = mb_strtolower($name);
         $header = $this->headers[$name] ?? null;
-        if (!$header) {
+        if ($header === null) {
             return null;
         }
         if ($all) {
             return $header;
         }
-        return array_pop($header);
+        return end($header) ?: null;
     }
 
     public function withHeader(string $name, string $value): self
     {
         $clone = clone $this;
-        $clone->headers[$name] = [$value];
+        $clone->headers[mb_strtolower($name)] = [$value];
         return $clone;
     }
 

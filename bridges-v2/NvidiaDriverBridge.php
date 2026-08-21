@@ -136,17 +136,11 @@ final class NvidiaDriverBridge extends BridgeAbstract
             }
 
             $linkNode = $nameCell->querySelector('a');
-            $downloadUrl = 'https:' . ($linkNode !== null ? ($linkNode->getAttribute('href') ?? '') : '');
             $driverName = trim($nameCell->textContent);
             $version = trim($versionCell->textContent);
             $date = trim($dateCell->textContent);
 
             $releaseNotes = $this->extractReleaseNotes($contentSpan);
-            $downloadButton = sprintf(
-                '<p style="margin-top:1em;"><a href="%s" target="_blank" rel="noopener noreferrer" style="%s">Download Driver</a></p>',
-                htmlspecialchars($downloadUrl, ENT_QUOTES, 'UTF-8'),
-                self::CSS['download']
-            );
 
             $content = '<div style="' . self::CSS['wrapper'] . '">' . $releaseNotes . $downloadButton . '</div>';
 
@@ -155,7 +149,6 @@ final class NvidiaDriverBridge extends BridgeAbstract
             $this->items[] = [
                 'timestamp' => $parsedTimestamp !== false ? $parsedTimestamp : null,
                 'title'     => sprintf('%s %s', $driverName, $version),
-                'uri'       => $downloadUrl,
                 'content'   => $content,
             ];
         }

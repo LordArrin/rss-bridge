@@ -111,6 +111,10 @@ final class PawchiveBridge extends BridgeAbstract
         'attachments-heading' => 'margin:0 0 8px 0;font-weight:bold',
         'attachments-list' => 'margin:0;padding:0;list-style:none',
         'attachments-item' => 'margin:4px 0',
+        'poll' => 'padding:15px;margin:10px 0;border-left:4px solid #4a90d9',
+        'poll_t' => 'margin:0 0 10px 0;font-weight:bold',
+        'poll_o' => 'margin:8px 0',
+        'poll_f' => 'margin:10px 0 0 0;color:#888;font-size:0.85em',
     ];
 
     private const array SANITIZE_TAGS_TO_REMOVE = [
@@ -373,7 +377,22 @@ final class PawchiveBridge extends BridgeAbstract
             []
         );
 
-        $html = trim((string)($dom->innertext ?? ''));
+        $result = '';
+
+        if (isset($dom->innertext) === true && is_string($dom->innertext) === true) {
+            $result = trim($dom->innertext);
+        }
+
+        if ($result === '' && method_exists($dom, 'saveHTML') === true) {
+            $saved = $dom->saveHTML();
+            if (is_string($saved) === true) {
+                $result = trim($saved);
+            }
+        }
+
+        if ($result === '') {
+            $result = $this->fallbackSanitize($html);
+        }
 
         $replacements = [
             '/<p>\s*<\/p>/i' => '',
@@ -383,7 +402,27 @@ final class PawchiveBridge extends BridgeAbstract
             '/&nbsp;/i' => ' ',
         ];
 
-        return trim((string)preg_replace(array_keys($replacements), array_values($replacements), $html));
+        return trim((string)preg_replace(array_keys($replacements), array_values($replacements), $result));
+    }
+
+    private function fallbackSanitize(string $html): string
+    {
+        $dangerousTags = ['script', 'iframe', 'object', 'embed', 'applet', 'form', 'input', 'style'];
+
+        foreach ($dangerousTags as $tag) {
+            $html = (string)preg_replace(
+                '/<' . $tag . '\b[^>]*>.*?<\/' . $tag . '>/is',
+                '',
+                $html
+            );
+            $html = (string)preg_replace(
+                '/<' . $tag . '\b[^>]*\/?>/i',
+                '',
+                $html
+            );
+        }
+
+        return $html;
     }
 
     private function sanitizeText(string $text): string
@@ -434,6 +473,110 @@ final class PawchiveBridge extends BridgeAbstract
             self::CSS['url-link'],
             $escapedUrl
         );
+    }
+
+    private function esc(mixed $s): string
+    {
+        return htmlspecialchars(
+            string: (string)$s,
+            flags: ENT_QUOTES | ENT_HTML5,
+            encoding: 'UTF-8'
+        );
+    }
+
+    private function style(string $key, string $extra = ''): string
+    {
+        $css = self::CSS[$key] ?? '';
+        if ($extra !== '') {
+            $css = ($css !== '' ? $css . ';' : '') . $extra;
+        }
+        return $css !== '' ? ' style="' . $css . '"' : '';
+    }
+
+    private function renderPoll(array $poll): string
+    {
+        $title = $poll['title'] ?? '';
+        if (is_array($title) === true) {
+            $title = implode(' ', $title);
+        }
+
+        $choices = $poll['choices'] ?? [];
+        $allowMultiple = (bool)($poll['allow_multiple'] ?? false);
+        $isFinished = (bool)($poll['is_finished'] ?? false);
+        $showResults = (bool)($poll['show_results'] ?? true);
+        $isResultVisible = (bool)($poll['is_result_visible'] ?? true);
+
+        if (empty($choices) === true || is_array($choices) === false) {
+            return '';
+        }
+
+        $total = (int)($poll['counter'] ?? 0);
+        if ($total === 0) {
+            foreach ($choices as $choice) {
+                $total += (int)($choice['votes'] ?? 0);
+            }
+        }
+
+        $resultsVisible = $isFinished === true
+            || $showResults === true
+            || $isResultVisible === true;
+
+        if ($resultsVisible === false) {
+            foreach ($choices as $choice) {
+                if (isset($choice['votes']) === true && $choice['votes'] > 0) {
+                    $resultsVisible = true;
+                    break;
+                }
+            }
+        }
+
+        $h = '<div' . $this->style('poll') . '>';
+
+        if ($title !== '') {
+            $h .= '<p' . $this->style('poll_t') . '>' . $this->esc($title) . '</p>';
+        }
+
+        foreach ($choices as $choice) {
+            $text = $this->esc($choice['text'] ?? '');
+            $votes = (int)($choice['votes'] ?? 0);
+
+            if ($text === '') {
+                continue;
+            }
+
+            $h .= '<div' . $this->style('poll_o') . '>';
+
+            if ($resultsVisible === true) {
+                $pct = $total > 0 ? (int)round(($votes / $total) * 100) : 0;
+                $pct = max(0, min(100, $pct));
+                $filled = (int)round($pct / 5);
+                $bar = '[' . str_repeat('#', $filled) . str_repeat('.', 20 - $filled) . ']';
+
+                $h .= '<b>' . $pct . '%</b> ' . $text . '<br />';
+                $h .= '<code>' . $bar . '</code>';
+            } else {
+                $h .= $text;
+            }
+
+            $h .= '</div>';
+        }
+
+        $footer = [];
+        if ($total > 0) {
+            $footer[] = $total . ' voters';
+        }
+        if ($allowMultiple === true) {
+            $footer[] = 'Multiple choice';
+        }
+        if ($isFinished === true) {
+            $footer[] = 'Finished';
+        }
+
+        if ($footer !== []) {
+            $h .= '<p' . $this->style('poll_f') . '>' . implode(' &#183; ', $footer) . '</p>';
+        }
+
+        return $h . '</div>';
     }
 
     private function getJson(string $endpoint): array
@@ -768,6 +911,10 @@ final class PawchiveBridge extends BridgeAbstract
         $downloadLinks = [];
         $this->processFiles($files, $hideAttachments, $contentHtml, $downloadLinks);
         $contentHtml .= $this->renderAttachmentsBlock($downloadLinks);
+
+        if (empty($post['poll']) === false && is_array($post['poll']) === true) {
+            $contentHtml .= $this->renderPoll($post['poll']);
+        }
 
         $item['content'] = $contentHtml;
 
