@@ -11,7 +11,7 @@ final class TheWhiteboardBridge extends BridgeAbstract
     public const NAME = 'The Whiteboard';
     public const URI = 'https://www.the-whiteboard.com/';
     public const DESCRIPTION = 'Get the latest comic from The Whiteboard';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public function collectData(): void

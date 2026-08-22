@@ -10,11 +10,12 @@ use function urljoin;
 
 final class PanoramaBridge extends BridgeAbstract
 {
-    public const MAINTAINER = 'LordArrin';
     public const NAME = 'IA Panorama';
     public const URI = 'https://panorama.pub';
     public const DESCRIPTION = 'News feed of the Russian satirical information agency "Panorama"';
+    public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 3600;
+
     public const PARAMETERS = [];
 
     public const REQUEST_DELAY_US = 800000;

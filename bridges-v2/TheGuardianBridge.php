@@ -11,8 +11,9 @@ final class TheGuardianBridge extends FeedExpander
     public const NAME = 'The Guardian';
     public const URI = 'https://www.theguardian.com/';
     public const DESCRIPTION = 'RSS feed for The Guardian';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 1200;
+
     public const PARAMETERS = [[
         'feed' => [
             'name' => 'Feed',

@@ -11,7 +11,7 @@ final class BleepingComputerBridge extends FeedExpander
     public const NAME = 'Bleeping Computer';
     public const URI = 'https://www.bleepingcomputer.com/';
     public const DESCRIPTION = 'Returns the newest articles.';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
 
     public const CACHE_TIMEOUT = 3600;
 

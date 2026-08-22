@@ -11,7 +11,7 @@ final class PinterestBridge extends FeedExpander
     public const NAME = 'Pinterest';
     public const URI = 'https://www.pinterest.com';
     public const DESCRIPTION = 'Returns the newest images on a board';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
 
     public const CACHE_TIMEOUT = 3600;
 

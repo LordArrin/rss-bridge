@@ -11,7 +11,7 @@ final class NvidiaDriverBridge extends BridgeAbstract
     public const NAME = 'NVIDIA Driver Releases';
     public const URI = 'https://www.nvidia.com/Download/processFind.aspx';
     public const DESCRIPTION = 'Fetch the latest NVIDIA driver updates';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 86400;
 
     public const PARAMETERS = [

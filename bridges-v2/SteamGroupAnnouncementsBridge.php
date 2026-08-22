@@ -11,7 +11,7 @@ final class SteamGroupAnnouncementsBridge extends FeedExpander
     public const NAME = 'Steam Group Announcements';
     public const URI = 'https://steamcommunity.com/';
     public const DESCRIPTION = 'Returns latest announcements from a steam group';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public const PARAMETERS = [

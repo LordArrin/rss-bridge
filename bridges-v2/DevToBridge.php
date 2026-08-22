@@ -11,7 +11,7 @@ final class DevToBridge extends BridgeAbstract
     public const NAME = 'dev.to';
     public const URI = 'https://dev.to';
     public const DESCRIPTION = 'Returns feeds for tags';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 10800;
 
     public const CONTEXT_BY_TAG = 'By tag';

@@ -11,7 +11,7 @@ final class TheYeteeBridge extends BridgeAbstract
     public const NAME = 'TheYetee';
     public const URI = 'https://theyetee.com';
     public const DESCRIPTION = 'Fetch daily shirts from The Yetee';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 14400;
 
     public function collectData(): void

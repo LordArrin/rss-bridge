@@ -11,7 +11,7 @@ final class ArsTechnicaBridge extends FeedExpander
     public const NAME = 'Ars Technica';
     public const URI = 'https://arstechnica.com/';
     public const DESCRIPTION = 'Returns the latest articles from Ars Technica';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public const PARAMETERS = [[

@@ -11,7 +11,7 @@ final class TheDriveBridge extends FeedExpander
     public const NAME = 'The Drive';
     public const URI = 'https://www.thedrive.com/';
     public const DESCRIPTION = 'Car news from thedrive.com';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public function collectData(): void

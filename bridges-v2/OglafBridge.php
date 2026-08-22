@@ -11,7 +11,7 @@ final class OglafBridge extends FeedExpander
     public const NAME = 'Oglaf';
     public const URI = 'https://www.oglaf.com/';
     public const DESCRIPTION = 'Fetch the entire comic image';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public const PARAMETERS = [

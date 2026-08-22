@@ -13,7 +13,7 @@ final class LogicMastersBridge extends BridgeAbstract
     public const NAME = 'Logic Masters Deutschland e.V.';
     public const URI = 'https://logic-masters.de/';
     public const DESCRIPTION = 'Aktuelles';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public function collectData(): void

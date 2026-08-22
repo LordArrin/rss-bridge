@@ -12,8 +12,8 @@ final class BrotFuerDieWeltBridge extends BridgeAbstract
 {
     public const NAME = 'Brot fur die Welt';
     public const URI = 'https://www.brot-fuer-die-welt.de';
-    public const DESCRIPTION = 'Listet die letzten Blogeintrage bzw. Pressemitteilungen von Brot fur die Welt.';
-    public const MAINTAINER = 'no maintainer';
+    public const DESCRIPTION = 'Listet die letzten Blogeintrage bzw. Pressemitteilungen von Brot fur die Welt';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public const PARAMETERS = [[

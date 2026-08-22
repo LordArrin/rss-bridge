@@ -8,11 +8,12 @@ use FeedExpander;
 
 final class GolemBridge extends FeedExpander
 {
-    public const MAINTAINER = 'Mynacol';
     public const NAME = 'Golem';
     public const URI = 'https://www.golem.de/';
-    public const CACHE_TIMEOUT = 1800;
     public const DESCRIPTION = 'Returns the full articles instead of only the intro';
+    public const MAINTAINER = 'No maintainer';
+    public const CACHE_TIMEOUT = 1800;
+
     public const PARAMETERS = [[
         'category' => [
             'name' => 'Category',

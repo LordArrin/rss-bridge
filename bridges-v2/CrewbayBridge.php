@@ -11,7 +11,7 @@ final class CrewbayBridge extends BridgeAbstract
     public const NAME = 'Crewbay';
     public const URI = 'https://www.crewbay.com';
     public const DESCRIPTION = 'Returns the newest sailing offers.';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public const PARAMETERS = [

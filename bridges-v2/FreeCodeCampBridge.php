@@ -11,7 +11,7 @@ final class FreeCodeCampBridge extends FeedExpander
     public const NAME = 'FreeCodecamp';
     public const URI = 'https://www.freecodecamp.org';
     public const DESCRIPTION = 'RSS feed for FreeCodeCamp';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public function collectData(): void

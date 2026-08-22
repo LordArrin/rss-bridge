@@ -11,7 +11,7 @@ final class BastaBridge extends BridgeAbstract
     public const NAME = 'Bastamag';
     public const URI = 'https://www.bastamag.net/';
     public const DESCRIPTION = 'Returns the newest articles.';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public const PARAMETERS = [[

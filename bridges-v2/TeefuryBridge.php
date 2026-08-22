@@ -13,7 +13,7 @@ final class TeefuryBridge extends BridgeAbstract
     public const NAME = 'Teefury';
     public const URI = 'https://www.teefury.com';
     public const DESCRIPTION = 'Returns the daily designs';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 10800;
 
     public function collectData(): void

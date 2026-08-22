@@ -11,7 +11,7 @@ final class ActivisionResearchBridge extends BridgeAbstract
     public const NAME = 'Activision Research Blog';
     public const URI = 'https://research.activision.com';
     public const DESCRIPTION = 'Posts from the Activision Research blog';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
 
     public const CACHE_TIMEOUT = 86400;
 

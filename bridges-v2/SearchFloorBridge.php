@@ -10,10 +10,10 @@ use function urljoin;
 
 final class SearchFloorBridge extends BridgeAbstract
 {
-    public const MAINTAINER = 'LordArrin';
     public const NAME = 'SearchFloor';
     public const URI = 'https://searchfloor.org';
     public const DESCRIPTION = 'Returns updates to all books by an author or a single book by ID.';
+    public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 3600;
 
     public const PARAMETERS = [

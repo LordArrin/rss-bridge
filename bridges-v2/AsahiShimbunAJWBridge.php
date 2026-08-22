@@ -11,7 +11,7 @@ final class AsahiShimbunAJWBridge extends BridgeAbstract
     public const NAME = 'Asahi Shimbun AJW';
     public const URI = 'http://www.asahi.com/ajw/';
     public const DESCRIPTION = 'Asahi Shimbun - Asia & Japan Watch';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public const PARAMETERS = [

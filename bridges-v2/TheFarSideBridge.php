@@ -11,7 +11,7 @@ final class TheFarSideBridge extends BridgeAbstract
     public const NAME = 'The Far Side';
     public const URI = 'https://www.thefarside.com';
     public const DESCRIPTION = 'Returns the daily dose';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public function collectData(): void

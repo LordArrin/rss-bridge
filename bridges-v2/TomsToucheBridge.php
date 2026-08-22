@@ -10,8 +10,8 @@ final class TomsToucheBridge extends BridgeAbstract
 {
     public const NAME = 'Toms Touche';
     public const URI = 'https://taz.de/#!tom=tomdestages';
-    public const DESCRIPTION = 'Your daily dose of Toms Touche.';
-    public const MAINTAINER = 'no maintainer';
+    public const DESCRIPTION = 'Your daily dose of Toms Touche';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public function collectData(): void

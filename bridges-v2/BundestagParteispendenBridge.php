@@ -10,8 +10,8 @@ final class BundestagParteispendenBridge extends BridgeAbstract
 {
     public const NAME = 'Deutscher Bundestag - Parteispenden';
     public const URI = 'https://www.bundestag.de/parlament/praesidium/parteienfinanzierung/fundstellen50000';
-    public const DESCRIPTION = 'Returns the latest "soft money" donations to parties represented in the German Bundestag.';
-    public const MAINTAINER = 'no maintainer';
+    public const DESCRIPTION = 'Returns the latest "soft money" donations to parties represented in the German Bundestag';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 86400;
 
     private const CONTENT_TEMPLATE = <<<TMPL

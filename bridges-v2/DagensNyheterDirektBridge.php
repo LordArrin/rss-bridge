@@ -11,7 +11,7 @@ final class DagensNyheterDirektBridge extends BridgeAbstract
     public const NAME = 'Dagens Nyheter Direkt';
     public const URI = 'https://www.dn.se/direkt/';
     public const DESCRIPTION = 'Latest news summarised by Dagens Nyheter';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public const PARAMETERS = [[

@@ -11,7 +11,7 @@ final class ABCNewsBridge extends BridgeAbstract
     public const NAME = 'ABC News';
     public const URI = 'https://www.abc.net.au';
     public const DESCRIPTION = 'Topics of the Australian Broadcasting Corporation';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
 
     public const CACHE_TIMEOUT = 3600;
 

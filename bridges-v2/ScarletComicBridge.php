@@ -11,7 +11,7 @@ final class ScarletComicBridge extends FeedExpander
     public const NAME = 'Scarlet Comics';
     public const URI = 'https://www.sandraandwoo.com';
     public const DESCRIPTION = 'Fetch the entire comic page';
-    public const MAINTAINER = 'no maintainer';
+    public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
     public const PARAMETERS = [

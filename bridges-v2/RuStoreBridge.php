@@ -13,6 +13,7 @@ final class RuStoreBridge extends BridgeAbstract
     public const DESCRIPTION = 'Returns application updates with its changelog';
     public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 3600;
+
     public const PARAMETERS = [
         [
             'package' => [
