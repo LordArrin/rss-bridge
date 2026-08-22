@@ -30,7 +30,7 @@ RUN set -xe && \
 # ============================================================
 FROM alpine:${ALPINE_VERSION} AS runtime
 
-ARG IMAGE_VERSION=1.1.9
+ARG IMAGE_VERSION=1.2.0
 ENV RSSBRIDGE_SYSTEM_VERSION=${IMAGE_VERSION}
 ENV CURL_IMPERSONATE=firefox147
 
@@ -71,8 +71,9 @@ RUN set -xe && \
     # Remove default PHP-FPM pool config
     rm -f /etc/php85/php-fpm.d/www.conf && \
     # Prepare runtime directories
-    mkdir -p /run/php85 /app/cache && \
-    chown nginx:nginx /run/php85 /app/cache && \
+    mkdir -p /run/php85 /app/cache /app/cache/opcache && \
+    chown -R nginx:nginx /run/php85 /app/cache && \
+    chmod 750 /app/cache/opcache && \
     # Protect libcurl from being upgraded
     echo "libcurl" >> /etc/apk/protected_paths.d/lst && \
     # Clean up package cache
@@ -107,6 +108,7 @@ RUN composer install --optimize-autoloader --no-interaction --ignore-platform-re
 RUN chmod +x /app/bin/* && \
     chmod +x /app/docker-entrypoint.sh
 
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD curl -fsS --compressed "http://localhost/?action=health" || exit 1
 

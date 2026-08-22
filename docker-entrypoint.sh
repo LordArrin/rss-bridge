@@ -34,6 +34,12 @@ if [ -n "${HTTP_PORT:-}" ]; then
     sed -i "s/listen 80/listen ${HTTP_PORT}/g" /etc/nginx/http.d/default.conf
 fi
 
+# Clear OPcache file cache on startup
+if [ -d /app/cache/opcache ]; then
+    rm -rf /app/cache/opcache/* 2>/dev/null || true
+    echo "OPcache file cache cleared"
+fi
+
 # Generate composer autoloader if missing
 if [ ! -f /app/vendor/autoload.php ]; then
     echo "Generating composer autoloader..."
@@ -43,6 +49,8 @@ fi
 # Build bridge metadata cache
 php /app/bin/cache-bridge-metadata || echo "Warning: cache build failed (non-fatal)"
 
+# Start nginx
 nginx
 
+# Start PHP-FPM
 exec php-fpm85 --nodaemonize
