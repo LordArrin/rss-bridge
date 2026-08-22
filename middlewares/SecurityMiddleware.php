@@ -2,12 +2,17 @@
 
 declare(strict_types=1);
 
+namespace RSSBridge\Middlewares;
+
+use Request;
+use Response;
+
 /**
  * Make sure that only strings are allowed in GET parameters
  */
-class SecurityMiddleware implements Middleware
+final class SecurityMiddleware implements Middleware
 {
-    public function __invoke(Request $request, $next): Response
+    public function __invoke(Request $request, callable $next): Response
     {
         foreach ($request->toArray() as $key => $value) {
             if (!is_string($value)) {
@@ -16,6 +21,7 @@ class SecurityMiddleware implements Middleware
                 ]), 400);
             }
         }
+
         return $next($request);
     }
 }

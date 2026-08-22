@@ -2,7 +2,13 @@
 
 declare(strict_types=1);
 
-class ExceptionMiddleware implements Middleware
+namespace RSSBridge\Middlewares;
+
+use Logger;
+use Request;
+use Response;
+
+final class ExceptionMiddleware implements Middleware
 {
     private Logger $logger;
 
@@ -11,7 +17,7 @@ class ExceptionMiddleware implements Middleware
         $this->logger = $logger;
     }
 
-    public function __invoke(Request $request, $next): Response
+    public function __invoke(Request $request, callable $next): Response
     {
         try {
             return $next($request);

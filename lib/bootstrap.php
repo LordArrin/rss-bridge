@@ -23,7 +23,7 @@ foreach ($files as $file) {
 }
 
 // Legacy autoloader for old bridges in global namespace.
-// Note: caches, parsedown, and urljoin are now handled by Composer PSR-4 autoloader.
+// Note: caches, parsedown, urljoin, and middlewares are now handled by Composer PSR-4 autoloader.
 spl_autoload_register(function ($className) {
     // Skip namespaced classes - Composer handles those
     if (str_contains($className, '\\')) {
@@ -35,7 +35,6 @@ spl_autoload_register(function ($className) {
         __DIR__ . '/../bridges/',
         __DIR__ . '/../formats/',
         __DIR__ . '/../lib/',
-        __DIR__ . '/../middlewares/',
         __DIR__ . '/../proxies/',
     ];
 

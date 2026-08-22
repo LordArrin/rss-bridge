@@ -9,8 +9,16 @@ use RSSBridge\Actions\DisplayAction;
 use RSSBridge\Actions\FrontpageAction;
 use RSSBridge\Actions\HealthAction;
 use RSSBridge\Actions\ListAction;
+use RSSBridge\Middlewares\BasicAuthMiddleware;
+use RSSBridge\Middlewares\CacheMiddleware;
+use RSSBridge\Middlewares\ExceptionMiddleware;
+use RSSBridge\Middlewares\MaintenanceMiddleware;
+use RSSBridge\Middlewares\SecurityMiddleware;
+use RSSBridge\Middlewares\TokenAuthenticationMiddleware;
 
 $container = new Container();
+
+// === Actions ===
 
 $container[ConnectivityAction::class] = function ($c) {
     return new ConnectivityAction($c['bridge_factory'], $c['safe_bridge_loader']);
@@ -35,6 +43,8 @@ $container[HealthAction::class] = function ($c) {
 $container[ListAction::class] = function ($c) {
     return new ListAction($c['bridge_factory'], $c['safe_bridge_loader']);
 };
+
+// === Core Services ===
 
 $container['bridge_factory'] = function ($c) {
     return new BridgeFactory($c['cache'], $c['logger']);
@@ -84,6 +94,32 @@ $container['bridge_metadata_cache'] = function ($c) {
             __DIR__ . '/../bridges-v2',
         ]
     );
+};
+
+// === Middlewares ===
+
+$container[BasicAuthMiddleware::class] = function () {
+    return new BasicAuthMiddleware();
+};
+
+$container[CacheMiddleware::class] = function ($c) {
+    return new CacheMiddleware($c['cache']);
+};
+
+$container[ExceptionMiddleware::class] = function ($c) {
+    return new ExceptionMiddleware($c['logger']);
+};
+
+$container[MaintenanceMiddleware::class] = function () {
+    return new MaintenanceMiddleware();
+};
+
+$container[SecurityMiddleware::class] = function () {
+    return new SecurityMiddleware();
+};
+
+$container[TokenAuthenticationMiddleware::class] = function () {
+    return new TokenAuthenticationMiddleware();
 };
 
 return $container;

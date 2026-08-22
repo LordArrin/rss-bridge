@@ -2,9 +2,14 @@
 
 declare(strict_types=1);
 
+namespace RSSBridge\Middlewares;
+
+use Configuration;
+use Request;
+use Response;
 use RSSBridge\Caches\CacheInterface;
 
-final class CacheMiddleware
+final class CacheMiddleware implements Middleware
 {
     private CacheInterface $cache;
 
