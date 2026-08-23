@@ -138,7 +138,7 @@ final class NasaApodBridge extends BridgeAbstract
                     $text = trim($node->textContent);
 
                     // Match pattern like "2026 August 20"
-                    if (preg_match('/^(\d{4})\s+([A-Za-z]+)\s+(\d{1,2})$/', $text, $matches)) {
+                    if (preg_match('/^(\d{4})\s+([A-Za-z]+)\s+(\d{1,2})$/', $text, $matches) === 1) {
                         $dateString = $matches[1] . ' ' . $matches[2] . ' ' . $matches[3];
                         $parsed = strtotime($dateString);
                         if ($parsed !== false) {

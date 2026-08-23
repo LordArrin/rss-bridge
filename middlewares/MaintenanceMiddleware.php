@@ -12,7 +12,7 @@ final class MaintenanceMiddleware implements Middleware
 {
     public function __invoke(Request $request, callable $next): Response
     {
-        if (!Configuration::getConfig('system', 'enable_maintenance_mode')) {
+        if ((bool) Configuration::getConfig('system', 'enable_maintenance_mode') === false) {
             return $next($request);
         }
 

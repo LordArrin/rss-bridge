@@ -18,7 +18,7 @@ final class ArrayCache implements CacheInterface
 
     public function get(string $key, mixed $default = null): mixed
     {
-        if (!array_key_exists($key, $this->data)) {
+        if (array_key_exists($key, $this->data) === false) {
             return $default;
         }
 

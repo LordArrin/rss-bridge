@@ -31,12 +31,12 @@ final class ConnectivityAction implements ActionInterface
         }
 
         $bridgeName = $request->get('bridge');
-        if (!$bridgeName) {
+        if ($bridgeName === false) {
             return new Response(render_template('connectivity.html.php'));
         }
 
         $bridgeClassName = $this->bridgeFactory->createBridgeClassName($bridgeName);
-        if (!$bridgeClassName) {
+        if ($bridgeClassName === false) {
             return new Response('Bridge not found', 404);
         }
 
@@ -45,13 +45,13 @@ final class ConnectivityAction implements ActionInterface
 
     private function reportBridgeConnectivity(string $bridgeClassName): Response
     {
-        if (!$this->bridgeFactory->isEnabled($bridgeClassName)) {
+        if ($this->bridgeFactory->isEnabled($bridgeClassName) === false) {
             throw new \Exception('Bridge is not whitelisted!');
         }
 
         $bridge = $this->safeLoader->createSafely($bridgeClassName);
 
-        if ($this->safeLoader->isBridgeBroken($bridge)) {
+        if ($this->safeLoader->isBridgeBroken($bridge) === true) {
             $brokenInfo = $this->safeLoader->getBrokenBridges()[$bridgeClassName] ?? ['message' => 'Unknown error'];
             return new Response(Json::encode([
                 'bridge'     => $bridgeClassName,
@@ -75,11 +75,10 @@ final class ConnectivityAction implements ActionInterface
         try {
             $response = getContents($bridge::URI, [], $curl_opts, true);
             $result['http_code'] = $response->getCode();
-            if (in_array($result['http_code'], [200], true)) {
+            if (in_array($result['http_code'], [200], true) === true) {
                 $result['successful'] = true;
             }
         } catch (\Exception $e) {
-            // Silently ignore
         }
 
         return new Response(Json::encode($result), 200, ['content-type' => 'text/json']);

@@ -20,10 +20,10 @@ final class SfeedFormat extends FormatAbstract
     public function render(): string
     {
         $text = '';
-        
+
         foreach ($this->getItems() as $item) {
             $itemArray = $item->toArray();
-            
+
             $timestamp = $itemArray['timestamp'] ?? '';
             $title = $this->escape((string) ($itemArray['title'] ?? ''));
             $uri = (string) ($itemArray['uri'] ?? '');

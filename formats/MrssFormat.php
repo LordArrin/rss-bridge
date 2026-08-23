@@ -45,7 +45,7 @@ final class MrssFormat extends FormatAbstract
         $title = $feedArray['name'] ?? '';
 
         foreach ($feedArray as $feedKey => $feedValue) {
-            if (in_array($feedKey, ['atom', 'donationUri'], true)) {
+            if (in_array($feedKey, ['atom', 'donationUri'], true) === true) {
                 continue;
             }
             if ($feedKey === 'name') {
@@ -75,7 +75,7 @@ final class MrssFormat extends FormatAbstract
                 $linkSelf->setAttribute('href', $feedUrl);
             } elseif ($feedKey === 'icon') {
                 $icon = $feedValue;
-                if ($icon) {
+                if ((bool) $icon === true) {
                     $feedImage = $document->createElement('image');
                     $channel->appendChild($feedImage);
                     $iconUrl = $document->createElement('url');
@@ -111,25 +111,25 @@ final class MrssFormat extends FormatAbstract
             $itemUid = $item->getUid();
             $isPermaLink = 'false';
 
-            if (empty($itemUid) && !empty($itemUri)) {
+            if (empty($itemUid) === true && empty($itemUri) === false) {
                 $itemUid = $itemUri;
                 $isPermaLink = 'true';
             }
 
-            if (empty($itemUid)) {
+            if (empty($itemUid) === true) {
                 $itemUid = hash('sha1', (string) $itemTitle . $itemContent);
             }
 
             $entry = $document->createElement('item');
             $channel->appendChild($entry);
 
-            if (!empty($itemTitle)) {
+            if (empty($itemTitle) === false) {
                 $entryTitle = $document->createElement('title');
                 $entry->appendChild($entryTitle);
                 $entryTitle->appendChild($document->createTextNode((string) $itemTitle));
             }
 
-            if (isset($itemArray['itunes'])) {
+            if (isset($itemArray['itunes']) === true) {
                 $feed->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:itunes', self::ITUNES_NS);
                 foreach ((array) $itemArray['itunes'] as $itunesKey => $itunesValue) {
                     $itunesProperty = $document->createElementNS(self::ITUNES_NS, (string) $itunesKey);
@@ -137,7 +137,7 @@ final class MrssFormat extends FormatAbstract
                     $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
                 }
 
-                if (isset($itemArray['enclosure'])) {
+                if (isset($itemArray['enclosure']) === true) {
                     $itunesEnclosure = $document->createElement('enclosure');
                     $entry->appendChild($itunesEnclosure);
                     $itunesEnclosure->setAttribute('url', (string) $itemArray['enclosure']['url']);
@@ -146,7 +146,7 @@ final class MrssFormat extends FormatAbstract
                 }
             }
 
-            if (!empty($itemUri)) {
+            if (empty($itemUri) === false) {
                 $entryLink = $document->createElement('link');
                 $entry->appendChild($entryLink);
                 $entryLink->appendChild($document->createTextNode((string) $itemUri));
@@ -157,13 +157,13 @@ final class MrssFormat extends FormatAbstract
             $entry->appendChild($entryGuid);
             $entryGuid->appendChild($document->createTextNode((string) $itemUid));
 
-            if (!empty($itemTimestamp)) {
+            if (empty($itemTimestamp) === false) {
                 $entryPublished = $document->createElement('pubDate');
                 $entry->appendChild($entryPublished);
                 $entryPublished->appendChild($document->createTextNode(gmdate(\DATE_RFC2822, $itemTimestamp)));
             }
 
-            if (!empty($itemContent)) {
+            if (empty($itemContent) === false) {
                 $entryDescription = $document->createElement('description');
                 $entry->appendChild($entryDescription);
                 $entryDescription->appendChild($document->createTextNode($itemContent));

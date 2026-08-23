@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+namespace RSSBridge\Proxies;
+
+use Logger;
 use RSSBridge\Caches\CacheInterface;
 
 abstract class ProxyAbstract implements ProxyInterface
@@ -10,20 +13,20 @@ abstract class ProxyAbstract implements ProxyInterface
     protected int $timeout = 180;
     protected int $maxRetries = 3;
     protected ?CacheInterface $cache = null;
-    protected ?\Logger $logger = null;
+    protected ?Logger $logger = null;
 
     public function __construct(array $config = [])
     {
         $this->config = $config;
-        
+
         global $container;
-        if (isset($container['cache'])) {
+        if (isset($container['cache']) === true) {
             $this->cache = $container['cache'];
         }
-        if (isset($container['logger'])) {
+        if (isset($container['logger']) === true) {
             $this->logger = $container['logger'];
         }
-        
+
         $this->initialize();
     }
 
@@ -48,11 +51,11 @@ abstract class ProxyAbstract implements ProxyInterface
     {
         $cacheTtl = $options['cache_ttl'] ?? 3600;
         $useCache = $options['use_cache'] ?? true;
-        
-        if ($useCache && $this->cache) {
+
+        if ($useCache === true && (bool) $this->cache === true) {
             $cacheKey = $this->buildCacheKey($url, $options);
             $cached = $this->cache->get($cacheKey);
-            
+
             if ($cached !== null) {
                 $this->log('debug', "Cache hit for {$url}");
                 return $cached;
@@ -62,11 +65,11 @@ abstract class ProxyAbstract implements ProxyInterface
         $this->log('info', "Fetching {$url} via {$this->getName()}");
         $html = $this->fetchHtml($url, $options);
 
-        if (!$this->validateResponse($html)) {
+        if ($this->validateResponse($html) === false) {
             throw new \RuntimeException("Proxy returned invalid response for {$url}");
         }
 
-        if ($useCache && $this->cache && $cacheTtl > 0) {
+        if ($useCache === true && (bool) $this->cache === true && $cacheTtl > 0) {
             $cacheKey = $this->buildCacheKey($url, $options);
             $this->cache->set($cacheKey, $html, $cacheTtl);
         }
@@ -82,13 +85,14 @@ abstract class ProxyAbstract implements ProxyInterface
     {
         throw new \RuntimeException('Binary downloads not supported by ' . $this->getName());
     }
+
     /**
      * Basic response validation.
      * Overridden in child classes for specific logic (e.g. Cloudflare check).
      */
     protected function validateResponse(string $response): bool
     {
-        return !empty($response);
+        return empty($response) === false;
     }
 
     protected function buildCacheKey(string $url, array $options): string
@@ -101,13 +105,13 @@ abstract class ProxyAbstract implements ProxyInterface
      */
     protected function log(string $level, string $message, array $context = []): void
     {
-        if (!$this->logger) {
+        if ((bool) $this->logger === false) {
             return;
         }
 
         $fullMessage = "[Proxy: {$this->getName()}] {$message}";
-        
-        if (method_exists($this->logger, $level)) {
+
+        if (method_exists($this->logger, $level) === true) {
             $this->logger->$level($fullMessage, $context);
         } else {
             $this->logger->info($fullMessage, $context);
@@ -129,7 +133,7 @@ abstract class ProxyAbstract implements ProxyInterface
             } catch (\Exception $e) {
                 $lastError = $e->getMessage();
                 $attempt++;
-                
+
                 if ($attempt < $this->maxRetries) {
                     sleep(2 ** ($attempt - 1));
                 }

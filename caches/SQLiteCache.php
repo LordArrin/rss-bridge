@@ -31,7 +31,7 @@ final class SQLiteCache implements CacheInterface
 
         $config = array_merge($default, $config);
 
-        if (!$config['file']) {
+        if ((bool) $config['file'] === false) {
             throw new \Exception('SQLiteCache needs a file path');
         }
 
@@ -45,22 +45,22 @@ final class SQLiteCache implements CacheInterface
             $dir = PATH_CACHE;
         }
 
-        if (!is_dir($dir)) {
+        if (is_dir($dir) === false) {
             throw new \Exception(sprintf('Invalid directory for SQLiteCache: %s', $dir));
         }
 
-        if (!is_writable($dir)) {
+        if (is_writable($dir) === false) {
             throw new \Exception(sprintf('The directory for SQLiteCache is not writable: %s', $dir));
         }
 
-        if (file_exists($file) && !is_writable($file)) {
+        if (file_exists($file) === true && is_writable($file) === false) {
             throw new \Exception(sprintf('The SQLiteCache file is not writable: %s', $file));
         }
 
         $this->db = new \SQLite3($file);
         $this->db->enableExceptions(true);
 
-        if (!is_file($file) || filesize($file) === 0) {
+        if (is_file($file) === false || filesize($file) === 0) {
             $this->db->exec("CREATE TABLE storage (
                 'key' BLOB PRIMARY KEY,
                 'value' BLOB,
@@ -86,7 +86,7 @@ final class SQLiteCache implements CacheInterface
         $stmt->bindValue(':key', $cacheKey, \SQLITE3_BLOB);
 
         $result = $stmt->execute();
-        if (!$result) {
+        if ($result === false) {
             return $default;
         }
 
@@ -153,7 +153,7 @@ final class SQLiteCache implements CacheInterface
 
     public function prune(): void
     {
-        if (!$this->enablePurge) {
+        if ($this->enablePurge === false) {
             return;
         }
 

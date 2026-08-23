@@ -22,7 +22,7 @@ final class CacheMiddleware implements Middleware
     {
         // Skip caching for certain actions
         $action = $request->get('action', 'display');
-        if (in_array($action, ['frontpage', 'health', 'detect'], true)) {
+        if (in_array($action, ['frontpage', 'health', 'detect'], true) === true) {
             return $next($request);
         }
 
@@ -38,8 +38,8 @@ final class CacheMiddleware implements Middleware
         // Execute the next middleware/action
         $response = $next($request);
 
-        // Cache successful responses
-        if ($response->getCode() === 200) {
+        // Cache only successful responses (2xx)
+        if ($response->getCode() >= 200 && $response->getCode() < 300) {
             $ttl = Configuration::getConfig('cache', 'timeout') ?? 900;
             $this->cache->set($cacheKey, $response, $ttl);
         }

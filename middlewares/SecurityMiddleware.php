@@ -15,7 +15,7 @@ final class SecurityMiddleware implements Middleware
     public function __invoke(Request $request, callable $next): Response
     {
         foreach ($request->toArray() as $key => $value) {
-            if (!is_string($value)) {
+            if (is_string($value) === false) {
                 return new Response(render(__DIR__ . '/../templates/error.html.php', [
                     'message' => "Query parameter \"$key\" is not a string.",
                 ]), 400);

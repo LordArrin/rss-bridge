@@ -12,28 +12,28 @@ final class TokenAuthenticationMiddleware implements Middleware
 {
     public function __invoke(Request $request, callable $next): Response
     {
-        if (!Configuration::getConfig('authentication', 'token')) {
+        $token = Configuration::getConfig('authentication', 'token');
+        if ((bool) $token === false) {
             return $next($request);
         }
 
-        $token = $request->get('token');
+        $requestToken = $request->get('token');
 
-        if (!$token) {
+        if ((bool) $requestToken === false) {
             return new Response(render(__DIR__ . '/../templates/token.html.php', [
                 'message' => 'Missing token',
                 'token' => '',
             ]), 401);
         }
 
-        if (!hash_equals(Configuration::getConfig('authentication', 'token'), $token)) {
+        if (hash_equals($token, $requestToken) === false) {
             return new Response(render(__DIR__ . '/../templates/token.html.php', [
                 'message' => 'Invalid token',
-                'token' => $token,
+                'token' => $requestToken,
             ]), 401);
         }
 
-        $request = $request->withAttribute('token', $token);
-
+        $request = $request->withAttribute('token', $requestToken);
         return $next($request);
     }
 }

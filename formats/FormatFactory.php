@@ -41,15 +41,15 @@ final class FormatFactory
         // Scan formats directory for any additional (custom) formats
         // that aren't in the built-in list
         $formatsDir = __DIR__;
-        if (is_dir($formatsDir)) {
+        if (is_dir($formatsDir) === true) {
             $iterator = new \FilesystemIterator($formatsDir);
             foreach ($iterator as $file) {
-                if (!$file->isFile()) {
+                if ($file->isFile() === false) {
                     continue;
                 }
-                if (preg_match('/^([A-Z][a-zA-Z0-9]*)Format\.php$/', $file->getFilename(), $m)) {
+                if ((bool) preg_match('/^([A-Z][a-zA-Z0-9]*)Format\.php$/', $file->getFilename(), $m) === true) {
                     $name = $m[1];
-                    if (!in_array($name, $this->formatNames, true)) {
+                    if (in_array($name, $this->formatNames, true) === false) {
                         $this->formatNames[] = $name;
                     }
                 }
@@ -66,7 +66,7 @@ final class FormatFactory
      */
     public function create(string $name): FormatInterface
     {
-        if (!preg_match('/^[a-zA-Z0-9-]+$/', $name)) {
+        if ((bool) preg_match('/^[a-zA-Z0-9-]+$/', $name) === false) {
             throw new \InvalidArgumentException(sprintf('Format name invalid: %s', $name));
         }
 
@@ -77,14 +77,14 @@ final class FormatFactory
         }
 
         // Try built-in formats first (PSR-4)
-        if (isset(self::BUILTIN_FORMATS[$normalizedName])) {
+        if (isset(self::BUILTIN_FORMATS[$normalizedName]) === true) {
             $className = self::BUILTIN_FORMATS[$normalizedName];
             return new $className();
         }
 
         // Fallback: try to instantiate custom format from same namespace
         $customClassName = __NAMESPACE__ . '\\' . $normalizedName . 'Format';
-        if (class_exists($customClassName)) {
+        if (class_exists($customClassName) === true) {
             return new $customClassName();
         }
 
@@ -112,12 +112,12 @@ final class FormatFactory
     private function normalizeName(string $name): ?string
     {
         // Strip .php extension
-        if (preg_match('/^(.+)\.php$/i', $name, $matches)) {
+        if ((bool) preg_match('/^(.+)\.php$/i', $name, $matches) === true) {
             $name = $matches[1];
         }
 
         // Strip 'Format' suffix
-        if (preg_match('/^(.+)Format$/i', $name, $matches)) {
+        if ((bool) preg_match('/^(.+)Format$/i', $name, $matches) === true) {
             $name = $matches[1];
         }
 

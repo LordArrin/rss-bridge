@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
-class TgWSProxy extends ProxyAbstract
+namespace RSSBridge\Proxies;
+
+final class TgWSProxy extends ProxyAbstract
 {
     private ?string $proxyUrl = null;
     private static ?\CurlHandle $persistentHandle = null;
@@ -12,9 +14,9 @@ class TgWSProxy extends ProxyAbstract
     protected function initialize(): void
     {
         $this->proxyUrl = $this->config['socks_url'] ?? null;
-        
+
         $this->log('info', sprintf(
-            "TgWSProxy initialized: proxy=%s, max_retries=%d",
+            'TgWSProxy initialized: proxy=%s, max_retries=%d',
             preg_replace('#://([^:@]+):([^@]+)@#', '://***:***@', $this->proxyUrl ?? 'null'),
             (int)($this->config['retries'] ?? 3)
         ));
@@ -27,43 +29,43 @@ class TgWSProxy extends ProxyAbstract
 
     public function isAvailable(): bool
     {
-        return !empty($this->proxyUrl);
+        return empty($this->proxyUrl) === false;
     }
 
     private function getPersistentHandle(): \CurlHandle
     {
         if (self::$persistentHandle === null || self::$requestCount >= self::$maxRequestsBeforeReset) {
             self::$persistentHandle = null;
-            
+
             self::$persistentHandle = curl_init();
             if (self::$persistentHandle === false) {
                 throw new \RuntimeException('Failed to initialize cURL handle');
             }
             self::$requestCount = 0;
-            
+
             curl_setopt(self::$persistentHandle, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5_HOSTNAME);
             curl_setopt(self::$persistentHandle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-            
+
             // Allow connection reuse for persistent handle
             curl_setopt(self::$persistentHandle, CURLOPT_FRESH_CONNECT, false);
             curl_setopt(self::$persistentHandle, CURLOPT_FORBID_REUSE, false);
-            
+
             curl_setopt(self::$persistentHandle, CURLOPT_TCP_KEEPALIVE, 1);
             curl_setopt(self::$persistentHandle, CURLOPT_TCP_KEEPIDLE, 60);
             curl_setopt(self::$persistentHandle, CURLOPT_TCP_KEEPINTVL, 30);
-            
+
             curl_setopt(self::$persistentHandle, CURLOPT_ENCODING, '');
             curl_setopt(self::$persistentHandle, CURLOPT_FOLLOWLOCATION, true);
             curl_setopt(self::$persistentHandle, CURLOPT_MAXREDIRS, 5);
-            
+
             // Security: restrict protocols
             curl_setopt(self::$persistentHandle, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
             curl_setopt(self::$persistentHandle, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
-            
+
             curl_setopt(self::$persistentHandle, CURLOPT_SSL_VERIFYPEER, true);
             curl_setopt(self::$persistentHandle, CURLOPT_SSL_VERIFYHOST, 2);
-            
-            if ($this->proxyUrl) {
+
+            if ((bool) $this->proxyUrl === true) {
                 curl_setopt(self::$persistentHandle, CURLOPT_PROXY, $this->proxyUrl);
             }
         }
@@ -75,92 +77,91 @@ class TgWSProxy extends ProxyAbstract
         $connectTimeout = (int)($this->config['connect_timeout'] ?? 15);
         $requestTimeout = (int)($this->config['request_timeout'] ?? 60);
         $maxRetries = (int)($this->config['retries'] ?? 3);
-        
+
         $lastException = null;
-        
+
         for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
             try {
                 $ch = $this->getPersistentHandle();
-                
+
                 curl_setopt($ch, CURLOPT_URL, $url);
                 curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $connectTimeout);
                 curl_setopt($ch, CURLOPT_TIMEOUT, $requestTimeout);
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($ch, CURLOPT_HEADER, false);
-                
-                if ($attempt > 1) {
+
+                if ($attempt > 1 === true) {
                     $this->log('warning', sprintf(
-                        "TgWSProxy retry %d/%d for %s",
+                        'TgWSProxy retry %d/%d for %s',
                         $attempt,
                         $maxRetries,
                         $url
                     ));
                     usleep(500000 * $attempt);
                 }
-                
+
                 self::$requestCount++;
-                
+
                 $html = curl_exec($ch);
                 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 $curlError = curl_error($ch);
                 $curlErrno = curl_errno($ch);
-                
+
                 if ($html === false || $curlErrno !== 0) {
                     throw new \RuntimeException(sprintf(
-                        "cURL error %d: %s (HTTP %d)",
+                        'cURL error %d: %s (HTTP %d)',
                         $curlErrno,
                         $curlError,
                         $httpCode
                     ));
                 }
-                
+
                 if ($httpCode >= 400) {
-                    throw new \RuntimeException(sprintf("HTTP %d for %s", $httpCode, $url));
+                    throw new \RuntimeException(sprintf('HTTP %d for %s', $httpCode, $url));
                 }
-                
-                if (empty($html)) {
-                    throw new \RuntimeException("Empty response");
+
+                if (empty($html) === true) {
+                    throw new \RuntimeException('Empty response');
                 }
-                
+
                 $this->log('debug', sprintf(
-                    "TgWSProxy got %d bytes for %s [attempt %d, HTTP %d]",
+                    'TgWSProxy got %d bytes for %s [attempt %d, HTTP %d]',
                     strlen($html),
                     $url,
                     $attempt,
                     $httpCode
                 ));
-                
+
                 return (string)$html;
-                
             } catch (\Throwable $e) {
                 $lastException = $e;
-                
+
                 $errorMsg = $e->getMessage();
                 $isRetryable = $this->isRetryableError($errorMsg);
-                
+
                 $this->log('warning', sprintf(
-                    "TgWSProxy attempt %d/%d failed for %s: %s (retryable: %s)",
+                    'TgWSProxy attempt %d/%d failed for %s: %s (retryable: %s)',
                     $attempt,
                     $maxRetries,
                     $url,
                     $errorMsg,
-                    $isRetryable ? 'yes' : 'no'
+                    $isRetryable === true ? 'yes' : 'no'
                 ));
-                
-                if (!$isRetryable || $attempt >= $maxRetries) {
+
+                if ($isRetryable === false || $attempt >= $maxRetries) {
                     break;
                 }
-                
-                if ($this->isConnectionError($errorMsg)) {
+
+                if ($this->isConnectionError($errorMsg) === true) {
                     // Reset persistent handle on connection error
                     self::$persistentHandle = null;
                     self::$requestCount = 0;
                 }
             }
         }
-        
+
         throw new \RuntimeException(sprintf(
-            "TgWS request failed for %s after %d attempts: %s",
+            'TgWS request failed for %s after %d attempts: %s',
             $url,
             $maxRetries,
             $lastException?->getMessage() ?? 'Unknown error'
@@ -172,101 +173,100 @@ class TgWSProxy extends ProxyAbstract
         $connectTimeout = (int)($this->config['connect_timeout'] ?? 15);
         $requestTimeout = (int)($this->config['request_timeout'] ?? 90);
         $maxRetries = (int)($this->config['retries'] ?? 3);
-        
+
         $lastException = null;
-        
+
         for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
             try {
                 $ch = $this->getPersistentHandle();
-                
+
                 curl_setopt($ch, CURLOPT_URL, $url);
                 curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $connectTimeout);
                 curl_setopt($ch, CURLOPT_TIMEOUT, $requestTimeout);
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($ch, CURLOPT_HEADER, true);
-                
-                if ($attempt > 1) {
+
+                if ($attempt > 1 === true) {
                     $this->log('warning', sprintf(
-                        "TgWSProxy binary retry %d/%d for %s",
+                        'TgWSProxy binary retry %d/%d for %s',
                         $attempt,
                         $maxRetries,
                         $url
                     ));
                     usleep(500000 * $attempt);
                 }
-                
+
                 self::$requestCount++;
-                
+
                 $response = curl_exec($ch);
                 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
                 $curlError = curl_error($ch);
                 $curlErrno = curl_errno($ch);
-                
+
                 if ($response === false || $curlErrno !== 0) {
                     throw new \RuntimeException(sprintf(
-                        "cURL error %d: %s (HTTP %d)",
+                        'cURL error %d: %s (HTTP %d)',
                         $curlErrno,
                         $curlError,
                         $httpCode
                     ));
                 }
-                
+
                 if ($httpCode >= 400) {
-                    throw new \RuntimeException(sprintf("HTTP %d for %s", $httpCode, $url));
+                    throw new \RuntimeException(sprintf('HTTP %d for %s', $httpCode, $url));
                 }
-                
+
                 $headers = substr($response, 0, $headerSize);
                 $body = substr($response, $headerSize);
-                
-                if (empty($body)) {
-                    throw new \RuntimeException("Empty response");
+
+                if (empty($body) === true) {
+                    throw new \RuntimeException('Empty response');
                 }
-                
+
                 $contentType = 'application/octet-stream';
-                if (preg_match('/content-type:\s*([^\r\n]+)/i', $headers, $matches)) {
+                if ((bool) preg_match('/content-type:\s*([^\r\n]+)/i', $headers, $matches) === true) {
                     $contentType = trim(explode(';', $matches[1])[0]);
                 }
-                
+
                 $this->log('debug', sprintf(
-                    "TgWSProxy got %d bytes (%s) for %s [attempt %d, HTTP %d]",
+                    'TgWSProxy got %d bytes (%s) for %s [attempt %d, HTTP %d]',
                     strlen($body),
                     $contentType,
                     $url,
                     $attempt,
                     $httpCode
                 ));
-                
+
                 return ['body' => $body, 'type' => $contentType];
-                
             } catch (\Throwable $e) {
                 $lastException = $e;
-                
+
                 $errorMsg = $e->getMessage();
                 $isRetryable = $this->isRetryableError($errorMsg);
-                
+
                 $this->log('warning', sprintf(
-                    "TgWSProxy binary attempt %d/%d failed for %s: %s (retryable: %s)",
+                    'TgWSProxy binary attempt %d/%d failed for %s: %s (retryable: %s)',
                     $attempt,
                     $maxRetries,
                     $url,
                     $errorMsg,
-                    $isRetryable ? 'yes' : 'no'
+                    $isRetryable === true ? 'yes' : 'no'
                 ));
-                
-                if (!$isRetryable || $attempt >= $maxRetries) {
+
+                if ($isRetryable === false || $attempt >= $maxRetries) {
                     break;
                 }
-                
-                if ($this->isConnectionError($errorMsg)) {
+
+                if ($this->isConnectionError($errorMsg) === true) {
                     self::$persistentHandle = null;
                     self::$requestCount = 0;
                 }
             }
         }
-        
+
         throw new \RuntimeException(sprintf(
-            "TgWS binary fetch failed for %s after %d attempts: %s",
+            'TgWS binary fetch failed for %s after %d attempts: %s',
             $url,
             $maxRetries,
             $lastException?->getMessage() ?? 'Unknown error'
@@ -298,15 +298,15 @@ class TgWSProxy extends ProxyAbstract
             'eof',
             'ssl',
         ];
-        
+
         $errorMsgLower = strtolower($errorMsg);
-        
+
         foreach ($retryablePatterns as $pattern) {
-            if (str_contains($errorMsgLower, $pattern)) {
+            if (str_contains($errorMsgLower, $pattern) === true) {
                 return true;
             }
         }
-        
+
         return false;
     }
 
@@ -323,15 +323,15 @@ class TgWSProxy extends ProxyAbstract
             'socket',
             'eof',
         ];
-        
+
         $errorMsgLower = strtolower($errorMsg);
-        
+
         foreach ($connectionPatterns as $pattern) {
-            if (str_contains($errorMsgLower, $pattern)) {
+            if (str_contains($errorMsgLower, $pattern) === true) {
                 return true;
             }
         }
-        
+
         return false;
     }
 }

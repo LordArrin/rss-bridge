@@ -24,7 +24,7 @@ final class MemcachedCache implements CacheInterface
 
         // Only add server if this is a new persistent connection
         if (count($this->conn->getServerList()) === 0) {
-            if (!$this->conn->addServer($host, $port)) {
+            if ($this->conn->addServer($host, $port) === false) {
                 throw new \Exception('Unable to add memcached server');
             }
         }

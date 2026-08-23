@@ -1,6 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 use RSSBridge\Caches\CacheInterface;
+use RSSBridge\Proxies\DirectProxy;
+use RSSBridge\Proxies\ProxyFactory;
 
 function get_sitemap(string $url): array
 {

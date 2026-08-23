@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
-class FlareSolverrProxy extends ProxyAbstract
+namespace RSSBridge\Proxies;
+
+final class FlareSolverrProxy extends ProxyAbstract
 {
     private ?string $apiUrl = null;
     private ?string $sessionName = null;
-    
+
     private const SESSION_FLAG_PREFIX = 'flaresolverr_session_created_';
     private const SESSION_FLAG_TTL = 86400;
 
@@ -23,7 +25,7 @@ class FlareSolverrProxy extends ProxyAbstract
 
     public function isAvailable(): bool
     {
-        if (empty($this->config['url'])) {
+        if (empty($this->config['url']) === true) {
             return false;
         }
 
@@ -58,9 +60,10 @@ class FlareSolverrProxy extends ProxyAbstract
 
     protected function fetchHtml(string $url, array $options): string
     {
-        $domain = parse_url($url, PHP_URL_HOST) ?: 'localhost';
+        $parsedHost = parse_url($url, PHP_URL_HOST);
+        $domain = (bool) $parsedHost === true ? $parsedHost : 'localhost';
         $wait = $this->calculateWaitTime($url, $options);
-        
+
         $payload = [
             'cmd' => 'request.get',
             'url' => $url,
@@ -69,19 +72,19 @@ class FlareSolverrProxy extends ProxyAbstract
         ];
 
         $cookies = $options['cookies'] ?? [];
-        
-        if ($this->sessionName) {
+
+        if ((bool) $this->sessionName === true) {
             $payload['session'] = $this->sessionName;
             $this->ensureSession($domain, $cookies);
         }
 
-        if (!empty($cookies)) {
+        if (empty($cookies) === false) {
             $payload['cookies'] = $cookies;
         }
 
         $response = $this->request('POST', $this->apiUrl, $payload);
 
-        if (!isset($response['solution']['response'])) {
+        if (isset($response['solution']['response']) === false) {
             throw new \RuntimeException('FlareSolverr did not return HTML content');
         }
 
@@ -90,15 +93,16 @@ class FlareSolverrProxy extends ProxyAbstract
 
     private function calculateWaitTime(string $url, array $options): int
     {
-        if (isset($options['wait'])) {
+        if (isset($options['wait']) === true) {
             return (int)$options['wait'];
         }
 
-        $domain = parse_url($url, PHP_URL_HOST) ?: 'unknown';
-        
-        if ($this->cache) {
+        $parsedHost = parse_url($url, PHP_URL_HOST);
+        $domain = (bool) $parsedHost === true ? $parsedHost : 'unknown';
+
+        if ((bool) $this->cache === true) {
             $cacheKey = 'flaresolverr_domain_visited_' . md5($domain);
-            if ($this->cache->get($cacheKey)) {
+            if ((bool) $this->cache->get($cacheKey) === true) {
                 $this->log('debug', "Domain {$domain} already visited, using short wait");
                 return 2000;
             }
@@ -111,20 +115,20 @@ class FlareSolverrProxy extends ProxyAbstract
 
     private function ensureSession(string $domain, array $cookies): void
     {
-        if (!$this->sessionName) {
+        if ((bool) $this->sessionName === false) {
             return;
         }
 
-        if ($this->cache) {
+        if ((bool) $this->cache === true) {
             $cacheKey = self::SESSION_FLAG_PREFIX . md5($this->sessionName);
-            if ($this->cache->get($cacheKey)) {
+            if ((bool) $this->cache->get($cacheKey) === true) {
                 $this->log('debug', "Session {$this->sessionName} already created (cached)");
                 return;
             }
         }
 
         $response = $this->request('POST', $this->apiUrl, ['cmd' => 'sessions.list']);
-        
+
         $sessionExists = false;
         foreach ($response['sessions'] ?? [] as $session) {
             if (($session['session'] ?? '') === $this->sessionName) {
@@ -133,9 +137,9 @@ class FlareSolverrProxy extends ProxyAbstract
             }
         }
 
-        if (!$sessionExists) {
+        if ($sessionExists === false) {
             $this->log('info', "Creating session: {$this->sessionName}");
-            
+
             $this->request('POST', $this->apiUrl, [
                 'cmd' => 'sessions.create',
                 'session' => $this->sessionName,
@@ -146,7 +150,7 @@ class FlareSolverrProxy extends ProxyAbstract
             $this->log('debug', "Session {$this->sessionName} already exists");
         }
 
-        if ($this->cache) {
+        if ((bool) $this->cache === true) {
             $cacheKey = self::SESSION_FLAG_PREFIX . md5($this->sessionName);
             $this->cache->set($cacheKey, time(), self::SESSION_FLAG_TTL);
         }
@@ -155,9 +159,9 @@ class FlareSolverrProxy extends ProxyAbstract
     protected function executeRequest(string $method, string $url, array $payload, array $headers): array
     {
         $ch = curl_init($url);
-        
+
         $curlHeaders = array_merge(['Content-Type: application/json'], $headers);
-        
+
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => $method === 'POST',
@@ -170,9 +174,9 @@ class FlareSolverrProxy extends ProxyAbstract
         $response = curl_exec($ch);
         $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        
+
         if ($response === false || $httpCode !== 200) {
-            $this->log('error', "HTTP failed", [
+            $this->log('error', 'HTTP failed', [
                 'url' => $url,
                 'http_code' => $httpCode,
                 'error' => $error
@@ -181,9 +185,9 @@ class FlareSolverrProxy extends ProxyAbstract
         }
 
         $result = json_decode((string)$response, true);
-        
+
         if (($result['status'] ?? '') !== 'ok') {
-            $this->log('error', "FlareSolverr API error", [
+            $this->log('error', 'FlareSolverr API error', [
                 'message' => $result['message'] ?? 'Unknown'
             ]);
             throw new \RuntimeException('API error: ' . ($result['message'] ?? 'Unknown'));
@@ -191,37 +195,38 @@ class FlareSolverrProxy extends ProxyAbstract
 
         return $result;
     }
+
     /**
      * Fetches binary content via FlareSolverr.
-     * 
+     *
      * @return array{body: string, type: string}
      */
     public function getBinary(string $url, array $options = []): array
     {
         $this->log('info', "Fetching binary {$url} via FlareSolverr");
-        
+
         $payload = [
             'cmd' => 'request.get',
             'url' => $url,
             'maxTimeout' => $options['timeout'] ?? 180000,
             'wait' => $options['wait'] ?? 5000,
         ];
-        
-        if ($this->sessionName) {
+
+        if ((bool) $this->sessionName === true) {
             $payload['session'] = $this->sessionName;
         }
-        
+
         $response = $this->request('POST', $this->apiUrl, $payload);
-        
-        if (!isset($response['solution']['response'])) {
+
+        if (isset($response['solution']['response']) === false) {
             throw new \RuntimeException('FlareSolverr did not return content');
         }
-        
+
         $body = (string)$response['solution']['response'];
-        
+
         $extension = pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION);
         $type = 'application/octet-stream';
-        
+
         $mimeMap = [
             'jpg' => 'image/jpeg',
             'jpeg' => 'image/jpeg',
@@ -233,11 +238,11 @@ class FlareSolverrProxy extends ProxyAbstract
             'webm' => 'video/webm',
             'pdf' => 'application/pdf',
         ];
-        
-        if (isset($mimeMap[strtolower($extension)])) {
+
+        if (isset($mimeMap[strtolower($extension)]) === true) {
             $type = $mimeMap[strtolower($extension)];
         }
-        
+
         return ['body' => $body, 'type' => $type];
     }
 }

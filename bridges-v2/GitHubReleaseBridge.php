@@ -105,7 +105,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $owner = $this->getInput('owner');
         $repo = $this->getInput('repo');
 
-        if (is_string($owner) && $owner !== '' && is_string($repo) && $repo !== '') {
+        if (is_string($owner) === true && $owner !== '' && is_string($repo) === true && $repo !== '') {
             return sprintf('%s/%s - Releases', $owner, $repo);
         }
 
@@ -117,7 +117,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $owner = $this->getInput('owner');
         $repo = $this->getInput('repo');
 
-        if (is_string($owner) && $owner !== '' && is_string($repo) && $repo !== '') {
+        if (is_string($owner) === true && $owner !== '' && is_string($repo) === true && $repo !== '') {
             return sprintf('%s/%s/%s/releases', self::URI, $owner, $repo);
         }
 

@@ -32,12 +32,17 @@ final class ListAction implements ActionInterface
         foreach ($this->bridgeFactory->getBridgeClassNames() as $bridgeClassName) {
             $bridge = $this->safeLoader->createSafely($bridgeClassName);
 
-            if ($this->safeLoader->isBridgeBroken($bridge)) {
+            if ($this->safeLoader->isBridgeBroken($bridge) === true) {
                 continue;
             }
 
+            $status = 'inactive';
+            if ($this->bridgeFactory->isEnabled($bridgeClassName) === true) {
+                $status = 'active';
+            }
+
             $list->bridges[$bridgeClassName] = [
-                'status'      => $this->bridgeFactory->isEnabled($bridgeClassName) ? 'active' : 'inactive',
+                'status'      => $status,
                 'uri'         => $bridge->getURI(),
                 'name'        => $bridge->getName(),
                 'icon'        => $bridge->getIcon(),

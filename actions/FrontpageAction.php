@@ -47,11 +47,11 @@ final class FrontpageAction implements ActionInterface
 
         $body = '';
         foreach ($bridgeClassNames as $bridgeClassName) {
-            if (!$this->bridgeFactory->isEnabled($bridgeClassName)) {
+            if ($this->bridgeFactory->isEnabled($bridgeClassName) === false) {
                 continue;
             }
 
-            if (!isset($allMetadata[$bridgeClassName])) {
+            if (isset($allMetadata[$bridgeClassName]) === false) {
                 continue;
             }
 
@@ -98,9 +98,8 @@ final class FrontpageAction implements ActionInterface
         string $shortClassName,
         ?string $token
     ): string {
-
-        $e = function($s) {
-            return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $e = function ($s) {
+            return htmlspecialchars((string) $s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         };
 
         $uri = $meta['uri'];
@@ -118,17 +117,20 @@ final class FrontpageAction implements ActionInterface
         $descriptionSafe = $e($description);
 
         if (
-            Configuration::getConfig('proxy', 'url')
-            && Configuration::getConfig('proxy', 'by_bridge')
+            Configuration::getConfig('proxy', 'url') === true
+            && Configuration::getConfig('proxy', 'by_bridge') === true
         ) {
-            $proxyName = Configuration::getConfig('proxy', 'name') ?: Configuration::getConfig('proxy', 'url');
+            $proxyName = Configuration::getConfig('proxy', 'name');
+            if ($proxyName === null || $proxyName === false || $proxyName === '') {
+                $proxyName = Configuration::getConfig('proxy', 'url');
+            }
             $parameters['global']['_noproxy'] = [
                 'name' => sprintf('Disable proxy (%s)', $proxyName),
                 'type' => 'checkbox',
             ];
         }
 
-        if (Configuration::getConfig('cache', 'custom_timeout')) {
+        if (Configuration::getConfig('cache', 'custom_timeout') === true) {
             $parameters['global']['_cache_timeout'] = [
                 'name' => 'Cache timeout in seconds',
                 'type' => 'number',
@@ -172,7 +174,7 @@ final class FrontpageAction implements ActionInterface
 
         if (count($parameters) === 0) {
             $card .= self::renderForm($shortClassName, '', [], $token);
-        } elseif (count($parameters) === 1 && array_key_exists('global', $parameters)) {
+        } elseif (count($parameters) === 1 && array_key_exists('global', $parameters) === true) {
             $card .= self::renderForm($shortClassName, '', $parameters['global'], $token);
         } else {
             foreach ($parameters as $contextName => $contextParameters) {
@@ -180,13 +182,13 @@ final class FrontpageAction implements ActionInterface
                     continue;
                 }
 
-                if (array_key_exists('global', $parameters)) {
+                if (array_key_exists('global', $parameters) === true) {
                     $contextParameters = array_merge($contextParameters, $parameters['global']);
                 }
 
-                $contextNameStr = is_numeric($contextName) ? (string) $contextName : $contextName;
+                $contextNameStr = is_numeric($contextName) === true ? (string) $contextName : $contextName;
 
-                if (!is_numeric($contextName)) {
+                if (is_numeric($contextName) === false) {
                     $card .= '<h5>' . $e($contextNameStr) . "</h5>\n";
                 }
 
@@ -218,7 +220,7 @@ final class FrontpageAction implements ActionInterface
 
         EOD;
 
-        if (Configuration::getConfig('authentication', 'token') && $token) {
+        if (Configuration::getConfig('authentication', 'token') === true && $token !== null && $token !== '') {
             $form .= html_input([
                     'type'  => 'hidden',
                     'name'  => 'token',
@@ -226,7 +228,7 @@ final class FrontpageAction implements ActionInterface
                 ]) . "\n";
         }
 
-        if (!empty($contextName)) {
+        if ($contextName !== '') {
             $form .= html_input([
                     'type'  => 'hidden',
                     'name'  => 'context',
@@ -237,21 +239,21 @@ final class FrontpageAction implements ActionInterface
         $form .= '<div class="parameters">' . "\n";
 
         foreach ($parameters as $id => $parameter) {
-            if (!isset($parameter['exampleValue'])) {
+            if (isset($parameter['exampleValue']) === false) {
                 $parameter['exampleValue'] = '';
             }
 
-            if (!isset($parameter['defaultValue'])) {
+            if (isset($parameter['defaultValue']) === false) {
                 $parameter['defaultValue'] = '';
             }
 
-            $idStr = is_numeric($id) ? (string) $id : $id;
+            $idStr = is_numeric($id) === true ? (string) $id : $id;
             $idArg = 'arg-' . urlencode($bridgeClassName) . '-' . urlencode($contextName) . '-' . urlencode($idStr);
 
             $form .= html_tag('label', $parameter['name'], ['for' => $idArg]) . "\n";
 
             if (
-                !isset($parameter['type'])
+                isset($parameter['type']) === false
                 || $parameter['type'] === 'text'
             ) {
                 $form .= self::getTextInput($parameter, $idArg, $idStr) . "\n";
@@ -266,7 +268,7 @@ final class FrontpageAction implements ActionInterface
             }
 
             $params = [];
-            if (isset($parameter['title'])) {
+            if (isset($parameter['title']) === true) {
                 $params = [
                     'title' => $parameter['title'],
                     'class' => 'info',
@@ -280,7 +282,7 @@ final class FrontpageAction implements ActionInterface
                 ];
             }
 
-            if ($params) {
+            if ($params !== []) {
                 $form .= html_tag('i', 'i', $params) . "\n";
             } else {
                 $form .= html_tag('i', ' ', ['class' => 'no-info']) . "\n";
@@ -350,7 +352,7 @@ final class FrontpageAction implements ActionInterface
         $list = sprintf('<select id="%s" name="%s">', htmlspecialchars($id), htmlspecialchars($name)) . "\n";
 
         foreach ($parameter['values'] as $name => $value) {
-            if (is_array($value)) {
+            if (is_array($value) === true) {
                 $list .= '<optgroup label="' . htmlspecialchars((string) $name) . '">';
                 foreach ($value as $subname => $subvalue) {
                     if (

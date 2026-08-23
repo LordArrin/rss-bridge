@@ -1,0 +1,227 @@
+name: Lint Bridges
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'bridges/**'
+      - 'bridges-v2/**'
+      - 'phpcs.xml'
+      - '.github/workflows/lint-bridges.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'bridges/**'
+      - 'bridges-v2/**'
+      - 'phpcs.xml'
+      - '.github/workflows/lint-bridges.yml'
+  workflow_dispatch:
+    inputs:
+      check_mode:
+        description: 'Check mode'
+        required: true
+        type: choice
+        options:
+          - 'changed_only'
+          - 'all_bridges'
+        default: 'all_bridges'
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  phpcs:
+    name: PHP_CodeSniffer
+    runs-on: ubuntu-26.04-arm
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          tools: composer:v2
+          coverage: none
+
+      - name: Install Composer dependencies
+        run: |
+          composer install --no-interaction --no-progress --prefer-dist
+          find vendor/bin -type f -exec chmod +x {} \;
+
+      - name: Show environment info
+        run: |
+          echo "### Environment ###"
+          echo "PHP: $(php -v | head -n 1)"
+          echo "PHPCS: $(./vendor/bin/phpcs --version)"
+          echo "Composer: $(composer --version)"
+          echo ""
+          echo "### Direct packages ###"
+          composer show --direct | awk '{print $1 ": " $2}'
+
+      - name: Determine changed bridge files
+        id: changed
+        run: |
+          BRIDGE_PATHS="bridges/*.php bridges-v2/*.php"
+          
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.event.inputs.check_mode }}" = "all_bridges" ]; then
+              BRIDGES_FILES=$(find bridges -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
+              BRIDGES_V2_FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
+              FILES=$(echo -e "${BRIDGES_FILES}\n${BRIDGES_V2_FILES}" | grep -v '^$' | tr '\n' ' ')
+              echo "Mode: manual check on ALL bridge files"
+            else
+              if git rev-parse HEAD~1 >/dev/null 2>&1; then
+                BASE="HEAD~1"
+              else
+                BASE=""
+              fi
+              
+              if [ -n "$BASE" ]; then
+                FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
+              else
+                BRIDGES_FILES=$(find bridges -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
+                BRIDGES_V2_FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
+                FILES=$(echo -e "${BRIDGES_FILES}\n${BRIDGES_V2_FILES}" | grep -v '^$' | tr '\n' ' ')
+              fi
+              echo "Mode: manual check on CHANGED bridge files only"
+            fi
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+            FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
+            echo "Mode: PR changes against $BASE"
+          else
+            if git rev-parse HEAD~1 >/dev/null 2>&1; then
+              BASE="HEAD~1"
+            else
+              BASE=""
+            fi
+            
+            if [ -n "$BASE" ]; then
+              FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
+              echo "Mode: push changes against $BASE"
+            else
+              BRIDGES_FILES=$(find bridges -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
+              BRIDGES_V2_FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
+              FILES=$(echo -e "${BRIDGES_FILES}\n${BRIDGES_V2_FILES}" | grep -v '^$' | tr '\n' ' ')
+              echo "Mode: initial commit - checking all files"
+            fi
+          fi
+
+          FILES=$(echo "$FILES" | xargs)
+
+          if [ -z "$FILES" ]; then
+            echo "has_files=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No bridge files to check."
+          else
+            echo "has_files=true" >> "$GITHUB_OUTPUT"
+            echo "files=$FILES" >> "$GITHUB_OUTPUT"
+            echo ""
+            echo "Files to check:"
+            echo "$FILES" | tr ' ' '\n'
+          fi
+
+      - name: Run phpcbf on changed bridges (PR only)
+        if: steps.changed.outputs.has_files == 'true' && github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          echo "Attempting to fix files: ${{ steps.changed.outputs.files }}"
+          ./vendor/bin/phpcbf ${{ steps.changed.outputs.files }} --standard=phpcs.xml --extensions=php -v || echo "phpcbf exited with code $?"
+          
+          echo "Git status after phpcbf:"
+          git status
+          echo "Git diff stat:"
+          git diff --stat
+
+      - name: Commit fixed files
+        if: steps.changed.outputs.has_files == 'true' && github.event_name == 'pull_request'
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: "style: fix phpcs issues"
+          branch: ${{ github.head_ref }}
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_options: '--no-verify'
+
+      - name: Run phpcs on bridges-v2 (strict mode with warnings)
+        if: steps.changed.outputs.has_files == 'true'
+        run: |
+          rm -f .phpcs.cache
+          
+          V2_FILES=$(echo "${{ steps.changed.outputs.files }}" | tr ' ' '\n' | grep '^bridges-v2/' | tr '\n' ' ')
+          
+          if [ -n "$V2_FILES" ]; then
+            echo "### Checking bridges-v2 (warnings enabled) ###"
+            ./vendor/bin/phpcs \
+              $V2_FILES \
+              --standard=phpcs.xml \
+              --warning-severity=5 \
+              --extensions=php \
+              --no-cache \
+              -p
+            EXIT_CODE=$?
+            
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "::warning::Warnings found in bridges-v2. Consider fixing them."
+            elif [ $EXIT_CODE -gt 1 ]; then
+              echo "::error::Errors found in bridges-v2!"
+              exit 1
+            fi
+          else
+            echo "No bridges-v2 files to check."
+          fi
+
+      - name: Run phpcs on legacy bridges (errors only)
+        if: steps.changed.outputs.has_files == 'true'
+        run: |
+          rm -f .phpcs.cache
+          
+          LEGACY_FILES=$(echo "${{ steps.changed.outputs.files }}" | tr ' ' '\n' | grep '^bridges/' | tr '\n' ' ')
+          
+          if [ -n "$LEGACY_FILES" ]; then
+            echo "### Checking legacy bridges (errors only) ###"
+            ./vendor/bin/phpcs \
+              $LEGACY_FILES \
+              --standard=phpcs.xml \
+              --warning-severity=0 \
+              --extensions=php \
+              --no-cache \
+              -p
+          else
+            echo "No legacy bridge files to check."
+          fi
+
+  executable-check:
+    name: Executable PHP files check
+    runs-on: ubuntu-26.04-arm
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Check for executable PHP files in bridges/ and bridges-v2/
+        run: |
+          FOUND=0
+          
+          echo "Checking bridges/..."
+          if ! find bridges -name "*.php" -executable -type f -print -exec false {} +; then
+            FOUND=1
+          fi
+          
+          echo "Checking bridges-v2/..."
+          if ! find bridges-v2 -name "*.php" -executable -type f -print -exec false {} +; then
+            FOUND=1
+          fi
+          
+          if [ "$FOUND" -eq 0 ]; then
+            echo 'Good, no executable php scripts found in bridges/ or bridges-v2/'
+          else
+            echo '::error::Please unmark php scripts above as non-executable'
+            echo 'You can do it with: git update-index --chmod=-x <file>'
+            exit 1
+          fi

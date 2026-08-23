@@ -8,8 +8,9 @@
             "RSSBridge\\Bridges\\": "bridges-v2/",
             "RSSBridge\\Caches\\": "caches/",
             "RSSBridge\\Actions\\": "actions/",
+            "RSSBridge\\Formats\\": "formats/",
             "RSSBridge\\Middlewares\\": "middlewares/",
-            "RSSBridge\\Formats\\": "formats/"
+            "RSSBridge\\Proxies\\": "proxies/"
         },
         "files": [
             "lib/compatibility.php"

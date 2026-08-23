@@ -20,11 +20,11 @@ final class PlaintextFormat extends FormatAbstract
     public function render(): string
     {
         $feed = $this->getFeed();
-        
+
         foreach ($this->getItems() as $item) {
             $feed['items'][] = $item->toArray();
         }
-        
+
         return print_r($feed, true);
     }
 }

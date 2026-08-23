@@ -36,7 +36,7 @@ final class AtomFormat extends FormatAbstract
 
         $feedArray = $this->getFeed();
         foreach ($feedArray as $feedKey => $feedValue) {
-            if (in_array($feedKey, ['donationUri'], true)) {
+            if (in_array($feedKey, ['donationUri'], true) === true) {
                 continue;
             }
             if ($feedKey === 'name') {
@@ -45,7 +45,7 @@ final class AtomFormat extends FormatAbstract
                 $title->setAttribute('type', 'text');
                 $title->appendChild($document->createTextNode((string) $feedValue));
             } elseif ($feedKey === 'icon') {
-                if ($feedValue) {
+                if ((bool) $feedValue === true) {
                     $icon = $document->createElement('icon');
                     $feed->appendChild($icon);
                     $icon->appendChild($document->createTextNode((string) $feedValue));
@@ -55,7 +55,7 @@ final class AtomFormat extends FormatAbstract
                     $logo->appendChild($document->createTextNode((string) $feedValue));
                 }
             } elseif ($feedKey === 'uri') {
-                if ($feedValue) {
+                if ((bool) $feedValue === true) {
                     $linkAlternate = $document->createElement('link');
                     $feed->appendChild($linkAlternate);
                     $linkAlternate->setAttribute('rel', 'alternate');
@@ -105,19 +105,19 @@ final class AtomFormat extends FormatAbstract
             $entryUri = $item->getURI();
             $entryID = '';
 
-            if (!empty($item->getUid())) {
+            if (empty($item->getUid()) === false) {
                 $entryID = 'urn:sha1:' . $item->getUid();
             }
 
-            if (empty($entryID)) {
+            if (empty($entryID) === true) {
                 $entryID = $entryUri;
             }
 
-            if (empty($entryID)) {
+            if (empty($entryID) === true) {
                 $entryID = 'urn:sha1:' . hash('sha1', (string) $entryTitle . (string) $entryContent);
             }
 
-            if (empty($entryTitle)) {
+            if (empty($entryTitle) === true) {
                 $entryTitle = str_replace("\n", ' ', strip_tags((string) $entryContent));
                 if (strlen($entryTitle) > 140) {
                     $wrapPos = strpos(wordwrap($entryTitle, 140), "\n");
@@ -125,7 +125,7 @@ final class AtomFormat extends FormatAbstract
                 }
             }
 
-            if (empty($entryContent)) {
+            if (empty($entryContent) === true) {
                 $entryContent = ' ';
             }
 
@@ -137,7 +137,7 @@ final class AtomFormat extends FormatAbstract
             $title->setAttribute('type', 'html');
             $title->appendChild($document->createTextNode((string) $entryTitle));
 
-            if ($entryTimestamp) {
+            if ((bool) $entryTimestamp === true) {
                 $timestamp = gmdate(\DATE_ATOM, $entryTimestamp);
 
                 $published = $document->createElement('published');
@@ -153,21 +153,21 @@ final class AtomFormat extends FormatAbstract
             $entry->appendChild($id);
             $id->appendChild($document->createTextNode($entryID));
 
-            if (isset($itemArray['itunes'])) {
+            if (isset($itemArray['itunes']) === true) {
                 $feed->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:itunes', self::ITUNES_NS);
                 foreach ((array) $itemArray['itunes'] as $itunesKey => $itunesValue) {
                     $itunesProperty = $document->createElementNS(self::ITUNES_NS, (string) $itunesKey);
                     $entry->appendChild($itunesProperty);
                     $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
                 }
-                if (isset($itemArray['enclosure'])) {
+                if (isset($itemArray['enclosure']) === true) {
                     $itunesEnclosure = $document->createElement('enclosure');
                     $entry->appendChild($itunesEnclosure);
                     $itunesEnclosure->setAttribute('url', (string) $itemArray['enclosure']['url']);
                     $itunesEnclosure->setAttribute('length', (string) $itemArray['enclosure']['length']);
                     $itunesEnclosure->setAttribute('type', (string) $itemArray['enclosure']['type']);
                 }
-            } elseif (!empty($entryUri)) {
+            } elseif (empty($entryUri) === false) {
                 $entryLinkAlternate = $document->createElement('link');
                 $entry->appendChild($entryLinkAlternate);
                 $entryLinkAlternate->setAttribute('rel', 'alternate');
@@ -175,7 +175,7 @@ final class AtomFormat extends FormatAbstract
                 $entryLinkAlternate->setAttribute('href', (string) $entryUri);
             }
 
-            if (!empty($item->getAuthor())) {
+            if (empty($item->getAuthor()) === false) {
                 $author = $document->createElement('author');
                 $entry->appendChild($author);
                 $authorName = $document->createElement('name');
@@ -202,12 +202,9 @@ final class AtomFormat extends FormatAbstract
                 $entryCategory->setAttribute('term', (string) $category);
             }
 
-            // Use getter if available, fallback to array access
-            $thumbnail = method_exists($item, 'getThumbnail') 
-                ? $item->getThumbnail() 
-                : ($itemArray['thumbnail'] ?? null);
-            
-            if (!empty($thumbnail)) {
+            $thumbnail = method_exists($item, 'getThumbnail') === true ? $item->getThumbnail() : ($itemArray['thumbnail'] ?? null);
+
+            if (empty($thumbnail) === false) {
                 $thumbnailElement = $document->createElementNS(self::MRSS_NS, 'thumbnail');
                 $entry->appendChild($thumbnailElement);
                 $thumbnailElement->setAttribute('url', (string) $thumbnail);

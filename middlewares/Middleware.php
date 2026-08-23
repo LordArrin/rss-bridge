@@ -9,7 +9,7 @@ use Response;
 
 /**
  * Interface for all HTTP middlewares.
- * 
+ *
  * Middlewares can:
  * - Modify the request before passing to next middleware/action
  * - Modify the response before returning

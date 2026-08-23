@@ -9,7 +9,7 @@ use Response;
 
 /**
  * Interface for all HTTP actions in RSS-Bridge.
- * 
+ *
  * All actions receive a Request and must return a Response.
  */
 interface ActionInterface

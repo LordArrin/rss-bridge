@@ -42,7 +42,7 @@ final class JsonFormat extends FormatAbstract
             'feed_url'      => get_current_url(),
         ];
 
-        if (!empty($feedArray['icon'])) {
+        if (empty($feedArray['icon']) === false) {
             $data['icon'] = $feedArray['icon'];
             $data['favicon'] = $feedArray['icon'];
         }
@@ -66,38 +66,38 @@ final class JsonFormat extends FormatAbstract
 
             $entry['id'] = $item->getUid();
 
-            if (empty($entry['id'])) {
+            if (empty($entry['id']) === true) {
                 $entry['id'] = $entryUri;
             }
 
-            if (!empty($entryTitle)) {
+            if (empty($entryTitle) === false) {
                 $entry['title'] = $entryTitle;
             }
-            
-            if (!empty($entryAuthor)) {
+
+            if (empty($entryAuthor) === false) {
                 // JSON Feed 1.1 uses 'authors' array instead of 'author'
                 $entry['authors'] = [
                     ['name' => $entryAuthor]
                 ];
             }
-            
-            if (!empty($entryTimestamp)) {
+
+            if (empty($entryTimestamp) === false) {
                 $entry['date_modified'] = gmdate(\DATE_ATOM, $entryTimestamp);
             }
-            
-            if (!empty($entryUri)) {
+
+            if (empty($entryUri) === false) {
                 $entry['url'] = $entryUri;
             }
-            
-            if (!empty($entryContent)) {
-                if (is_html($entryContent)) {
+
+            if (empty($entryContent) === false) {
+                if (is_html($entryContent) === true) {
                     $entry['content_html'] = $entryContent;
                 } else {
                     $entry['content_text'] = $entryContent;
                 }
             }
-            
-            if (!empty($entryEnclosures)) {
+
+            if (empty($entryEnclosures) === false) {
                 $entry['attachments'] = [];
                 foreach ($entryEnclosures as $enclosure) {
                     $entry['attachments'][] = [
@@ -106,25 +106,25 @@ final class JsonFormat extends FormatAbstract
                     ];
                 }
             }
-            
-            if (!empty($entryCategories)) {
+
+            if (empty($entryCategories) === false) {
                 $entry['tags'] = [];
                 foreach ($entryCategories as $category) {
                     $entry['tags'][] = $category;
                 }
             }
-            
-            if (!empty($vendorFields)) {
+
+            if (empty($vendorFields) === false) {
                 $entry['_rssbridge'] = $vendorFields;
             }
 
-            if (empty($entry['id'])) {
+            if (empty($entry['id']) === true) {
                 $entry['id'] = hash('sha1', (string) $entryTitle . $entryContent);
             }
 
             $items[] = $entry;
         }
-        
+
         $data['items'] = $items;
 
         return json_encode($data, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);

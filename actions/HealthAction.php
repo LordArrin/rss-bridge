@@ -65,17 +65,15 @@ final class HealthAction implements ActionInterface
             $testKey = 'health_check_' . uniqid();
             $testValue = 'test_' . time();
 
-            // Measure set latency
             $startSet = microtime(true);
             $this->cache->set($testKey, $testValue, 10);
             $setLatency = round((microtime(true) - $startSet) * 1000, 2);
 
-            // Measure get latency
             $startGet = microtime(true);
             $retrieved = $this->cache->get($testKey);
             $getLatency = round((microtime(true) - $startGet) * 1000, 2);
 
-            if (method_exists($this->cache, 'delete')) {
+            if (method_exists($this->cache, 'delete') === true) {
                 $this->cache->delete($testKey);
             }
 
@@ -87,10 +85,9 @@ final class HealthAction implements ActionInterface
                 'get_latency_ms' => $getLatency,
             ];
 
-            // Add memcached-specific stats
-            if (method_exists($this->cache, 'getStats')) {
+            if (method_exists($this->cache, 'getStats') === true) {
                 $stats = $this->cache->getStats();
-                if (!empty($stats)) {
+                if (empty($stats) === false) {
                     $serverStats = reset($stats);
                     $result['memcached'] = [
                         'curr_items' => $serverStats['curr_items'] ?? 0,
@@ -108,7 +105,6 @@ final class HealthAction implements ActionInterface
                 $result['message'] = 'cache read/write mismatch';
             }
 
-            // Slow cache warnings
             if ($setLatency > 50 || $getLatency > 50) {
                 $result['status'] = 'degraded';
                 $result['message'] = sprintf('Slow cache operations: set=%sms, get=%sms', $setLatency, $getLatency);
@@ -149,13 +145,18 @@ final class HealthAction implements ActionInterface
 
         foreach ($possibleProfiles as $profileName) {
             $type = Configuration::getConfig('proxy_profile_' . $profileName, 'type');
-            if ($type) {
+            if ($type !== null && $type !== '') {
                 $profiles[] = $profileName;
             }
         }
 
+        $status = 'disabled';
+        if (count($profiles) !== 0) {
+            $status = 'ok';
+        }
+
         return [
-            'status' => count($profiles) > 0 ? 'ok' : 'disabled',
+            'status' => $status,
             'profiles' => $profiles,
             'count' => count($profiles),
         ];
@@ -165,15 +166,15 @@ final class HealthAction implements ActionInterface
     {
         $statuses = [];
         foreach ($checks as $check) {
-            if (is_array($check) && isset($check['status'])) {
+            if (is_array($check) === true && isset($check['status']) === true) {
                 $statuses[] = $check['status'];
             }
         }
 
-        if (in_array('error', $statuses, true)) {
+        if (in_array('error', $statuses, true) === true) {
             return 'down';
         }
-        if (in_array('degraded', $statuses, true)) {
+        if (in_array('degraded', $statuses, true) === true) {
             return 'degraded';
         }
         return 'ok';
@@ -181,7 +182,7 @@ final class HealthAction implements ActionInterface
 
     private function getHttpCode(string $status): int
     {
-        return match($status) {
+        return match ($status) {
             'ok' => 200,
             'degraded' => 200,
             'down' => 503,

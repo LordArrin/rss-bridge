@@ -43,27 +43,27 @@ final class DisplayAction implements ActionInterface
         $format = $request->get('format');
         $noproxy = $request->get('_noproxy');
 
-        if (!$bridgeName) {
+        if ($bridgeName === false || $bridgeName === null || $bridgeName === '') {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Missing bridge name parameter']), 400);
         }
 
         $bridgeClassName = $this->bridgeFactory->createBridgeClassName($bridgeName);
-        if (!$bridgeClassName) {
+        if ($bridgeClassName === false || $bridgeClassName === null || $bridgeClassName === '') {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Bridge not found']), 404);
         }
 
-        if (!$format) {
+        if ($format === false || $format === null || $format === '') {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'You must specify a format']), 400);
         }
 
-        if (!$this->bridgeFactory->isEnabled($bridgeClassName)) {
+        if ($this->bridgeFactory->isEnabled($bridgeClassName) === false) {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'This bridge is not whitelisted']), 400);
         }
 
         if (
-            Configuration::getConfig('proxy', 'url')
-            && Configuration::getConfig('proxy', 'by_bridge')
-            && $noproxy
+            Configuration::getConfig('proxy', 'url') === true
+            && Configuration::getConfig('proxy', 'by_bridge') === true
+            && ($noproxy === true || $noproxy === 'on' || $noproxy === '1' || $noproxy === 1)
         ) {
             define('NOPROXY', true);
         }
@@ -76,7 +76,7 @@ final class DisplayAction implements ActionInterface
 
         if ($response->getCode() === 200) {
             $ttl = $request->get('_cache_timeout');
-            if (Configuration::getConfig('cache', 'custom_timeout') && isset($ttl)) {
+            if (Configuration::getConfig('cache', 'custom_timeout') === true && isset($ttl) === true) {
                 $ttl = (int) $ttl;
             } else {
                 $ttl = $bridge->getCacheTimeout();
@@ -117,7 +117,7 @@ final class DisplayAction implements ActionInterface
                 $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
                 return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), 429);
             } elseif ($e instanceof HttpException) {
-                if (in_array($e->getCode(), [429, 503], true)) {
+                if (in_array($e->getCode(), [429, 503], true) === true) {
                     $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
                     return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $e->getCode());
                 }
@@ -189,7 +189,7 @@ final class DisplayAction implements ActionInterface
         $cacheKey = 'error_reporting_' . $bridgeName . '_' . $code;
         $report = $this->cache->get($cacheKey);
 
-        if ($report) {
+        if ($report !== false && $report !== null && $report !== '') {
             $report = Json::decode($report);
             $report['time'] = time();
             $report['count']++;
@@ -210,12 +210,17 @@ final class DisplayAction implements ActionInterface
     private static function createGithubIssueUrl(BridgeAbstract $bridge, \Throwable $e): string
     {
         $maintainer = $bridge->getMaintainer();
-        if (str_contains($maintainer, ',')) {
+        if (str_contains($maintainer, ',') === true) {
             $maintainers = explode(',', $maintainer);
         } else {
             $maintainers = [$maintainer];
         }
         $maintainers = array_map('trim', $maintainers);
+
+        $phpVer = phpversion();
+        if ($phpVer === false || $phpVer === '') {
+            $phpVer = 'Unknown';
+        }
 
         $queryString = $_SERVER['QUERY_STRING'] ?? '';
         $query = [
@@ -227,7 +232,7 @@ final class DisplayAction implements ActionInterface
                 $queryString,
                 Configuration::getVersion(),
                 PHP_OS_FAMILY,
-                phpversion() ?: 'Unknown',
+                $phpVer,
                 implode(', @', $maintainers),
             ),
             'labels' => 'Bridge-Broken',

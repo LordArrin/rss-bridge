@@ -31,18 +31,18 @@ final class FileCache implements CacheInterface
 
         $config = array_merge($default, $config);
 
-        if (!$config['path']) {
+        if ((bool) $config['path'] === false) {
             throw new \Exception('The FileCache needs a path value');
         }
 
         $this->path = rtrim((string) $config['path'], '/') . '/';
         $this->enablePurge = (bool) $config['enable_purge'];
 
-        if (!is_dir($this->path)) {
+        if (is_dir($this->path) === false) {
             throw new \Exception(sprintf('The FileCache path does not exist: %s', $this->path));
         }
 
-        if (!is_writable($this->path)) {
+        if (is_writable($this->path) === false) {
             throw new \Exception(sprintf('The FileCache path is not writable: %s', $this->path));
         }
     }
@@ -51,7 +51,7 @@ final class FileCache implements CacheInterface
     {
         $cacheFile = $this->createCacheFile($key);
 
-        if (!file_exists($cacheFile)) {
+        if (file_exists($cacheFile) === false) {
             return $default;
         }
 
@@ -100,7 +100,7 @@ final class FileCache implements CacheInterface
     public function delete(string $key): void
     {
         $cacheFile = $this->createCacheFile($key);
-        if (file_exists($cacheFile)) {
+        if (file_exists($cacheFile) === true) {
             unlink($cacheFile);
         }
     }
@@ -108,12 +108,12 @@ final class FileCache implements CacheInterface
     public function clear(): void
     {
         foreach (scandir($this->path) as $filename) {
-            if ($this->isExcludedFile($filename)) {
+            if ($this->isExcludedFile($filename) === true) {
                 continue;
             }
 
             $cacheFile = $this->path . $filename;
-            if (is_file($cacheFile)) {
+            if (is_file($cacheFile) === true) {
                 unlink($cacheFile);
             }
         }
@@ -121,19 +121,19 @@ final class FileCache implements CacheInterface
 
     public function prune(): void
     {
-        if (!$this->enablePurge) {
+        if ($this->enablePurge === false) {
             return;
         }
 
         $now = time();
 
         foreach (scandir($this->path) as $filename) {
-            if ($this->isExcludedFile($filename)) {
+            if ($this->isExcludedFile($filename) === true) {
                 continue;
             }
 
             $cacheFile = $this->path . $filename;
-            if (!is_file($cacheFile)) {
+            if (is_file($cacheFile) === false) {
                 continue;
             }
 

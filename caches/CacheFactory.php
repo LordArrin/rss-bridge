@@ -33,7 +33,7 @@ final class CacheFactory
     {
         $name = $this->normalizeName($name);
 
-        if (!isset(self::PSR4_CLASSES[$name])) {
+        if (isset(self::PSR4_CLASSES[$name]) === false) {
             throw new \InvalidArgumentException(sprintf('Invalid cache name: "%s"', $name));
         }
 
@@ -46,11 +46,11 @@ final class CacheFactory
             $name = \Configuration::getConfig('cache', 'type') ?? 'file';
         }
 
-        if (preg_match('/(.+)(?:\.php)$/', $name, $matches)) {
+        if ((bool) preg_match('/(.+)(?:\.php)$/', $name, $matches) === true) {
             $name = $matches[1];
         }
 
-        if (preg_match('/(.+)(?:Cache)$/i', $name, $matches)) {
+        if ((bool) preg_match('/(.+)(?:Cache)$/i', $name, $matches) === true) {
             $name = $matches[1];
         }
 
@@ -67,19 +67,25 @@ final class CacheFactory
                 return new NullCache();
 
             case 'file':
-                $path = \Configuration::getConfig('FileCache', 'path') ?: PATH_CACHE;
+                $configuredPath = \Configuration::getConfig('FileCache', 'path');
+                $path = PATH_CACHE;
+
+                if ((bool) $configuredPath === true) {
+                    $path = $configuredPath;
+                }
+
                 return new FileCache($this->logger, [
                     'path'         => $path,
                     'enable_purge' => \Configuration::getConfig('FileCache', 'enable_purge'),
                 ]);
 
             case 'sqlite':
-                if (!extension_loaded('sqlite3')) {
+                if (extension_loaded('sqlite3') === false) {
                     throw new \Exception('"sqlite3" extension not loaded. Please check "php.ini"');
                 }
 
                 $file = \Configuration::getConfig('SQLiteCache', 'file');
-                if (!$file) {
+                if ((bool) $file === false) {
                     throw new \Exception('Configuration for SQLiteCache missing.');
                 }
 
@@ -90,22 +96,22 @@ final class CacheFactory
                 ]);
 
             case 'memcached':
-                if (!extension_loaded('memcached')) {
+                if (extension_loaded('memcached') === false) {
                     throw new \Exception('"memcached" extension not loaded. Please check "php.ini"');
                 }
 
                 $host = \Configuration::getConfig('MemcachedCache', 'host');
                 $port = \Configuration::getConfig('MemcachedCache', 'port');
 
-                if (empty($host)) {
+                if (empty($host) === true) {
                     throw new \Exception('"host" param is not set for MemcachedCache');
                 }
-                if (empty($port)) {
+                if (empty($port) === true) {
                     throw new \Exception('"port" param is not set for MemcachedCache');
                 }
 
                 $port = (string) $port;
-                if (!ctype_digit($port)) {
+                if (ctype_digit($port) === false) {
                     throw new \Exception('"port" param is invalid for MemcachedCache');
                 }
 

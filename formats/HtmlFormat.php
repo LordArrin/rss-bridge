@@ -24,11 +24,11 @@ final class HtmlFormat extends FormatAbstract
         $bridgeName = $_GET['bridge'] ?? 'Unknown';
 
         $feedArray = $this->getFeed();
-        
+
         // Create links to other formats
         $formats = [];
         $formatNames = ['Atom', 'Mrss', 'Json', 'Plaintext', 'Sfeed'];
-        
+
         foreach ($formatNames as $formatName) {
             $formatUrl = '?' . str_ireplace('format=Html', 'format=' . $formatName, $queryString);
             $formats[] = [
@@ -41,7 +41,7 @@ final class HtmlFormat extends FormatAbstract
         $items = [];
         foreach ($this->getItems() as $item) {
             $items[] = [
-                'url'        => $item->getURI() ?: ($feedArray['uri'] ?? ''),
+                'url'        => (bool) $item->getURI() === true ? $item->getURI() : ($feedArray['uri'] ?? ''),
                 'title'      => $item->getTitle() ?? '(no title)',
                 'timestamp'  => $item->getTimestamp(),
                 'author'     => $item->getAuthor(),
@@ -63,13 +63,13 @@ final class HtmlFormat extends FormatAbstract
             'formats'      => $formats,
             'uri'          => $feedArray['uri'] ?? '',
             'items'        => $items,
-            'donation_uri' => $donationUri,
+            // 'donation_uri' => $donationUri,
         ]);
     }
 
     private function getMimeTypeForFormat(string $formatName): string
     {
-        return match($formatName) {
+        return match ($formatName) {
             'Atom' => 'application/atom+xml',
             'Mrss' => 'application/rss+xml',
             'Json' => 'application/json',
