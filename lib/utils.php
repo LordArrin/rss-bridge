@@ -1,26 +1,5 @@
 <?php
 
-// Based on https://github.com/nette/utils/blob/master/src/Utils/Json.php
-final class Json
-{
-    public static function encode(mixed $value, bool $pretty = true, bool $asciiSafe = false): string
-    {
-        $flags = JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES;
-        if (!$asciiSafe) {
-            $flags |= JSON_UNESCAPED_UNICODE;
-        }
-        if ($pretty) {
-            $flags |= JSON_PRETTY_PRINT;
-        }
-        return json_encode($value, $flags);
-    }
-
-    public static function decode(string $json, bool $assoc = true): mixed
-    {
-        return json_decode($json, $assoc, 512, JSON_THROW_ON_ERROR);
-    }
-}
-
 /**
  * Get the home page URL e.g. 'https://example.com/' or 'https://example.com/bridge/'
  */
@@ -255,51 +234,4 @@ function now(): \DateTimeImmutable
 function create_random_string(int $bytes = 16): string
 {
     return bin2hex(random_bytes($bytes));
-}
-
-/**
- * Mostly thrown by bridges to indicate user failure.
- * Will only be logged as debug log record.
- */
-final class ClientException extends \Exception
-{
-}
-
-function throwClientException(string $message = ''): never
-{
-    throw new ClientException($message, 400);
-}
-
-function throwServerException(string $message = ''): never
-{
-    throw new \Exception($message, 500);
-}
-
-function throwRateLimitException(string $message = ''): never
-{
-    throw new RateLimitException($message);
-}
-
-/**
- * @deprecated Use throwClientException() instead.
- */
-function returnClientError(string $message = ''): never
-{
-    trigger_error(
-        'returnClientError() is deprecated, use throwClientException() instead',
-        E_USER_DEPRECATED
-    );
-    throwClientException($message);
-}
-
-/**
- * @deprecated Use throwServerException() instead.
- */
-function returnServerError(string $message = ''): never
-{
-    trigger_error(
-        'returnServerError() is deprecated, use throwServerException() instead',
-        E_USER_DEPRECATED
-    );
-    throwServerException($message);
 }

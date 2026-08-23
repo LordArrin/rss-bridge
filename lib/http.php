@@ -1,9 +1,5 @@
 <?php
 
-final class RateLimitException extends \Exception
-{
-}
-
 class HttpException extends \Exception
 {
     public ?Response $response;

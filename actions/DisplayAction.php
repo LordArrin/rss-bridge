@@ -10,7 +10,6 @@ use ClientException;
 use Configuration;
 use RSSBridge\Formats\FormatFactory;
 use HttpException;
-use Json;
 use Logger;
 use RateLimitException;
 use Request;

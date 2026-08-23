@@ -17,17 +17,9 @@
 
     <source>
         <include>
-            <directory>lib</directory>
             <directory>bridges</directory>
-            <directory>bridges-v2</directory>
-            <directory>actions</directory>
-            <directory>caches</directory>
-            <directory>formats</directory>
         </include>
         <exclude>
-            <directory>lib/parsedown</directory>
-            <directory>lib/php-urljoin</directory>
-            <directory>lib/simplehtmldom</directory>
         </exclude>
     </source>
 </phpunit>

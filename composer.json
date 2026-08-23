@@ -13,6 +13,15 @@
             "RSSBridge\\Proxies\\": "proxies/"
         },
         "files": [
+            "lib/Json.php",
+            "lib/exceptions.php",
+            "lib/utils.php",
+            "lib/html.php",
+            "lib/contents.php",
+            "lib/http.php",
+            "lib/logger.php",
+            "lib/url.php",
+            "lib/seotags.php",
             "lib/compatibility.php"
         ]
     },
