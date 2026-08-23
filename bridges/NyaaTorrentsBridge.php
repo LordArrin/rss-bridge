@@ -1,5 +1,7 @@
 <?php
 
+use RSSBridge\FeedParser;
+
 class NyaaTorrentsBridge extends BridgeAbstract
 {
     const MAINTAINER = 'ORelio & Jisagi';

@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
+use RSSBridge\Actions\ActionInterface;
 use RSSBridge\Actions\ConnectivityAction;
 use RSSBridge\Actions\DisplayAction;
 use RSSBridge\Actions\FrontpageAction;
 use RSSBridge\Actions\HealthAction;
 use RSSBridge\Actions\ListAction;
+use RSSBridge\Container;
 use RSSBridge\Middlewares\BasicAuthMiddleware;
 use RSSBridge\Middlewares\CacheMiddleware;
 use RSSBridge\Middlewares\ExceptionMiddleware;
@@ -36,7 +38,7 @@ final class RssBridge
             default => FrontpageAction::class,
         };
 
-        /** @var ActionInterface $actionHandler */
+        /** @var \RSSBridge\Actions\ActionInterface $actionHandler */
         $actionHandler = $this->container[$actionClass];
 
         // Build middleware stack (order matters!)

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use BridgeAbstract;
+use RSSBridge\FeedItem;
 
 final class MSISupportBridge extends BridgeAbstract
 {

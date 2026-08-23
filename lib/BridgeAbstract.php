@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use RSSBridge\Caches\CacheInterface;
+use RSSBridge\ParameterValidator;
 
 abstract class BridgeAbstract
 {

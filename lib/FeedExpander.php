@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use RSSBridge\FeedParser;
 use RSSBridge\Formats\MrssFormat;
 use RSSBridge\Formats\AtomFormat;
 

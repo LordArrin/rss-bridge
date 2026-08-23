@@ -1,5 +1,7 @@
 <?php
 
+namespace RSSBridge;
+
 class ParameterValidator
 {
     /**

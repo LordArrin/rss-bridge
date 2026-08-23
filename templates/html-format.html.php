@@ -46,11 +46,6 @@
                 </a>
             <?php endforeach; ?>
 
-            <?php if ($donation_uri): ?>
-                <a href="<?= e($donation_uri) ?>" class="button rss-feed" rel="noopener noreferrer" target="_blank">
-                    Donate to maintainer
-                </a>
-            <?php endif; ?>
         </div>
 
         <?php foreach ($items as $item): ?>

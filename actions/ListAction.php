@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Actions;
 
 use BridgeFactory;
+use Json;
 use Request;
 use Response;
 use SafeBridgeLoader;

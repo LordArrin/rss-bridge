@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+namespace RSSBridge;
+
+use RSSBridge\FeedItem;
+
 /**
  * Very basic and naive feed parser.
  *

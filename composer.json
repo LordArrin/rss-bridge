@@ -12,17 +12,28 @@
             "RSSBridge\\Middlewares\\": "middlewares/",
             "RSSBridge\\Proxies\\": "proxies/"
         },
+        "classmap": [
+            "lib/Container.php",
+            "lib/ParameterValidator.php",
+            "lib/FeedParser.php",
+            "lib/FeedItem.php"
+        ],
         "files": [
             "lib/Json.php",
             "lib/exceptions.php",
             "lib/utils.php",
-            "lib/html.php",
             "lib/contents.php",
             "lib/http.php",
             "lib/logger.php",
             "lib/url.php",
-            "lib/seotags.php",
-            "lib/compatibility.php"
+            "lib/compatibility.php",
+            "quirks/template.php",
+            "quirks/html.php",
+            "quirks/srcset.php",
+            "quirks/dom.php",
+            "quirks/extract.php",
+            "quirks/media.php",
+            "quirks/seo.php"
         ]
     },
     "require": {

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use RSSBridge\FeedItem;
+
 /**
  * An alternative abstract class for bridges utilizing XPath expressions.
  *

@@ -1,5 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
+namespace RSSBridge;
+
 class FeedItem
 {
     protected ?string $uri = null;

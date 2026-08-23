@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Formats;
 
+use RSSBridge\FeedItem;
+
 /**
  * Base class for all feed formats.
  *
@@ -20,7 +22,7 @@ abstract class FormatAbstract implements FormatInterface
     protected array $feed = [];
 
     /**
-     * @var \FeedItem[]
+     * @var FeedItem[]
      */
     protected array $items = [];
 
@@ -57,10 +59,10 @@ abstract class FormatAbstract implements FormatInterface
     {
         $this->items = [];
         foreach ($items as $item) {
-            if ($item instanceof \FeedItem) {
+            if ($item instanceof FeedItem) {  // < ÓÁÐÀÒÜ ÎÁÐÀÒÍÛÉ ÑËÅØ
                 $this->items[] = $item;
             } else {
-                $this->items[] = \FeedItem::fromArray((array) $item);
+                $this->items[] = FeedItem::fromArray((array) $item);  // < ÓÁÐÀÒÜ ÎÁÐÀÒÍÛÉ ÑËÅØ
             }
         }
     }
@@ -68,7 +70,7 @@ abstract class FormatAbstract implements FormatInterface
     /**
      * {@inheritdoc}
      *
-     * @return \FeedItem[]
+     * @return FeedItem[]
      */
     public function getItems(): array
     {

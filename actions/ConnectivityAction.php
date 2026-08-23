@@ -6,6 +6,7 @@ namespace RSSBridge\Actions;
 
 use BridgeFactory;
 use Configuration;
+use Json;
 use Request;
 use Response;
 use SafeBridgeLoader;
