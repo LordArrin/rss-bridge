@@ -1,11 +1,39 @@
 <?php
 
+declare(strict_types=1);
+
+use RSSBridge\Configuration;
+
 /**
- * Convert Markdown into HTML with Parsedown.
+ * Media handling utilities for RSS feed items.
+ *
+ * This file provides helpers for processing media content commonly
+ * found in web pages and converting it into feed-friendly HTML:
+ *
+ * - Markdown to HTML conversion via Parsedown
+ * - YouTube video embedding (iframe or clickable thumbnail with WebP/JPEG)
+ *
+ * Loading mechanism: registered in composer.json "files" autoload,
+ * so the functions are available globally without any require.
  */
-function markdownToHtml($string, $config = [])
+
+/**
+ * Convert Markdown text into HTML using the Parsedown library.
+ *
+ * Supports three Parsedown options that control output behavior:
+ * - 'breaksEnabled' (bool): Convert newlines to <br> tags
+ * - 'markupEscaped' (bool): Escape HTML markup in the input
+ * - 'urlsLinked' (bool): Auto-link URLs in the input text
+ *
+ * @param string $string The Markdown input text.
+ * @param array<string, bool> $config Parsedown configuration options.
+ * @return string The rendered HTML output.
+ * @throws \InvalidArgumentException If an unknown Parsedown option is provided.
+ */
+function markdownToHtml(string $string, array $config = []): string
 {
     $Parsedown = new Parsedown();
+
     foreach ($config as $option => $value) {
         if ($option === 'breaksEnabled') {
             $Parsedown->setBreaksEnabled($value);
@@ -17,13 +45,27 @@ function markdownToHtml($string, $config = [])
             throw new \InvalidArgumentException("Invalid Parsedown option \"$option\"");
         }
     }
+
     return $Parsedown->text($string);
 }
 
 /**
- * Handle a YouTube video by returning an iframe or a clickable thumbnail.
+ * Handle a YouTube video URL by returning an embed or a clickable thumbnail.
+ *
+ * Extracts the 11-character YouTube video ID from various URL formats
+ * (youtube.com/watch, youtu.be, shorts, embed, etc.) and returns either:
+ *
+ * - An <iframe> embed (when youtube.iframe is enabled in configuration),
+ *   optionally using youtube-nocookie.com for privacy.
+ * - A <picture> element with WebP/JPEG srcset thumbnails linking to the
+ *   video page (when iframe is disabled), which is safer for RSS readers.
+ *
+ * Returns an empty string if no valid YouTube video ID is found.
+ *
+ * @param string $string A string containing a YouTube video URL or video ID.
+ * @return string HTML snippet with iframe or thumbnail, or empty string if not found.
  */
-function handleYoutube(string $string)
+function handleYoutube(string $string): string
 {
     $useIframe = Configuration::getConfig('youtube', 'iframe');
     $useNocookie = Configuration::getConfig('youtube', 'nocookie');
@@ -37,8 +79,8 @@ function handleYoutube(string $string)
         return '';
     }
 
-    if ($useIframe) {
-        if ($useNocookie) {
+    if ($useIframe === true) {
+        if ($useNocookie === true) {
             $embedUri = 'https://www.youtube-nocookie.com/embed/' . $videoID;
         } else {
             $embedUri = 'https://www.youtube.com/embed/' . $videoID;

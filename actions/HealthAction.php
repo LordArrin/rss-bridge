@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace RSSBridge\Actions;
 
-use Configuration;
 use Json;
 use Request;
 use Response;
 use RSSBridge\Caches\CacheInterface;
+use RSSBridge\Configuration;
 use SafeBridgeLoader;
 
 final class HealthAction implements ActionInterface

@@ -14,11 +14,27 @@ final class BoostyBridge extends BridgeAbstract
     public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 3600;
 
-    public const PARAMETERS = [[
-        'blog'     => ['name' => 'Blog', 'type' => 'text', 'required' => true, 'title' => 'Channel name, for example, rebel_jack from https://boosty.to/rebel_jack'],
-        'limit'    => ['name' => 'Posts limit', 'type' => 'number', 'defaultValue' => 10],
-        'hideTags' => ['name' => 'Hide tags', 'type' => 'checkbox', 'title' => 'Check this box to completely hide the tags list from the post content'],
-    ]];
+    public const PARAMETERS = [
+        [
+            'blog' => [
+                'name' => 'Blog',
+                'type' => 'text',
+                'required' => true,
+                'exampleValue' => 'lazy_tarts',
+                'title' => 'Channel name, for example, rebel_jack from https://boosty.to/rebel_jack',
+            ],
+            'limit' => [
+                'name' => 'Posts limit',
+                'type' => 'number',
+                'defaultValue' => 10,
+            ],
+            'hideTags' => [
+                'name' => 'Hide tags',
+                'type' => 'checkbox',
+                'title' => 'Check this box to completely hide the tags list from the post content',
+            ],
+        ],
+    ];
 
     private string $blogName = '';
     private string $blogDisplayName = '';

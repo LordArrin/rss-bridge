@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Proxies;
 
-use Configuration;
+use RSSBridge\Configuration;
 
 final class ProxyFactory
 {

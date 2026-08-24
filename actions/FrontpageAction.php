@@ -6,7 +6,7 @@ namespace RSSBridge\Actions;
 
 use BridgeFactory;
 use BridgeMetadataCache;
-use Configuration;
+use RSSBridge\Configuration;
 use Request;
 use Response;
 use SafeBridgeLoader;

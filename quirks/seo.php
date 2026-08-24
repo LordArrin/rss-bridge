@@ -1,13 +1,43 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * Process HTML DOM to retrieve standard metadata intended for social media embeds and SEO.
- * @param string|object $html Webpage HTML. Supports HTML objects or string objects.
- * @return array Entry generated from Metadata: 'title', 'author', 'timestamp', etc.
+ * SEO metadata extraction from HTML pages.
+ *
+ * This file provides a single function that extracts structured metadata
+ * from HTML pages for use in RSS feed items. It scans two sources:
+ *
+ * 1. HTML <meta> tags (Open Graph, Twitter Cards, Dublin Core, etc.)
+ * 2. Embedded JSON-LD structured data (schema.org Article, Person, etc.)
+ *
+ * The extracted metadata is returned as an associative array suitable
+ * for merging into a FeedItem.
+ *
+ * Loading mechanism: registered in composer.json "files" autoload,
+ * so the function is available globally without any require.
  */
-function html_find_seo_metadata($html)
+
+/**
+ * Extract SEO and social media metadata from an HTML page.
+ *
+ * Scans the HTML for Open Graph, Twitter Cards, standard meta tags,
+ * and JSON-LD structured data. Returns an associative array with
+ * keys like 'title', 'author', 'timestamp', 'enclosures', etc.
+ *
+ * @param string|\simple_html_dom $html Raw HTML string or parsed DOM object.
+ * @return array{
+ *     uri?: string,
+ *     title?: string,
+ *     content?: string,
+ *     timestamp?: int,
+ *     enclosures?: array<int, string>,
+ *     author?: string,
+ * } Extracted metadata (only present keys are included).
+ */
+function html_find_seo_metadata(string|\simple_html_dom $html): array
 {
-    if (is_string($html)) {
+    if (is_string($html) === true) {
         $html = getSimpleHTMLDOM($html);
     }
 
@@ -85,26 +115,28 @@ function html_find_seo_metadata($html)
             $element = null;
             if ($field === 'canonical') {
                 $element = $html->find('link[rel=canonical]');
-            } else if ($field === 'time') {
+            } elseif ($field === 'time') {
                 $element = $html->find('time[datetime]');
             } else {
                 $element = $html->find("meta[property=$field], meta[name=$field]");
             }
+
             // Found something? Extract the value and populate Entry field
-            if (!empty($element)) {
+            if ($element !== null && $element !== [] && count($element) > 0) {
                 $element = $element[0];
                 $field_value = '';
                 if ($field === 'canonical') {
                     $field_value = $element->href;
-                } else if ($field === 'time') {
+                } elseif ($field === 'time') {
                     $field_value = $element->datetime;
                 } else {
                     $field_value = $element->content;
                 }
-                if (!empty($field_value)) {
+
+                if ($field_value !== null && $field_value !== '') {
                     if ($field === 'article:author:first_name' || $field === 'profile:first_name') {
                         $author_first_name = $field_value;
-                    } else if ($field === 'article:author:last_name' || $field === 'profile:last_name') {
+                    } elseif ($field === 'article:author:last_name' || $field === 'profile:last_name') {
                         $author_last_name = $field_value;
                     } else {
                         $item[$property] = $field_value;
@@ -116,12 +148,23 @@ function html_find_seo_metadata($html)
     }
 
     // Populate author from first name and last name if all we have is nothing or Twitter @username
-    if ((!isset($item['author']) || $item['author'][0] === '@') && (is_string($author_first_name) || is_string($author_last_name))) {
+    $authorNotSet = isset($item['author']) === false;
+    $authorIsTwitterHandle = (
+        isset($item['author']) === true
+        && is_string($item['author']) === true
+        && str_starts_with($item['author'], '@') === true
+    );
+    $authorMissing = $authorNotSet || $authorIsTwitterHandle;
+    $hasFirstName = is_string($author_first_name) === true;
+    $hasLastName = is_string($author_last_name) === true;
+    $hasNameParts = $hasFirstName || $hasLastName;
+
+    if ($authorMissing === true && $hasNameParts === true) {
         $author = '';
-        if (is_string($author_first_name)) {
+        if (is_string($author_first_name) === true) {
             $author = $author_first_name;
         }
-        if (is_string($author_last_name)) {
+        if (is_string($author_last_name) === true) {
             $author = $author . ' ' . $author_last_name;
         }
         $item['author'] = trim($author);
@@ -129,12 +172,10 @@ function html_find_seo_metadata($html)
 
     // == Second source of metadata: Embedded JSON ==
     // JSON linked data - https://www.w3.org/TR/2014/REC-json-ld-20140116/
-    // JSON linked data is COMPLEX and MAY BE LESS RELIABLE than <meta> tags. Used for fields not found as <meta> tags.
-    // The implementation below will load all ld+json we can understand and attempt to extract relevant information.
+    // JSON linked data is COMPLEX and MAY BE LESS RELIABLE than <meta> tags.
+    // Used for fields not found as <meta> tags.
 
     // ld+json object types that hold article metadata
-    // Each mapping define item fields and a list of possible JSON field for this field
-    // Each candiate JSON field is either a string (field name) or a list (path to nested field)
     static $ldjson_article_types = ['webpage', 'article', 'newsarticle', 'blogposting'];
     static $ldjson_article_mappings = [
         'uri' => ['url', 'mainEntityOfPage'],
@@ -151,15 +192,14 @@ function html_find_seo_metadata($html)
     $ldjson_author_id = null;
 
     // Utility function for checking if JSON array matches one of the desired ld+json object types
-    // A JSON object may have a single ld+json @type as a string OR several types at once as a list
-    $ldjson_is_of_type = function ($json, $allowed_types) {
-        if (isset($json['@type'])) {
+    $ldjson_is_of_type = function (array $json, array $allowed_types): bool {
+        if (isset($json['@type']) === true) {
             $json_types = $json['@type'];
-            if (!is_array($json_types)) {
-                $json_types = [ $json_types ];
+            if (is_array($json_types) === false) {
+                $json_types = [$json_types];
             }
             foreach ($json_types as $item_type) {
-                if (in_array(strtolower($item_type), $allowed_types)) {
+                if (is_string($item_type) === true && in_array(strtolower($item_type), $allowed_types, true) === true) {
                     return true;
                 }
             }
@@ -170,68 +210,87 @@ function html_find_seo_metadata($html)
     // Process ld+json objects embedded in the HTML DOM
     foreach ($html->find('script[type=application/ld+json]') as $html_ldjson_node) {
         $json_raw = json_decode($html_ldjson_node->innertext, true);
-        if (is_array($json_raw)) {
-            // The JSON we just loaded may contain directly a single ld+json object AND/OR several ones under the '@graph' key
-            $json_items = [ $json_raw ];
-            if (isset($json_raw['@graph'])) {
+        if (is_array($json_raw) === true) {
+            // The JSON may contain a single object AND/OR several under '@graph'
+            $json_items = [$json_raw];
+            if (isset($json_raw['@graph']) === true && is_array($json_raw['@graph']) === true) {
                 foreach ($json_raw['@graph'] as $json_raw_sub_item) {
                     $json_items[] = $json_raw_sub_item;
                 }
             }
-            // Now that we have a list of distinct JSON items, we can process them individually
+
+            // Process each JSON item individually
             foreach ($json_items as $json) {
+                if (is_array($json) === false) {
+                    continue;
+                }
+
                 // JSON item that holds an ld+json Article object (or a variant)
-                if ($ldjson_is_of_type($json, $ldjson_article_types)) {
-                    // For each item property, look for corresponding JSON fields and populate the item
+                if ($ldjson_is_of_type($json, $ldjson_article_types) === true) {
                     foreach ($ldjson_article_mappings as $property => $field_list) {
-                        // Skip fields already found as <meta> tags, except Twitter @username (because we might find a better name)
-                        if (!isset($item[$property]) || ($property === 'author' && $item['author'][0] === '@')) {
-                            foreach ($field_list as $field) {
-                                $json_root = $json;
-                                // If necessary, navigate inside the JSON object to access a nested field
-                                if (is_array($field)) {
-                                    // At this point, $field = ['author', 'name'] and $json_root = {"author": {"name": "John Doe"}}
-                                    $json_navigate_ok = true;
-                                    while (count($field) > 1) {
-                                        $sub_field = array_shift($field);
-                                        if (array_key_exists($sub_field, $json_root)) {
-                                            $json_root = $json_root[$sub_field];
-                                            if (array_is_list($json_root) && count($json_root) === 1) {
-                                                $json_root = $json_root[0]; // Unwrap list of single item e.g. {"author":[{"name":"John Doe"}]}
-                                            }
-                                        } else {
-                                            // Desired path not found in JSON, stop navigating
-                                            $json_navigate_ok = false;
-                                            break;
+                        // Skip fields already found as <meta> tags (except Twitter @username)
+                        $fieldAlreadySet = isset($item[$property]) === true;
+                        $isAuthorField = $property === 'author';
+                        $authorIsHandle = (
+                            isset($item['author']) === true
+                            && is_string($item['author']) === true
+                            && str_starts_with($item['author'], '@') === true
+                        );
+                        $shouldSkipField = $fieldAlreadySet === true && ($isAuthorField === false || $authorIsHandle === false);
+
+                        if ($shouldSkipField === true) {
+                            continue;
+                        }
+
+                        foreach ($field_list as $field) {
+                            $json_root = $json;
+                            // Navigate inside the JSON object to access nested fields
+                            if (is_array($field) === true) {
+                                $json_navigate_ok = true;
+                                while (count($field) > 1) {
+                                    $sub_field = array_shift($field);
+                                    if (is_array($json_root) === true && array_key_exists($sub_field, $json_root) === true) {
+                                        $json_root = $json_root[$sub_field];
+                                        if (
+                                            is_array($json_root) === true
+                                            && array_is_list($json_root) === true
+                                            && count($json_root) === 1
+                                        ) {
+                                            $json_root = $json_root[0];
                                         }
+                                    } else {
+                                        $json_navigate_ok = false;
+                                        break;
                                     }
-                                    if (!$json_navigate_ok) {
-                                        continue; //Desired path not found in JSON, skip this field
-                                    }
-                                    $field = $field[0];
-                                    // At this point, $field = "name" and $json_root = {"name": "John Doe"}
                                 }
-                                // Now we can check for desired field in JSON and populate $item accordingly
-                                if (isset($json_root[$field])) {
-                                    $field_value = $json_root[$field];
-                                    if (is_array($field_value) && isset($field_value[0])) {
-                                        $field_value = $field_value[0]; // Different versions of the same enclosure? Take the first one
-                                    }
-                                    if (is_string($field_value) && !empty($field_value)) {
-                                        if ($property === 'author' && $field === '@id') {
-                                            $ldjson_author_id = $field_value; // Author is referred to by its ID: We'll see later if we can resolve it
-                                        } else {
-                                            $item[$property] = $field_value;
-                                            break; // Stop on first match, e.g. {"author":{"name":"John Doe"}} has priority over {"author":"John Doe"}
-                                        }
+                                if ($json_navigate_ok === false) {
+                                    continue;
+                                }
+                                $field = $field[0];
+                            }
+
+                            // Check for desired field in JSON and populate $item
+                            if (is_array($json_root) === true && isset($json_root[$field]) === true) {
+                                $field_value = $json_root[$field];
+                                if (is_array($field_value) === true && isset($field_value[0]) === true) {
+                                    $field_value = $field_value[0];
+                                }
+                                if (is_string($field_value) === true && $field_value !== '') {
+                                    if ($property === 'author' && $field === '@id') {
+                                        $ldjson_author_id = $field_value;
+                                    } else {
+                                        $item[$property] = $field_value;
+                                        break;
                                     }
                                 }
                             }
                         }
                     }
-                // JSON item that holds an ld+json Author object (or a variant)
-                } else if ($ldjson_is_of_type($json, $ldjson_author_types)) {
-                    if (isset($json['@id']) && isset($json['name'])) {
+                // JSON item that holds an ld+json Author object
+                } elseif ($ldjson_is_of_type($json, $ldjson_author_types) === true) {
+                    $hasId = isset($json['@id']) === true && is_string($json['@id']) === true;
+                    $hasName = isset($json['name']) === true && is_string($json['name']) === true;
+                    if ($hasId === true && $hasName === true) {
                         $ldjson_author_mappings[$json['@id']] = $json['name'];
                     }
                 }
@@ -239,17 +298,32 @@ function html_find_seo_metadata($html)
         }
     }
 
-    // Attempt to resolve ld+json author if all we have is nothing or Twitter @username
-    if ((!isset($item['author']) || $item['author'][0] === '@') && !is_null($ldjson_author_id) && isset($ldjson_author_mappings[$ldjson_author_id])) {
+    // Attempt to resolve ld+json author if still missing or Twitter @username
+    $authorStillNotSet = isset($item['author']) === false;
+    $authorStillIsHandle = (
+        isset($item['author']) === true
+        && is_string($item['author']) === true
+        && str_starts_with($item['author'], '@') === true
+    );
+    $authorStillMissing = $authorStillNotSet || $authorStillIsHandle;
+
+    if (
+        $authorStillMissing === true
+        && $ldjson_author_id !== null
+        && isset($ldjson_author_mappings[$ldjson_author_id]) === true
+    ) {
         $item['author'] = $ldjson_author_mappings[$ldjson_author_id];
     }
 
     // Adjust item field types
-    if (isset($item['enclosures'])) {
-        $item['enclosures'] = [ $item['enclosures'] ];
+    if (isset($item['enclosures']) === true && is_string($item['enclosures']) === true) {
+        $item['enclosures'] = [$item['enclosures']];
     }
-    if (isset($item['timestamp'])) {
-        $item['timestamp'] = strtotime($item['timestamp']);
+    if (isset($item['timestamp']) === true && is_string($item['timestamp']) === true) {
+        $parsed = strtotime($item['timestamp']);
+        if ($parsed !== false) {
+            $item['timestamp'] = $parsed;
+        }
     }
 
     return $item;

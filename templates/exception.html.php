@@ -1,4 +1,5 @@
 <?php
+
 /**
  * This template is used for rendering exceptions
  */
@@ -130,7 +131,7 @@
     </div>
 
     <div>
-        <strong>Version:</strong> <?= e(Configuration::getVersion()) ?>
+        <strong>Version:</strong> <?= e(\RSSBridge\Configuration::getVersion()) ?>
     </div>
 
     <div>

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use RSSBridge\Caches\CacheInterface;
+use RSSBridge\Configuration;
 use RSSBridge\ParameterValidator;
 
 abstract class BridgeAbstract
@@ -240,11 +241,17 @@ abstract class BridgeAbstract
 
     protected function getInput($input)
     {
+        if ($this->queriedContext === null) {
+            return null;
+        }
         return $this->inputs[$this->queriedContext][$input]['value'] ?? null;
     }
 
     public function getKey($input)
     {
+        if ($this->queriedContext === null) {
+            return null;
+        }
         if (!isset($this->inputs[$this->queriedContext][$input]['value'])) {
             return null;
         }

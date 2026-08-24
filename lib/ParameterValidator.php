@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace RSSBridge;
 
 class ParameterValidator
@@ -60,7 +62,10 @@ class ParameterValidator
         return $errors;
     }
 
-    public function getQueriedContext(array $input, array $parameters)
+    /**
+     * @return string|int|false|null
+     */
+    public function getQueriedContext(array $input, array $parameters): string|int|false|null
     {
         $queriedContexts = [];
 
@@ -106,11 +111,11 @@ class ParameterValidator
             case 0:
                 // Found no match, is there a context without parameters?
                 if (isset($input['context'])) {
-                    return $input['context'];
+                    return (string)$input['context'];
                 }
                 foreach ($queriedContexts as $context2 => $queried) {
                     if (is_null($queried)) {
-                        return $context2;
+                        return (string)$context2;
                     }
                 }
                 return null;
@@ -122,49 +127,49 @@ class ParameterValidator
         }
     }
 
-    private function validateTextValue($value, $pattern = null)
+    private function validateTextValue(mixed $value, ?string $pattern = null): ?string
     {
         if (is_null($pattern)) {
             // No filtering taking place
-            $filteredValue = filter_var($value);
+            $filteredValue = filter_var($value, FILTER_DEFAULT);
         } else {
-            $filteredValue = filter_var($value, FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => '/^' . $pattern . '$/']]);
+            $filteredValue = filter_var((string)$value, FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => '/^' . $pattern . '$/']]);
         }
         if ($filteredValue === false) {
             return null;
         }
-        return $filteredValue;
+        return (string)$filteredValue;
     }
 
-    private function validateNumberValue($value)
+    private function validateNumberValue(mixed $value): ?int
     {
         $filteredValue = filter_var($value, FILTER_VALIDATE_INT);
         if ($filteredValue === false) {
             return null;
         }
-        return $filteredValue;
+        return (int)$filteredValue;
     }
 
-    private function validateCheckboxValue($value)
+    private function validateCheckboxValue(mixed $value): ?bool
     {
         return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
     }
 
-    private function validateListValue($value, $expectedValues)
+    private function validateListValue(mixed $value, array $expectedValues): ?string
     {
-        $filteredValue = filter_var($value);
+        $filteredValue = filter_var($value, FILTER_DEFAULT);
         if ($filteredValue === false) {
             return null;
         }
-        if (!in_array($filteredValue, $expectedValues)) {
+        if (!in_array($filteredValue, $expectedValues, true)) {
             // Check sub-values?
             foreach ($expectedValues as $subName => $subValue) {
-                if (is_array($subValue) && in_array($filteredValue, $subValue)) {
-                    return $filteredValue;
+                if (is_array($subValue) && in_array($filteredValue, $subValue, true)) {
+                    return (string)$filteredValue;
                 }
             }
             return null;
         }
-        return $filteredValue;
+        return (string)$filteredValue;
     }
 }

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use RSSBridge\Caches\CacheInterface;
+use RSSBridge\Configuration;
 use RSSBridge\Proxies\DirectProxy;
 use RSSBridge\Proxies\ProxyFactory;
 
@@ -275,7 +276,7 @@ function getProtectedContents(string $url, string $profileName, array $options =
                 "If this site is protected by Cloudflare, configure a profile in config.ini.php:\n\n" .
                 "  [proxy_profile_flaresolverr]\n" .
                 "  type = \"FlareSolverr\"\n" .
-                "  url = \"http://localhost:8191\""
+                '  url = "http://localhost:8191"'
             );
         }
         throwClientException("Proxy profile '{$profileName}' failed: " . $e->getMessage());

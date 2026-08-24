@@ -7,9 +7,6 @@ namespace RSSBridge\Actions;
 use BridgeAbstract;
 use BridgeFactory;
 use ClientException;
-use Configuration;
-use RSSBridge\Formats\FormatFactory;
-use RSSBridge\FeedItem;
 use HttpException;
 use Json;
 use Logger;
@@ -17,6 +14,9 @@ use RateLimitException;
 use Request;
 use Response;
 use RSSBridge\Caches\CacheInterface;
+use RSSBridge\Configuration;
+use RSSBridge\FeedItem;
+use RSSBridge\Formats\FormatFactory;
 use SafeBridgeLoader;
 
 final class DisplayAction implements ActionInterface

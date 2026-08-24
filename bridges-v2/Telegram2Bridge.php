@@ -233,7 +233,6 @@ CSS,
 
     private string $feedName = '';
     private string $feedIcon = '';
-    private ?array $mediaCache = null;
     private ?string $cachedNormalizedUsername = null;
 
     private function getNormalizedUsername(): string
@@ -1337,98 +1336,23 @@ CSS,
 
     private function urlToDataUri(string $url): string
     {
-        $data = $this->fetchMediaCached($url);
-        if ($data === null) {
-            return $url;
-        }
-
         $embedMaxSize = $this->getOption('embed_max_size');
         if ($embedMaxSize === null || $embedMaxSize === '') {
             $embedMaxSize = '10m';
         }
-        $maxSize = $this->parseSize($embedMaxSize);
-
-        if ($maxSize > 0 && strlen($data['body']) > $maxSize) {
-            return $url;
-        }
-
-        return sprintf('data:%s;base64,%s', $data['type'], base64_encode(string: $data['body']));
-    }
-
-    private function fetchMediaCached(string $url): ?array
-    {
-        if ($this->mediaCache !== null && array_key_exists($url, $this->mediaCache) === true) {
-            return $this->mediaCache[$url];
-        }
+        $maxSize = \media_embed_parse_size($embedMaxSize);
 
         $useProxy = (bool) $this->getInput('use_proxy');
 
-        if ($useProxy === true) {
-            try {
-                $data = getProtectedBinary($url, self::PROXY_PROFILE);
-                if ($data !== null) {
-                    $this->mediaCache ??= [];
-                    $this->mediaCache[$url] = $data;
-                    return $data;
-                }
-            } catch (\Throwable $e) {
-                $this->logger->warning(sprintf(
-                    'TgWSProxy media fetch failed for %s: %s',
-                    $url,
-                    $e->getMessage()
-                ));
-            }
-        }
-
-        return $this->fetchMediaDirect($url);
-    }
-
-    private function fetchMediaDirect(string $url): ?array
-    {
-        try {
-            return $this->withRetry(
-                function () use ($url): array {
-                    $response = getContents($url, [], [], true);
-
-                    $body = $response->getBody();
-                    $ct = $response->getHeaders()['content-type'][0] ?? 'application/octet-stream';
-                    $type = trim(string: explode(separator: ';', string: $ct)[0]);
-
-                    if ($body === '' || $body === null) {
-                        throw new \RuntimeException('Empty response body');
-                    }
-
-                    return ['body' => $body, 'type' => $type];
-                },
-                'Direct media fetch',
-                $url
-            );
-        } catch (\Throwable $e) {
-            $this->mediaCache ??= [];
-            $this->mediaCache[$url] = null;
-            return null;
-        }
-    }
-
-    private function parseSize(string|int|float $value): int
-    {
-        $value = trim((string) $value);
-        if ($value === '') {
-            return 0;
-        }
-
-        if (preg_match('/^(\d+(?:\.\d+)?)\s*([kmg])?b?$/i', $value, $m) !== 1) {
-            return (int) $value;
-        }
-
-        $mult = match (strtolower($m[2] ?? '')) {
-            'k' => 1024,
-            'm' => 1048576,
-            'g' => 1073741824,
-            default => 1,
-        };
-
-        return (int) round(num: (float) $m[1] * $mult);
+        return \media_embed_url_to_data_uri(
+            url: $url,
+            cache: $this->cache,
+            cacheTtl: $this->getCacheTimeout(),
+            maxSize: $maxSize,
+            proxyProfile: $useProxy === true ? self::PROXY_PROFILE : null,
+            logger: $this->logger,
+            retries: self::PROXY_RETRIES
+        );
     }
 
     private function isBlocked(array $item, \Dom\Element $message): bool

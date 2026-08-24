@@ -15,7 +15,7 @@
 <section class="footer">
     <div class="footer-badges">
         <?php
-        $version = Configuration::getVersion();
+        $version = \RSSBridge\Configuration::getVersion();
         $encodedVersion = rawurlencode($version);
         $dockerUrl = "https://hub.docker.com/repository/docker/lordarrin/rss-bridge/tags/" . $encodedVersion;
         $badgeText = 'lordarrin/rss-bridge:' . $version;

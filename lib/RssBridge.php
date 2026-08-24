@@ -29,7 +29,7 @@ final class RssBridge
     {
         $action = $request->get('action', 'frontpage');
 
-        $actionClass = match($action) {
+        $actionClass = match ($action) {
             'connectivity' => ConnectivityAction::class,
             'display' => DisplayAction::class,
             'frontpage' => FrontpageAction::class,

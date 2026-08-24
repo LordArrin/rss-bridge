@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 /**
  * Compatibility layer for simple_html_dom
- * 
+ *
  * This file provides a bridge between legacy simple_html_dom API
  * and modern voku/simple_html_dom (which uses DOMDocument + Symfony CssSelector).
- * 
+ *
  * Goal: Make legacy bridges work without modification.
  */
 
 use voku\helper\HtmlDomParser;
+use RSSBridge\Configuration;
 
 class CompatibilityHtmlDom
 {
@@ -52,7 +53,7 @@ class CompatibilityHtmlDom
 
     /**
      * Get elements by tag name (used by defaultLinkTo)
-     * 
+     *
      * @param string $name Tag name
      * @param int|null $idx Index of element to return (null = return all)
      * @return self[]|self|null
@@ -88,7 +89,7 @@ class CompatibilityHtmlDom
 
     /**
      * Get attribute value
-     * 
+     *
      * @param string $name Attribute name
      * @return string|null Attribute value or null if not exists
      */
@@ -104,7 +105,7 @@ class CompatibilityHtmlDom
 
     /**
      * Set attribute value
-     * 
+     *
      * @param string $name Attribute name
      * @param string $value Attribute value
      */
@@ -120,7 +121,7 @@ class CompatibilityHtmlDom
 
     /**
      * Check if attribute exists
-     * 
+     *
      * @param string $name Attribute name
      * @return bool
      */
@@ -192,19 +193,19 @@ class CompatibilityHtmlDom
             if (method_exists($this->dom, $name)) {
                 return $this->dom->$name(...$arguments);
             }
-            
+
             // Handle legacy method aliases
             $methodAliases = [
                 'innertext' => 'innerHtml',
                 'outertext' => 'html',
                 'plaintext' => 'text',
             ];
-            
+
             $lowercaseName = strtolower($name);
             if (isset($methodAliases[$lowercaseName])) {
                 return $this->dom->{$methodAliases[$lowercaseName]}(...$arguments);
             }
-            
+
             return null;
         } catch (\Throwable $e) {
             self::logIssue('Method call failed', [
@@ -252,14 +253,14 @@ class CompatibilityHtmlDom
         if (class_exists('Configuration') && Configuration::getConfig('system', 'debug_mode')) {
             $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 10);
             $bridgeInfo = 'unknown';
-            
+
             foreach ($trace as $frame) {
                 if (isset($frame['file']) && strpos($frame['file'], 'bridges/') !== false) {
                     $bridgeInfo = basename($frame['file']);
                     break;
                 }
             }
-            
+
             error_log(sprintf(
                 '[LEGACY_BRIDGE] %s: %s (bridge: %s)',
                 $type,

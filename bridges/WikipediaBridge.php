@@ -18,7 +18,7 @@ class WikipediaBridge extends BridgeAbstract
             'exampleValue' => 'English',
             'values' => [
                 'English' => 'en',
-                'Ð ÑƒÑÑÐºÐ¸Ð¹' => 'ru',
+                'Ðóññêèé' => 'ru',
                 'Dutch' => 'nl',
                 'Esperanto' => 'eo',
                 'French' => 'fr',
@@ -32,7 +32,7 @@ class WikipediaBridge extends BridgeAbstract
             'exampleValue' => 'Today\'s featured article',
             'values' => [
                 'Today\'s featured article' => 'tfa',
-                'Did you knowâ€¦' => 'dyk'
+                'Did you know…' => 'dyk'
             ]
         ],
         'fullarticle' => [
@@ -163,7 +163,7 @@ class WikipediaBridge extends BridgeAbstract
         }
 
         $item = [];
-        $item['uri'] = $this->getURI() . $target->href;
+        $item['uri'] = urljoin($this->getURI(), $target->href);
         $item['title'] = $target->title;
 
         if (!$fullArticle) {
@@ -184,7 +184,7 @@ class WikipediaBridge extends BridgeAbstract
             $item = [];
 
             // We can only use the first anchor, there is no way of finding the 'correct' one if there are multiple
-            $item['uri'] = $this->getURI() . $entry->find('a', 0)->href;
+            $item['uri'] = urljoin($this->getURI(), $entry->find('a', 0)->href);
             $item['title'] = strip_tags($entry->innertext);
 
             if (!$fullArticle) {

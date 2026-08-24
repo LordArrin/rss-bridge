@@ -13,6 +13,8 @@ final class Rule34Bridge extends GelbooruBase
     public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 1800;
 
+    private const EMBED_CACHE_TTL = 604800;
+
     public const CONFIGURATION = [
         'api_key' => [
             'required' => false,
@@ -48,6 +50,12 @@ final class Rule34Bridge extends GelbooruBase
                 'required' => false,
                 'title' => 'Maximum number of posts to fetch (API hard limit is 1000)',
                 'defaultValue' => 10
+            ],
+            'embed_images' => [
+                'name' => 'Embed images',
+                'type' => 'checkbox',
+                'required' => false,
+                'title' => 'Download images and embed them as data URIs in the feed (larger feed size)'
             ],
             'exclude_ai' => [
                 'name' => 'Exclude AI-generated content',
@@ -142,6 +150,16 @@ final class Rule34Bridge extends GelbooruBase
     {
         $pageUrl = self::VIEW_URI . 'index.php?page=post&s=view&id=' . (int) ($element->id ?? 0);
         $thumbnailUrl = (string) ($element->preview_url ?? $this->buildThumbnailURI($element));
+
+        if ($this->getInput('embed_images') === true) {
+            $thumbnailUrl = \media_embed_url_to_data_uri(
+                url: $thumbnailUrl,
+                cache: $this->cache,
+                cacheTtl: self::EMBED_CACHE_TTL,
+                logger: $this->logger,
+                retries: 2
+            );
+        }
 
         $content = sprintf(
             '<a href="%s"><img src="%s" /></a><br><br><b>Dimensions:</b> %d x %d',

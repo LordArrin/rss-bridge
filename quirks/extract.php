@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * Extract the first part of a string matching the specified start and end delimiters.
  */

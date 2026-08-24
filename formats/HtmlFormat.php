@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Formats;
 
-use Configuration;
+use RSSBridge\Configuration;
 
 /**
  * HTML format for displaying feed items in browser.
@@ -51,19 +51,12 @@ final class HtmlFormat extends FormatAbstract
             ];
         }
 
-        // Donations support is currently disabled
-        $donationUri = null;
-        // if (Configuration::getConfig('admin', 'donations') && ($feedArray['donationUri'] ?? null)) {
-        //     $donationUri = $feedArray['donationUri'];
-        // }
-
         return render_template(__DIR__ . '/../templates/html-format.html.php', [
             'bridge_name'  => $bridgeName,
             'title'        => $feedArray['name'] ?? '',
             'formats'      => $formats,
             'uri'          => $feedArray['uri'] ?? '',
             'items'        => $items,
-            // 'donation_uri' => $donationUri,
         ]);
     }
 

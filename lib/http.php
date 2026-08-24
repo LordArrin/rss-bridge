@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 class HttpException extends \Exception
 {
     public ?Response $response;
@@ -162,13 +164,15 @@ final class CurlHttpClient implements HttpClient
             }
             $lastError = curl_error($ch);
             $lastErrno = curl_errno($ch);
-            if (in_array($lastErrno, [
+            if (
+                in_array($lastErrno, [
                 CURLE_SSL_CERTPROBLEM,
                 CURLE_SSL_CIPHER,
                 CURLE_BAD_CONTENT_ENCODING,
                 CURLE_URL_MALFORMAT,
                 CURLE_COULDNT_RESOLVE_HOST,
-            ], true)) {
+                ], true)
+            ) {
                 break;
             }
         }
@@ -214,7 +218,7 @@ final class Request
         return $self;
     }
 
-    public function get(string $key, $default = null): ?string
+    public function get(string $key, mixed $default = null): mixed
     {
         return $this->get[$key] ?? $default;
     }
@@ -224,14 +228,14 @@ final class Request
         return $this->server[$key] ?? $default;
     }
 
-    public function withAttribute(string $name, $value = true): self
+    public function withAttribute(string $name, mixed $value = true): self
     {
         $clone = clone $this;
         $clone->attributes[$name] = $value;
         return $clone;
     }
 
-    public function getAttribute(string $key, $default = null)
+    public function getAttribute(string $key, mixed $default = null): mixed
     {
         return $this->attributes[$key] ?? $default;
     }
@@ -330,7 +334,7 @@ final class Response
         return $this->headers;
     }
 
-    public function getHeader(string $name, bool $all = false)
+    public function getHeader(string $name, bool $all = false): string|array|null
     {
         $name = mb_strtolower($name);
         $header = $this->headers[$name] ?? null;
@@ -340,7 +344,8 @@ final class Response
         if ($all) {
             return $header;
         }
-        return end($header) ?: null;
+        $last = end($header);
+        return is_string($last) ? $last : null;
     }
 
     public function withHeader(string $name, string $value): self

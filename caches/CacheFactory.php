@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Caches;
 
+use RSSBridge\Configuration;
+
 /**
  * Factory for creating cache instances based on configuration.
  */
@@ -43,7 +45,7 @@ final class CacheFactory
     private function normalizeName(?string $name): string
     {
         if ($name === null) {
-            $name = \Configuration::getConfig('cache', 'type') ?? 'file';
+            $name = Configuration::getConfig('cache', 'type') ?? 'file';
         }
 
         if ((bool) preg_match('/(.+)(?:\.php)$/', $name, $matches) === true) {
@@ -67,7 +69,7 @@ final class CacheFactory
                 return new NullCache();
 
             case 'file':
-                $configuredPath = \Configuration::getConfig('FileCache', 'path');
+                $configuredPath = Configuration::getConfig('FileCache', 'path');
                 $path = PATH_CACHE;
 
                 if ((bool) $configuredPath === true) {
@@ -76,7 +78,7 @@ final class CacheFactory
 
                 return new FileCache($this->logger, [
                     'path'         => $path,
-                    'enable_purge' => \Configuration::getConfig('FileCache', 'enable_purge'),
+                    'enable_purge' => Configuration::getConfig('FileCache', 'enable_purge'),
                 ]);
 
             case 'sqlite':
@@ -84,15 +86,15 @@ final class CacheFactory
                     throw new \Exception('"sqlite3" extension not loaded. Please check "php.ini"');
                 }
 
-                $file = \Configuration::getConfig('SQLiteCache', 'file');
+                $file = Configuration::getConfig('SQLiteCache', 'file');
                 if ((bool) $file === false) {
                     throw new \Exception('Configuration for SQLiteCache missing.');
                 }
 
                 return new SQLiteCache($this->logger, [
                     'file'         => $file,
-                    'timeout'      => \Configuration::getConfig('SQLiteCache', 'timeout'),
-                    'enable_purge' => \Configuration::getConfig('SQLiteCache', 'enable_purge'),
+                    'timeout'      => Configuration::getConfig('SQLiteCache', 'timeout'),
+                    'enable_purge' => Configuration::getConfig('SQLiteCache', 'enable_purge'),
                 ]);
 
             case 'memcached':
@@ -100,8 +102,8 @@ final class CacheFactory
                     throw new \Exception('"memcached" extension not loaded. Please check "php.ini"');
                 }
 
-                $host = \Configuration::getConfig('MemcachedCache', 'host');
-                $port = \Configuration::getConfig('MemcachedCache', 'port');
+                $host = Configuration::getConfig('MemcachedCache', 'host');
+                $port = Configuration::getConfig('MemcachedCache', 'port');
 
                 if (empty($host) === true) {
                     throw new \Exception('"host" param is not set for MemcachedCache');

@@ -88,6 +88,7 @@ final class Vk2Bridge extends BridgeAbstract
                 'name' => 'Name of group or profile',
                 'type' => 'text',
                 'required' => true,
+                'exampleValue' => 'rebel_jack',
                 'title' => 'Name from URL. Example: rebel_jack from https://vk.ru/rebel_jack',
             ],
             'hide_reposts' => [

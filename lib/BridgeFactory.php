@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use RSSBridge\Caches\CacheInterface;
+use RSSBridge\Configuration;
 
 /**
  * Factory for creating and managing bridge instances.

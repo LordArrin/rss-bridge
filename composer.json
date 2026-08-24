@@ -16,7 +16,8 @@
             "lib/Container.php",
             "lib/ParameterValidator.php",
             "lib/FeedParser.php",
-            "lib/FeedItem.php"
+            "lib/FeedItem.php",
+            "lib/Configuration.php"
         ],
         "files": [
             "lib/Json.php",
@@ -33,6 +34,7 @@
             "quirks/dom.php",
             "quirks/extract.php",
             "quirks/media.php",
+            "quirks/media_embed.php",
             "quirks/seo.php"
         ]
     },

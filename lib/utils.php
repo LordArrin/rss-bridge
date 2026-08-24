@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * Get the home page URL e.g. 'https://example.com/' or 'https://example.com/bridge/'
  */
@@ -80,7 +82,7 @@ function trace_from_exception(\Throwable $e): array
 
 function trace_to_call_points(array $trace): array
 {
-    return array_map(fn($frame) => frame_to_call_point($frame), $trace);
+    return array_map(fn(array $frame) => frame_to_call_point($frame), $trace);
 }
 
 function frame_to_call_point(array $frame): string
@@ -132,12 +134,6 @@ function is_html(string $text): bool
 
 /**
  * Determines the MIME type from a URL/Path file extension.
- *
- * Remarks:
- * - The built-in functions mime_content_type() and fileinfo require fetching remote contents.
- * - A caller can hint for a MIME type by appending #.ext to the URL (i.e. #.image).
- *
- * Based on https://stackoverflow.com/a/1147952
  */
 function parse_mime_type(string $url): string
 {
@@ -211,7 +207,6 @@ function parse_mime_type(string $url): string
 
 /**
  * Format bytes into human-readable string.
- * https://stackoverflow.com/a/2510459
  */
 function format_bytes(int $bytes, int $precision = 2): string
 {

@@ -22,12 +22,14 @@ final class GitHubReleaseBridge extends BridgeAbstract
             'name' => 'Owner',
             'type' => 'text',
             'required' => true,
+            'exampleValue' => 'immich-app',
             'title' => 'The name of the repo owner (e.g. RSS-Bridge from https://github.com/RSS-Bridge/rss-bridge)'
         ],
         'repo' => [
             'name' => 'Repository',
             'type' => 'text',
             'required' => true,
+            'exampleValue' => 'immich',
             'title' => 'Repo name (e.g. rss-bridge from https://github.com/RSS-Bridge/rss-bridge)'
         ],
         'pre_release' => [

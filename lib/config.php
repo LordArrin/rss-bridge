@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use RSSBridge\Configuration;
+
 $config = [];
 if (file_exists(__DIR__ . '/../config.ini.php')) {
     $config = parse_ini_file(__DIR__ . '/../config.ini.php', true, INI_SCANNER_TYPED);

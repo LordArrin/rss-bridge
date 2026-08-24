@@ -322,19 +322,32 @@ abstract class XPathAbstract extends BridgeAbstract
     private function getParam($name)
     {
         switch ($name) {
-            case 'url': return $this->getSourceUrl();
-            case 'feed_title': return $this->getExpressionTitle();
-            case 'feed_icon': return $this->getExpressionIcon();
-            case 'item': return $this->getExpressionItem();
-            case 'title': return $this->getExpressionItemTitle();
-            case 'content': return $this->getExpressionItemContent();
-            case 'uri': return $this->getExpressionItemUri();
-            case 'author': return $this->getExpressionItemAuthor();
-            case 'timestamp': return $this->getExpressionItemTimestamp();
-            case 'enclosures': return $this->getExpressionItemEnclosures();
-            case 'categories': return $this->getExpressionItemCategories();
-            case 'fix_encoding': return $this->getSettingFixEncoding();
-            case 'raw_content': return $this->getSettingUseRawItemContent();
+            case 'url':
+                return $this->getSourceUrl();
+            case 'feed_title':
+                return $this->getExpressionTitle();
+            case 'feed_icon':
+                return $this->getExpressionIcon();
+            case 'item':
+                return $this->getExpressionItem();
+            case 'title':
+                return $this->getExpressionItemTitle();
+            case 'content':
+                return $this->getExpressionItemContent();
+            case 'uri':
+                return $this->getExpressionItemUri();
+            case 'author':
+                return $this->getExpressionItemAuthor();
+            case 'timestamp':
+                return $this->getExpressionItemTimestamp();
+            case 'enclosures':
+                return $this->getExpressionItemEnclosures();
+            case 'categories':
+                return $this->getExpressionItemCategories();
+            case 'fix_encoding':
+                return $this->getSettingFixEncoding();
+            case 'raw_content':
+                return $this->getSettingUseRawItemContent();
         }
     }
 
@@ -474,13 +487,20 @@ abstract class XPathAbstract extends BridgeAbstract
         $value = is_array($value) ? array_map([$this, 'fixEncoding'], $value) : $this->fixEncoding($value);
 
         switch ($param) {
-            case 'title': return $this->formatItemTitle($value);
-            case 'content': return $this->formatItemContent($value);
-            case 'uri': return $this->formatItemUri($value);
-            case 'author': return $this->formatItemAuthor($value);
-            case 'timestamp': return $this->formatItemTimestamp($value);
-            case 'enclosures': return $this->formatItemEnclosures($value);
-            case 'categories': return $this->formatItemCategories($value);
+            case 'title':
+                return $this->formatItemTitle($value);
+            case 'content':
+                return $this->formatItemContent($value);
+            case 'uri':
+                return $this->formatItemUri($value);
+            case 'author':
+                return $this->formatItemAuthor($value);
+            case 'timestamp':
+                return $this->formatItemTimestamp($value);
+            case 'enclosures':
+                return $this->formatItemEnclosures($value);
+            case 'categories':
+                return $this->formatItemCategories($value);
         }
 
         return $value;
@@ -611,9 +631,7 @@ abstract class XPathAbstract extends BridgeAbstract
         }
 
         if ($typedResult instanceof \DOMElement) {
-            return $returnXML
-                ? ($typedResult->ownerDocument ?? $typedResult)->saveXML($typedResult)
-                : $typedResult->nodeValue;
+            return $returnXML ? ($typedResult->ownerDocument ?? $typedResult)->saveXML($typedResult) : $typedResult->nodeValue;
         } elseif ($typedResult instanceof \DOMAttr) {
             return $typedResult->value;
         } elseif ($typedResult instanceof \DOMText) {
@@ -637,9 +655,7 @@ abstract class XPathAbstract extends BridgeAbstract
      */
     protected function fixEncoding($input)
     {
-        return $this->getParam('fix_encoding')
-            ? mb_convert_encoding($input, 'ISO-8859-1', 'UTF-8')
-            : $input;
+        return $this->getParam('fix_encoding') ? mb_convert_encoding($input, 'ISO-8859-1', 'UTF-8') : $input;
     }
 
     /**

@@ -1,35 +1,47 @@
 <?php
 
+declare(strict_types=1);
+
+namespace RSSBridge;
+
 /**
  * Configuration module for RSS-Bridge.
  *
  * This class implements a configuration module for RSS-Bridge.
- */
+ each */
 final class Configuration
 {
-    private static $config = [];
+    public const VERSION = '1.1.9';
+
+    /**
+     * @var array<string, array<string, mixed>>
+     */
+    private static array $config = [];
 
     private function __construct()
     {
     }
 
-    public static function loadConfiguration(array $customConfig = [], array $env = [])
+    public static function loadConfiguration(array $customConfig = [], array $env = []): void
     {
         if (!file_exists(__DIR__ . '/../config.default.ini.php')) {
             throw new \Exception('The default configuration file is missing');
         }
+
         $config = parse_ini_file(__DIR__ . '/../config.default.ini.php', true, INI_SCANNER_TYPED);
         if (!$config) {
             throw new \Exception('Error parsing ini config');
         }
+
         foreach ($config as $header => $section) {
             foreach ($section as $key => $value) {
-                self::setConfig($header, $key, $value);
+                self::setConfig((string)$header, (string)$key, $value);
             }
         }
+
         foreach ($customConfig as $header => $section) {
             foreach ($section as $key => $value) {
-                self::setConfig($header, $key, $value);
+                self::setConfig((string)$header, (string)$key, $value);
             }
         }
 
@@ -51,7 +63,7 @@ final class Configuration
         }
 
         foreach ($env as $envName => $envValue) {
-            $nameParts = explode('_', $envName);
+            $nameParts = explode('_', (string)$envName);
             if ($nameParts[0] === 'RSSBRIDGE') {
                 if (count($nameParts) < 3) {
                     // Invalid env name
@@ -66,7 +78,7 @@ final class Configuration
                 $key = strtolower($key);
 
                 // Handle this specifically because it's an array
-                if ($key === 'enabled_bridges') {
+                if ($key === 'enabled_bridges' && is_string($envValue)) {
                     $envValue = explode(',', $envValue);
                     $envValue = array_map('trim', $envValue);
                 }
@@ -79,7 +91,7 @@ final class Configuration
             }
         }
 
-        if (!in_array(self::getConfig('system', 'env'), ['dev', 'prod'])) {
+        if (!in_array(self::getConfig('system', 'env'), ['dev', 'prod'], true)) {
             self::throwConfigError('system', 'env', 'Must be dev or prod');
         }
 
@@ -87,11 +99,9 @@ final class Configuration
             self::throwConfigError('system', 'enabled_bridges', 'Is not an array');
         }
 
-        if (
-            !is_string(self::getConfig('system', 'timezone'))
-            || !in_array(self::getConfig('system', 'timezone'), timezone_identifiers_list(DateTimeZone::ALL_WITH_BC))
-        ) {
-            self::throwConfigError('system', 'timezone');
+        $timezone = self::getConfig('system', 'timezone');
+        if (!is_string($timezone) || !in_array($timezone, timezone_identifiers_list(\DateTimeZone::ALL_WITH_BC) ?: [], true)) {
+            self::throwConfigError('system', 'timezone', 'Is not a valid timezone');
         }
 
         if (!is_string(self::getConfig('proxy', 'url'))) {
@@ -103,7 +113,6 @@ final class Configuration
         }
 
         if (!is_string(self::getConfig('proxy', 'name'))) {
-            /** Name of the proxy server */
             self::throwConfigError('proxy', 'name', 'Is not a valid string');
         }
 
@@ -127,10 +136,8 @@ final class Configuration
             self::throwConfigError('authentication', 'password', 'Is not a valid string');
         }
 
-        if (
-            !empty(self::getConfig('admin', 'email'))
-            && !filter_var(self::getConfig('admin', 'email'), FILTER_VALIDATE_EMAIL)
-        ) {
+        $email = self::getConfig('admin', 'email');
+        if (!empty($email) && !filter_var((string)$email, FILTER_VALIDATE_EMAIL)) {
             self::throwConfigError('admin', 'email', 'Is not a valid email address');
         }
 
@@ -138,22 +145,21 @@ final class Configuration
             self::throwConfigError('admin', 'donations', 'Is not a valid Boolean');
         }
 
-        if (!is_string(self::getConfig('error', 'output'))) {
+        $errorOutput = self::getConfig('error', 'output');
+        if (!is_string($errorOutput)) {
             self::throwConfigError('error', 'output', 'Is not a valid String');
         }
-        if (!in_array(self::getConfig('error', 'output'), ['feed', 'http', 'none'])) {
+        if (!in_array($errorOutput, ['feed', 'http', 'none'], true)) {
             self::throwConfigError('error', 'output', 'Invalid output');
         }
 
-        if (
-            !is_numeric(self::getConfig('error', 'report_limit'))
-            || self::getConfig('error', 'report_limit') < 1
-        ) {
-            self::throwConfigError('admin', 'report_limit', 'Value is invalid');
+        $reportLimit = self::getConfig('error', 'report_limit');
+        if (!is_numeric($reportLimit) || (int)$reportLimit < 1) {
+            self::throwConfigError('error', 'report_limit', 'Value is invalid');
         }
     }
 
-    public static function getConfig(string $section, string $key, $default = null)
+    public static function getConfig(string $section, string $key, mixed $default = null): mixed
     {
         if (self::$config === []) {
             throw new \Exception('Config has not been loaded');
@@ -164,7 +170,7 @@ final class Configuration
     /**
      * @internal Please avoid usage
      */
-    public static function setConfig(string $section, string $key, $value): void
+    public static function setConfig(string $section, string $key, mixed $value): void
     {
         self::$config[strtolower($section)][strtolower($key)] = $value;
     }
@@ -174,10 +180,10 @@ final class Configuration
         $envVersion = getenv('RSSBRIDGE_SYSTEM_VERSION');
         $baseVersion = ($envVersion !== false && $envVersion !== '') ? $envVersion : self::VERSION;
 
-        return $baseVersion;
+        return (string)$baseVersion;
     }
 
-    private static function throwConfigError($section, $key, $message = '')
+    private static function throwConfigError(string $section, string $key, string $message = ''): never
     {
         http_response_code(500);
         print("Config [$section] => [$key] is invalid. $message");

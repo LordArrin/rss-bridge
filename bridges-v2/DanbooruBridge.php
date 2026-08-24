@@ -16,15 +16,6 @@ final class DanbooruBridge extends BridgeAbstract
 
     private const EMBED_CACHE_TTL = 604800;
 
-    private const MIME_TYPES = [
-        'jpg' => 'image/jpeg',
-        'jpeg' => 'image/jpeg',
-        'png' => 'image/png',
-        'gif' => 'image/gif',
-        'webp' => 'image/webp',
-        'avif' => 'image/avif',
-    ];
-
     public const CONFIGURATION = [
         'login' => [
             'required' => false,
@@ -48,7 +39,7 @@ final class DanbooruBridge extends BridgeAbstract
                 'type' => 'number',
                 'required' => false,
                 'title' => 'Maximum number of posts to fetch (API hard limit is 200). Every item carries a base64 image, so keep this modest.',
-                'defaultValue' => 20,
+                'defaultValue' => 10,
             ],
             'login' => [
                 'name' => 'Login',
@@ -184,33 +175,22 @@ final class DanbooruBridge extends BridgeAbstract
 
     private function fetchImageAsDataUri(string $url, string $ext): string
     {
-        if ($ext === '') {
-            $ext = strtolower(pathinfo((string)parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
-        }
-        $mime = self::MIME_TYPES[$ext] ?? '';
+        $mime = \media_embed_mime_from_extension($ext);
         if ($mime === '') {
-            return '';
+            $ext = strtolower(pathinfo((string)parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
+            $mime = \media_embed_mime_from_extension($ext);
+            if ($mime === '') {
+                return '';
+            }
         }
 
-        $cacheKey = 'embed_' . md5($url);
-        $cached = $this->loadCacheValue($cacheKey);
-        if (is_string($cached) === true && $cached !== '') {
-            return $cached;
-        }
-
-        try {
-            $binary = getContents($url, $this->buildHeaders());
-        } catch (\Throwable $e) {
-            return '';
-        }
-
-        if ($binary === '') {
-            return '';
-        }
-
-        $dataUri = sprintf('data:%s;base64,%s', $mime, base64_encode($binary));
-        $this->saveCacheValue($cacheKey, $dataUri, self::EMBED_CACHE_TTL);
-        return $dataUri;
+        return \media_embed_url_to_data_uri(
+            url: $url,
+            cache: $this->cache,
+            cacheTtl: self::EMBED_CACHE_TTL,
+            logger: $this->logger,
+            retries: 2
+        );
     }
 
     private function getItemFromElement(array $post): ?array

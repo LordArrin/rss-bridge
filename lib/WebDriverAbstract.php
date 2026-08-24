@@ -2,10 +2,7 @@
 
 declare(strict_types=1);
 
-use Facebook\WebDriver\Chrome\ChromeOptions;
-use Facebook\WebDriver\Remote\DesiredCapabilities;
-use Facebook\WebDriver\Remote\RemoteWebDriver;
-use Facebook\WebDriver\WebDriverCapabilities;
+use RSSBridge\Configuration;
 
 /**
  * An alternative abstract class for bridges depending on a WebDriver.
