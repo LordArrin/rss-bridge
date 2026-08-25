@@ -1,5 +1,3 @@
----
-
 ```markdown
 # Writing Bridges for LordArrin's RSS-Bridge Fork
 
@@ -650,5 +648,3 @@ final class BlogBridge extends BridgeAbstract
 
 Open an issue on [github.com/LordArrin/rss-bridge](https://github.com/LordArrin/rss-bridge) — the community is happy to help new bridge authors.
 ```
-
----
