@@ -1,7 +1,5 @@
 ---
 
-## 🇷🇺 Русская версия: `docs/writing-bridges.ru.md`
-
 ```markdown
 # Написание мостов для форка RSS-Bridge от LordArrin
 
