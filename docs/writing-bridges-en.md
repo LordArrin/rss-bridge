@@ -1,6 +1,13 @@
+¬от два готовых файла документации Ч на английском и на русском. ќба полностью самодостаточны, включают все наши изменени€ (quirks, мигрированные классы, обновлЄнные примеры) и готовы к публикации.
+
+---
+
+## ???? English version: `docs/writing-bridges.md`
+
+```markdown
 # Writing Bridges for LordArrin's RSS-Bridge Fork
 
-This guide covers writing bridges specifically for this fork. It focuses on modern PHP 8.5, the native `\Dom\HTMLDocument` API, and PSR-4 namespacing Ч all of which differ significantly from the upstream RSS-Bridge project.
+This guide covers writing bridges specifically for this fork. It focuses on modern PHP 8.5, the native `\Dom\HTMLDocument` API, PSR-4 namespacing, and the `quirks/` utility library Ч all of which differ significantly from the upstream RSS-Bridge project.
 
 ## Key Differences from Upstream
 
@@ -10,6 +17,7 @@ This guide covers writing bridges specifically for this fork. It focuses on mode
 | Strict types | Optional | Required (`declare(strict_types=1)`) |
 | HTML parser | `simple_html_dom` (embedded) | `\Dom\HTMLDocument` (PHP native, PHP 8.4+) |
 | New bridges | `bridges/` (global namespace) | `bridges-v2/` with `RSSBridge\Bridges` namespace |
+| HTML utilities | Inline in each bridge | Centralized in `quirks/` directory |
 | HTTP client | Custom, optional curl-impersonate | curl-impersonate baked into Alpine image |
 | Markdown | Embedded Parsedown 1.7.4 | `erusev/parsedown` 1.8+ via Composer |
 | URL joining | Embedded | `busybee/urljoin` via Composer |
@@ -18,6 +26,8 @@ This guide covers writing bridges specifically for this fork. It focuses on mode
 
 - **`bridges/`** Ч legacy bridges (kept for compatibility, global namespace)
 - **`bridges-v2/`** Ч new bridges (PSR-4, namespaced, strict types)
+- **`quirks/`** Ч utility functions for bridges (HTML helpers, DOM manipulation, media processing)
+- **`lib/`** Ч core framework classes (partially migrated to `RSSBridge` namespace)
 
 **Always place new bridges in `bridges-v2/`.** Legacy `bridges/` is kept only to avoid breaking upstream compatibility.
 
@@ -124,9 +134,135 @@ Access via `$this->getOption('api_token')`. These are defined in `config.ini.php
 api_token = "your-token-here"
 ```
 
+## Quirks Utilities
+
+The `quirks/` directory contains battle-tested utility functions that handle common bridge tasks. **Use these instead of writing your own implementations.**
+
+All quirks functions are globally available (loaded via Composer `files` autoload) and have `declare(strict_types=1)` enabled.
+
+### HTML Generation Helpers (`quirks/html.php`)
+
+Safely generate HTML fragments for feed item content:
+
+```php
+// Escape user input (prevents XSS)
+$safe = e($userInput);  // htmlspecialchars with ENT_QUOTES | ENT_SUBSTITUTE
+
+// Mark trusted HTML as safe (semantic no-op)
+$trusted = raw($preRenderedHtml);
+
+// Truncate long strings
+$short = truncate($longText, 200, '...');
+
+// Generate HTML tags with validation
+$input = html_input(['type' => 'text', 'name' => 'q', 'value' => 'search']);
+$option = html_option('United States', 'us', true);
+$div = html_tag('div', 'Hello', ['class' => 'greeting', 'id' => 'hello']);
+```
+
+`html_tag()` validates attribute names against a whitelist, preventing accidental injection of event handlers like `onclick`.
+
+### DOM Manipulation (`quirks/dom.php`)
+
+Process HTML content for feed items:
+
+```php
+// Sanitize HTML: remove scripts, iframes, keep only safe attributes
+$clean = sanitize($html);
+$clean = sanitize($html, ['script', 'iframe'], ['href', 'src'], ['p', 'strong']);
+
+// Convert relative URLs to absolute (processes img, a, script, link, video, audio, iframe)
+$absolute = defaultLinkTo($html, 'https://example.com/');
+
+// Convert lazy-loaded images to static (data-src, data-srcset, data-lazy-src)
+$static = convertLazyLoading($html);
+
+// Replace CSS background-image with <img> tags
+$withImgs = backgroundToImg($html);
+
+// Break dangerous tags (script, iframe, link) while keeping them visible
+$broken = break_annoying_html_tags($html);
+```
+
+**Recommended pattern** for processing article HTML:
+
+```php
+$html = getContents($articleUrl);
+$html = defaultLinkTo($html, $articleUrl);  // Fix relative URLs
+$html = convertLazyLoading($html);          // Handle lazy-loaded images
+$html = sanitize($html);                    // Remove scripts/iframes
+$item['content'] = $html;
+```
+
+### String Extraction (`quirks/extract.php`)
+
+Extract data from HTML strings or inline JavaScript:
+
+```php
+// Extract text between delimiters
+$data = extractFromDelimiters($html, 'window.data = ', ';');
+
+// Remove HTML sections
+$clean = stripWithDelimiters($html, '<script>', '</script>');
+$clean = stripRecursiveHTMLSection($html, 'div', '<div class="ads">');
+```
+
+### Srcset Parsing (`quirks/srcset.php`)
+
+Handle responsive images:
+
+```php
+// Parse srcset attribute
+$entries = parseSrcset('image-320w.jpg 320w, image-1024w.jpg 1024w');
+// => ['320w' => 'image-320w.jpg', '1024w' => 'image-1024w.jpg']
+
+// Get largest image URL
+$largest = parseSrcsetLargestImageUrl($srcset);
+```
+
+### Media Processing (`quirks/media.php`)
+
+```php
+// Convert Markdown to HTML
+$html = markdownToHtml($markdown, ['breaksEnabled' => true]);
+
+// Generate YouTube embed or thumbnail
+$embed = handleYoutube('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+// Returns <iframe> or <picture> with WebP/JPEG srcset based on config
+```
+
+### SEO Metadata Extraction (`quirks/seo.php`)
+
+Extract Open Graph, Twitter Cards, and JSON-LD metadata automatically:
+
+```php
+$metadata = html_find_seo_metadata($html);
+// Returns array with keys: uri, title, content, timestamp, enclosures, author
+
+// Use in bridge:
+$item = [
+    'title' => $metadata['title'] ?? $fallbackTitle,
+    'uri' => $metadata['uri'] ?? $articleUrl,
+    'content' => $articleContent,
+    'timestamp' => $metadata['timestamp'] ?? time(),
+    'author' => $metadata['author'] ?? null,
+    'enclosures' => $metadata['enclosures'] ?? [],
+];
+```
+
+### Template Rendering (`quirks/template.php`)
+
+Used internally by RSS-Bridge actions to render HTML pages. Rarely needed in bridges, but available if you need to generate complex HTML:
+
+```php
+$html = render('my-template.html.php', ['items' => $items]);
+```
+
 ## HTML Parsing with Native DOM
 
-**Never use `simple_html_dom` functions in new bridges.** Use the native PHP 8.4+ `\Dom\HTMLDocument` API instead.
+**Never use `simple_html_dom` functions directly in new bridges** (`str_get_html()`, `->find()`, `->plaintext`, `->innertext`). Instead, use the native PHP 8.4+ `\Dom\HTMLDocument` API for new parsing logic.
+
+**Exception:** The functions in `quirks/dom.php` (like `sanitize()`, `defaultLinkTo()`) use `simple_html_dom` internally Ч that's fine. Treat them as black-box utilities.
 
 ### Fetching HTML
 
@@ -177,30 +313,6 @@ $items = iterator_to_array($dom->querySelectorAll('li'));
 | `$node->parentNode` | `?\Dom\Node` | Parent node (can be document) |
 | `$node->childNodes` | `\Dom\NodeList` | Children |
 | `$dom->saveHTML()` | `string` | Full document HTML |
-
-### Example: Parsing a List
-
-```php
-foreach ($dom->querySelectorAll('.post-list .post') as $post) {
-    $link = $post->querySelector('a.title');
-    if ($link === null) continue;
-
-    $title = trim($link->textContent);
-    $uri = $this->absoluteUrl((string)$link->getAttribute('href'));
-    $timeNode = $post->querySelector('time');
-    $timestamp = $timeNode !== null
-        ? strtotime((string)$timeNode->getAttribute('datetime'))
-        : null;
-
-    $this->items[] = [
-        'title' => $title,
-        'uri' => $uri,
-        'timestamp' => $timestamp ?: time(),
-        'uid' => $uri,
-        'content' => $post->querySelector('.summary')?->textContent ?? $title,
-    ];
-}
-```
 
 ### Traversing Parents
 
@@ -323,7 +435,14 @@ url = "http://localhost:8191"
 
 ## Relative URLs
 
-Use the bundled `urljoin` for resolving relative URLs:
+**Preferred: Use `defaultLinkTo()` from quirks** to process all relative URLs in an HTML fragment at once:
+
+```php
+$html = getContents($articleUrl);
+$html = defaultLinkTo($html, $articleUrl);  // Fixes img src, a href, video src, etc.
+```
+
+**Manual approach:** Use `urljoin()` for individual URLs:
 
 ```php
 use function urljoin;
@@ -340,6 +459,34 @@ Render Markdown to HTML with Parsedown:
 $parsedown = new \Parsedown();
 $html = $parsedown->text($markdown);
 ```
+
+Or use the quirks wrapper with options:
+
+```php
+$html = markdownToHtml($markdown, [
+    'breaksEnabled' => true,
+    'markupEscaped' => true,
+]);
+```
+
+## Namespaced Core Classes
+
+Several core classes have been migrated to the `RSSBridge` namespace. When you need them in your bridge, import them explicitly:
+
+```php
+use RSSBridge\Configuration;
+use RSSBridge\FeedItem;
+use RSSBridge\FeedParser;
+
+// Access configuration
+$apiKey = Configuration::getConfig('MyBridge', 'api_key');
+
+// Parse an existing RSS/Atom feed
+$parser = new FeedParser();
+$feed = $parser->parseFeed($xmlString);
+```
+
+**Note:** `BridgeAbstract` is still in the global namespace (for compatibility with legacy bridges), so `use BridgeAbstract;` works without a namespace prefix. This will change in the future when all legacy bridges are migrated.
 
 ## Running Quality Checks
 
@@ -382,11 +529,12 @@ docker exec rss-bridge vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBrid
 - [ ] `namespace RSSBridge\Bridges;` declared
 - [ ] Class is `final` and extends `BridgeAbstract`
 - [ ] All 5 required constants defined (NAME, URI, DESCRIPTION, MAINTAINER, CACHE_TIMEOUT)
-- [ ] No `simple_html_dom` functions (`find()`, `plaintext`, `innertext`, etc.)
-- [ ] Uses `\Dom\HTMLDocument` with `querySelector` / `querySelectorAll`
+- [ ] No direct `simple_html_dom` calls (`str_get_html()`, `->find()`, `->plaintext`)
+- [ ] Uses `\Dom\HTMLDocument` with `querySelector` / `querySelectorAll` for new parsing
+- [ ] Uses quirks utilities (`defaultLinkTo()`, `convertLazyLoading()`, `sanitize()`) for HTML processing
 - [ ] `libxml_use_internal_errors(true)` wraps HTML parsing
 - [ ] Null-safe operator `?->` used for optional elements
-- [ ] Absolute URLs constructed with `urljoin()`
+- [ ] Relative URLs handled via `defaultLinkTo()` or `urljoin()`
 - [ ] `phpcs` passes with no warnings
 - [ ] Bridge tested with real data in Docker
 
@@ -400,8 +548,6 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use BridgeAbstract;
-
-use function urljoin;
 
 final class BlogBridge extends BridgeAbstract
 {
@@ -443,26 +589,41 @@ final class BlogBridge extends BridgeAbstract
         $count = 0;
 
         foreach ($posts as $post) {
-            if ($count >= $limit) break;
+            if ($count >= $limit) {
+                break;
+            }
 
             $link = $post->querySelector('a.post-title');
-            if ($link === null) continue;
+            if ($link === null) {
+                continue;
+            }
 
-            $uri = urljoin(self::URI, (string)$link->getAttribute('href'));
+            $uri = $link->getAttribute('href');
             $title = trim($link->textContent);
 
-            $excerpt = $post->querySelector('.excerpt')?->textContent ?? $title;
+            // Fetch full article
+            $articleHtml = getContents($uri);
+            
+            // Process article HTML with quirks utilities
+            $articleHtml = defaultLinkTo($articleHtml, $uri);
+            $articleHtml = convertLazyLoading($articleHtml);
+            $articleHtml = sanitize($articleHtml);
+
+            // Extract metadata for fallback
+            $metadata = html_find_seo_metadata($articleHtml);
+
             $dateStr = $post->querySelector('time')?->getAttribute('datetime');
-            $timestamp = $dateStr ? strtotime($dateStr) : null;
-            $author = $post->querySelector('.author-name')?->textContent;
+            $timestamp = $dateStr !== null ? strtotime($dateStr) : ($metadata['timestamp'] ?? time());
+            $author = $post->querySelector('.author-name')?->textContent ?? ($metadata['author'] ?? null);
 
             $this->items[] = [
-                'title'     => $title,
-                'uri'       => $uri,
-                'content'   => '<p>' . htmlspecialchars($excerpt, ENT_QUOTES, 'UTF-8') . '</p>',
-                'timestamp' => $timestamp ?: time(),
-                'author'    => $author !== null ? trim($author) : null,
-                'uid'       => $uri,
+                'title' => $title,
+                'uri' => $uri,
+                'content' => $articleHtml,
+                'timestamp' => $timestamp !== false ? $timestamp : time(),
+                'author' => $author !== null ? trim($author) : null,
+                'uid' => $uri,
+                'enclosures' => $metadata['enclosures'] ?? [],
             ];
 
             $count++;
@@ -492,3 +653,6 @@ final class BlogBridge extends BridgeAbstract
 ## Questions?
 
 Open an issue on [github.com/LordArrin/rss-bridge](https://github.com/LordArrin/rss-bridge) Ч the community is happy to help new bridge authors.
+```
+
+---
