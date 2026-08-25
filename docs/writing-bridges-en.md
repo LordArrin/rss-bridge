@@ -1,13 +1,9 @@
-¬от два готовых файла документации Ч на английском и на русском. ќба полностью самодостаточны, включают все наши изменени€ (quirks, мигрированные классы, обновлЄнные примеры) и готовы к публикации.
-
 ---
-
-## ???? English version: `docs/writing-bridges.md`
 
 ```markdown
 # Writing Bridges for LordArrin's RSS-Bridge Fork
 
-This guide covers writing bridges specifically for this fork. It focuses on modern PHP 8.5, the native `\Dom\HTMLDocument` API, PSR-4 namespacing, and the `quirks/` utility library Ч all of which differ significantly from the upstream RSS-Bridge project.
+This guide covers writing bridges specifically for this fork. It focuses on modern PHP 8.5, the native `\Dom\HTMLDocument` API, PSR-4 namespacing, and the `quirks/` utility library вАФ all of which differ significantly from the upstream RSS-Bridge project.
 
 ## Key Differences from Upstream
 
@@ -24,10 +20,10 @@ This guide covers writing bridges specifically for this fork. It focuses on mode
 
 ## Directory Structure
 
-- **`bridges/`** Ч legacy bridges (kept for compatibility, global namespace)
-- **`bridges-v2/`** Ч new bridges (PSR-4, namespaced, strict types)
-- **`quirks/`** Ч utility functions for bridges (HTML helpers, DOM manipulation, media processing)
-- **`lib/`** Ч core framework classes (partially migrated to `RSSBridge` namespace)
+- **`bridges/`** вАФ legacy bridges (kept for compatibility, global namespace)
+- **`bridges-v2/`** вАФ new bridges (PSR-4, namespaced, strict types)
+- **`quirks/`** вАФ utility functions for bridges (HTML helpers, DOM manipulation, media processing)
+- **`lib/`** вАФ core framework classes (partially migrated to `RSSBridge` namespace)
 
 **Always place new bridges in `bridges-v2/`.** Legacy `bridges/` is kept only to avoid breaking upstream compatibility.
 
@@ -262,7 +258,7 @@ $html = render('my-template.html.php', ['items' => $items]);
 
 **Never use `simple_html_dom` functions directly in new bridges** (`str_get_html()`, `->find()`, `->plaintext`, `->innertext`). Instead, use the native PHP 8.4+ `\Dom\HTMLDocument` API for new parsing logic.
 
-**Exception:** The functions in `quirks/dom.php` (like `sanitize()`, `defaultLinkTo()`) use `simple_html_dom` internally Ч that's fine. Treat them as black-box utilities.
+**Exception:** The functions in `quirks/dom.php` (like `sanitize()`, `defaultLinkTo()`) use `simple_html_dom` internally вАФ that's fine. Treat them as black-box utilities.
 
 ### Fetching HTML
 
@@ -291,7 +287,7 @@ private function fetchHtml(string $url): \Dom\HTMLDocument
 $title = $dom->querySelector('h1.title');
 $author = $dom->querySelector('article .author a');
 
-// Multiple elements (returns \Dom\NodeList Ч iterable)
+// Multiple elements (returns \Dom\NodeList вАФ iterable)
 foreach ($dom->querySelectorAll('article.post') as $post) {
     // ...
 }
@@ -356,7 +352,7 @@ public function collectData(): void
 
 ## Error Handling
 
-Use the standard exceptions Ч never throw raw `\Exception`:
+Use the standard exceptions вАФ never throw raw `\Exception`:
 
 ```php
 // User made a bad request
@@ -408,7 +404,7 @@ if ($cached !== null) {
 $this->cache->set($cacheKey, $data, 3600);  // TTL in seconds
 ```
 
-Note that `getContents()` and `getSimpleHTMLDOMCached()` already cache HTTP responses internally Ч use the bridge cache only for parsed/processed data.
+Note that `getContents()` and `getSimpleHTMLDOMCached()` already cache HTTP responses internally вАФ use the bridge cache only for parsed/processed data.
 
 ## Proxy / Cloudflare Bypass
 
@@ -652,7 +648,7 @@ final class BlogBridge extends BridgeAbstract
 
 ## Questions?
 
-Open an issue on [github.com/LordArrin/rss-bridge](https://github.com/LordArrin/rss-bridge) Ч the community is happy to help new bridge authors.
+Open an issue on [github.com/LordArrin/rss-bridge](https://github.com/LordArrin/rss-bridge) вАФ the community is happy to help new bridge authors.
 ```
 
 ---
