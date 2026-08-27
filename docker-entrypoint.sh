@@ -35,10 +35,10 @@ if [ -n "${HTTP_PORT:-}" ]; then
 fi
 
 # Clear OPcache file cache on startup
-if [ -d /app/cache/opcache ]; then
-    rm -rf /app/cache/opcache/* 2>/dev/null || true
-    echo "OPcache file cache cleared"
-fi
+rm -rf /app/cache/opcache/* 2>/dev/null || true
+
+# Clean old cache
+php /app/bin/cache-clear
 
 # Generate composer autoloader if missing
 if [ ! -f /app/vendor/autoload.php ]; then
@@ -47,7 +47,7 @@ if [ ! -f /app/vendor/autoload.php ]; then
 fi
 
 # Build bridge metadata cache
-php /app/bin/cache-bridge-metadata || echo "Warning: cache build failed (non-fatal)"
+php /app/bin/cache-bridge-metadata || echo "Warning: cache build failed"
 
 # Start nginx
 nginx
