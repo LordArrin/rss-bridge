@@ -104,10 +104,16 @@ final class DockerHubBridge extends BridgeAbstract
             }
 
             $item = [];
-            $item['title'] = (string)($result->name ?? '');
-            $item['uid'] = (string)($result->id ?? '');
-            $item['uri'] = $this->getTagUrl((string)($result->name ?? ''));
-            $item['author'] = isset($result->last_updater_username) ? (string)$result->last_updater_username : null;
+            $item['title'] = (string) ($result->name ?? '');
+            $item['uid'] = (string) ($result->id ?? '');
+            $item['uri'] = $this->getTagUrl((string) ($result->name ?? ''));
+
+            $authorName = null;
+            if (isset($result->last_updater_username) === true) {
+                $authorName = (string) $result->last_updater_username;
+            }
+            $item['author'] = $authorName;
+
             $item['timestamp'] = $result->tag_last_pushed ?? null;
 
             $lastPushed = '';

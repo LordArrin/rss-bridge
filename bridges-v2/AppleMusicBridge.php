@@ -37,8 +37,8 @@ final class AppleMusicBridge extends BridgeAbstract
         $items = $this->getJson();
         $artist = $this->getArtist($items);
 
-        if ($artist !== null && isset($artist->artistName)) {
-            $this->title = (string)$artist->artistName;
+        if ($artist !== null && isset($artist->artistName) === true) {
+            $this->title = (string) $artist->artistName;
         }
 
         foreach ($items as $item) {
@@ -87,8 +87,15 @@ final class AppleMusicBridge extends BridgeAbstract
 
     private function getJson(): array
     {
+        if ($artist !== null && isset($artist->artistName) === true) {
+            $this->title = (string) $artist->artistName;
+        }
+
         $limitInput = $this->getInput('limit');
-        $limit = is_numeric($limitInput) ? (int)$limitInput : 10;
+        $limit = 10;
+        if (is_numeric($limitInput) === true) {
+            $limit = (int) $limitInput;
+        }
         $limit = min(max($limit, 1), self::MAX_LIMIT);
 
         $artistId = (string)$this->getInput('artist');

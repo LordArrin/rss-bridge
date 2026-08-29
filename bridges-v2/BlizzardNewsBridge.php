@@ -84,11 +84,31 @@ final class BlizzardNewsBridge extends BridgeAbstract
                 continue;
             }
 
-            $title = isset($properties['title']) ? (string)$properties['title'] : '';
-            $summary = isset($properties['summary']) ? (string)$properties['summary'] : '';
-            $newsUrl = isset($properties['newsUrl']) ? (string)$properties['newsUrl'] : '';
-            $author = isset($properties['author']) ? (string)$properties['author'] : null;
-            $lastUpdated = isset($properties['lastUpdated']) ? (string)$properties['lastUpdated'] : '';
+            $title = '';
+            if (isset($properties['title']) === true) {
+                $title = (string) $properties['title'];
+            }
+
+            $summary = '';
+            if (isset($properties['summary']) === true) {
+                $summary = (string) $properties['summary'];
+            }
+
+            $newsUrl = '';
+            if (isset($properties['newsUrl']) === true) {
+                $newsUrl = (string) $properties['newsUrl'];
+            }
+
+            $author = null;
+            if (isset($properties['author']) === true) {
+                $author = (string) $properties['author'];
+            }
+
+            $lastUpdated = '';
+            if (isset($properties['lastUpdated']) === true) {
+                $lastUpdated = (string) $properties['lastUpdated'];
+            }
+
             $imageUrl = $properties['staticAsset']['imageUrl'] ?? null;
             $productTitle = $properties['cxpProduct']['title'] ?? null;
 

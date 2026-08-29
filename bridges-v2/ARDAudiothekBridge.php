@@ -69,7 +69,11 @@ final class ARDAudiothekBridge extends BridgeAbstract
 
         $processedJSON = $data1->data->programSet;
 
-        $limitValue = is_numeric($limit) ? (int)$limit : self::DEFAULT_LIMIT;
+        $limitValue = self::DEFAULT_LIMIT;
+        if (is_numeric($limit) === true) {
+            $limitValue = (int) $limit;
+        }
+
         $answerLength = 1;
         $offset = 0;
         $numberOfElements = 1;

@@ -10,7 +10,4 @@
     <!-- Exclude non-PHP or third-party code -->
     <exclude-pattern>./static/*</exclude-pattern>
     <exclude-pattern>./vendor/*</exclude-pattern>
-    <exclude-pattern>./lib/parsedown/*</exclude-pattern>
-    <exclude-pattern>./lib/php-urljoin/*</exclude-pattern>
-    <exclude-pattern>./lib/simplehtmldom/*</exclude-pattern>
 </ruleset>

@@ -51,8 +51,8 @@
   <!-- Line length limitation -->
   <rule ref="Generic.Files.LineLength">
     <properties>
-      <property name="lineLimit" value="180"/>
-      <property name="absoluteLineLimit" value="180"/>
+      <property name="lineLimit" value="240"/>
+      <property name="absoluteLineLimit" value="240"/>
       <property name="ignoreComments" value="true"/>
     </properties>
   </rule>

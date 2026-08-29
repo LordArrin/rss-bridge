@@ -15,11 +15,11 @@ final class PikabuBridge extends BridgeAbstract
     public const CACHE_TIMEOUT = 3600;
 
     private const PARAMETERS_FILTER = [
-        'name' => 'Фильтр',
+        'name' => 'Filter',
         'type' => 'list',
         'values' => [
-            'Горячее' => 'hot',
-            'Свежее' => 'new',
+            'Hot' => 'hot',
+            'Fresh' => 'new',
         ],
         'defaultValue' => 'hot',
     ];
@@ -45,9 +45,9 @@ final class PikabuBridge extends BridgeAbstract
             ],
             'filter' => self::PARAMETERS_FILTER,
         ],
-        'По пользователю' => [
+        'By user' => [
             'user' => [
-                'name' => 'Пользователь',
+                'name' => 'User',
                 'exampleValue' => 'admin',
                 'required' => true,
             ],

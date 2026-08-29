@@ -81,9 +81,15 @@ final class ARDMediathekBridge extends BridgeAbstract
 
             $item = [];
             $item['uri'] = self::URI . self::VIDEO_PATH . $videoId . '/';
-            $item['title'] = (string)($video->longTitle ?? $videoId);
+            $item['title'] = (string) ($video->longTitle ?? $videoId);
             $item['uid'] = $videoId;
-            $item['author'] = isset($video->publicationService->name) ? (string)$video->publicationService->name : null;
+
+            $publicationServiceName = null;
+            if (isset($video->publicationService->name) === true) {
+                $publicationServiceName = (string) $video->publicationService->name;
+            }
+            $item['author'] = $publicationServiceName;
+
             $item['content'] = $this->buildItemContent($imageUrl);
 
             $broadcastedOn = $video->broadcastedOn ?? null;

@@ -8,11 +8,11 @@ use BridgeAbstract;
 
 final class GoComicsBridge extends BridgeAbstract
 {
-    public const MAINTAINER = 'TReKiE';
     public const NAME = 'GoComics Unofficial RSS';
     public const URI = 'https://www.gocomics.com/';
-    public const CACHE_TIMEOUT = 21600;
     public const DESCRIPTION = 'The Unofficial GoComics RSS';
+    public const MAINTAINER = 'No maintainer';
+    public const CACHE_TIMEOUT = 21600;
 
     public const PARAMETERS = [[
         'comicname' => [
@@ -137,12 +137,8 @@ final class GoComicsBridge extends BridgeAbstract
             $html = getContents($url);
         } catch (\HttpException $e) {
             if ($e->getCode() === 403) {
-                throw new \Exception(
-                    'The server returned 403 Forbidden. This is likely GoComics\' use of Bunny Shield '
-                    . 'blocking requests from this bridge. Try reducing your feed update frequency, '
-                    . 'running your own RSS-Bridge instance, or hosting an instance from a different IP/location.',
-                    403
-                );
+                $message = '403 Forbidden. GoComics uses Bunny Shield to block this bridge. Try reducing feed update frequency or hosting from a different IP.';
+                throw new \Exception($message, 403);
             }
             throw $e;
         }

@@ -134,9 +134,14 @@ final class RutubeBridge extends BridgeAbstract
                 continue;
             }
 
-            $thumbnailUrl = (string)($video->thumbnail_url ?? '');
-            $description = (string)($video->description ?? '');
-            $authorName = isset($video->author->name) ? (string)$video->author->name : null;
+            $thumbnailUrl = (string) ($video->thumbnail_url ?? '');
+            $description = (string) ($video->description ?? '');
+
+            $authorName = null;
+            if (isset($video->author->name) === true) {
+                $authorName = (string) $video->author->name;
+            }
+
             $publicationTs = $video->publication_ts ?? null;
 
             $item = [];
@@ -203,7 +208,10 @@ final class RutubeBridge extends BridgeAbstract
             $this->title = 'Поиск ' . (string)$s;
         }
 
-        return is_array($videos) ? $videos : [];
+        if (is_array($videos) === true) {
+            return $videos;
+        }
+        return [];
     }
 
     private function getVideosFromSearchAPI(): array

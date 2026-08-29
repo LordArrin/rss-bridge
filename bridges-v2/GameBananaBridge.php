@@ -75,7 +75,10 @@ final class GameBananaBridge extends BridgeAbstract
             return;
         }
 
-        $this->title = isset($dataList[0][0]) ? (string)$dataList[0][0] : null;
+        $this->title = null;
+        if (isset($dataList[0][0]) === true) {
+            $this->title = (string) $dataList[0][0];
+        }
         array_shift($dataList);
 
         foreach ($dataList as $element) {
@@ -203,10 +206,14 @@ final class GameBananaBridge extends BridgeAbstract
         }
         $item['categories'] = $categories;
 
-        $timestamp = $includeUpdates ? $udate : $date;
+        $timestamp = $date;
+        if ($includeUpdates === true) {
+            $timestamp = $udate;
+        }
+
         if ($timestamp !== null) {
             if (is_numeric($timestamp) === true) {
-                $item['timestamp'] = (int)$timestamp;
+                $item['timestamp'] = (int) $timestamp;
             } elseif (is_string($timestamp) === true && $timestamp !== '') {
                 $item['timestamp'] = $timestamp;
             }

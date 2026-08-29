@@ -215,11 +215,15 @@ final class ThreadsBridge extends BridgeAbstract
             return $found;
         }
 
+        $haystackArray = $haystack;
+        if (is_object($haystack) === true) {
+            $haystackArray = (array) $haystack;
+        }
+
         $iterator = new \RecursiveArrayIterator(
-            is_object($haystack) ? (array)$haystack : $haystack,
+            $haystackArray,
             \RecursiveArrayIterator::CHILD_ARRAYS_ONLY
         );
-
         $recursive = new \RecursiveIteratorIterator(
             $iterator,
             \RecursiveIteratorIterator::SELF_FIRST

@@ -9,8 +9,6 @@ enable_maintenance_mode = false
 max_file_size = 20000000
 
 [http]
-
-; curl-impersonate
 ; 20s covers slow upstreams without hanging forever.
 timeout = 20
 
