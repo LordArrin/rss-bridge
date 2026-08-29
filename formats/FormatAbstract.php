@@ -37,7 +37,6 @@ abstract class FormatAbstract implements FormatInterface
             'name'        => '',
             'uri'         => '',
             'icon'        => '',
-            'donationUri' => '',
         ];
         $this->feed = array_merge($default, $feed);
     }

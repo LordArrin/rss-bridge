@@ -79,7 +79,7 @@ final class AO3Bridge extends BridgeAbstract
     {
         $version = 'v0.0.1';
         $headers = [
-            'useragent: rss-bridge ' . $version . ' (https://github.com/RSS-Bridge/rss-bridge)'
+            'useragent: rss-bridge ' . $version . ' (https://github.com/LordArrin/rss-bridge)'
         ];
         $response = getContents($url, $headers);
         if ($response === '') {
@@ -234,7 +234,7 @@ final class AO3Bridge extends BridgeAbstract
     {
         $version = 'v0.0.1';
         $headers = [
-            'useragent: rss-bridge ' . $version . ' (https://github.com/RSS-Bridge/rss-bridge)'
+            'useragent: rss-bridge ' . $version . ' (https://github.com/LordArrin/rss-bridge)'
         ];
 
         $navResponse = getContents($url . '/navigate', $headers);

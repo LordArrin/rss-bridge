@@ -141,10 +141,6 @@ final class Configuration
             self::throwConfigError('admin', 'email', 'Is not a valid email address');
         }
 
-        if (!is_bool(self::getConfig('admin', 'donations'))) {
-            self::throwConfigError('admin', 'donations', 'Is not a valid Boolean');
-        }
-
         $errorOutput = self::getConfig('error', 'output');
         if (!is_string($errorOutput)) {
             self::throwConfigError('error', 'output', 'Is not a valid String');

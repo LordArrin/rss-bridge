@@ -5,7 +5,7 @@ RSS-Bridge is a PHP web application. Works with PHP 8.5.
 [![LICENSE](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Docker Image](https://img.shields.io/badge/docker-lordarrin%2Frss--bridge-blue.svg?logo=docker)](https://hub.docker.com/r/lordarrin/rss-bridge)
 
-## A subset of bridges (18/365)
+## A subset of bridges (18/120)
 
 * `Nginx`: Returns Nginx releases with changelogs and other news
 * `Pawchive`: Returns posts from Pawchive

@@ -119,7 +119,7 @@ final class ModrinthBridge extends BridgeAbstract
             $url .= '?' . $query;
         }
 
-        $header = ['User-Agent: rss-bridge plugin https://github.com/RSS-Bridge/rss-bridge'];
+        $header = ['User-Agent: rss-bridge plugin https://github.com/LordArrin/rss-bridge'];
         $json = getContents($url, $header);
         $data = json_decode($json, false);
 

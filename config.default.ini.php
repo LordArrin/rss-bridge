@@ -50,7 +50,6 @@ retries = 3
 
 email = ""
 telegram = ""
-donations = false
 
 [webdriver]
 

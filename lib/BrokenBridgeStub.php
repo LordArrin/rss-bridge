@@ -75,11 +75,6 @@ class BrokenBridgeStub extends BridgeAbstract
         return '';
     }
 
-    public function getDonationURI()
-    {
-        return '';
-    }
-
     public function getIcon()
     {
         return '';

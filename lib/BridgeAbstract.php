@@ -10,13 +10,11 @@ abstract class BridgeAbstract
 {
     const NAME = null;
     const URI = null;
-    const DONATION_URI = '';
     const DESCRIPTION = 'No description provided';
     const MAINTAINER = 'No maintainer';
     const CACHE_TIMEOUT = 3600;
     const CONFIGURATION = [];
     const PARAMETERS = [];
-    const TEST_DETECT_PARAMETERS = [];
 
     protected const LIMIT = [
         'name'          => 'Limit',
@@ -45,7 +43,6 @@ abstract class BridgeAbstract
         return [
             'name'          => $this->getName(),
             'uri'           => $this->getURI(),
-            'donationUri'   => $this->getDonationURI(),
             'icon'          => $this->getIcon(),
         ];
     }
@@ -57,12 +54,7 @@ abstract class BridgeAbstract
 
     public function getURI()
     {
-        return static::URI ?? 'https://github.com/RSS-Bridge/rss-bridge/';
-    }
-
-    public function getDonationURI()
-    {
-        return static::DONATION_URI;
+        return static::URI ?? 'https://github.com/LordArrin/rss-bridge/';
     }
 
     public function getIcon()
@@ -274,22 +266,6 @@ abstract class BridgeAbstract
                     }
                 }
             }
-        }
-        return null;
-    }
-
-    public function detectParameters($url)
-    {
-        $regex = '/^(https?:\/\/)?(www\.)?(.+?)(\/)?$/';
-        $contexts = $this->getParameters();
-
-        if (
-            empty($contexts)
-            && preg_match($regex, $url, $urlMatches) > 0
-            && preg_match($regex, static::URI, $bridgeUriMatches) > 0
-            && $urlMatches[3] === $bridgeUriMatches[3]
-        ) {
-            return [];
         }
         return null;
     }

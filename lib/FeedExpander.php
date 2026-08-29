@@ -14,8 +14,6 @@ use RSSBridge\Formats\AtomFormat;
  * bridge can enrich or modify the item (e.g. fetch the full article body
  * from the original website).
  *
- * Note: donationUri is parsed but not used in FeedExpander output.
- * Donations support is disabled in the current implementation.
  */
 abstract class FeedExpander extends BridgeAbstract
 {

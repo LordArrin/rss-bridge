@@ -36,9 +36,6 @@ final class AtomFormat extends FormatAbstract
 
         $feedArray = $this->getFeed();
         foreach ($feedArray as $feedKey => $feedValue) {
-            if (in_array($feedKey, ['donationUri'], true) === true) {
-                continue;
-            }
             if ($feedKey === 'name') {
                 $title = $document->createElement('title');
                 $feed->appendChild($title);

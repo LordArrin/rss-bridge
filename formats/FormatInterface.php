@@ -25,7 +25,7 @@ interface FormatInterface
     /**
      * Set the feed metadata (name, uri, icon, etc.).
      *
-     * @param array{name?: string, uri?: string, icon?: string, donationUri?: string} $feed
+     * @param array{name?: string, uri?: string, icon?: string} $feed
      */
     public function setFeed(array $feed): void;
 

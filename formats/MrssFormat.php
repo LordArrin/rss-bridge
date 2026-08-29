@@ -45,9 +45,6 @@ final class MrssFormat extends FormatAbstract
         $title = $feedArray['name'] ?? '';
 
         foreach ($feedArray as $feedKey => $feedValue) {
-            if (in_array($feedKey, ['atom', 'donationUri'], true) === true) {
-                continue;
-            }
             if ($feedKey === 'name') {
                 $channelTitle = $document->createElement('title');
                 $channel->appendChild($channelTitle);
