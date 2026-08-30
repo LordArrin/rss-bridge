@@ -10,13 +10,13 @@ use RSSBridge\Configuration;
 /**
  * Factory for creating and managing bridge instances.
  *
- * This class is responsible for scanning bridge directories, resolving bridge
- * class names (supporting both legacy global namespace and PSR-4 namespaced
- * bridges), and safely instantiating bridge objects.
+ * This class is responsible for scanning the bridges-v2 directory, resolving
+ * bridge class names from short names or FQCNs, and safely instantiating
+ * bridge objects.
  *
  * It uses an isolated "sandbox" process to detect fatal compile errors
- * (like signature mismatches in legacy bridges) before loading them into
- * the main process, preventing the entire application from crashing.
+ * (like signature mismatches) before loading them into the main process,
+ * preventing the entire application from crashing.
  */
 final class BridgeFactory
 {
@@ -24,9 +24,8 @@ final class BridgeFactory
     private \Logger $logger;
 
     /**
-     * Array of all available bridge class names (FQCN or legacy global name).
-     * For legacy bridges: 'TelegramBridge'
-     * For PSR-4 bridges: 'RSSBridge\Bridges\TelegramBridge'
+     * Array of all available bridge class names (FQCN).
+     * Example: ['RSSBridge\Bridges\TelegramBridge', 'RSSBridge\Bridges\YoutubeBridge', ...]
      *
      * @var string[]
      */
@@ -64,52 +63,28 @@ final class BridgeFactory
     }
 
     /**
-     * Scans bridge directories and populates bridgeClassNames and shortNameMap.
-     *
-     * PSR-4 bridges (in bridges-v2/) take precedence over legacy bridges
-     * (in bridges/) when both have the same short name.
+     * Scans the bridges-v2 directory and populates bridgeClassNames and shortNameMap.
      */
     private function scanBridges(): void
     {
         $this->bridgeClassNames = [];
         $this->shortNameMap = [];
 
-        $legacyDir = __DIR__ . '/../bridges/';
-        if (is_dir($legacyDir)) {
-            foreach (scandir($legacyDir) as $file) {
-                if (preg_match('/^([^.]+Bridge)\.php$/U', $file, $m)) {
-                    $shortName = $m[1];
-                    $this->bridgeClassNames[] = $shortName;
-                    $this->shortNameMap[strtolower($shortName)] = $shortName;
-                }
-            }
+        $v2Dir = __DIR__ . '/../bridges-v2/';
+        if (!is_dir($v2Dir)) {
+            return;
         }
 
-        $v2Dir = __DIR__ . '/../bridges-v2/';
-        if (is_dir($v2Dir)) {
-            foreach (scandir($v2Dir) as $file) {
-                if (preg_match('/^([^.]+Bridge)\.php$/U', $file, $m)) {
-                    $shortName = $m[1];
-                    $fqcn = 'RSSBridge\\Bridges\\' . $shortName;
-
-                    $lowerShortName = strtolower($shortName);
-                    if (isset($this->shortNameMap[$lowerShortName])) {
-                        $legacyFqcn = $this->shortNameMap[$lowerShortName];
-                        $index = array_search($legacyFqcn, $this->bridgeClassNames, true);
-                        if ($index !== false) {
-                            unset($this->bridgeClassNames[$index]);
-                            $this->bridgeClassNames = array_values($this->bridgeClassNames);
-                        }
-                        $this->logger->info(sprintf(
-                            'PSR-4 bridge "%s" overrides legacy bridge with the same name',
-                            $shortName
-                        ));
-                    }
-
-                    $this->bridgeClassNames[] = $fqcn;
-                    $this->shortNameMap[$lowerShortName] = $fqcn;
-                }
+        foreach (scandir($v2Dir) as $file) {
+            if (!preg_match('/^([^.]+Bridge)\.php$/U', $file, $m)) {
+                continue;
             }
+
+            $shortName = $m[1];
+            $fqcn = 'RSSBridge\\Bridges\\' . $shortName;
+
+            $this->bridgeClassNames[] = $fqcn;
+            $this->shortNameMap[strtolower($shortName)] = $fqcn;
         }
 
         sort($this->bridgeClassNames);
@@ -195,7 +170,7 @@ final class BridgeFactory
      * Loads a bridge file inside an isolated PHP subprocess to detect
      * fatal compile errors (e.g. signature mismatches with parent classes).
      *
-     * This prevents the main process from crashing when a legacy bridge
+     * This prevents the main process from crashing when a bridge
      * has incompatible type declarations with its parent abstract class.
      *
      * @param string $file Absolute path to the bridge PHP file
@@ -239,10 +214,7 @@ final class BridgeFactory
     /**
      * Resolves the filesystem path to a bridge file by its class name.
      *
-     * Checks the PSR-4 directory (bridges-v2/) first, then the legacy
-     * directory (bridges/).
-     *
-     * @param string $className Full class name (FQCN or legacy global name)
+     * @param string $className Full class name (FQCN)
      * @return string|null Absolute path to the file, or null if not found
      */
     private function getBridgeFilePath(string $className): ?string
@@ -254,18 +226,13 @@ final class BridgeFactory
             return $v2File;
         }
 
-        $legacyFile = __DIR__ . '/../bridges/' . $shortName . '.php';
-        if (file_exists($legacyFile)) {
-            return $legacyFile;
-        }
-
         return null;
     }
 
     /**
      * Checks whether a bridge is enabled in the configuration.
      *
-     * @param string $bridgeName Full class name (FQCN or legacy global name)
+     * @param string $bridgeName Full class name (FQCN)
      */
     public function isEnabled(string $bridgeName): bool
     {
@@ -273,7 +240,7 @@ final class BridgeFactory
     }
 
     /**
-     * Resolves a bridge class name from a short name, legacy name, or FQCN.
+     * Resolves a bridge class name from a short name or FQCN.
      *
      * @param string $bridgeName Any accepted bridge name format
      * @return string|null The full class name, or null if not found
@@ -322,11 +289,9 @@ final class BridgeFactory
     }
 
     /**
-     * Extracts the short class name from a FQCN, or returns it as-is
-     * for legacy global-namespace names.
+     * Extracts the short class name from a FQCN.
      *
      * Example: 'RSSBridge\Bridges\TelegramBridge' -> 'TelegramBridge'
-     * Example: 'TelegramBridge' -> 'TelegramBridge'
      *
      * @param string $className Full class name
      */

@@ -95,7 +95,6 @@ $container['bridge_metadata_cache'] = function ($c) {
     return new BridgeMetadataCache(
         $c['cache'],
         [
-            __DIR__ . '/../bridges',
             __DIR__ . '/../bridges-v2',
         ]
     );

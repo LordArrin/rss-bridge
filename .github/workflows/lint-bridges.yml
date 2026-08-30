@@ -4,14 +4,12 @@ on:
   push:
     branches: [master]
     paths:
-      - 'bridges/**'
       - 'bridges-v2/**'
       - 'phpcs.xml'
       - '.github/workflows/lint-bridges.yml'
   pull_request:
     branches: [master]
     paths:
-      - 'bridges/**'
       - 'bridges-v2/**'
       - 'phpcs.xml'
       - '.github/workflows/lint-bridges.yml'
@@ -67,13 +65,11 @@ jobs:
       - name: Determine changed bridge files
         id: changed
         run: |
-          BRIDGE_PATHS="bridges/*.php bridges-v2/*.php"
+          BRIDGE_PATHS="bridges-v2/*.php"
           
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ "${{ github.event.inputs.check_mode }}" = "all_bridges" ]; then
-              BRIDGES_FILES=$(find bridges -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
-              BRIDGES_V2_FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
-              FILES=$(echo -e "${BRIDGES_FILES}\n${BRIDGES_V2_FILES}" | grep -v '^$' | tr '\n' ' ')
+              FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null | tr '\n' ' ')
               echo "Mode: manual check on ALL bridge files"
             else
               if git rev-parse HEAD~1 >/dev/null 2>&1; then
@@ -85,9 +81,7 @@ jobs:
               if [ -n "$BASE" ]; then
                 FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
               else
-                BRIDGES_FILES=$(find bridges -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
-                BRIDGES_V2_FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
-                FILES=$(echo -e "${BRIDGES_FILES}\n${BRIDGES_V2_FILES}" | grep -v '^$' | tr '\n' ' ')
+                FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null | tr '\n' ' ')
               fi
               echo "Mode: manual check on CHANGED bridge files only"
             fi
@@ -106,9 +100,7 @@ jobs:
               FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- $BRIDGE_PATHS | tr '\n' ' ')
               echo "Mode: push changes against $BASE"
             else
-              BRIDGES_FILES=$(find bridges -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
-              BRIDGES_V2_FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null || echo "")
-              FILES=$(echo -e "${BRIDGES_FILES}\n${BRIDGES_V2_FILES}" | grep -v '^$' | tr '\n' ' ')
+              FILES=$(find bridges-v2 -maxdepth 1 -name '*.php' -type f 2>/dev/null | tr '\n' ' ')
               echo "Mode: initial commit - checking all files"
             fi
           fi
@@ -153,7 +145,7 @@ jobs:
         run: |
           rm -f .phpcs.cache
           
-          V2_FILES=$(echo "${{ steps.changed.outputs.files }}" | tr ' ' '\n' | grep '^bridges-v2/' | tr '\n' ' ')
+          V2_FILES="${{ steps.changed.outputs.files }}"
           
           if [ -n "$V2_FILES" ]; then
             echo "### Checking bridges-v2 (warnings enabled) ###"
@@ -176,26 +168,6 @@ jobs:
             echo "No bridges-v2 files to check."
           fi
 
-      - name: Run phpcs on legacy bridges (errors only)
-        if: steps.changed.outputs.has_files == 'true'
-        run: |
-          rm -f .phpcs.cache
-          
-          LEGACY_FILES=$(echo "${{ steps.changed.outputs.files }}" | tr ' ' '\n' | grep '^bridges/' | tr '\n' ' ')
-          
-          if [ -n "$LEGACY_FILES" ]; then
-            echo "### Checking legacy bridges (errors only) ###"
-            ./vendor/bin/phpcs \
-              $LEGACY_FILES \
-              --standard=phpcs.xml \
-              --warning-severity=0 \
-              --extensions=php \
-              --no-cache \
-              -p
-          else
-            echo "No legacy bridge files to check."
-          fi
-
   executable-check:
     name: Executable PHP files check
     runs-on: ubuntu-26.04-arm
@@ -204,24 +176,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Check for executable PHP files in bridges/ and bridges-v2/
+      - name: Check for executable PHP files in bridges-v2/
         run: |
-          FOUND=0
-          
-          echo "Checking bridges/..."
-          if ! find bridges -name "*.php" -executable -type f -print -exec false {} +; then
-            FOUND=1
-          fi
-          
           echo "Checking bridges-v2/..."
-          if ! find bridges-v2 -name "*.php" -executable -type f -print -exec false {} +; then
-            FOUND=1
-          fi
+          EXECUTABLE_FILES=$(find bridges-v2 -name "*.php" -executable -type f -print)
           
-          if [ "$FOUND" -eq 0 ]; then
-            echo 'Good, no executable php scripts found in bridges/ or bridges-v2/'
+          if [ -z "$EXECUTABLE_FILES" ]; then
+            echo 'Good, no executable PHP scripts found in bridges-v2/'
           else
-            echo '::error::Please unmark php scripts above as non-executable'
+            echo '::error::The following PHP files are marked as executable:'
+            echo "$EXECUTABLE_FILES"
+            echo ''
+            echo '::error::Please unmark PHP scripts above as non-executable'
             echo 'You can do it with: git update-index --chmod=-x <file>'
             exit 1
           fi
