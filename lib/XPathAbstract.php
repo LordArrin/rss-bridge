@@ -413,7 +413,7 @@ abstract class XPathAbstract extends BridgeAbstract
         libxml_clear_errors();
         libxml_use_internal_errors(false);
 
-        defaultLinkTo($webPageHtml, $webPageHtml->baseURI ?? $this->feedUri);
+        $this->convertRelativeToAbsoluteUrls($webPageHtml, $webPageHtml->baseURI ?? $this->feedUri);
 
         $xpath = new \DOMXPath($webPageHtml);
 
@@ -657,5 +657,30 @@ abstract class XPathAbstract extends BridgeAbstract
     protected function generateItemId(array $item): ?string
     {
         return null;
+    }
+
+    /**
+     * Convert relative URLs to absolute URLs in the DOM.
+     *
+     * @param \DOMDocument $dom The DOM document to process
+     * @param string $baseUrl The base URL for relative links
+     */
+    protected function convertRelativeToAbsoluteUrls(\DOMDocument $dom, string $baseUrl): void
+    {
+        // Process images
+        foreach ($dom->getElementsByTagName('img') as $image) {
+            $src = $image->getAttribute('src');
+            if ($src !== null && $src !== '') {
+                $image->setAttribute('src', urljoin($baseUrl, $src));
+            }
+        }
+
+        // Process anchors
+        foreach ($dom->getElementsByTagName('a') as $anchor) {
+            $href = $anchor->getAttribute('href');
+            if ($href !== null && $href !== '') {
+                $anchor->setAttribute('href', urljoin($baseUrl, $href));
+            }
+        }
     }
 }

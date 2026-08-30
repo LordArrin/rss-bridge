@@ -87,10 +87,6 @@ final class AppleMusicBridge extends BridgeAbstract
 
     private function getJson(): array
     {
-        if ($artist !== null && isset($artist->artistName) === true) {
-            $this->title = (string) $artist->artistName;
-        }
-
         $limitInput = $this->getInput('limit');
         $limit = 10;
         if (is_numeric($limitInput) === true) {

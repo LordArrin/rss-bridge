@@ -92,7 +92,7 @@ TMPL;
         }
 
         $party = trim($partyEl->innerHTML ?? '');
-        $amountText = trim($amountEl->innerHTML ?? '');
+        $amount = trim($amountEl->innerHTML ?? '');
 
         $donor = trim($donorEl->innerHTML ?? '');
         $date = str_replace(' ', '', trim($dateEl->innerHTML ?? ''));
@@ -100,9 +100,9 @@ TMPL;
         $content = sprintf(self::CONTENT_TEMPLATE, $party, $amount, $donor, $date);
 
         $item = [
-            'title' => $party . ': ' . $amount,
-            'content' => $content,
-            'uid' => sha1($content),
+        'title' => $party . ': ' . $amount,
+        'content' => $content,
+        'uid' => sha1($content),
         ];
 
         if ($dipEl !== null) {

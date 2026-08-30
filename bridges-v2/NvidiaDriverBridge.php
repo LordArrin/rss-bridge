@@ -71,8 +71,6 @@ final class NvidiaDriverBridge extends BridgeAbstract
         'empty'     => 'color:#666;font-style:italic;',
     ];
 
-    private string $operatingSystem = '';
-
     public function collectData(): void
     {
         $parameters = [
@@ -86,19 +84,16 @@ final class NvidiaDriverBridge extends BridgeAbstract
                 $parameters['osid'] = 57;
                 $parameters['dtcid'] = 1;
                 $parameters['whql'] = $whql;
-                $this->operatingSystem = 'Windows';
                 break;
             case 'Linux':
                 $whql = $this->getInput('lwhql');
                 $parameters['osid'] = 12;
                 $parameters['whql'] = $whql;
-                $this->operatingSystem = 'Linux';
                 break;
             case 'FreeBSD':
                 $whql = $this->getInput('fwhql');
                 $parameters['osid'] = 22;
                 $parameters['whql'] = $whql;
-                $this->operatingSystem = 'FreeBSD';
                 break;
         }
 
@@ -135,14 +130,13 @@ final class NvidiaDriverBridge extends BridgeAbstract
                 continue;
             }
 
-            $linkNode = $nameCell->querySelector('a');
-            $driverName = trim($nameCell->textContent);
-            $version = trim($versionCell->textContent);
-            $date = trim($dateCell->textContent);
+            $driverName = trim($nameCell->textContent ?? '');
+            $version = trim($versionCell->textContent ?? '');
+            $date = trim($dateCell->textContent ?? '');
 
             $releaseNotes = $this->extractReleaseNotes($contentSpan);
 
-            $content = '<div style="' . self::CSS['wrapper'] . '">' . $releaseNotes . $downloadButton . '</div>';
+            $content = '<div style="' . self::CSS['wrapper'] . '">' . $releaseNotes . '</div>';
 
             $parsedTimestamp = strtotime($date);
 
@@ -161,6 +155,19 @@ final class NvidiaDriverBridge extends BridgeAbstract
 
     public function getName(): string
     {
+        // Если контекст не установлен - вернуть статичное имя
+        if ($this->queriedContext === null) {
+            return static::NAME;
+        }
+
+        // Определяем ОС из контекста
+        $operatingSystem = match ($this->queriedContext) {
+            'Windows' => 'Windows',
+            'Linux' => 'Linux',
+            'FreeBSD' => 'FreeBSD',
+            default => '',
+        };
+
         $key = match ($this->queriedContext) {
             'Windows' => 'wwhql',
             'Linux' => 'lwhql',
@@ -168,10 +175,17 @@ final class NvidiaDriverBridge extends BridgeAbstract
             default => null,
         };
 
-        $whqlValue = $key !== null ? (string)$this->getInput($key) : '';
+        $whqlValue = $key !== null ? (string) $this->getInput($key) : '';
+
+        // Fallback на defaultValue если значение пустое
+        if ($whqlValue === '' && $key !== null) {
+            $paramDef = static::PARAMETERS[$this->queriedContext][$key] ?? [];
+            $whqlValue = (string) ($paramDef['defaultValue'] ?? '');
+        }
+
         $driverType = self::WHQL_LABELS[$whqlValue] ?? 'All';
 
-        return sprintf('NVIDIA %s %s Drivers', $this->operatingSystem, $driverType);
+        return sprintf('NVIDIA %s %s Drivers', $operatingSystem, $driverType);
     }
 
     private function extractReleaseNotes(?\Dom\Element $contentSpan): string
@@ -180,7 +194,7 @@ final class NvidiaDriverBridge extends BridgeAbstract
             return '<p style="' . self::CSS['empty'] . '">No release notes available.</p>';
         }
 
-        $html = $contentSpan->innerHTML;
+        $html = $contentSpan->innerHTML ?? '';
 
         $html = preg_replace(
             '/<ul([^>]*)>/i',

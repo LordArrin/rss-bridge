@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Caches;
 
+use RSSBridge\Configuration;
+
 /**
  * SQLite-based persistent cache with WAL mode for better concurrency.
  */
