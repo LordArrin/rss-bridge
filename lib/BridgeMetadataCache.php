@@ -154,14 +154,14 @@ final class BridgeMetadataCache
                 }
 
                 $metadata[$className] = [
-                    'name' => $bridge->getName(),
-                    'uri' => $bridge->getURI(),
-                    'description' => $bridge->getDescription(),
-                    'parameters' => $bridge->getParameters(),
-                    'domain' => $this->extractDomain($bridge->getURI()),
-                    'short_name' => $shortName,
-                    'maintainer' => $bridge->getMaintainer(),
-                    'cache_timeout' => $bridge->getCacheTimeout(),
+                'name' => $className::NAME,
+                'uri' => $bridge->getURI(),
+                'description' => $bridge->getDescription(),
+                'parameters' => $bridge->getParameters(),
+                'domain' => $this->extractDomain($bridge->getURI()),
+                'short_name' => $shortName,
+                'maintainer' => $bridge->getMaintainer(),
+                'cache_timeout' => $bridge->getCacheTimeout(),
                 ];
             }
         }

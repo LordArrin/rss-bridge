@@ -8,7 +8,7 @@ use RSSBridge\BridgeAbstract;
 
 final class AO3Bridge extends BridgeAbstract
 {
-    public const NAME = 'AO3';
+    public const NAME = 'Archive of Our Own';
     public const URI = 'https://archiveofourown.org/';
     public const CACHE_TIMEOUT = 1800;
     public const DESCRIPTION = 'Returns works or chapters from Archive of Our Own';
