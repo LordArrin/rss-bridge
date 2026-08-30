@@ -8,10 +8,10 @@ namespace RSSBridge;
  * Configuration module for RSS-Bridge.
  *
  * This class implements a configuration module for RSS-Bridge.
- each */
+ */
 final class Configuration
 {
-    public const VERSION = '1.1.9';
+    public const VERSION = '1.2.0';
 
     /**
      * @var array<string, array<string, mixed>>
@@ -24,12 +24,12 @@ final class Configuration
 
     public static function loadConfiguration(array $customConfig = [], array $env = []): void
     {
-        if (!file_exists(__DIR__ . '/../config.default.ini.php')) {
+        if (file_exists(__DIR__ . '/../config.default.ini.php') === false) {
             throw new \Exception('The default configuration file is missing');
         }
 
         $config = parse_ini_file(__DIR__ . '/../config.default.ini.php', true, INI_SCANNER_TYPED);
-        if (!$config) {
+        if ($config === false) {
             throw new \Exception('Error parsing ini config');
         }
 
@@ -45,7 +45,7 @@ final class Configuration
             }
         }
 
-        if (file_exists(__DIR__ . '/../DEBUG')) {
+        if (file_exists(__DIR__ . '/../DEBUG') === true) {
             $debug = trim(file_get_contents(__DIR__ . '/../DEBUG'));
             if ($debug === '') {
                 self::setConfig('system', 'env', 'dev');
@@ -53,7 +53,7 @@ final class Configuration
             }
         }
 
-        if (file_exists(__DIR__ . '/../whitelist.txt')) {
+        if (file_exists(__DIR__ . '/../whitelist.txt') === true) {
             $enabledBridges = trim(file_get_contents(__DIR__ . '/../whitelist.txt'));
             if ($enabledBridges === '*') {
                 self::setConfig('system', 'enabled_bridges', ['*']);
@@ -78,7 +78,7 @@ final class Configuration
                 $key = strtolower($key);
 
                 // Handle this specifically because it's an array
-                if ($key === 'enabled_bridges' && is_string($envValue)) {
+                if ($key === 'enabled_bridges' && is_string($envValue) === true) {
                     $envValue = explode(',', $envValue);
                     $envValue = array_map('trim', $envValue);
                 }
@@ -91,66 +91,70 @@ final class Configuration
             }
         }
 
-        if (!in_array(self::getConfig('system', 'env'), ['dev', 'prod'], true)) {
+        if (in_array(self::getConfig('system', 'env'), ['dev', 'prod'], true) === false) {
             self::throwConfigError('system', 'env', 'Must be dev or prod');
         }
 
-        if (!is_array(self::getConfig('system', 'enabled_bridges'))) {
+        if (is_array(self::getConfig('system', 'enabled_bridges')) === false) {
             self::throwConfigError('system', 'enabled_bridges', 'Is not an array');
         }
 
         $timezone = self::getConfig('system', 'timezone');
-        if (!is_string($timezone) || !in_array($timezone, timezone_identifiers_list(\DateTimeZone::ALL_WITH_BC) ?: [], true)) {
+        $timezoneList = timezone_identifiers_list(\DateTimeZone::ALL_WITH_BC);
+        if ($timezoneList === false) {
+            $timezoneList = [];
+        }
+        if (is_string($timezone) === false || in_array($timezone, $timezoneList, true) === false) {
             self::throwConfigError('system', 'timezone', 'Is not a valid timezone');
         }
 
-        if (!is_string(self::getConfig('proxy', 'url'))) {
+        if (is_string(self::getConfig('proxy', 'url')) === false) {
             self::throwConfigError('proxy', 'url', 'Is not a valid string');
         }
 
-        if (!is_bool(self::getConfig('proxy', 'by_bridge'))) {
+        if (is_bool(self::getConfig('proxy', 'by_bridge')) === false) {
             self::throwConfigError('proxy', 'by_bridge', 'Is not a valid Boolean');
         }
 
-        if (!is_string(self::getConfig('proxy', 'name'))) {
+        if (is_string(self::getConfig('proxy', 'name')) === false) {
             self::throwConfigError('proxy', 'name', 'Is not a valid string');
         }
 
-        if (!is_string(self::getConfig('cache', 'type'))) {
+        if (is_string(self::getConfig('cache', 'type')) === false) {
             self::throwConfigError('cache', 'type', 'Is not a valid string');
         }
 
-        if (!is_bool(self::getConfig('cache', 'custom_timeout'))) {
+        if (is_bool(self::getConfig('cache', 'custom_timeout')) === false) {
             self::throwConfigError('cache', 'custom_timeout', 'Is not a valid Boolean');
         }
 
-        if (!is_bool(self::getConfig('authentication', 'enable'))) {
+        if (is_bool(self::getConfig('authentication', 'enable')) === false) {
             self::throwConfigError('authentication', 'enable', 'Is not a valid Boolean');
         }
 
-        if (!is_string(self::getConfig('authentication', 'username'))) {
+        if (is_string(self::getConfig('authentication', 'username')) === false) {
             self::throwConfigError('authentication', 'username', 'Is not a valid string');
         }
 
-        if (!is_string(self::getConfig('authentication', 'password'))) {
+        if (is_string(self::getConfig('authentication', 'password')) === false) {
             self::throwConfigError('authentication', 'password', 'Is not a valid string');
         }
 
         $email = self::getConfig('admin', 'email');
-        if (!empty($email) && !filter_var((string)$email, FILTER_VALIDATE_EMAIL)) {
+        if (empty($email) === false && filter_var((string)$email, FILTER_VALIDATE_EMAIL) === false) {
             self::throwConfigError('admin', 'email', 'Is not a valid email address');
         }
 
         $errorOutput = self::getConfig('error', 'output');
-        if (!is_string($errorOutput)) {
+        if (is_string($errorOutput) === false) {
             self::throwConfigError('error', 'output', 'Is not a valid String');
         }
-        if (!in_array($errorOutput, ['feed', 'http', 'none'], true)) {
+        if (in_array($errorOutput, ['feed', 'http', 'none'], true) === false) {
             self::throwConfigError('error', 'output', 'Invalid output');
         }
 
         $reportLimit = self::getConfig('error', 'report_limit');
-        if (!is_numeric($reportLimit) || (int)$reportLimit < 1) {
+        if (is_numeric($reportLimit) === false || (int)$reportLimit < 1) {
             self::throwConfigError('error', 'report_limit', 'Value is invalid');
         }
     }
@@ -182,7 +186,27 @@ final class Configuration
     private static function throwConfigError(string $section, string $key, string $message = ''): never
     {
         http_response_code(500);
-        print("Config [$section] => [$key] is invalid. $message");
+        echo "Config [$section] => [$key] is invalid. $message";
         exit(1);
+    }
+
+    /**
+     * Returns the absolute path to the cache directory.
+     *
+     * This is the directory where file-based caches store their data.
+     */
+    public static function getPathCache(): string
+    {
+        return dirname(__DIR__) . '/cache/';
+    }
+
+    /**
+     * Returns the absolute path to the caches library directory.
+     *
+     * This directory contains cache implementation classes.
+     */
+    public static function getPathLibCaches(): string
+    {
+        return dirname(__DIR__) . '/caches/';
     }
 }

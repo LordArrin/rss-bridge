@@ -53,42 +53,46 @@ final class TheGuardianBridge extends FeedExpander
 
     protected function parseItem(array $item): array|false
     {
-        $articlePage = getSimpleHTMLDOM($item['uri']);
-        if ($articlePage === false) {
-            $item['content'] .= '<br><p><em>Could not request ' . $this->getName() . ': ' . $item['uri'] . '</em></p>';
+        $html = getContents($item['uri']);
+        if ($html === '') {
+            $item['content'] = ($item['content'] ?? '') . '<br><p><em>Could not request ' . $this->getName() . ': ' . $item['uri'] . '</em></p>';
             return $item;
         }
 
+        libxml_use_internal_errors(true);
+        $articlePage = \Dom\HTMLDocument::createFromString($html);
+        libxml_use_internal_errors(false);
+
         $content = '';
 
-        $mainFigure = $articlePage->find('div[data-gu-name="media"] figure', 0);
+        $mainFigure = $articlePage->querySelector('div[data-gu-name="media"] figure');
         if ($mainFigure === null) {
-            $mainFigure = $articlePage->find('figure[id]', 0);
+            $mainFigure = $articlePage->querySelector('figure[id]');
         }
         if ($mainFigure !== null) {
             $content .= $this->extractImageFromFigure($mainFigure);
         }
 
-        $standfirst = $articlePage->find('div[data-gu-name="standfirst"]', 0);
+        $standfirst = $articlePage->querySelector('div[data-gu-name="standfirst"]');
         if ($standfirst !== null) {
-            $inner = $standfirst->find('div', 0);
+            $inner = $standfirst->querySelector('div');
             if ($inner !== null) {
-                $content .= '<div><em>' . $inner->innertext . '</em></div>';
+                $content .= '<div><em>' . $inner->innerHTML . '</em></div>';
             } else {
-                $standfirstText = trim($standfirst->plaintext);
+                $standfirstText = trim($standfirst->textContent ?? '');
                 if ($standfirstText !== '') {
                     $content .= '<div><em>' . htmlspecialchars($standfirstText, ENT_QUOTES, 'UTF-8') . '</em></div>';
                 }
             }
         }
 
-        $body = $articlePage->find('.article-body-commercial-selector', 0);
+        $body = $articlePage->querySelector('.article-body-commercial-selector');
         if ($body !== null) {
             $content .= $this->cleanBodyContent($body);
         }
 
         if ($content === '') {
-            $item['content'] .= '<br><p><em>Could not extract article content from ' . $item['uri'] . '</em></p>';
+            $item['content'] = ($item['content'] ?? '') . '<br><p><em>Could not extract article content from ' . $item['uri'] . '</em></p>';
             return $item;
         }
 
@@ -96,9 +100,9 @@ final class TheGuardianBridge extends FeedExpander
 
         $item['content'] = $content;
 
-        $author = $articlePage->find('address[data-component="meta-byline"] a[rel="author"]', 0);
+        $author = $articlePage->querySelector('address[data-component="meta-byline"] a[rel="author"]');
         if ($author !== null) {
-            $item['author'] = trim($author->plaintext);
+            $item['author'] = trim($author->textContent ?? '');
         }
 
         $categories = $this->extractTags($articlePage);
@@ -109,7 +113,7 @@ final class TheGuardianBridge extends FeedExpander
         return $item;
     }
 
-    private function extractImageFromFigure(\simple_html_dom_node $figure): string
+    private function extractImageFromFigure(\Dom\Element $figure): string
     {
         $spacefinderRole = $figure->getAttribute('data-spacefinder-role');
         $spacefinderType = (string) $figure->getAttribute('data-spacefinder-type');
@@ -118,16 +122,16 @@ final class TheGuardianBridge extends FeedExpander
             return '';
         }
 
-        $picture = $figure->find('picture', 0);
+        $picture = $figure->querySelector('picture');
         if ($picture === null) {
             return '';
         }
 
-        $html = '<figure>' . $picture->outertext;
+        $html = '<figure>' . $picture->outerHTML;
 
-        $figcaption = $figure->find('figcaption', 0);
+        $figcaption = $figure->querySelector('figcaption');
         if ($figcaption !== null) {
-            $captionText = trim($figcaption->plaintext);
+            $captionText = trim($figcaption->textContent ?? '');
             if ($captionText !== '') {
                 $html .= '<figcaption>' . htmlspecialchars($captionText, ENT_QUOTES, 'UTF-8') . '</figcaption>';
             }
@@ -136,19 +140,21 @@ final class TheGuardianBridge extends FeedExpander
         return $html . '</figure>';
     }
 
-    private function cleanBodyContent(\simple_html_dom_node $body): string
+    private function cleanBodyContent(\Dom\Element $body): string
     {
         foreach (self::JUNK_SELECTORS as $selector) {
-            foreach ($body->find($selector) as $el) {
-                $el->outertext = '';
+            foreach ($body->querySelectorAll($selector) as $el) {
+                $el->remove();
             }
         }
 
-        foreach ($body->find('figure[id]') as $figure) {
-            $figure->outertext = $this->extractImageFromFigure($figure);
+        foreach ($body->querySelectorAll('figure[id]') as $figure) {
+            $extractedHtml = $this->extractImageFromFigure($figure);
+            $figure->insertAdjacentHTML(\Dom\AdjacentPosition::BeforeBegin, $extractedHtml);
+            $figure->remove();
         }
 
-        $html = $body->innertext;
+        $html = $body->innerHTML;
 
         $html = preg_replace('/<em>\s*The Associated Press contributed reporting\s*<\/em>/i', '', $html);
         $html = preg_replace('/<p[^>]*>\s*<em>\s*The Associated Press contributed reporting\s*<\/em>\s*<\/p>/i', '', $html);
@@ -178,9 +184,9 @@ final class TheGuardianBridge extends FeedExpander
         return $result;
     }
 
-    private function extractTags(\simple_html_dom_node $articlePage): array
+    private function extractTags(\Dom\HTMLDocument $articlePage): array
     {
-        foreach ($articlePage->find('meta') as $meta) {
+        foreach ($articlePage->querySelectorAll('meta') as $meta) {
             if ($meta->getAttribute('property') === 'article:tag') {
                 $tags = [];
                 foreach (explode(',', (string)$meta->getAttribute('content')) as $tag) {
@@ -196,8 +202,8 @@ final class TheGuardianBridge extends FeedExpander
         }
 
         $tags = [];
-        foreach ($articlePage->find('.dcr-p7nd18 li') as $tagEl) {
-            $tagText = trim($tagEl->plaintext);
+        foreach ($articlePage->querySelectorAll('.dcr-p7nd18 li') as $tagEl) {
+            $tagText = trim($tagEl->textContent ?? '');
             if ($tagText !== '') {
                 $tags[] = $tagText;
             }

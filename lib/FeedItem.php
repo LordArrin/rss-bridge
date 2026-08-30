@@ -81,7 +81,7 @@ class FeedItem
             case 'uid':
                 return $this->getUid();
             default:
-                if (array_key_exists($name, $this->misc)) {
+                if (array_key_exists($name, $this->misc) === true) {
                     return $this->misc[$name];
                 }
                 return null;
@@ -97,19 +97,19 @@ class FeedItem
     {
         $this->uri = null;
 
-        if ($uri instanceof simple_html_dom_node) {
-            if ($uri->hasAttribute('href')) { // Anchor
-                $uri = $uri->href;
-            } elseif ($uri->hasAttribute('src')) { // Image
-                $uri = $uri->src;
+        if ($uri instanceof \Dom\Element) {
+            if ($uri->hasAttribute('href') === true) { // Anchor
+                $uri = $uri->getAttribute('href');
+            } elseif ($uri->hasAttribute('src') === true) { // Image
+                $uri = $uri->getAttribute('src');
             }
         }
-        if (!is_string($uri)) {
+        if (is_string($uri) === false) {
             return;
         }
         $uri = trim($uri);
         // Intentionally doing a weak url validation here because FILTER_VALIDATE_URL is too strict
-        if (!preg_match('#^https?://#i', $uri)) {
+        if (preg_match('#^https?://#i', $uri) !== 1) {
             return;
         }
         $this->uri = $uri;
@@ -123,7 +123,7 @@ class FeedItem
     public function setTitle($title)
     {
         $this->title = null;
-        if (is_string($title)) {
+        if (is_string($title) === true) {
             $this->title = truncate(trim($title));
         }
     }
@@ -136,7 +136,7 @@ class FeedItem
     public function setTimestamp($datetime)
     {
         $this->timestamp = null;
-        if (is_numeric($datetime)) {
+        if (is_numeric($datetime) === true) {
             $timestamp = $datetime;
         } else {
             $timestamp = strtotime($datetime);
@@ -154,7 +154,7 @@ class FeedItem
     public function setAuthor($author)
     {
         $this->author = null;
-        if (is_string($author)) {
+        if (is_string($author) === true) {
             $this->author = $author;
         }
     }
@@ -165,20 +165,19 @@ class FeedItem
     }
 
     /**
-     * @param string|array|\simple_html_dom|\simple_html_dom_node $content The item content
+     * @param string|array|\Dom\HTMLDocument|\Dom\Element $content The item content
      */
     public function setContent($content)
     {
         $this->content = null;
 
-        if (
-            $content instanceof simple_html_dom
-            || $content instanceof simple_html_dom_node
-        ) {
-            $content = (string) $content;
+        if ($content instanceof \Dom\HTMLDocument) {
+            $content = $content->saveHTML();
+        } elseif ($content instanceof \Dom\Element) {
+            $content = $content->outerHTML;
         }
 
-        if (is_string($content)) {
+        if (is_string($content) === true) {
             $this->content = $content;
         }
     }
@@ -192,18 +191,19 @@ class FeedItem
     {
         $this->enclosures = [];
 
-        if (!is_array($enclosures)) {
+        if (is_array($enclosures) === false) {
             return;
         }
         foreach ($enclosures as $enclosure) {
             if (
-                !filter_var(
+                filter_var(
                     $enclosure,
                     FILTER_VALIDATE_URL,
                     FILTER_FLAG_PATH_REQUIRED
-                )
+                ) === false
             ) {
-            } elseif (!in_array($enclosure, $this->enclosures)) {
+                continue;
+            } elseif (in_array($enclosure, $this->enclosures, true) === false) {
                 $this->enclosures[] = $enclosure;
             }
         }
@@ -218,11 +218,11 @@ class FeedItem
     {
         $this->categories = [];
 
-        if (!is_array($categories)) {
+        if (is_array($categories) === false) {
             return;
         }
         foreach ($categories as $category) {
-            if (is_string($category)) {
+            if (is_string($category) === true) {
                 $this->categories[] = $category;
             }
         }
@@ -236,10 +236,10 @@ class FeedItem
     public function setUid($uid): void
     {
         $this->uid = null;
-        if (!is_string($uid)) {
+        if (is_string($uid) === false) {
             return;
         }
-        if (preg_match('/^[a-f0-9]{40}$/', $uid)) {
+        if (preg_match('/^[a-f0-9]{40}$/', $uid) === 1) {
             // Preserve sha1 hash
             $this->uid = $uid;
         } else {

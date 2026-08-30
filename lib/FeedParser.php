@@ -26,10 +26,11 @@ final class FeedParser
         $xmlErrors = libxml_get_errors();
         libxml_use_internal_errors(false);
         if ($xml === false) {
-            if ($xmlErrors) {
+            $firstXmlErrorMessage = '';
+            if ($xmlErrors !== []) {
                 $firstXmlErrorMessage = $xmlErrors[0]->message;
             }
-            throw new \Exception(sprintf('Unable to parse xml: %s', $firstXmlErrorMessage ?? ''));
+            throw new \Exception(sprintf('Unable to parse xml: %s', $firstXmlErrorMessage));
         }
         $feed = [
             'title'     => null,
@@ -37,33 +38,33 @@ final class FeedParser
             'icon'      => null,
             'items'     => [],
         ];
-        if (isset($xml->item[0])) {
+        if (isset($xml->item[0]) === true) {
             // rss 1.0
             $channel = $xml->channel[0];
             $feed['title'] = trim((string)$channel->title);
             $feed['uri'] = trim((string)$channel->link);
-            if (isset($channel->image->url)) {
+            if (isset($channel->image->url) === true) {
                 $feed['icon'] = trim((string)$channel->image->url);
             }
             foreach ($xml->item as $item) {
                 $feed['items'][] = $this->parseRss1Item($item);
             }
-        } elseif (isset($xml->channel[0])) {
+        } elseif (isset($xml->channel[0]) === true) {
             // rss 2.0
             $channel = $xml->channel[0];
             $feed['title'] = trim((string)$channel->title);
             $feed['uri'] = trim((string)$channel->link);
-            if (isset($channel->image->url)) {
+            if (isset($channel->image->url) === true) {
                 $feed['icon'] = trim((string)$channel->image->url);
             }
             foreach ($channel->item as $item) {
                 $feed['items'][] = $this->parseRss2Item($item);
             }
-        } elseif (isset($xml->entry[0])) {
+        } elseif (isset($xml->entry[0]) === true) {
             // atom 1.0
             $feed['title'] = (string)$xml->title;
             // Find best link (only one, or first of 'alternate')
-            if (!isset($xml->link)) {
+            if (isset($xml->link) === false) {
                 $feed['uri'] = '';
             } elseif (count($xml->link) === 1) {
                 $feed['uri'] = (string)$xml->link[0]['href'];
@@ -76,9 +77,9 @@ final class FeedParser
                     }
                 }
             }
-            if (isset($xml->icon)) {
+            if (isset($xml->icon) === true) {
                 $feed['icon'] = (string) $xml->icon;
-            } elseif (isset($xml->logo)) {
+            } elseif (isset($xml->logo) === true) {
                 $feed['icon'] = (string) $xml->logo;
             }
             foreach ($xml->entry as $item) {
@@ -108,19 +109,19 @@ final class FeedParser
     public function parseAtomItem(\SimpleXMLElement $feedItem): array
     {
         $item = $this->parseRss2Item($feedItem);
-        if (isset($feedItem->id)) {
+        if (isset($feedItem->id) === true) {
             $item['uri'] = (string)$feedItem->id;
         }
-        if (isset($feedItem->title)) {
+        if (isset($feedItem->title) === true) {
             $item['title'] = trim(html_entity_decode((string)$feedItem->title));
         }
-        if (isset($feedItem->updated)) {
+        if (isset($feedItem->updated) === true) {
             $item['timestamp'] = strtotime((string)$feedItem->updated);
         }
-        if (isset($feedItem->author)) {
+        if (isset($feedItem->author) === true) {
             $item['author'] = (string)$feedItem->author->name;
         }
-        if (isset($feedItem->content)) {
+        if (isset($feedItem->content) === true) {
             $contentChildren = $feedItem->content->children();
             if (count($contentChildren) > 0) {
                 $content = '';
@@ -163,8 +164,7 @@ final class FeedParser
         ];
 
         foreach ($feedItem as $k => $v) {
-            $hasChildren = count($v) !== 0;
-            if (!$hasChildren) {
+            if (count($v) === 0) {
                 if ($k === 'category') {
                     $item['categories'][] = (string) $v;
                 }
@@ -172,37 +172,37 @@ final class FeedParser
             }
         }
 
-        if (isset($feedItem->link)) {
+        if (isset($feedItem->link) === true) {
             // todo: trim uri
             $item['uri'] = (string)$feedItem->link;
         }
-        if (isset($feedItem->title)) {
+        if (isset($feedItem->title) === true) {
             $item['title'] = trim(html_entity_decode((string)$feedItem->title));
         }
-        if (isset($feedItem->description)) {
+        if (isset($feedItem->description) === true) {
             $item['content'] = (string)$feedItem->description;
         }
 
         $namespaces = $feedItem->getNamespaces(true);
-        if (isset($namespaces['dc'])) {
+        if (isset($namespaces['dc']) === true) {
             $dc = $feedItem->children($namespaces['dc']);
         }
-        if (isset($namespaces['media'])) {
+        if (isset($namespaces['media']) === true) {
             $media = $feedItem->children($namespaces['media']);
         }
 
-        if (isset($namespaces['content'])) {
+        if (isset($namespaces['content']) === true) {
             $content = $feedItem->children($namespaces['content']);
             $item['content'] = (string) $content;
         }
 
         foreach ($namespaces as $namespaceName => $namespaceUrl) {
-            if (in_array($namespaceName, ['', 'content'])) {
+            if (in_array($namespaceName, ['', 'content']) === true) {
                 continue;
             }
             $item[$namespaceName] = $this->parseModule($feedItem, $namespaceName, $namespaceUrl);
         }
-        if (isset($namespaces['itunes'])) {
+        if (isset($namespaces['itunes']) === true) {
             $enclosure = $feedItem->enclosure;
             $item['enclosure'] = [
                 'url'       => (string) $enclosure['url'],
@@ -210,11 +210,11 @@ final class FeedParser
                 'type'      => (string) $enclosure['type'],
             ];
         }
-        if (!$item['uri']) {
+        if (empty($item['uri']) === true) {
             // Let's use guid as uri if it's a permalink
-            if (isset($feedItem->guid)) {
+            if (isset($feedItem->guid) === true) {
                 foreach ($feedItem->guid->attributes() as $attribute => $value) {
-                    if ($attribute === 'isPermaLink' && ($value === 'true' || (filter_var($feedItem->guid, FILTER_VALIDATE_URL)))) {
+                    if ($attribute === 'isPermaLink' && ($value === 'true' || filter_var($feedItem->guid, FILTER_VALIDATE_URL) !== false)) {
                         $item['uri'] = (string) $feedItem->guid;
                         break;
                     }
@@ -228,7 +228,7 @@ final class FeedParser
         $item['author'] = $feedItem->author ?? $feedItem->creator ?? $dc->creator ?? $media->credit ?? '';
         $item['author'] = (string) $item['author'];
 
-        if (isset($feedItem->enclosure) && !empty($feedItem->enclosure['url'])) {
+        if (isset($feedItem->enclosure) === true && empty($feedItem->enclosure['url']) === false) {
             $item['enclosures'] = [
                 (string) $feedItem->enclosure['url'],
             ];
@@ -249,23 +249,23 @@ final class FeedParser
             'categories'    => [],
             //'enclosures'    => [],
         ];
-        if (isset($feedItem->link)) {
+        if (isset($feedItem->link) === true) {
             // todo: trim uri
             $item['uri'] = (string)$feedItem->link;
         }
-        if (isset($feedItem->title)) {
+        if (isset($feedItem->title) === true) {
             $item['title'] = html_entity_decode((string)$feedItem->title);
         }
-        if (isset($feedItem->description)) {
+        if (isset($feedItem->description) === true) {
             $item['content'] = (string)$feedItem->description;
         }
         $namespaces = $feedItem->getNamespaces(true);
-        if (isset($namespaces['dc'])) {
+        if (isset($namespaces['dc']) === true) {
             $dc = $feedItem->children($namespaces['dc']);
-            if (isset($dc->date)) {
+            if (isset($dc->date) === true) {
                 $item['timestamp'] = strtotime((string)$dc->date);
             }
-            if (isset($dc->creator)) {
+            if (isset($dc->creator) === true) {
                 $item['author'] = (string)$dc->creator;
             }
         }

@@ -16,11 +16,11 @@ class ParameterValidator
         foreach ($input as $name => $value) {
             $registered = false;
             foreach ($parameters as $contextName => $contextParameters) {
-                if (!array_key_exists($name, $contextParameters)) {
+                if (array_key_exists($name, $contextParameters) === false) {
                     continue;
                 }
                 $registered = true;
-                if (!isset($contextParameters[$name]['type'])) {
+                if (isset($contextParameters[$name]['type']) === false) {
                     // Default type is text
                     $contextParameters[$name]['type'] = 'text';
                 }
@@ -37,7 +37,7 @@ class ParameterValidator
                         break;
                     default:
                     case 'text':
-                        if (isset($contextParameters[$name]['pattern'])) {
+                        if (isset($contextParameters[$name]['pattern']) === true) {
                             $input[$name] = $this->validateTextValue($value, $contextParameters[$name]['pattern']);
                         } else {
                             $input[$name] = $this->validateTextValue($value);
@@ -46,15 +46,15 @@ class ParameterValidator
                 }
 
                 if (
-                    is_null($input[$name])
-                    && isset($contextParameters[$name]['required'])
-                    && $contextParameters[$name]['required']
+                    is_null($input[$name]) === true
+                    && isset($contextParameters[$name]['required']) === true
+                    && $contextParameters[$name]['required'] === true
                 ) {
                     $errors[] = ['name' => $name, 'reason' => 'Parameter is invalid!'];
                 }
             }
 
-            if (!$registered) {
+            if ($registered === false) {
                 $errors[] = ['name' => $name, 'reason' => 'Parameter is not registered!'];
             }
         }
@@ -75,7 +75,7 @@ class ParameterValidator
 
             // Ensure all user data exist in the current context
             $notInContext = array_diff_key($input, $contextParameters);
-            if (array_key_exists('global', $parameters)) {
+            if (array_key_exists('global', $parameters) === true) {
                 $notInContext = array_diff_key($notInContext, $parameters['global']);
             }
             if (count($notInContext) > 0) {
@@ -84,14 +84,14 @@ class ParameterValidator
 
             // Check if all parameters of the context are satisfied
             foreach ($contextParameters as $id => $properties) {
-                if (!empty($input[$id])) {
+                if (empty($input[$id]) === false) {
                     $queriedContexts[$contextName] = true;
                 } elseif (
-                    isset($properties['type'])
+                    isset($properties['type']) === true
                     && ($properties['type'] === 'checkbox' || $properties['type'] === 'list')
                 ) {
                     continue;
-                } elseif (isset($properties['required']) && $properties['required'] === true) {
+                } elseif (isset($properties['required']) === true && $properties['required'] === true) {
                     $queriedContexts[$contextName] = false;
                     break;
                 }
@@ -100,7 +100,7 @@ class ParameterValidator
 
         // Abort if one of the globally required parameters is not satisfied
         if (
-            array_key_exists('global', $parameters)
+            array_key_exists('global', $parameters) === true
             && $queriedContexts['global'] === false
         ) {
             return null;
@@ -110,18 +110,18 @@ class ParameterValidator
         switch (array_sum($queriedContexts)) {
             case 0:
                 // Found no match, is there a context without parameters?
-                if (isset($input['context'])) {
+                if (isset($input['context']) === true) {
                     return (string)$input['context'];
                 }
                 foreach ($queriedContexts as $context2 => $queried) {
-                    if (is_null($queried)) {
+                    if ($queried === null) {
                         return (string)$context2;
                     }
                 }
                 return null;
             case 1:
                 // Found unique match
-                return array_search(true, $queriedContexts);
+                return array_search(true, $queriedContexts, true);
             default:
                 return false;
         }
@@ -129,7 +129,7 @@ class ParameterValidator
 
     private function validateTextValue(mixed $value, ?string $pattern = null): ?string
     {
-        if (is_null($pattern)) {
+        if ($pattern === null) {
             // No filtering taking place
             $filteredValue = filter_var($value, FILTER_DEFAULT);
         } else {
@@ -161,10 +161,10 @@ class ParameterValidator
         if ($filteredValue === false) {
             return null;
         }
-        if (!in_array($filteredValue, $expectedValues, true)) {
+        if (in_array($filteredValue, $expectedValues, true) === false) {
             // Check sub-values?
             foreach ($expectedValues as $subName => $subValue) {
-                if (is_array($subValue) && in_array($filteredValue, $subValue, true)) {
+                if (is_array($subValue) === true && in_array($filteredValue, $subValue, true) === true) {
                     return (string)$filteredValue;
                 }
             }

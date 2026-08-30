@@ -43,7 +43,7 @@ abstract class WebDriverAbstract extends BridgeAbstract
      */
     public function getIcon(): string
     {
-        return $this->feedIcon ?: parent::getIcon();
+        return (empty($this->feedIcon) === false) ? $this->feedIcon : parent::getIcon();
     }
 
     /**
@@ -68,7 +68,7 @@ abstract class WebDriverAbstract extends BridgeAbstract
     protected function getBrowserOptions(): mixed
     {
         $chromeOptions = new \Facebook\WebDriver\ChromeOptions();
-        if (Configuration::getConfig('webdriver', 'headless')) {
+        if (Configuration::getConfig('webdriver', 'headless') === true) {
             $chromeOptions->addArguments(['--headless']);
         }
         return $chromeOptions;

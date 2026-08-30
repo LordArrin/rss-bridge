@@ -370,25 +370,36 @@ final class PawchiveBridge extends BridgeAbstract
 
         $html = $this->cleanUnicodeCharacters($html);
 
-        $dom = sanitize(
-            $html,
-            self::SANITIZE_TAGS_TO_REMOVE,
-            self::SANITIZE_ATTRIBUTES_TO_KEEP,
-            []
-        );
+        libxml_use_internal_errors(true);
+        $dom = \Dom\HTMLDocument::createFromString('<div>' . $html . '</div>');
+        libxml_use_internal_errors(false);
 
-        $result = '';
-
-        if (isset($dom->innertext) === true && is_string($dom->innertext) === true) {
-            $result = trim($dom->innertext);
+        $wrapper = $dom->querySelector('div');
+        if ($wrapper === null) {
+            return $this->fallbackSanitize($html);
         }
 
-        if ($result === '' && method_exists($dom, 'saveHTML') === true) {
-            $saved = $dom->saveHTML();
-            if (is_string($saved) === true) {
-                $result = trim($saved);
+        // Remove dangerous tags
+        foreach (self::SANITIZE_TAGS_TO_REMOVE as $tag) {
+            foreach ($wrapper->querySelectorAll($tag) as $el) {
+                $el->remove();
             }
         }
+
+        // Remove disallowed attributes from all elements
+        foreach ($wrapper->querySelectorAll('*') as $el) {
+            $attributesToRemove = [];
+            foreach ($el->attributes as $attr) {
+                if (in_array($attr->name, self::SANITIZE_ATTRIBUTES_TO_KEEP, true) === false) {
+                    $attributesToRemove[] = $attr->name;
+                }
+            }
+            foreach ($attributesToRemove as $attrName) {
+                $el->removeAttribute($attrName);
+            }
+        }
+
+        $result = $wrapper->innerHTML ?? '';
 
         if ($result === '') {
             $result = $this->fallbackSanitize($html);

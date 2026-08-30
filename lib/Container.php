@@ -17,19 +17,18 @@ class Container implements \ArrayAccess
     #[\ReturnTypeWillChange]
     public function offsetGet($offset)
     {
-        if (!isset($this->values[$offset])) {
+        if (isset($this->values[$offset]) === false) {
             throw new \Exception(sprintf('Unknown container key: "%s"', $offset));
         }
-        if (!isset($this->resolved[$offset])) {
+        if (isset($this->resolved[$offset]) === false) {
             $this->resolved[$offset] = $this->values[$offset]($this);
         }
         return $this->resolved[$offset];
     }
 
-    #[\ReturnTypeWillChange]
     public function offsetExists($offset): bool
     {
-        return isset($this->values[$offset]);
+        return isset($this->values[$offset]) === true;
     }
 
     public function offsetUnset($offset): void

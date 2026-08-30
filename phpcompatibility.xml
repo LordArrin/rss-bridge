@@ -7,7 +7,23 @@
 
     <rule ref="PHPCompatibility"/>
 
+    <!-- Check paths -->
+    <file>./lib</file>
+    <file>./actions</file>
+    <file>./bridges-v2</file>
+    <file>./caches</file>
+    <file>./formats</file>
+    <file>./middlewares</file>
+    <file>./proxies</file>
+    <file>./quirks</file>
+    <file>./bin</file>
+
     <!-- Exclude non-PHP or third-party code -->
-    <exclude-pattern>./static/*</exclude-pattern>
     <exclude-pattern>./vendor/*</exclude-pattern>
+    <exclude-pattern>./static/*</exclude-pattern>
+    <exclude-pattern>./templates/*</exclude-pattern>
+    <exclude-pattern>./cache/*</exclude-pattern>
+    <exclude-pattern>./config/*.ini.php</exclude-pattern>
+    <exclude-pattern>./config.default.ini.php</exclude-pattern>
+    <exclude-pattern>./config.ini.php</exclude-pattern>
 </ruleset>

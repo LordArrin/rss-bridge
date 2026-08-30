@@ -17,9 +17,13 @@
 
     <source>
         <include>
-            <directory>bridges</directory>
+            <directory>lib</directory>
+            <directory>actions</directory>
+            <directory>bridges-v2</directory>
+            <directory>caches</directory>
+            <directory>formats</directory>
+            <directory>middlewares</directory>
+            <directory>proxies</directory>
         </include>
-        <exclude>
-        </exclude>
     </source>
 </phpunit>

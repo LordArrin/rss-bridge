@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ruleset name="RSS-Bridge Ruleset">
   <description>
-    Modernized ruleset for RSS-Bridge bridges (PHP 8.5+).
+    Modernized ruleset for RSS-Bridge (PHP 8.5+).
     Based on PSR-12 with strict typing and modern PHP practices.
   </description>
 
@@ -9,32 +9,31 @@
   <config name="php_version" value="80500"/>
 
   <!-- Default check paths -->
-  <file>./bridges</file>
-  <file>./bridges-v2</file>
   <file>./lib</file>
   <file>./actions</file>
+  <file>./bridges-v2</file>
   <file>./caches</file>
   <file>./formats</file>
   <file>./middlewares</file>
   <file>./proxies</file>
+  <file>./quirks</file>
+  <file>./bin</file>
 
-  <!-- Exceptions (Legacy code, vendors, and statics only) -->
+  <!-- Exceptions -->
   <exclude-pattern>./vendor/*</exclude-pattern>
   <exclude-pattern>./static/*</exclude-pattern>
   <exclude-pattern>./templates/*</exclude-pattern>
-  <exclude-pattern>./lib/parsedown/*</exclude-pattern>
-  <exclude-pattern>./lib/php-urljoin/*</exclude-pattern>
-  <exclude-pattern>./lib/simplehtmldom/*</exclude-pattern>
+  <exclude-pattern>./cache/*</exclude-pattern>
+  <exclude-pattern>./config/*.ini.php</exclude-pattern>
   <exclude-pattern>./config.default.ini.php</exclude-pattern>
   <exclude-pattern>./config.ini.php</exclude-pattern>
 
   <!-- Basic standard PSR-12 -->
   <rule ref="PSR12">
-    <!-- 
-      NOTE: The MissingNamespace exception is retained for compatibility with older bridges.
-      Ideally, all new bridges should use namespaces (e.g., RSSBridge\Bridges\...).
-      The MultipleClasses, SideEffects, EndFileNewline, and ConstantVisibility exceptions have been removed,
-      as they violate modern code quality standards.
+    <!--
+      NOTE: The MissingNamespace exception allows global functions in lib/utils.php,
+      lib/contents.php, lib/exceptions.php, lib/http.php, lib/logger.php, and quirks/.
+      All classes use proper namespaces (RSSBridge\...).
     -->
     <exclude name="PSR1.Classes.ClassDeclaration.MissingNamespace"/>
   </rule>

@@ -71,12 +71,12 @@ final class BridgeFactory
         $this->shortNameMap = [];
 
         $v2Dir = __DIR__ . '/../bridges-v2/';
-        if (!is_dir($v2Dir)) {
+        if (is_dir($v2Dir) === false) {
             return;
         }
 
         foreach (scandir($v2Dir) as $file) {
-            if (!preg_match('/^([^.]+Bridge)\.php$/U', $file, $m)) {
+            if (preg_match('/^([^.]+Bridge)\.php$/U', $file, $m) !== 1) {
                 continue;
             }
 
@@ -113,7 +113,7 @@ final class BridgeFactory
             }
 
             $bridgeClassName = $this->createBridgeClassName($enabledBridge);
-            if ($bridgeClassName) {
+            if ($bridgeClassName !== null) {
                 $this->enabledBridges[] = $bridgeClassName;
             } else {
                 $this->missingEnabledBridges[] = $enabledBridge;
@@ -140,15 +140,15 @@ final class BridgeFactory
             throw new \Exception(sprintf('Bridge class not found: %s', $name));
         }
 
-        if (!class_exists($resolved, false)) {
+        if (class_exists($resolved, false) === false) {
             $file = $this->getBridgeFilePath($resolved);
-            if ($file && is_readable($file)) {
+            if ($file !== null && is_readable($file) === true) {
                 $this->loadBridgeInSandbox($file);
                 include_once $file;
             }
         }
 
-        if (!class_exists($resolved, false)) {
+        if (class_exists($resolved, false) === false) {
             throw new \Exception(sprintf('Bridge class does not exist after include: %s', $resolved));
         }
 
@@ -180,16 +180,13 @@ final class BridgeFactory
     private function loadBridgeInSandbox(string $file): void
     {
         $testScript = tempnam(sys_get_temp_dir(), 'rssbridge_sandbox_') . '.php';
-        $bootstrapPath = realpath(__DIR__ . '/bootstrap.php');
         $vendorPath = realpath(__DIR__ . '/../vendor/autoload.php');
 
         $code = "<?php\n";
-        if ($vendorPath) {
+        if ($vendorPath !== false) {
             $code .= "require '" . addslashes($vendorPath) . "';\n";
         }
-        if ($bootstrapPath) {
-            $code .= "require '" . addslashes($bootstrapPath) . "';\n";
-        }
+
         $code .= "try {\n";
         $code .= "    require '" . addslashes($file) . "';\n";
         $code .= "    echo 'SANDBOX_SUCCESS';\n";
@@ -222,7 +219,7 @@ final class BridgeFactory
         $shortName = $this->getShortClassName($className);
 
         $v2File = __DIR__ . '/../bridges-v2/' . $shortName . '.php';
-        if (file_exists($v2File)) {
+        if (file_exists($v2File) === true) {
             return $v2File;
         }
 
@@ -250,11 +247,11 @@ final class BridgeFactory
         $name = self::normalizeBridgeName($bridgeName);
         $nameLower = strtolower($name);
 
-        if (isset($this->shortNameMap[$nameLower])) {
+        if (isset($this->shortNameMap[$nameLower]) === true) {
             return $this->shortNameMap[$nameLower];
         }
 
-        if (class_exists($bridgeName, false)) {
+        if (class_exists($bridgeName, false) === true) {
             return $bridgeName;
         }
 
@@ -272,16 +269,16 @@ final class BridgeFactory
      */
     public static function normalizeBridgeName(string $name): string
     {
-        if (str_contains($name, '\\')) {
+        if (str_contains($name, '\\') === true) {
             $parts = explode('\\', $name);
             $name = end($parts);
         }
 
-        if (preg_match('/(.+)(?:\.php)$/i', $name, $matches)) {
+        if (preg_match('/(.+)(?:\.php)$/i', $name, $matches) === 1) {
             $name = $matches[1];
         }
 
-        if (!preg_match('/Bridge$/i', $name)) {
+        if (preg_match('/Bridge$/i', $name) === 0) {
             $name = sprintf('%sBridge', $name);
         }
 
@@ -297,7 +294,7 @@ final class BridgeFactory
      */
     public function getShortClassName(string $className): string
     {
-        if (str_contains($className, '\\')) {
+        if (str_contains($className, '\\') === true) {
             $parts = explode('\\', $className);
             return end($parts);
         }

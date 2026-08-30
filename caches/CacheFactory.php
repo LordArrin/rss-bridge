@@ -70,7 +70,7 @@ final class CacheFactory
 
             case 'file':
                 $configuredPath = Configuration::getConfig('FileCache', 'path');
-                $path = PATH_CACHE;
+                $path = Configuration::getPathCache();
 
                 if ((bool) $configuredPath === true) {
                     $path = $configuredPath;

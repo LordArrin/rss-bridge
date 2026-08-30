@@ -22,30 +22,49 @@ final class WeLiveSecurityBridge extends FeedExpander
 
     protected function parseItem(array $item): array|false
     {
-        $html = getSimpleHTMLDOMCached($item['uri']);
-        if ($html === false) {
-            $item['content'] .= '<br /><p><em>Could not request ' . $this->getName() . ': ' . $item['uri'] . '</em></p>';
+        try {
+            $dom = getSimpleHTMLDOMCached($item['uri']);
+        } catch (\Throwable $e) {
+            $item['content'] = ($item['content'] ?? '') . '<br /><p><em>Could not request ' . $this->getName() . ': ' . $item['uri'] . '</em></p>';
             return $item;
         }
 
-        $html = $html->find('.article-page', 0);
-        $content_html = $html->find('.article-body', 0);
+        $articlePage = $dom->querySelector('.article-page');
+        if ($articlePage === null) {
+            $item['content'] = ($item['content'] ?? '') . '<br /><p><em>Could not find article page: ' . $item['uri'] . '</em></p>';
+            return $item;
+        }
 
-        foreach ($content_html->find('blockquote') as $blockquote) {
-            if (str_starts_with(trim($blockquote->plaintext), 'Connect with us on') === true) {
-                $blockquote->outertext = '';
+        $contentHtml = $articlePage->querySelector('.article-body');
+        if ($contentHtml === null) {
+            $item['content'] = ($item['content'] ?? '') . '<br /><p><em>Could not find article body: ' . $item['uri'] . '</em></p>';
+            return $item;
+        }
+
+        // Remove promotional blockquotes
+        foreach ($contentHtml->querySelectorAll('blockquote') as $blockquote) {
+            $text = trim($blockquote->textContent ?? '');
+            if (str_starts_with($text, 'Connect with us on') === true) {
+                $blockquote->remove();
             }
         }
 
-        $content = $content_html->innertext;
-        $subtitle = $html->find('.sub-title', 0);
+        $content = $contentHtml->innerHTML ?? '';
+
+        $subtitle = $articlePage->querySelector('.sub-title');
         if ($subtitle !== null) {
-            $content = '<p><b>' . $subtitle->plaintext . '</b></p>' . $content;
+            $subtitleText = trim($subtitle->textContent ?? '');
+            if ($subtitleText !== '') {
+                $content = '<p><b>' . htmlspecialchars($subtitleText, ENT_QUOTES, 'UTF-8') . '</b></p>' . $content;
+            }
         }
 
-        $author = $html->find('.article-author', 0);
+        $author = $articlePage->querySelector('.article-author');
         if ($author !== null && isset($item['author']) === false) {
-            $item['author'] = trim($author->plaintext);
+            $authorText = trim($author->textContent ?? '');
+            if ($authorText !== '') {
+                $item['author'] = $authorText;
+            }
         }
 
         $item['content'] = trim($content);

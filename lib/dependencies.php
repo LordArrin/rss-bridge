@@ -77,7 +77,7 @@ $container['logger'] = function () {
 
     $file_path  = Configuration::getConfig('logging', 'file_path');
     $file_level = Configuration::getConfig('logging', 'file_level');
-    if ($file_path && $file_level) {
+    if (empty($file_path) === false && empty($file_level) === false) {
         $level = array_flip(Logger::LEVEL_NAMES)[strtoupper($file_level)];
         $logger->addHandler(new StreamHandler($file_path, $level));
     }

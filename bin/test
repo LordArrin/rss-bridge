@@ -11,7 +11,7 @@ declare(strict_types=1);
  *   bin/test CacheTest    # Run specific test
  */
 
-require __DIR__ . '/../lib/bootstrap.php';
+require __DIR__ . '/../vendor/autoload.php';
 
 // Check if PHPUnit is available
 if (!file_exists(__DIR__ . '/../vendor/bin/phpunit')) {

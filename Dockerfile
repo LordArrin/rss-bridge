@@ -4,7 +4,7 @@
 ARG ALPINE_VERSION=3.24
 FROM alpine:${ALPINE_VERSION} AS builder
 
-ARG CURL_VERSION=2.1.1
+ARG CURL_VERSION=2.2.0
 ENV CURL_IMPERSONATE_VERSION=${CURL_VERSION}
 
 RUN set -xe && \
@@ -32,7 +32,7 @@ FROM alpine:${ALPINE_VERSION} AS runtime
 
 ARG IMAGE_VERSION=1.2.0
 ENV RSSBRIDGE_SYSTEM_VERSION=${IMAGE_VERSION}
-ENV CURL_IMPERSONATE=firefox147
+ENV CURL_IMPERSONATE=chrome150
 
 LABEL org.opencontainers.image.title="RSS Bridge" \
       org.opencontainers.image.description="RSS-Bridge - generate feeds for websites that don't have one" \

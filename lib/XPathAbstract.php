@@ -31,7 +31,7 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * Use {@see XPathAbstract::getSourceUrl()} to read this parameter.
      */
-    const FEED_SOURCE_URL = '';
+    public const FEED_SOURCE_URL = '';
 
     /**
      * XPath expression for extracting the feed title from the source page.
@@ -40,7 +40,7 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * Use {@see XPathAbstract::getExpressionTitle()} to read this parameter.
      */
-    const XPATH_EXPRESSION_FEED_TITLE = './/title';
+    public const XPATH_EXPRESSION_FEED_TITLE = './/title';
 
     /**
      * XPath expression for extracting the feed favicon URL from the source page.
@@ -49,7 +49,7 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * Use {@see XPathAbstract::getExpressionIcon()} to read this parameter.
      */
-    const XPATH_EXPRESSION_FEED_ICON = './/link[@rel="icon"]/@href';
+    public const XPATH_EXPRESSION_FEED_ICON = './/link[@rel="icon"]/@href';
 
     /**
      * XPath expression for extracting the feed items from the source page.
@@ -60,7 +60,7 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * Use {@see XPathAbstract::getExpressionItem()} to read this parameter.
      */
-    const XPATH_EXPRESSION_ITEM = '';
+    public const XPATH_EXPRESSION_ITEM = '';
 
     /**
      * XPath expression for extracting an item title from the item context.
@@ -70,7 +70,7 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * Use {@see XPathAbstract::getExpressionItemTitle()} to read this parameter.
      */
-    const XPATH_EXPRESSION_ITEM_TITLE = '';
+    public const XPATH_EXPRESSION_ITEM_TITLE = '';
 
     /**
      * XPath expression for extracting an item's content from the item context.
@@ -81,7 +81,7 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * Use {@see XPathAbstract::getExpressionItemContent()} to read this parameter.
      */
-    const XPATH_EXPRESSION_ITEM_CONTENT = '';
+    public const XPATH_EXPRESSION_ITEM_CONTENT = '';
 
     /**
      * XPath expression for extracting an item link from the item context.
@@ -93,7 +93,7 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * Use {@see XPathAbstract::getExpressionItemUri()} to read this parameter.
      */
-    const XPATH_EXPRESSION_ITEM_URI = '';
+    public const XPATH_EXPRESSION_ITEM_URI = '';
 
     /**
      * XPath expression for extracting an item author from the item context.
@@ -104,7 +104,7 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * Use {@see XPathAbstract::getExpressionItemAuthor()} to read this parameter.
      */
-    const XPATH_EXPRESSION_ITEM_AUTHOR = '';
+    public const XPATH_EXPRESSION_ITEM_AUTHOR = '';
 
     /**
      * XPath expression for extracting an item timestamp from the item context.
@@ -116,7 +116,7 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * Use {@see XPathAbstract::getExpressionItemTimestamp()} to read this parameter.
      */
-    const XPATH_EXPRESSION_ITEM_TIMESTAMP = '';
+    public const XPATH_EXPRESSION_ITEM_TIMESTAMP = '';
 
     /**
      * XPath expression for extracting item enclosures (media content like
@@ -129,7 +129,7 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * Use {@see XPathAbstract::getExpressionItemEnclosures()} to read this parameter.
      */
-    const XPATH_EXPRESSION_ITEM_ENCLOSURES = '';
+    public const XPATH_EXPRESSION_ITEM_ENCLOSURES = '';
 
     /**
      * XPath expression for extracting an item category from the item context.
@@ -143,7 +143,7 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * Use {@see XPathAbstract::getExpressionItemCategories()} to read this parameter.
      */
-    const XPATH_EXPRESSION_ITEM_CATEGORIES = '';
+    public const XPATH_EXPRESSION_ITEM_CATEGORIES = '';
 
     /**
      * Fix encoding.
@@ -154,7 +154,7 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * Use {@see XPathAbstract::getSettingFixEncoding()} to read this parameter.
      */
-    const SETTING_FIX_ENCODING = false;
+    public const SETTING_FIX_ENCODING = false;
 
     /**
      * Use raw item content.
@@ -163,7 +163,7 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * Use {@see XPathAbstract::getSettingUseRawItemContent()} to read this parameter.
      */
-    const SETTING_USE_RAW_ITEM_CONTENT = true;
+    public const SETTING_USE_RAW_ITEM_CONTENT = true;
 
     /**
      * Internal storage for resulting feed name, automatically detected.
@@ -186,7 +186,7 @@ abstract class XPathAbstract extends BridgeAbstract
      */
     public function getName(): string
     {
-        return $this->feedName ?: parent::getName();
+        return (empty($this->feedName) === false) ? $this->feedName : parent::getName();
     }
 
     /**
@@ -195,7 +195,7 @@ abstract class XPathAbstract extends BridgeAbstract
      */
     public function getURI(): string
     {
-        return $this->feedUri ?: parent::getURI();
+        return (empty($this->feedUri) === false) ? $this->feedUri : parent::getURI();
     }
 
     /**
@@ -204,7 +204,7 @@ abstract class XPathAbstract extends BridgeAbstract
      */
     public function getIcon(): string
     {
-        return $this->feedIcon ?: parent::getIcon();
+        return (empty($this->feedIcon) === false) ? $this->feedIcon : parent::getIcon();
     }
 
     /**
@@ -446,8 +446,8 @@ abstract class XPathAbstract extends BridgeAbstract
                 $typedResult = @$xpath->evaluate($expression, $entry);
                 if (
                     $typedResult === false
-                    || ($typedResult instanceof \DOMNodeList && count($typedResult) === 0)
-                    || (is_string($typedResult) && strlen(trim($typedResult)) === 0)
+                    || (($typedResult instanceof \DOMNodeList) === true && count($typedResult) === 0)
+                    || (is_string($typedResult) === true && strlen(trim($typedResult)) === 0)
                 ) {
                     continue;
                 }
@@ -481,8 +481,8 @@ abstract class XPathAbstract extends BridgeAbstract
      */
     protected function formatParamValue(string $param, mixed $value): mixed
     {
-        $value = is_array($value) ? array_map('trim', $value) : trim($value);
-        $value = is_array($value) ? array_map([$this, 'fixEncoding'], $value) : $this->fixEncoding($value);
+        $value = (is_array($value) === true) ? array_map('trim', $value) : trim($value);
+        $value = (is_array($value) === true) ? array_map([$this, 'fixEncoding'], $value) : $this->fixEncoding($value);
 
         switch ($param) {
             case 'title':
@@ -523,7 +523,7 @@ abstract class XPathAbstract extends BridgeAbstract
      */
     protected function formatItemContent(string $value): string
     {
-        return $this->getParam('raw_content') ? $value : htmlspecialchars($value);
+        return ($this->getParam('raw_content') === true) ? $value : htmlspecialchars($value);
     }
 
     /**
@@ -538,7 +538,7 @@ abstract class XPathAbstract extends BridgeAbstract
             return '';
         }
 
-        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+        if (str_starts_with($value, 'http://') === true || str_starts_with($value, 'https://') === true) {
             return $value;
         }
 
@@ -589,7 +589,7 @@ abstract class XPathAbstract extends BridgeAbstract
      */
     protected function formatItemCategories(mixed $value): array
     {
-        return is_array($value) ? $value : [$value];
+        return (is_array($value) === true) ? $value : [$value];
     }
 
     /**
@@ -623,16 +623,14 @@ abstract class XPathAbstract extends BridgeAbstract
         }
 
         if ($typedResult instanceof \DOMElement) {
-            return $returnXML
-                ? ($typedResult->ownerDocument ?? $typedResult)->saveXML($typedResult)
-                : $typedResult->nodeValue;
+            return ($returnXML === true) ? ($typedResult->ownerDocument ?? $typedResult)->saveXML($typedResult) : $typedResult->nodeValue;
         } elseif ($typedResult instanceof \DOMAttr) {
             return $typedResult->value;
         } elseif ($typedResult instanceof \DOMText) {
             return $typedResult->wholeText;
-        } elseif (is_string($typedResult)) {
+        } elseif (is_string($typedResult) === true) {
             return $typedResult;
-        } elseif (null === $typedResult) {
+        } elseif ($typedResult === null) {
             return '';
         }
 
@@ -648,9 +646,7 @@ abstract class XPathAbstract extends BridgeAbstract
      */
     protected function fixEncoding(string $input): string
     {
-        return $this->getParam('fix_encoding')
-            ? mb_convert_encoding($input, 'ISO-8859-1', 'UTF-8')
-            : $input;
+        return ($this->getParam('fix_encoding') === true) ? mb_convert_encoding($input, 'ISO-8859-1', 'UTF-8') : $input;
     }
 
     /**

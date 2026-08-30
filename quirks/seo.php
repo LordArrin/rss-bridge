@@ -25,7 +25,7 @@ declare(strict_types=1);
  * and JSON-LD structured data. Returns an associative array with
  * keys like 'title', 'author', 'timestamp', 'enclosures', etc.
  *
- * @param string|\simple_html_dom $html Raw HTML string or parsed DOM object.
+ * @param string|\Dom\HTMLDocument $html Raw HTML string or parsed DOM object.
  * @return array{
  *     uri?: string,
  *     title?: string,
@@ -35,10 +35,12 @@ declare(strict_types=1);
  *     author?: string,
  * } Extracted metadata (only present keys are included).
  */
-function html_find_seo_metadata(string|\simple_html_dom $html): array
+function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
 {
     if (is_string($html) === true) {
-        $html = getSimpleHTMLDOM($html);
+        libxml_use_internal_errors(true);
+        $html = \Dom\HTMLDocument::createFromString($html);
+        libxml_use_internal_errors(false);
     }
 
     $item = [];
@@ -112,28 +114,28 @@ function html_find_seo_metadata(string|\simple_html_dom $html): array
     foreach ($meta_mappings as $property => $field_list) {
         foreach ($field_list as $field) {
             // Look for HTML meta tag
-            $element = null;
+            $elements = null;
             if ($field === 'canonical') {
-                $element = $html->find('link[rel=canonical]');
+                $elements = $html->querySelectorAll('link[rel="canonical"]');
             } elseif ($field === 'time') {
-                $element = $html->find('time[datetime]');
+                $elements = $html->querySelectorAll('time[datetime]');
             } else {
-                $element = $html->find("meta[property=$field], meta[name=$field]");
+                $elements = $html->querySelectorAll("meta[property=\"$field\"], meta[name=\"$field\"]");
             }
 
             // Found something? Extract the value and populate Entry field
-            if ($element !== null && $element !== [] && count($element) > 0) {
-                $element = $element[0];
+            if ($elements !== null && $elements->length > 0) {
+                $element = $elements->item(0);
                 $field_value = '';
                 if ($field === 'canonical') {
-                    $field_value = $element->href;
+                    $field_value = $element->getAttribute('href') ?? '';
                 } elseif ($field === 'time') {
-                    $field_value = $element->datetime;
+                    $field_value = $element->getAttribute('datetime') ?? '';
                 } else {
-                    $field_value = $element->content;
+                    $field_value = $element->getAttribute('content') ?? '';
                 }
 
-                if ($field_value !== null && $field_value !== '') {
+                if ($field_value !== '') {
                     if ($field === 'article:author:first_name' || $field === 'profile:first_name') {
                         $author_first_name = $field_value;
                     } elseif ($field === 'article:author:last_name' || $field === 'profile:last_name') {
@@ -208,8 +210,9 @@ function html_find_seo_metadata(string|\simple_html_dom $html): array
     };
 
     // Process ld+json objects embedded in the HTML DOM
-    foreach ($html->find('script[type=application/ld+json]') as $html_ldjson_node) {
-        $json_raw = json_decode($html_ldjson_node->innertext, true);
+    $ldjson_scripts = $html->querySelectorAll('script[type="application/ld+json"]');
+    foreach ($ldjson_scripts as $html_ldjson_node) {
+        $json_raw = json_decode($html_ldjson_node->textContent ?? '', true);
         if (is_array($json_raw) === true) {
             // The JSON may contain a single object AND/OR several under '@graph'
             $json_items = [$json_raw];

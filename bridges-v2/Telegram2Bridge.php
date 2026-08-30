@@ -8,7 +8,7 @@ use RSSBridge\BridgeAbstract;
 
 final class Telegram2Bridge extends BridgeAbstract
 {
-    public const NAME = 'Telegram2';
+    public const NAME = 'Telegram';
     public const URI = 'https://t.me';
     public const DESCRIPTION = 'Returns the recent publications from a public Telegram channel. Supports embedded media content, hides ads and unsupported content.';
     public const MAINTAINER = 'LordArrin';
@@ -436,7 +436,7 @@ CSS,
             try {
                 return $this->withRetry(
                     fn(): \Dom\HTMLDocument => \Dom\HTMLDocument::createFromString(
-                        source: (string) getProtectedSimpleHTMLDOM($url, self::PROXY_PROFILE),
+                        source: getProtectedSimpleHTMLDOM($url, self::PROXY_PROFILE)->saveHTML(),
                         options: LIBXML_NOERROR
                     ),
                     'TgWSProxy page fetch',
@@ -458,7 +458,7 @@ CSS,
         try {
             return $this->withRetry(
                 fn(): \Dom\HTMLDocument => \Dom\HTMLDocument::createFromString(
-                    source: (string) getSimpleHTMLDOM($url),
+                    source: getSimpleHTMLDOM($url)->saveHTML(),
                     options: LIBXML_NOERROR
                 ),
                 'Direct page fetch',

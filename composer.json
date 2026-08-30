@@ -36,11 +36,9 @@
             "lib/http.php",
             "lib/logger.php",
             "lib/url.php",
-            "lib/compatibility.php",
             "quirks/template.php",
             "quirks/html.php",
             "quirks/srcset.php",
-            "quirks/dom.php",
             "quirks/extract.php",
             "quirks/media.php",
             "quirks/media_embed.php",
@@ -58,13 +56,12 @@
         "ext-zip": "*",
         "ext-dom": "*",
         "erusev/parsedown": "^1.8",
-        "busybee/urljoin": "^1.0",
-        "voku/simple_html_dom": "^5.0.0"
+        "busybee/urljoin": "^1.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^13.3.2",
         "squizlabs/php_codesniffer": "^4.0.4",
-        "phpstan/phpstan": "^2.2.9"
+        "phpstan/phpstan": "^2.2.10"
     },
     "scripts": {
         "test": "phpunit",

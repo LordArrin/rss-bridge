@@ -11,10 +11,10 @@ final class Json
     public static function encode(mixed $value, bool $pretty = true, bool $asciiSafe = false): string
     {
         $flags = JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES;
-        if (!$asciiSafe) {
+        if ($asciiSafe === false) {
             $flags |= JSON_UNESCAPED_UNICODE;
         }
-        if ($pretty) {
+        if ($pretty === true) {
             $flags |= JSON_PRETTY_PRINT;
         }
         return json_encode($value, $flags);

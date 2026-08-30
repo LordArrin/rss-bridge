@@ -41,8 +41,8 @@ final class SQLiteCache implements CacheInterface
 
         $dir = dirname($file);
         if ($dir === '.') {
-            $file = PATH_CACHE . $file;
-            $dir = PATH_CACHE;
+            $file = Configuration::getPathCache() . $file;
+            $dir = Configuration::getPathCache();
         }
 
         if (is_dir($dir) === false) {

@@ -42,9 +42,9 @@ final class BridgeMetadataCache
         $cacheKey = $this->buildCacheKey();
         $cached = $this->cache->get($cacheKey);
 
-        if ($cached !== null && is_array($cached) && isset($cached['metadata'])) {
+        if ($cached !== null && is_array($cached) === true && isset($cached['metadata']) === true) {
             // Restore broken bridges list to the loader so FrontpageAction can access it
-            if (isset($cached['broken_bridges'])) {
+            if (isset($cached['broken_bridges']) === true) {
                 foreach ($cached['broken_bridges'] as $bridgeName => $errorInfo) {
                     $loader->restoreBrokenBridge($bridgeName, $errorInfo);
                 }
@@ -96,7 +96,7 @@ final class BridgeMetadataCache
     {
         $cacheKey = $this->buildCacheKey();
         $cached = $this->cache->get($cacheKey);
-        return $cached !== null && is_array($cached) && isset($cached['metadata']);
+        return $cached !== null && is_array($cached) === true && isset($cached['metadata']) === true;
     }
 
     /**
@@ -124,32 +124,32 @@ final class BridgeMetadataCache
         $metadata = [];
 
         foreach ($this->bridgesDirs as $dir) {
-            if (!is_dir($dir)) {
+            if (is_dir($dir) === false) {
                 continue;
             }
 
             foreach (scandir($dir) as $file) {
-                if (!preg_match('/^([^.]+Bridge)\.php$/U', $file, $m)) {
+                if (preg_match('/^([^.]+Bridge)\.php$/U', $file, $m) !== 1) {
                     continue;
                 }
 
                 $shortName = $m[1];
 
                 // Determine full class name based on directory
-                if (str_contains($dir, 'bridges-v2')) {
+                if (str_contains($dir, 'bridges-v2') === true) {
                     $className = 'RSSBridge\\Bridges\\' . $shortName;
                 } else {
                     $className = $shortName;
                 }
 
-                if (!$factory->isEnabled($className)) {
+                if ($factory->isEnabled($className) === false) {
                     continue;
                 }
 
                 $bridge = $loader->createSafely($className);
 
                 // Skip broken bridges - they will be reported separately
-                if ($loader->isBridgeBroken($bridge)) {
+                if ($loader->isBridgeBroken($bridge) === true) {
                     continue;
                 }
 
@@ -180,16 +180,16 @@ final class BridgeMetadataCache
      */
     private function extractDomain(string $url): string
     {
-        if (empty($url)) {
+        if (empty($url) === true) {
             return '';
         }
 
         $domain = parse_url($url, PHP_URL_HOST);
-        if ($domain && str_starts_with($domain, 'www.')) {
+        if ($domain !== null && $domain !== false && str_starts_with($domain, 'www.') === true) {
             $domain = substr($domain, 4);
         }
 
-        return $domain ?: '';
+        return (empty($domain) === false) ? $domain : '';
     }
 
     /**
@@ -202,7 +202,7 @@ final class BridgeMetadataCache
         if ($this->cachedHash === null) {
             $hashParts = [];
             foreach ($this->bridgesDirs as $dir) {
-                if (is_dir($dir)) {
+                if (is_dir($dir) === true) {
                     $hashParts[] = $dir;
                     foreach (scandir($dir) as $file) {
                         if ($file !== '.' && $file !== '..') {

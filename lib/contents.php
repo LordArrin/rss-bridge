@@ -144,96 +144,51 @@ function getContents(
 }
 
 /**
- * Gets contents from the Internet as simplhtmldom object.
+ * Gets contents from the Internet as HTMLDocument object.
  *
  * @param string $url The URL.
- * @param array $header (optional) A list of cURL header.
- * For more information follow the links below.
- * * https://php.net/manual/en/function.curl-setopt.php
- * * https://curl.haxx.se/libcurl/c/CURLOPT_HTTPHEADER.html
- * @param array $opts (optional) A list of cURL options as associative array in
- * the format `$opts[$option] = $value;`, where `$option` is any `CURLOPT_XXX`
- * option and `$value` the corresponding value.
+ * @param array $header (optional) A list of cURL headers.
+ * @param array $opts (optional) A list of cURL options as associative array.
  *
- * For more information see http://php.net/manual/en/function.curl-setopt.php
- * @param bool $lowercase Force all selectors to lowercase.
- * @param bool $forceTagsClosed Forcefully close tags in malformed HTML.
- *
- * _Remarks_: Forcefully closing tags is great for malformed HTML, but it can
- * lead to parsing errors.
- * @param string $target_charset Defines the target charset.
- * @param bool $stripRN Replace all occurrences of `"\r"` and `"\n"` by `" "`.
- * @param string $defaultBRText Specifies the replacement text for `<br>` tags
- * when returning plaintext.
- * @param string $defaultSpanText Specifies the replacement text for `<span />`
- * tags when returning plaintext.
+ * @return \Dom\HTMLDocument Parsed HTML document
+ * @throws \Exception If the HTTP response is empty or parsing fails
  */
 function getSimpleHTMLDOM(
-    $url,
-    $header = [],
-    $opts = [],
-    $lowercase = true,
-    $forceTagsClosed = true,
-    $target_charset = DEFAULT_TARGET_CHARSET,
-    $stripRN = true,
-    $defaultBRText = DEFAULT_BR_TEXT,
-    $defaultSpanText = DEFAULT_SPAN_TEXT
-): \simple_html_dom {
-    $html = getContents($url, $header ?? [], $opts ?? []);
+    string $url,
+    array $header = [],
+    array $opts = []
+): \Dom\HTMLDocument {
+    $html = getContents($url, $header, $opts);
     if ($html === '') {
         throw new \Exception('Unable to parse dom because the http response was the empty string');
     }
 
-    return str_get_html(
-        $html,
-        $lowercase,
-        $forceTagsClosed,
-        $target_charset,
-        $stripRN,
-        $defaultBRText,
-        $defaultSpanText
-    );
+    libxml_use_internal_errors(true);
+    $dom = \Dom\HTMLDocument::createFromString($html);
+    libxml_clear_errors();
+    libxml_use_internal_errors(false);
+
+    return $dom;
 }
 
 /**
- * Fetch contents from the Internet as simplhtmldom object. Contents are cached
+ * Fetch contents from the Internet as HTMLDocument object. Contents are cached
  * and re-used for subsequent calls until the cache duration elapsed.
  *
  * @param string $url The URL.
  * @param int $ttl Cache duration in seconds.
- * @param array $header (optional) A list of cURL header.
- * For more information follow the links below.
- * * https://php.net/manual/en/function.curl-setopt.php
- * * https://curl.haxx.se/libcurl/c/CURLOPT_HTTPHEADER.html
- * @param array $opts (optional) A list of cURL options as associative array in
- * the format `$opts[$option] = $value;`, where `$option` is any `CURLOPT_XXX`
- * option and `$value` the corresponding value.
+ * @param array $header (optional) A list of cURL headers.
+ * @param array $opts (optional) A list of cURL options as associative array.
  *
- * For more information see http://php.net/manual/en/function.curl-setopt.php
- * @param bool $lowercase Force all selectors to lowercase.
- * @param bool $forceTagsClosed Forcefully close tags in malformed HTML.
- *
- * _Remarks_: Forcefully closing tags is great for malformed HTML, but it can
- * lead to parsing errors.
- * @param string $target_charset Defines the target charset.
- * @param bool $stripRN Replace all occurrences of `"\r"` and `"\n"` by `" "`.
- * @param string $defaultBRText Specifies the replacement text for `<br>` tags
- * when returning plaintext.
- * @param string $defaultSpanText Specifies the replacement text for `<span />`
- * tags when returning plaintext.
+ * @return \Dom\HTMLDocument Parsed HTML document
+ * @throws \Exception If the HTTP response is empty or parsing fails
  */
 function getSimpleHTMLDOMCached(
-    $url,
-    $ttl = 86400,
-    $header = [],
-    $opts = [],
-    $lowercase = true,
-    $forceTagsClosed = true,
-    $target_charset = DEFAULT_TARGET_CHARSET,
-    $stripRN = true,
-    $defaultBRText = DEFAULT_BR_TEXT,
-    $defaultSpanText = DEFAULT_SPAN_TEXT
-): \simple_html_dom {
+    string $url,
+    int $ttl = 86400,
+    array $header = [],
+    array $opts = []
+): \Dom\HTMLDocument {
     global $container;
 
     /** @var CacheInterface $cache */
@@ -241,20 +196,19 @@ function getSimpleHTMLDOMCached(
 
     $cacheKey = 'pages_' . $url;
     $content = $cache->get($cacheKey);
-    if (!$content) {
-        $content = getContents($url, $header ?? [], $opts ?? []);
+    if ($content === null || $content === false) {
+        $content = getContents($url, $header, $opts);
         $cache->set($cacheKey, $content, $ttl);
     }
-    return str_get_html(
-        $content,
-        $lowercase,
-        $forceTagsClosed,
-        $target_charset,
-        $stripRN,
-        $defaultBRText,
-        $defaultSpanText
-    );
+
+    libxml_use_internal_errors(true);
+    $dom = \Dom\HTMLDocument::createFromString($content);
+    libxml_clear_errors();
+    libxml_use_internal_errors(false);
+
+    return $dom;
 }
+
 /**
  * Retrieves HTML via a named proxy profile.
  *
@@ -284,14 +238,15 @@ function getProtectedContents(string $url, string $profileName, array $options =
 }
 
 /**
- * Retrieves HTML via a named proxy profile as a simple_html_dom object.
+ * Retrieves HTML via a named proxy profile as HTMLDocument object.
  *
  * @param string $url URL for request
  * @param string $profileName Profile name from config.ini.php
  * @param array $options Options: cookies, timeout, wait, use_cache, cache_ttl
- * @return \simple_html_dom
+ * @return \Dom\HTMLDocument Parsed HTML document
+ * @throws \Exception If the proxy returns empty HTML or parsing fails
  */
-function getProtectedSimpleHTMLDOM(string $url, string $profileName, array $options = []): \simple_html_dom
+function getProtectedSimpleHTMLDOM(string $url, string $profileName, array $options = []): \Dom\HTMLDocument
 {
     $html = getProtectedContents($url, $profileName, $options);
 
@@ -301,12 +256,10 @@ function getProtectedSimpleHTMLDOM(string $url, string $profileName, array $opti
         );
     }
 
-    $dom = str_get_html($html);
-    if (!$dom) {
-        throwClientException(
-            "Failed to parse HTML from proxy profile '{$profileName}' for: {$url}"
-        );
-    }
+    libxml_use_internal_errors(true);
+    $dom = \Dom\HTMLDocument::createFromString($html);
+    libxml_clear_errors();
+    libxml_use_internal_errors(false);
 
     return $dom;
 }

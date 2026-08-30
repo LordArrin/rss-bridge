@@ -192,3 +192,43 @@ function html_tag(
 
     return $html;
 }
+
+/**
+ * Break potentially dangerous HTML tags by inserting a zero-width non-joiner.
+ *
+ * This function is used to sanitize user-generated content that may contain
+ * script tags or other executable content. It replaces opening tags like
+ * <script> with <‌script> (note the zero-width non-joiner character),
+ * which prevents browsers from executing the tag while preserving the visual
+ * appearance in most cases.
+ *
+ * Usage in templates:
+ *   <?= break_annoying_html_tags($userContent) ?>
+ *
+ * @param string $html The HTML content to sanitize.
+ * @return string The sanitized HTML with dangerous tags broken.
+ */
+function break_annoying_html_tags(string $html): string
+{
+    // Zero-width non-joiner character
+    $zwnj = "\u{200C}";
+
+    $replacements = [
+        '<script' => '<' . $zwnj . 'script',
+        '</script' => '</' . $zwnj . 'script',
+        '<iframe' => '<' . $zwnj . 'iframe',
+        '</iframe' => '</' . $zwnj . 'iframe',
+        '<object' => '<' . $zwnj . 'object',
+        '</object' => '</' . $zwnj . 'object',
+        '<embed' => '<' . $zwnj . 'embed',
+        '</embed' => '</' . $zwnj . 'embed',
+        '<applet' => '<' . $zwnj . 'applet',
+        '</applet' => '</' . $zwnj . 'applet',
+    ];
+
+    return str_replace(
+        array_keys($replacements),
+        array_values($replacements),
+        $html
+    );
+}

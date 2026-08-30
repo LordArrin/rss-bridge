@@ -87,25 +87,32 @@ final class GolemBridge extends FeedExpander
             }
             $urls[$uri] = true;
 
-            $articlePage = getSimpleHTMLDOMCached($uri, static::CACHE_TIMEOUT, static::HEADERS);
-            $articlePage = defaultLinkTo($articlePage, $uri);
+            $html = getContents($uri, static::HEADERS);
+            libxml_use_internal_errors(true);
+            $articlePage = \Dom\HTMLDocument::createFromString($html);
+            libxml_use_internal_errors(false);
 
-            $item['uri'] = $articlePage->find('head meta[name="twitter:url"]', 0)->content;
+            $this->convertRelativeToAbsoluteLinks($articlePage, $uri);
+
+            $twitterUrl = $articlePage->querySelector('head meta[name="twitter:url"]');
+            if ($twitterUrl !== null) {
+                $item['uri'] = $twitterUrl->getAttribute('content') ?? $uri;
+            }
 
             if (array_key_exists('categories', $item) === false) {
-                $categories = $articlePage->find('div.go-tag-list__tags a.go-tag');
+                $categories = $articlePage->querySelectorAll('div.go-tag-list__tags a.go-tag');
                 $trimmedcategories = [];
                 foreach ($categories as $category) {
-                    $trimmedcategories[] = trim(html_entity_decode($category->plaintext));
+                    $trimmedcategories[] = trim(html_entity_decode($category->textContent ?? ''));
                 }
                 if ($trimmedcategories !== []) {
                     $item['categories'] = array_unique($trimmedcategories);
                 }
             }
 
-            $nextUri = $articlePage->find('li.go-pagination__item--next a', 0);
+            $nextUri = $articlePage->querySelector('li.go-pagination__item--next a');
             if ($nextUri !== null) {
-                $uri = $nextUri->href;
+                $uri = $nextUri->getAttribute('href');
             } else {
                 $uri = null;
             }
@@ -116,16 +123,16 @@ final class GolemBridge extends FeedExpander
         return $item;
     }
 
-    private function extractContent($page, string $prevcontent): string
+    private function extractContent(\Dom\HTMLDocument $page, string $prevcontent): string
     {
         $item = '';
 
-        $articleNode = $page->find('article', 0);
+        $articleNode = $page->querySelector('article');
         if ($articleNode === null) {
             return '';
         }
 
-        $articleHtml = $articleNode->outertext;
+        $articleHtml = $articleNode->outerHTML;
 
         libxml_use_internal_errors(true);
         $dom = \Dom\HTMLDocument::createFromString('<div>' . $articleHtml . '</div>');
@@ -137,8 +144,9 @@ final class GolemBridge extends FeedExpander
         }
 
         $embedSrcs = [];
-        foreach ($page->find('script') as $script) {
-            if (preg_match_all('/type:\s*\"Embed(.*)urlPrivacy:/U', $script, $embeds) === 1) {
+        foreach ($page->querySelectorAll('script') as $script) {
+            $scriptContent = $script->textContent ?? '';
+            if (preg_match_all('/type:\s*\"Embed(.*)urlPrivacy:/U', $scriptContent, $embeds) === 1) {
                 foreach ($embeds[1] as $embed) {
                     if (preg_match('/src:\s*\"([^\"]+)\"/', $embed, $src) === 1) {
                         $embedSrcs[] = $src[1];
@@ -203,10 +211,13 @@ final class GolemBridge extends FeedExpander
             }
         }
 
-        $firstHeader = $page->find('.table-jtoc td', 0);
+        $firstHeader = $page->querySelector('.table-jtoc td');
         $firstHeaderText = null;
-        if ($firstHeader !== null && $firstHeader->title !== null) {
-            $firstHeaderText = html_entity_decode($firstHeader->title);
+        if ($firstHeader !== null) {
+            $titleAttr = $firstHeader->getAttribute('title');
+            if ($titleAttr !== null) {
+                $firstHeaderText = html_entity_decode($titleAttr);
+            }
         }
 
         $multipageHeader = $wrapper->querySelector('header.paged-cluster-header h1');
@@ -247,5 +258,27 @@ final class GolemBridge extends FeedExpander
         }
 
         return $item;
+    }
+
+    /**
+     * Convert relative URLs to absolute URLs for img src and a href attributes
+     */
+    private function convertRelativeToAbsoluteLinks(\Dom\HTMLDocument $dom, string $baseUrl): void
+    {
+        // Process images
+        foreach ($dom->querySelectorAll('img') as $image) {
+            $src = $image->getAttribute('src');
+            if ($src !== null && $src !== '') {
+                $image->setAttribute('src', urljoin($baseUrl, $src));
+            }
+        }
+
+        // Process anchors
+        foreach ($dom->querySelectorAll('a') as $anchor) {
+            $href = $anchor->getAttribute('href');
+            if ($href !== null && $href !== '') {
+                $anchor->setAttribute('href', urljoin($baseUrl, $href));
+            }
+        }
     }
 }
