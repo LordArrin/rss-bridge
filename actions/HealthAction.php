@@ -9,7 +9,7 @@ use Request;
 use Response;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
-use SafeBridgeLoader;
+use RSSBridge\SafeBridgeLoader;
 
 final class HealthAction implements ActionInterface
 {

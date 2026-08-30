@@ -2,7 +2,7 @@
     "name": "lordarrin/rss-bridge",
     "description": "RSS-Bridge - generate feeds for websites that don't have one",
     "license": "AGPL-3.0-or-later",
-    "version": "1.1.9",
+    "version": "1.2.0",
     "autoload": {
         "psr-4": {
             "RSSBridge\\Bridges\\": "bridges-v2/",
@@ -13,11 +13,20 @@
             "RSSBridge\\Proxies\\": "proxies/"
         },
         "classmap": [
+            "lib/BridgeAbstract.php",
+            "lib/BridgeFactory.php",
+            "lib/BridgeMetadataCache.php",
+            "lib/BrokenBridgeStub.php",
+            "lib/Configuration.php",
             "lib/Container.php",
-            "lib/ParameterValidator.php",
-            "lib/FeedParser.php",
+            "lib/FeedExpander.php",
             "lib/FeedItem.php",
-            "lib/Configuration.php"
+            "lib/FeedParser.php",
+            "lib/ParameterValidator.php",
+            "lib/RssBridge.php",
+            "lib/SafeBridgeLoader.php",
+            "lib/WebDriverAbstract.php",
+            "lib/XPathAbstract.php"
         ],
         "files": [
             "lib/Json.php",

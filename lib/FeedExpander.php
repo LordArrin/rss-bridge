@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace RSSBridge;
+
 use RSSBridge\FeedParser;
 use RSSBridge\Formats\MrssFormat;
 use RSSBridge\Formats\AtomFormat;
@@ -13,16 +15,13 @@ use RSSBridge\Formats\AtomFormat;
  * and passes each item through {@see parseItem()} so that the extending
  * bridge can enrich or modify the item (e.g. fetch the full article body
  * from the original website).
- *
  */
 abstract class FeedExpander extends BridgeAbstract
 {
     /**
      * Parsed feed data returned by {@see FeedParser::parseFeed()}.
-     *
-     * @var array
      */
-    private $feed = [];
+    private array $feed = [];
 
     /**
      * Fetches and parses the remote feed, populating the internal items list.
@@ -33,9 +32,10 @@ abstract class FeedExpander extends BridgeAbstract
      * @param string $url Feed URL to fetch
      * @param int $maxItems Maximum number of items to keep (-1 for unlimited)
      * @param array $headers Additional HTTP headers for the request
+     *
      * @throws \Exception If the URL is empty, the response is empty, or the XML cannot be parsed
      */
-    public function collectExpandableDatas($url, $maxItems = -1, $headers = [])
+    public function collectExpandableDatas(string $url, int $maxItems = -1, array $headers = []): void
     {
         if (!$url) {
             throw new \Exception('There is no $url for this RSS expander');
@@ -82,9 +82,10 @@ abstract class FeedExpander extends BridgeAbstract
      * with their own untyped signatures.
      *
      * @param array $item Parsed feed item
-     * @return array The (possibly modified) item, or a falsy value to drop it
+     *
+     * @return array|false The (possibly modified) item, or a falsy value to drop it
      */
-    protected function parseItem($item)
+    protected function parseItem(array $item): array|false
     {
         return $item;
     }
@@ -93,7 +94,7 @@ abstract class FeedExpander extends BridgeAbstract
      * Returns the feed URI, preferring the value from the parsed feed
      * and falling back to the parent implementation.
      */
-    public function getURI()
+    public function getURI(): string
     {
         return $this->feed['uri'] ?? parent::getURI();
     }
@@ -102,7 +103,7 @@ abstract class FeedExpander extends BridgeAbstract
      * Returns the feed title, preferring the value from the parsed feed
      * and falling back to the parent implementation.
      */
-    public function getName()
+    public function getName(): string
     {
         return $this->feed['title'] ?? parent::getName();
     }
@@ -111,7 +112,7 @@ abstract class FeedExpander extends BridgeAbstract
      * Returns the feed icon URL, preferring the value from the parsed feed
      * and falling back to the parent implementation.
      */
-    public function getIcon()
+    public function getIcon(): string
     {
         return $this->feed['icon'] ?? parent::getIcon();
     }

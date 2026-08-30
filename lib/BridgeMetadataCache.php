@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace RSSBridge;
+
 use RSSBridge\Caches\CacheInterface;
 
 /**

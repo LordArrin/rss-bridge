@@ -44,11 +44,11 @@ try {
     $metadata = $cache->rebuild($factory, $loader);
     $elapsed = round((microtime(true) - $start) * 1000, 2);
 
-    echo sprintf("? Cached %d bridges in %sms [hash: %s]\n", count($metadata), $elapsed, substr($currentHash, 0, 8));
+    echo sprintf("[OK] Cached %d bridges in %sms [hash: %s]\n", count($metadata), $elapsed, substr($currentHash, 0, 8));
 
     $broken = $loader->getBrokenBridges();
     if (count($broken) > 0) {
-        echo sprintf("\n? %d broken bridges:\n", count($broken));
+        echo sprintf("\n[WARN] %d broken bridges:\n", count($broken));
         foreach ($broken as $name => $info) {
             echo sprintf("  - %s: %s\n", $name, substr($info['message'], 0, 100));
         }
@@ -56,7 +56,7 @@ try {
 
     exit(0);
 } catch (\Throwable $e) {
-    fprintf(STDERR, "? Failed to build cache: %s\n", $e->getMessage());
+    fprintf(STDERR, "[ERROR] Failed to build cache: %s\n", $e->getMessage());
     if ($verbose) {
         fprintf(STDERR, "%s\n", $e->getTraceAsString());
     }

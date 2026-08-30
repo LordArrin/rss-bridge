@@ -156,7 +156,7 @@ New bridge files MUST have `declare(strict_types=1);` at the top:
 
 declare(strict_types=1);
 
-class BearBlogBridge extends BridgeAbstract
+class BearBlogBridge extends \RSSBridge\BridgeAbstract
 {
     const NAME = 'BearBlog (bearblog.dev)';
 

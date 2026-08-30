@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace RSSBridge;
+
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
 
@@ -19,7 +21,7 @@ use RSSBridge\Configuration;
 final class BridgeFactory
 {
     private CacheInterface $cache;
-    private Logger $logger;
+    private \Logger $logger;
 
     /**
      * Array of all available bridge class names (FQCN or legacy global name).
@@ -52,7 +54,7 @@ final class BridgeFactory
      */
     private array $missingEnabledBridges = [];
 
-    public function __construct(CacheInterface $cache, Logger $logger)
+    public function __construct(CacheInterface $cache, \Logger $logger)
     {
         $this->cache = $cache;
         $this->logger = $logger;
@@ -153,7 +155,7 @@ final class BridgeFactory
      * sandbox check passes, the file is included in the main process.
      *
      * @param string $name Bridge class name (FQCN) or short name
-     * @return BridgeAbstract
+     *
      * @throws \Exception If the bridge cannot be found, loaded, or instantiated
      */
     public function create(string $name): BridgeAbstract
@@ -197,6 +199,7 @@ final class BridgeFactory
      * has incompatible type declarations with its parent abstract class.
      *
      * @param string $file Absolute path to the bridge PHP file
+     *
      * @throws \Exception If the sandbox check fails
      */
     private function loadBridgeInSandbox(string $file): void

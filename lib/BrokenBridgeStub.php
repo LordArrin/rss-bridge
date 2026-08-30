@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+namespace RSSBridge;
+
+use RSSBridge\Caches\CacheInterface;
+
 /**
  * Safe placeholder returned by {@see SafeBridgeLoader} when a bridge
  * cannot be loaded (e.g. because of a syntax error, a compile-time
@@ -11,7 +15,7 @@ declare(strict_types=1);
  * rest of the application can treat it like any other bridge. All
  * metadata getters return safe defaults, and {@see collectData()}
  * throws an exception with the original error message so that
- * {@see DisplayAction} can surface it to the user.
+ * {@see \DisplayAction} can surface it to the user.
  *
  * IMPORTANT: Method signatures deliberately omit type hints to avoid
  * any conflict with the untyped signatures of {@see BridgeAbstract},
@@ -19,23 +23,16 @@ declare(strict_types=1);
  */
 class BrokenBridgeStub extends BridgeAbstract
 {
-    /**
-     * @var string
-     */
-    private $originalName;
-
-    /**
-     * @var string
-     */
-    private $errorMessage;
+    private string $originalName;
+    private string $errorMessage;
 
     /**
      * @param string $originalName Short name of the bridge that failed to load
      * @param string $errorMessage Error message describing the failure
-     * @param mixed $cache Optional cache instance passed to the parent constructor
-     * @param mixed $logger Optional logger instance passed to the parent constructor
+     * @param CacheInterface|null $cache Optional cache instance passed to the parent constructor
+     * @param \Logger|null $logger Optional logger instance passed to the parent constructor
      */
-    public function __construct($originalName, $errorMessage, $cache = null, $logger = null)
+    public function __construct(string $originalName, string $errorMessage, ?CacheInterface $cache = null, ?\Logger $logger = null)
     {
         parent::__construct($cache, $logger);
         $this->originalName = $originalName;
@@ -46,7 +43,7 @@ class BrokenBridgeStub extends BridgeAbstract
      * Marks this instance as a broken stub so that callers can detect it
      * without relying on instanceof checks.
      */
-    public function isBrokenStub()
+    public function isBrokenStub(): bool
     {
         return true;
     }
@@ -56,7 +53,7 @@ class BrokenBridgeStub extends BridgeAbstract
      *
      * @throws \Exception
      */
-    public function collectData()
+    public function collectData(): void
     {
         throw new \Exception('This bridge is broken: ' . $this->errorMessage);
     }
@@ -65,17 +62,17 @@ class BrokenBridgeStub extends BridgeAbstract
      * Returns the original bridge name suffixed with " (Broken)" so that
      * the frontend clearly indicates which bridges are disabled.
      */
-    public function getName()
+    public function getName(): string
     {
         return $this->originalName . ' (Broken)';
     }
 
-    public function getURI()
+    public function getURI(): string
     {
         return '';
     }
 
-    public function getIcon()
+    public function getIcon(): string
     {
         return '';
     }
@@ -84,7 +81,7 @@ class BrokenBridgeStub extends BridgeAbstract
      * Returns an empty parameter list, since a broken bridge cannot
      * be configured by the user.
      */
-    public function getParameters()
+    public function getParameters(): array
     {
         return [];
     }
@@ -93,12 +90,12 @@ class BrokenBridgeStub extends BridgeAbstract
      * Returns a description containing the original error message,
      * useful for administrators and debugging.
      */
-    public function getDescription()
+    public function getDescription(): string
     {
         return 'This bridge is broken: ' . $this->errorMessage;
     }
 
-    public function getMaintainer()
+    public function getMaintainer(): string
     {
         return 'System';
     }
@@ -107,10 +104,9 @@ class BrokenBridgeStub extends BridgeAbstract
      * Always returns null, since a broken bridge cannot detect parameters
      * from a URL.
      *
-     * @param string $url
-     * @return null
+     * @param mixed $url
      */
-    public function detectParameters($url)
+    public function detectParameters($url): mixed
     {
         return null;
     }
@@ -119,7 +115,7 @@ class BrokenBridgeStub extends BridgeAbstract
      * Returns a cache timeout of 0 so that broken stubs are never cached
      * for long and can be automatically retried after a deployment fix.
      */
-    public function getCacheTimeout()
+    public function getCacheTimeout(): int
     {
         return 0;
     }

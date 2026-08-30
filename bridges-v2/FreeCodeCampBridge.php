@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
-use FeedExpander;
+use RSSBridge\FeedExpander;
 
 final class FreeCodeCampBridge extends FeedExpander
 {
@@ -19,7 +19,7 @@ final class FreeCodeCampBridge extends FeedExpander
         $this->collectExpandableDatas('https://www.freecodecamp.org/news/rss/', 15);
     }
 
-    protected function parseItem($item)
+    protected function parseItem(array $item): array|false
     {
         $html = getContents($item['uri']);
         if ($html === '') {

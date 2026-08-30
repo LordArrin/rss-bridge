@@ -4,20 +4,20 @@ declare(strict_types=1);
 
 namespace RSSBridge\Actions;
 
-use BridgeAbstract;
-use BridgeFactory;
 use ClientException;
 use HttpException;
 use Json;
 use Logger;
-use RateLimitException;
-use Request;
-use Response;
+use RSSBridge\BridgeAbstract;
+use RSSBridge\BridgeFactory;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
 use RSSBridge\FeedItem;
 use RSSBridge\Formats\FormatFactory;
-use SafeBridgeLoader;
+use RSSBridge\SafeBridgeLoader;
+use RateLimitException;
+use Request;
+use Response;
 
 final class DisplayAction implements ActionInterface
 {

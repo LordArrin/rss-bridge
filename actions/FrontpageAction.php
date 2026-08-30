@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace RSSBridge\Actions;
 
-use BridgeFactory;
-use BridgeMetadataCache;
+use RSSBridge\BridgeFactory;
+use RSSBridge\BridgeMetadataCache;
 use RSSBridge\Configuration;
+use RSSBridge\SafeBridgeLoader;
 use Request;
 use Response;
-use SafeBridgeLoader;
 
 final class FrontpageAction implements ActionInterface
 {

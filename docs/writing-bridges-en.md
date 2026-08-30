@@ -480,7 +480,7 @@ $parser = new FeedParser();
 $feed = $parser->parseFeed($xmlString);
 ```
 
-**Note:** `BridgeAbstract` is still in the global namespace (for compatibility with legacy bridges), so `use BridgeAbstract;` works without a namespace prefix. This will change in the future when all legacy bridges are migrated.
+`BridgeAbstract` is in the `RSSBridge` namespace, so all bridges must import it with `use RSSBridge\BridgeAbstract;`.
 
 ## Running Quality Checks
 

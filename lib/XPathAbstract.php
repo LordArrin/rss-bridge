@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace RSSBridge;
+
 use RSSBridge\FeedItem;
 
 /**
@@ -74,8 +76,8 @@ abstract class XPathAbstract extends BridgeAbstract
      * XPath expression for extracting an item's content from the item context.
      * This expression should match a node contained within each article item node
      * containing the article content or description. It should start with a dot
-     * followed by two forward slashes, referring to any descendant nodes of the
-     * article item node.
+     * followed by two forward slashes, referring to any descendant nodes of
+     * the article item node.
      *
      * Use {@see XPathAbstract::getExpressionItemContent()} to read this parameter.
      */
@@ -165,27 +167,24 @@ abstract class XPathAbstract extends BridgeAbstract
 
     /**
      * Internal storage for resulting feed name, automatically detected.
-     * @var string|null
      */
-    private $feedName;
+    private ?string $feedName = null;
 
     /**
      * Internal storage for resulting feed uri, automatically detected.
-     * @var string|null
      */
-    private $feedUri;
+    private ?string $feedUri = null;
 
     /**
      * Internal storage for resulting feed favicon, automatically detected.
-     * @var string|null
      */
-    private $feedIcon;
+    private ?string $feedIcon = null;
 
     /**
      * Returns the feed name.
      * Falls back to {@see BridgeAbstract::getName()} if no title was extracted.
      */
-    public function getName()
+    public function getName(): string
     {
         return $this->feedName ?: parent::getName();
     }
@@ -194,7 +193,7 @@ abstract class XPathAbstract extends BridgeAbstract
      * Returns the feed URI.
      * Falls back to {@see BridgeAbstract::getURI()} if no URI was detected.
      */
-    public function getURI()
+    public function getURI(): string
     {
         return $this->feedUri ?: parent::getURI();
     }
@@ -203,7 +202,7 @@ abstract class XPathAbstract extends BridgeAbstract
      * Returns the feed icon URL.
      * Falls back to {@see BridgeAbstract::getIcon()} if no icon was extracted.
      */
-    public function getIcon()
+    public function getIcon(): string
     {
         return $this->feedIcon ?: parent::getIcon();
     }
@@ -211,7 +210,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Returns the source Web page URL.
      */
-    protected function getSourceUrl()
+    protected function getSourceUrl(): string
     {
         return static::FEED_SOURCE_URL;
     }
@@ -219,7 +218,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Returns the XPath expression for the feed title.
      */
-    protected function getExpressionTitle()
+    protected function getExpressionTitle(): string
     {
         return static::XPATH_EXPRESSION_FEED_TITLE;
     }
@@ -227,7 +226,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Returns the XPath expression for the feed favicon.
      */
-    protected function getExpressionIcon()
+    protected function getExpressionIcon(): string
     {
         return static::XPATH_EXPRESSION_FEED_ICON;
     }
@@ -235,7 +234,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Returns the XPath expression for the feed items.
      */
-    protected function getExpressionItem()
+    protected function getExpressionItem(): string
     {
         return static::XPATH_EXPRESSION_ITEM;
     }
@@ -243,7 +242,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Returns the XPath expression for an item title.
      */
-    protected function getExpressionItemTitle()
+    protected function getExpressionItemTitle(): string
     {
         return static::XPATH_EXPRESSION_ITEM_TITLE;
     }
@@ -251,7 +250,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Returns the XPath expression for an item content.
      */
-    protected function getExpressionItemContent()
+    protected function getExpressionItemContent(): string
     {
         return static::XPATH_EXPRESSION_ITEM_CONTENT;
     }
@@ -259,7 +258,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Returns the XPath expression for an item URI.
      */
-    protected function getExpressionItemUri()
+    protected function getExpressionItemUri(): string
     {
         return static::XPATH_EXPRESSION_ITEM_URI;
     }
@@ -267,7 +266,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Returns the XPath expression for an item author.
      */
-    protected function getExpressionItemAuthor()
+    protected function getExpressionItemAuthor(): string
     {
         return static::XPATH_EXPRESSION_ITEM_AUTHOR;
     }
@@ -275,7 +274,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Returns the XPath expression for an item timestamp.
      */
-    protected function getExpressionItemTimestamp()
+    protected function getExpressionItemTimestamp(): string
     {
         return static::XPATH_EXPRESSION_ITEM_TIMESTAMP;
     }
@@ -283,7 +282,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Returns the XPath expression for item enclosures.
      */
-    protected function getExpressionItemEnclosures()
+    protected function getExpressionItemEnclosures(): string
     {
         return static::XPATH_EXPRESSION_ITEM_ENCLOSURES;
     }
@@ -291,7 +290,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Returns the XPath expression for item categories.
      */
-    protected function getExpressionItemCategories()
+    protected function getExpressionItemCategories(): string
     {
         return static::XPATH_EXPRESSION_ITEM_CATEGORIES;
     }
@@ -299,7 +298,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Returns the setting for using raw item content.
      */
-    protected function getSettingUseRawItemContent()
+    protected function getSettingUseRawItemContent(): bool
     {
         return static::SETTING_USE_RAW_ITEM_CONTENT;
     }
@@ -307,7 +306,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Returns the setting for fixing feed encoding.
      */
-    protected function getSettingFixEncoding()
+    protected function getSettingFixEncoding(): bool
     {
         return static::SETTING_FIX_ENCODING;
     }
@@ -317,9 +316,8 @@ abstract class XPathAbstract extends BridgeAbstract
      * in derived classes.
      *
      * @param string $name Parameter name
-     * @return bool|string|null
      */
-    private function getParam($name)
+    private function getParam(string $name): mixed
     {
         switch ($name) {
             case 'url':
@@ -349,15 +347,15 @@ abstract class XPathAbstract extends BridgeAbstract
             case 'raw_content':
                 return $this->getSettingUseRawItemContent();
         }
+
+        return null;
     }
 
     /**
      * Should provide the source website HTML content.
      * Can be easily overwritten for example if special headers or auth infos are required.
-     *
-     * @return string
      */
-    protected function provideWebsiteContent()
+    protected function provideWebsiteContent(): string
     {
         return getContents($this->feedUri);
     }
@@ -366,37 +364,38 @@ abstract class XPathAbstract extends BridgeAbstract
      * Should provide the feed's title.
      *
      * @param \DOMXPath $xpath
-     * @return string|null
      */
-    protected function provideFeedTitle(\DOMXPath $xpath)
+    protected function provideFeedTitle(\DOMXPath $xpath): ?string
     {
         $title = $xpath->query($this->getParam('feed_title'));
         if (count($title) === 1) {
             return $this->fixEncoding($this->getItemValueOrNodeValue($title));
         }
+
+        return null;
     }
 
     /**
      * Should provide the URL of the feed's favicon.
      *
      * @param \DOMXPath $xpath
-     * @return string|null
      */
-    protected function provideFeedIcon(\DOMXPath $xpath)
+    protected function provideFeedIcon(\DOMXPath $xpath): ?string
     {
         $icon = $xpath->query($this->getParam('feed_icon'));
         if (count($icon) === 1) {
             return $this->cleanMediaUrl($this->getItemValueOrNodeValue($icon));
         }
+
+        return null;
     }
 
     /**
      * Should provide the feed's items.
      *
      * @param \DOMXPath $xpath
-     * @return \DOMNodeList|false
      */
-    protected function provideFeedItems(\DOMXPath $xpath)
+    protected function provideFeedItems(\DOMXPath $xpath): \DOMNodeList|false
     {
         return @$xpath->query($this->getParam('item'));
     }
@@ -404,7 +403,7 @@ abstract class XPathAbstract extends BridgeAbstract
     /**
      * Main entry point for collecting feed data.
      */
-    public function collectData()
+    public function collectData(): void
     {
         $this->feedUri = $this->getParam('url');
 
@@ -479,9 +478,8 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * @param string $param Parameter name
      * @param string|array $value Extracted value
-     * @return string|array
      */
-    protected function formatParamValue($param, $value)
+    protected function formatParamValue(string $param, mixed $value): mixed
     {
         $value = is_array($value) ? array_map('trim', $value) : trim($value);
         $value = is_array($value) ? array_map([$this, 'fixEncoding'], $value) : $this->fixEncoding($value);
@@ -511,9 +509,8 @@ abstract class XPathAbstract extends BridgeAbstract
      * Can be easily overwritten in case the value needs to be transformed.
      *
      * @param string $value Raw title
-     * @return string
      */
-    protected function formatItemTitle($value)
+    protected function formatItemTitle(string $value): string
     {
         return $value;
     }
@@ -523,9 +520,8 @@ abstract class XPathAbstract extends BridgeAbstract
      * Can be easily overwritten in case the value needs to be transformed.
      *
      * @param string $value Raw content
-     * @return string
      */
-    protected function formatItemContent($value)
+    protected function formatItemContent(string $value): string
     {
         return $this->getParam('raw_content') ? $value : htmlspecialchars($value);
     }
@@ -535,15 +531,14 @@ abstract class XPathAbstract extends BridgeAbstract
      * Can be easily overwritten in case the value needs to be transformed.
      *
      * @param string $value Raw URI
-     * @return string
      */
-    protected function formatItemUri($value)
+    protected function formatItemUri(string $value): string
     {
         if (strlen($value) === 0) {
             return '';
         }
 
-        if (strpos($value, 'http://') === 0 || strpos($value, 'https://') === 0) {
+        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
             return $value;
         }
 
@@ -555,9 +550,8 @@ abstract class XPathAbstract extends BridgeAbstract
      * Can be easily overwritten in case the value needs to be transformed.
      *
      * @param string $value Raw author
-     * @return string
      */
-    protected function formatItemAuthor($value)
+    protected function formatItemAuthor(string $value): string
     {
         return $value;
     }
@@ -571,7 +565,7 @@ abstract class XPathAbstract extends BridgeAbstract
      * @param string $value Raw timestamp
      * @return int|false
      */
-    protected function formatItemTimestamp($value)
+    protected function formatItemTimestamp(string $value): int|false
     {
         return strtotime($value);
     }
@@ -581,9 +575,8 @@ abstract class XPathAbstract extends BridgeAbstract
      * Can be easily overwritten in case the values need to be transformed.
      *
      * @param string $value Raw enclosure URL
-     * @return array
      */
-    protected function formatItemEnclosures($value)
+    protected function formatItemEnclosures(string $value): array
     {
         return [$this->cleanMediaUrl($value)];
     }
@@ -593,9 +586,8 @@ abstract class XPathAbstract extends BridgeAbstract
      * Can be easily overwritten in case the values need to be transformed.
      *
      * @param string|array $value Raw categories
-     * @return array
      */
-    protected function formatItemCategories($value)
+    protected function formatItemCategories(mixed $value): array
     {
         return is_array($value) ? $value : [$value];
     }
@@ -604,15 +596,15 @@ abstract class XPathAbstract extends BridgeAbstract
      * Cleans a media URL and joins it with the feed URI if necessary.
      *
      * @param string $mediaUrl Raw media URL
-     * @return string|void
      */
-    protected function cleanMediaUrl($mediaUrl)
+    protected function cleanMediaUrl(string $mediaUrl): ?string
     {
         $pattern = '~(?:http(?:s)?:)?[\/a-zA-Z0-9\-=_,\.\%]+\.(?:jpg|gif|png|jpeg|ico|mp3|webp){1}~i';
         $result = preg_match($pattern, $mediaUrl, $matches);
         if (1 !== $result) {
-            return;
+            return null;
         }
+
         return urljoin($this->feedUri, $matches[0]);
     }
 
@@ -621,17 +613,19 @@ abstract class XPathAbstract extends BridgeAbstract
      *
      * @param mixed $typedResult Result from XPath evaluation
      * @param bool $returnXML Whether to return the node as XML
-     * @return string
+     *
      * @throws \Exception
      */
-    protected function getItemValueOrNodeValue($typedResult, $returnXML = false)
+    protected function getItemValueOrNodeValue(mixed $typedResult, bool $returnXML = false): string
     {
         if ($typedResult instanceof \DOMNodeList) {
             $typedResult = $typedResult->item(0);
         }
 
         if ($typedResult instanceof \DOMElement) {
-            return $returnXML ? ($typedResult->ownerDocument ?? $typedResult)->saveXML($typedResult) : $typedResult->nodeValue;
+            return $returnXML
+                ? ($typedResult->ownerDocument ?? $typedResult)->saveXML($typedResult)
+                : $typedResult->nodeValue;
         } elseif ($typedResult instanceof \DOMAttr) {
             return $typedResult->value;
         } elseif ($typedResult instanceof \DOMText) {
@@ -651,20 +645,20 @@ abstract class XPathAbstract extends BridgeAbstract
      * expect umlauts or other non-ASCII characters.
      *
      * @param string $input Input string
-     * @return string
      */
-    protected function fixEncoding($input)
+    protected function fixEncoding(string $input): string
     {
-        return $this->getParam('fix_encoding') ? mb_convert_encoding($input, 'ISO-8859-1', 'UTF-8') : $input;
+        return $this->getParam('fix_encoding')
+            ? mb_convert_encoding($input, 'ISO-8859-1', 'UTF-8')
+            : $input;
     }
 
     /**
      * Allows overriding default mechanism for determining items UIDs.
      *
      * @param array $item Item data
-     * @return string|null Unique identifier, or null to skip
      */
-    protected function generateItemId($item)
+    protected function generateItemId(array $item): ?string
     {
         return null;
     }

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
-use BridgeAbstract;
+use RSSBridge\BridgeAbstract;
 
 final class LWNprevBridge extends BridgeAbstract
 {

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace RSSBridge;
+
 use RSSBridge\Configuration;
 
 /**
@@ -16,23 +18,21 @@ abstract class WebDriverAbstract extends BridgeAbstract
     /**
      * Holds the remote WebDriver object, including configuration and connection.
      *
-     * @var RemoteWebDriver|null
+     * @var \Facebook\WebDriver\RemoteWebDriver|null
      */
-    protected $driver;
+    protected mixed $driver = null;
 
     /**
      * Holds the URI of the feed's icon.
-     *
-     * @var string|null
      */
-    private $feedIcon;
+    private ?string $feedIcon = null;
 
     /**
      * Returns the WebDriver object.
      *
-     * @return RemoteWebDriver|null
+     * @return \Facebook\WebDriver\RemoteWebDriver|null
      */
-    protected function getDriver()
+    protected function getDriver(): mixed
     {
         return $this->driver;
     }
@@ -41,7 +41,7 @@ abstract class WebDriverAbstract extends BridgeAbstract
      * Returns the URI of the feed's icon.
      * Falls back to {@see BridgeAbstract::getIcon()} if no custom icon was set.
      */
-    public function getIcon()
+    public function getIcon(): string
     {
         return $this->feedIcon ?: parent::getIcon();
     }
@@ -51,7 +51,7 @@ abstract class WebDriverAbstract extends BridgeAbstract
      *
      * @param string $iconurl Icon URL
      */
-    protected function setIcon($iconurl)
+    protected function setIcon(string $iconurl): void
     {
         $this->feedIcon = $iconurl;
     }
@@ -63,11 +63,11 @@ abstract class WebDriverAbstract extends BridgeAbstract
      * the argument '--headless' is added. Override this to change
      * or add more options.
      *
-     * @return ChromeOptions
+     * @return \Facebook\WebDriver\ChromeOptions
      */
-    protected function getBrowserOptions()
+    protected function getBrowserOptions(): mixed
     {
-        $chromeOptions = new ChromeOptions();
+        $chromeOptions = new \Facebook\WebDriver\ChromeOptions();
         if (Configuration::getConfig('webdriver', 'headless')) {
             $chromeOptions->addArguments(['--headless']);
         }
@@ -80,12 +80,15 @@ abstract class WebDriverAbstract extends BridgeAbstract
      * The Chrome options are added. Override this to change
      * or add more capabilities.
      *
-     * @return WebDriverCapabilities
+     * @return \Facebook\WebDriver\WebDriverCapabilities
      */
-    protected function getDesiredCapabilities()
+    protected function getDesiredCapabilities(): mixed
     {
-        $desiredCapabilities = DesiredCapabilities::chrome();
-        $desiredCapabilities->setCapability(ChromeOptions::CAPABILITY, $this->getBrowserOptions());
+        $desiredCapabilities = \Facebook\WebDriver\Remote\DesiredCapabilities::chrome();
+        $desiredCapabilities->setCapability(
+            \Facebook\WebDriver\ChromeOptions::CAPABILITY,
+            $this->getBrowserOptions()
+        );
         return $desiredCapabilities;
     }
 
@@ -95,10 +98,13 @@ abstract class WebDriverAbstract extends BridgeAbstract
      *
      * This should be called in collectData() first.
      */
-    protected function prepareWebDriver()
+    protected function prepareWebDriver(): void
     {
         $server = Configuration::getConfig('webdriver', 'selenium_server_url');
-        $this->driver = RemoteWebDriver::create($server, $this->getDesiredCapabilities());
+        $this->driver = \Facebook\WebDriver\Remote\RemoteWebDriver::create(
+            $server,
+            $this->getDesiredCapabilities()
+        );
     }
 
     /**
@@ -106,7 +112,7 @@ abstract class WebDriverAbstract extends BridgeAbstract
      * which change their appearance depending on the window size) and opens
      * the URI set in the constant URI.
      */
-    protected function prepareWindow()
+    protected function prepareWindow(): void
     {
         $this->getDriver()->manage()->window()->maximize();
         $this->getDriver()->get($this->getURI());
@@ -119,7 +125,7 @@ abstract class WebDriverAbstract extends BridgeAbstract
      * This must be called at the end of scraping, for example within a
      * 'finally' block.
      */
-    protected function cleanUp()
+    protected function cleanUp(): void
     {
         $this->getDriver()->quit();
     }
@@ -130,7 +136,7 @@ abstract class WebDriverAbstract extends BridgeAbstract
      * Override this but call parent() first.
      * Don't forget to call cleanUp() at the end.
      */
-    public function collectData()
+    public function collectData(): void
     {
         $this->prepareWebDriver();
         $this->prepareWindow();

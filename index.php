@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use RSSBridge\Configuration;
+use RSSBridge\RssBridge;
 
 require __DIR__ . '/lib/bootstrap.php';
 require __DIR__ . '/lib/config.php';

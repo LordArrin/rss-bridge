@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
-use FeedExpander;
+use RSSBridge\FeedExpander;
 
 final class WeLiveSecurityBridge extends FeedExpander
 {
@@ -20,7 +20,7 @@ final class WeLiveSecurityBridge extends FeedExpander
         ],
     ];
 
-    protected function parseItem($item)
+    protected function parseItem(array $item): array|false
     {
         $html = getSimpleHTMLDOMCached($item['uri']);
         if ($html === false) {

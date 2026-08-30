@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
-use FeedExpander;
+use RSSBridge\FeedExpander;
 
 final class OglafBridge extends FeedExpander
 {
@@ -35,12 +35,8 @@ final class OglafBridge extends FeedExpander
         $this->collectExpandableDatas($url, $limit);
     }
 
-    protected function parseItem($item)
+    protected function parseItem(array $item): array|false
     {
-        if (is_array($item) === false) {
-            return $item;
-        }
-
         $uri = $item['uri'] ?? '';
         if ($uri === '') {
             return $item;

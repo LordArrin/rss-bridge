@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
-use FeedExpander;
+use RSSBridge\FeedExpander;
 
 final class TheDriveBridge extends FeedExpander
 {
@@ -19,17 +19,17 @@ final class TheDriveBridge extends FeedExpander
         $this->collectExpandableDatas('https://www.thedrive.com/feed', 20);
     }
 
-    protected function parseItem($feedItem): ?array
+    protected function parseItem(array $item): array|false
     {
-        $item = parent::parseItem($feedItem);
+        $item = parent::parseItem($item);
 
         if (is_array($item) === false) {
-            return null;
+            return false;
         }
 
         $uri = $item['uri'] ?? '';
         if (str_contains($uri, 'the-war-zone') === true) {
-            return null;
+            return false;
         }
 
         $content = $item['content'] ?? '';

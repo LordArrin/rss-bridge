@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+use RSSBridge\BridgeFactory;
 use RSSBridge\Caches\CacheFactory;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Container;
 use RSSBridge\Configuration;
+use RSSBridge\SafeBridgeLoader;
+use RSSBridge\BridgeMetadataCache;
 use RSSBridge\Actions\ConnectivityAction;
 use RSSBridge\Actions\DisplayAction;
 use RSSBridge\Actions\FrontpageAction;

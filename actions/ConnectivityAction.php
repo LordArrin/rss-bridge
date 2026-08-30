@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace RSSBridge\Actions;
 
-use BridgeFactory;
 use Json;
 use Request;
 use Response;
+use RSSBridge\BridgeFactory;
 use RSSBridge\Configuration;
-use SafeBridgeLoader;
+use RSSBridge\SafeBridgeLoader;
 
 final class ConnectivityAction implements ActionInterface
 {

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
-use FeedExpander;
+use RSSBridge\FeedExpander;
 
 final class TheGuardianBridge extends FeedExpander
 {
@@ -51,7 +51,7 @@ final class TheGuardianBridge extends FeedExpander
         $this->collectExpandableDatas($url, 10);
     }
 
-    protected function parseItem($item)
+    protected function parseItem(array $item): array|false
     {
         $articlePage = getSimpleHTMLDOM($item['uri']);
         if ($articlePage === false) {

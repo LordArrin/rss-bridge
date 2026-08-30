@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace RSSBridge;
+
 use RSSBridge\Caches\CacheInterface;
 
 /**
@@ -15,11 +17,11 @@ use RSSBridge\Caches\CacheInterface;
 class SafeBridgeLoader
 {
     private BridgeFactory $bridgeFactory;
-    private Logger $logger;
+    private \Logger $logger;
     private CacheInterface $cache;
     private array $brokenBridges = [];
 
-    public function __construct(BridgeFactory $bridgeFactory, Logger $logger, CacheInterface $cache)
+    public function __construct(BridgeFactory $bridgeFactory, \Logger $logger, CacheInterface $cache)
     {
         $this->bridgeFactory = $bridgeFactory;
         $this->logger = $logger;

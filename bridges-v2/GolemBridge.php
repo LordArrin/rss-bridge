@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
-use FeedExpander;
+use RSSBridge\FeedExpander;
 
 final class GolemBridge extends FeedExpander
 {
@@ -74,7 +74,7 @@ final class GolemBridge extends FeedExpander
         );
     }
 
-    protected function parseItem($item)
+    protected function parseItem(array $item): array|false
     {
         $item['content'] ??= '';
         $uri = $item['uri'];
