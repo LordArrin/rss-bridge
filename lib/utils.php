@@ -2,171 +2,151 @@
 
 declare(strict_types=1);
 
-/**
- * Get the home page URL e.g. 'https://example.com/' or 'https://example.com/bridge/'
- */
-function get_home_page_url(): string
-{
-    $https = $_SERVER['HTTPS'] ?? '';
-    // Support reverse-proxy setups (Nginx, Traefik, Caddy, etc.)
-    if (($proto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') !== '') {
-        $https = ($proto === 'https') ? 'on' : '';
-    }
-    $host = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
-    $uri = $_SERVER['REQUEST_URI'] ?? '/';
-    if (($pos = strpos($uri, '?')) !== false) {
-        $uri = substr($uri, 0, $pos);
-    }
-    $scheme = ($https === 'on') ? 'https' : 'http';
-    return "$scheme://$host$uri";
-}
+namespace RSSBridge\Utils;
 
-/**
- * Get the full current URL e.g. 'http://example.com/?action=display&bridge=FooBridge'
- */
-function get_current_url(): string
+final class Url
 {
-    $https = $_SERVER['HTTPS'] ?? '';
-    if (($proto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') !== '') {
-        $https = ($proto === 'https') ? 'on' : '';
-    }
-    $host = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
-    $uri = $_SERVER['REQUEST_URI'] ?? '/';
-    $scheme = ($https === 'on') ? 'https' : 'http';
-    return "$scheme://$host$uri";
-}
-
-function create_sane_exception_message(\Throwable $e): string
-{
-    return sprintf(
-        '%s: %s in %s line %s',
-        get_class($e),
-        sanitize_root($e->getMessage()),
-        sanitize_root($e->getFile()),
-        $e->getLine()
-    );
-}
-
-/**
- * Returns e.g. https://github.com/LordArrin/rss-bridge/blob/master/bridges/AO3Bridge.php#L8
- */
-function render_github_url(string $file, int $line, string $revision = 'master'): string
-{
-    return sprintf(
-        'https://github.com/LordArrin/rss-bridge/blob/%s/%s#L%d',
-        $revision,
-        $file,
-        $line
-    );
-}
-
-function trace_from_exception(\Throwable $e): array
-{
-    $frames = array_reverse($e->getTrace());
-    $frames[] = [
-        'file' => $e->getFile(),
-        'line' => $e->getLine(),
+    private const MIME_TYPES = [
+        'jpg'   => 'image/jpeg',
+        'jpeg'  => 'image/jpeg',
+        'gif'   => 'image/gif',
+        'png'   => 'image/png',
+        'webp'  => 'image/webp',
+        'avif'  => 'image/avif',
+        'svg'   => 'image/svg+xml',
+        'image' => 'image/*',
+        'mp3'   => 'audio/mpeg',
+        'mp4'   => 'video/mp4',
+        'webm'  => 'video/webm',
+        'pdf'   => 'application/pdf',
+        'json'  => 'application/json',
+        'xml'   => 'application/xml',
+        'rss'   => 'application/rss+xml',
+        'atom'  => 'application/atom+xml',
+        'html'  => 'text/html',
+        'htm'   => 'text/html',
+        'css'   => 'text/css',
+        'js'    => 'application/javascript',
+        'txt'   => 'text/plain',
     ];
-    $trace = [];
-    foreach ($frames as $frame) {
-        $trace[] = [
-            'file'     => sanitize_root($frame['file'] ?? ''),
-            'line'     => $frame['line'] ?? null,
-            'class'    => $frame['class'] ?? null,
-            'type'     => $frame['type'] ?? null,
-            'function' => $frame['function'] ?? null,
-        ];
+
+    public static function getHomePageUrl(): string
+    {
+        $uri = $_SERVER['REQUEST_URI'] ?? '/';
+        if (($pos = strpos($uri, '?')) !== false) {
+            $uri = substr($uri, 0, $pos);
+        }
+        return self::getBaseUrl() . $uri;
     }
-    return $trace;
-}
 
-function trace_to_call_points(array $trace): array
-{
-    return array_map(fn(array $frame) => frame_to_call_point($frame), $trace);
-}
+    public static function getCurrentUrl(): string
+    {
+        return self::getBaseUrl() . ($_SERVER['REQUEST_URI'] ?? '/');
+    }
 
-function frame_to_call_point(array $frame): string
-{
-    if (!empty($frame['class'])) {
+    private static function getBaseUrl(): string
+    {
+        $https = $_SERVER['HTTPS'] ?? '';
+        $proto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+        if ($proto !== '') {
+            $https = ($proto === 'https') ? 'on' : '';
+        }
+        $host = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
+        $scheme = ($https === 'on') ? 'https' : 'http';
+        return sprintf('%s://%s', $scheme, $host);
+    }
+
+    public static function createSaneExceptionMessage(\Throwable $e): string
+    {
         return sprintf(
-            '%s(%s): %s%s%s()',
-            $frame['file'],
-            $frame['line'],
-            $frame['class'],
-            $frame['type'],
-            $frame['function'],
+            '%s: %s in %s line %s',
+            get_class($e),
+            self::sanitizeRoot($e->getMessage()),
+            self::sanitizeRoot($e->getFile()),
+            $e->getLine()
         );
     }
-    if (!empty($frame['function'])) {
+
+    public static function renderGithubUrl(string $file, int $line, string $revision = 'master'): string
+    {
         return sprintf(
-            '%s(%s): %s()',
-            $frame['file'],
-            $frame['line'],
-            $frame['function'],
+            'https://github.com/LordArrin/rss-bridge/blob/%s/%s#L%d',
+            $revision,
+            $file,
+            $line
         );
     }
-    return sprintf('%s(%s)', $frame['file'], $frame['line']);
-}
 
-/**
- * Trim path prefix for privacy/security reasons.
- *
- * Example: "/home/user/rss-bridge/index.php" => "index.php"
- */
-function sanitize_root(string $filePath): string
-{
-    $root = dirname(__DIR__);
-    return _sanitize_path_name($filePath, $root);
-}
-
-function _sanitize_path_name(string $s, string $pathName): string
-{
-    return str_replace([$pathName . '/', $pathName], '', $s);
-}
-
-/**
- * This is buggy because strip_tags() removes a lot that isn't HTML.
- */
-function is_html(string $text): bool
-{
-    return strlen(strip_tags($text)) !== strlen($text);
-}
-
-/**
- * Determines the MIME type from a URL/Path file extension.
- */
-function parse_mime_type(string $url): string
-{
-    static $mime = null;
-
-    if ($mime === null) {
-        // Default values, overridden by /etc/mime.types when present
-        $mime = [
-            'jpg'   => 'image/jpeg',
-            'jpeg'  => 'image/jpeg',
-            'gif'   => 'image/gif',
-            'png'   => 'image/png',
-            'webp'  => 'image/webp',
-            'avif'  => 'image/avif',
-            'svg'   => 'image/svg+xml',
-            'image' => 'image/*',
-            'mp3'   => 'audio/mpeg',
-            'mp4'   => 'video/mp4',
-            'webm'  => 'video/webm',
-            'pdf'   => 'application/pdf',
-            'json'  => 'application/json',
-            'xml'   => 'application/xml',
-            'rss'   => 'application/rss+xml',
-            'atom'  => 'application/atom+xml',
-            'html'  => 'text/html',
-            'htm'   => 'text/html',
-            'css'   => 'text/css',
-            'js'    => 'application/javascript',
-            'txt'   => 'text/plain',
+    public static function traceFromException(\Throwable $e): array
+    {
+        $frames = array_reverse($e->getTrace());
+        $frames[] = [
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
         ];
+        $trace = [];
+        foreach ($frames as $frame) {
+            $trace[] = [
+                'file'     => self::sanitizeRoot($frame['file'] ?? ''),
+                'line'     => $frame['line'] ?? null,
+                'class'    => $frame['class'] ?? null,
+                'type'     => $frame['type'] ?? null,
+                'function' => $frame['function'] ?? null,
+            ];
+        }
+        return $trace;
+    }
+
+    public static function traceToCallPoints(array $trace): array
+    {
+        return array_map(fn(array $frame) => self::frameToCallPoint($frame), $trace);
+    }
+
+    public static function frameToCallPoint(array $frame): string
+    {
+        if (empty($frame['class']) === false) {
+            return sprintf(
+                '%s(%s): %s%s%s()',
+                $frame['file'],
+                $frame['line'],
+                $frame['class'],
+                $frame['type'],
+                $frame['function'],
+            );
+        }
+        if (empty($frame['function']) === false) {
+            return sprintf(
+                '%s(%s): %s()',
+                $frame['file'],
+                $frame['line'],
+                $frame['function'],
+            );
+        }
+        return sprintf('%s(%s)', $frame['file'], $frame['line']);
+    }
+
+    public static function sanitizeRoot(string $filePath): string
+    {
+        $root = dirname(__DIR__);
+        return self::sanitizePathName($filePath, $root);
+    }
+
+    private static function sanitizePathName(string $s, string $pathName): string
+    {
+        return str_replace([$pathName . '/', $pathName], '', $s);
+    }
+
+    public static function isHtml(string $text): bool
+    {
+        return strlen(strip_tags($text)) !== strlen($text);
+    }
+
+    public static function parseMimeType(string $url): string
+    {
+        $mime = self::MIME_TYPES;
 
         $openBasedir = ini_get('open_basedir');
-        if (!$openBasedir && @is_readable('/etc/mime.types')) {
+        if (empty($openBasedir) === true && is_readable('/etc/mime.types') === true) {
             $file = fopen('/etc/mime.types', 'r');
             if ($file !== false) {
                 while (($line = fgets($file)) !== false) {
@@ -186,47 +166,40 @@ function parse_mime_type(string $url): string
                 fclose($file);
             }
         }
+
+        $cleanUrl = $url;
+        if (($qpos = strpos($cleanUrl, '?')) !== false) {
+            $cleanUrl = substr($cleanUrl, 0, $qpos);
+        }
+        if (($hpos = strpos($cleanUrl, '#')) !== false) {
+            $cleanUrl = substr($cleanUrl, 0, $hpos);
+        }
+
+        $ext = strtolower(pathinfo($cleanUrl, PATHINFO_EXTENSION));
+        if ($ext !== '' && isset($mime[$ext]) === true) {
+            return $mime[$ext];
+        }
+
+        return 'application/octet-stream';
     }
 
-    // Strip query string and fragment
-    $cleanUrl = $url;
-    if (($qpos = strpos($cleanUrl, '?')) !== false) {
-        $cleanUrl = substr($cleanUrl, 0, $qpos);
-    }
-    if (($hpos = strpos($cleanUrl, '#')) !== false) {
-        $cleanUrl = substr($cleanUrl, 0, $hpos);
-    }
-
-    $ext = strtolower(pathinfo($cleanUrl, PATHINFO_EXTENSION));
-    if ($ext !== '' && isset($mime[$ext])) {
-        return $mime[$ext];
+    public static function formatBytes(int $bytes, int $precision = 2): string
+    {
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        $bytes = max($bytes, 0);
+        $pow = $bytes > 0 ? (int)floor(log($bytes, 1024)) : 0;
+        $pow = min($pow, count($units) - 1);
+        $bytes /= 1024 ** $pow;
+        return round($bytes, $precision) . ' ' . $units[$pow];
     }
 
-    return 'application/octet-stream';
-}
+    public static function now(): \DateTimeImmutable
+    {
+        return new \DateTimeImmutable();
+    }
 
-/**
- * Format bytes into human-readable string.
- */
-function format_bytes(int $bytes, int $precision = 2): string
-{
-    $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    $bytes = max($bytes, 0);
-    $pow = $bytes > 0 ? (int)floor(log($bytes, 1024)) : 0;
-    $pow = min($pow, count($units) - 1);
-    $bytes /= 1024 ** $pow;
-    return round($bytes, $precision) . ' ' . $units[$pow];
-}
-
-function now(): \DateTimeImmutable
-{
-    return new \DateTimeImmutable();
-}
-
-/**
- * Generate a cryptographically secure random hex string.
- */
-function create_random_string(int $bytes = 16): string
-{
-    return bin2hex(random_bytes($bytes));
+    public static function createRandomString(int $bytes = 16): string
+    {
+        return bin2hex(random_bytes($bytes));
+    }
 }

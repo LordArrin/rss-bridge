@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace RSSBridge\Actions;
 
-use ClientException;
 use HttpException;
 use Json;
 use Logger;
@@ -12,10 +11,11 @@ use RSSBridge\BridgeAbstract;
 use RSSBridge\BridgeFactory;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
+use RSSBridge\Exceptions\ClientException;
+use RSSBridge\Exceptions\RateLimitException;
 use RSSBridge\FeedItem;
 use RSSBridge\Formats\FormatFactory;
 use RSSBridge\SafeBridgeLoader;
-use RateLimitException;
 use Request;
 use Response;
 

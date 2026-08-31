@@ -1,37 +1,32 @@
 #!/bin/sh
 set -e
 
-copy_custom() {
-    [ -f "$1" ] || return 0
-    name=$(basename "$1")
-    
-    case "$name" in
-        *" "*) printf 'Skipping %s (space in name)\n' "$name"; return 0 ;;
-        *Bridge.php)
-            # Detect if source is bridges-v2 (PSR-4) or legacy
-            if echo "$1" | grep -q "bridges-v2"; then
-                dest=/app/bridges-v2
-            else
-                dest=/app/bridges
-            fi
-            ;;
-        *Format.php) dest=/app/formats ;;
-        config.ini.php|whitelist.txt|DEBUG) dest=/app ;;
-        *) return 0 ;;
-    esac
-    
-    mkdir -p "$dest"
-    cp "$1" "$dest/"
-    chown nginx:nginx "$dest/$name"
-    printf 'Added: %s -> %s/\n' "$name" "$dest"
-}
+# Copy custom config from /config to /app
+if [ -f /config/config.ini.php ]; then
+    cp /config/config.ini.php /app/config.ini.php
+    chown nginx:nginx /app/config.ini.php
+    printf 'Added: config.ini.php -> /app/\n'
+fi
 
-for f in /config/* /config/bridges/* /config/bridges-v2/*; do
-    copy_custom "$f"
-done
+# Copy custom bridges from /config/bridges-v2
+if [ -d /config/bridges-v2 ]; then
+    for f in /config/bridges-v2/*.php; do
+        [ -f "$f" ] || continue
+        name=$(basename "$f")
+        case "$name" in
+            *" "*) printf 'Skipping %s (space in name)\n' "$name"; continue ;;
+        esac
+        mkdir -p /app/bridges-v2
+        cp "$f" /app/bridges-v2/
+        chown nginx:nginx "/app/bridges-v2/$name"
+        printf 'Added: %s -> /app/bridges-v2/\n' "$name"
+    done
+fi
 
-if [ -n "${HTTP_PORT:-}" ]; then
-    sed -i "s/listen 80/listen ${HTTP_PORT}/g" /etc/nginx/http.d/default.conf
+# Legacy bridges are no longer supported - warn the user
+if [ -d /config/bridges ]; then
+    echo "WARNING: /config/bridges is deprecated. Legacy bridges are no longer supported."
+    echo "Please migrate your custom bridges to /config/bridges-v2 directory."
 fi
 
 # Clear OPcache file cache on startup
@@ -46,7 +41,7 @@ if [ ! -f /app/vendor/autoload.php ]; then
     cd /app && composer dump-autoload --optimize --no-interaction
 fi
 
-# Build bridge metadata cache
+# Build bridges metadata cache
 php /app/bin/cache-bridge-metadata || echo "Warning: cache build failed"
 
 # Start nginx

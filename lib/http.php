@@ -1,6 +1,21 @@
 <?php
 
+/**
+ * HTTP client module containing request/response handling.
+ *
+ * This file contains multiple classes and an interface by design
+ * (single-module approach). PSR-1 single-class-per-file rule is
+ * intentionally disabled for this file.
+ *
+ * @phpcs:disable PSR1.Classes.ClassDeclaration.MultipleClasses
+ * @phpcs:disable Generic.Files.OneClassPerFile.MultipleFound
+ * @phpcs:disable Generic.Files.OneInterfacePerFile.MultipleFound
+ * @phpcs:disable PSR1.Files.SideEffects.FoundWithSymbols
+ */
+
 declare(strict_types=1);
+
+namespace RSSBridge\Http;
 
 class HttpException extends \Exception
 {
@@ -20,7 +35,7 @@ class HttpException extends \Exception
             $response->getCode(),
             $response->getStatusLine()
         );
-        if (CloudFlareException::isCloudFlareResponse($response)) {
+        if (CloudFlareException::isCloudFlareResponse($response) === true) {
             return new CloudFlareException($message, $response->getCode(), $response);
         }
         return new HttpException(trim($message), $response->getCode(), $response);
@@ -40,7 +55,7 @@ final class CloudFlareException extends HttpException
         ];
         $body = $response->getBody();
         foreach ($cloudflareTitles as $title) {
-            if (str_contains($body, $title)) {
+            if (str_contains($body, $title) === true) {
                 return true;
             }
         }
@@ -111,7 +126,7 @@ final class CurlHttpClient implements HttpClient
         if ($config['max_filesize'] !== null) {
             $curlOptions[CURLOPT_MAXFILESIZE] = $config['max_filesize'];
             $curlOptions[CURLOPT_NOPROGRESS] = false;
-            if (defined('CURLOPT_XFERINFOFUNCTION')) {
+            if (defined('CURLOPT_XFERINFOFUNCTION') === true) {
                 $curlOptions[CURLOPT_XFERINFOFUNCTION] = function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($config) {
                     return ($downloaded > $config['max_filesize']) ? 1 : 0;
                 };
@@ -126,7 +141,7 @@ final class CurlHttpClient implements HttpClient
             $curlOptions[$option] = $value;
         }
 
-        if (!curl_setopt_array($ch, $curlOptions)) {
+        if (curl_setopt_array($ch, $curlOptions) === false) {
             throw new HttpException('Failed to set cURL options: tried to set an illegal curl option');
         }
 
@@ -136,7 +151,7 @@ final class CurlHttpClient implements HttpClient
             if ($rawHeader === "\r\n") {
                 return $len;
             }
-            if (preg_match('#^HTTP/(2|1\.1|1\.0)#', $rawHeader)) {
+            if (preg_match('#^HTTP/(2|1\.1|1\.0)#', $rawHeader) === 1) {
                 return $len;
             }
             $header = explode(':', $rawHeader, 2);
@@ -145,7 +160,7 @@ final class CurlHttpClient implements HttpClient
             }
             $name = mb_strtolower(trim($header[0]));
             $value = trim($header[1]);
-            if (!isset($responseHeaders[$name])) {
+            if (isset($responseHeaders[$name]) === false) {
                 $responseHeaders[$name] = [];
             }
             $responseHeaders[$name][] = $value;
@@ -171,7 +186,7 @@ final class CurlHttpClient implements HttpClient
                 CURLE_BAD_CONTENT_ENCODING,
                 CURLE_URL_MALFORMAT,
                 CURLE_COULDNT_RESOLVE_HOST,
-                ], true)
+                ], true) === true
             ) {
                 break;
             }
@@ -303,12 +318,12 @@ final class Response
 
         foreach ($headers as $name => $value) {
             $name = mb_strtolower((string)$name);
-            if (!isset($this->headers[$name])) {
+            if (isset($this->headers[$name]) === false) {
                 $this->headers[$name] = [];
             }
-            if (is_string($value)) {
+            if (is_string($value) === true) {
                 $this->headers[$name][] = $value;
-            } elseif (is_array($value)) {
+            } elseif (is_array($value) === true) {
                 $this->headers[$name] = $value;
             }
         }
@@ -341,11 +356,11 @@ final class Response
         if ($header === null) {
             return null;
         }
-        if ($all) {
+        if ($all === true) {
             return $header;
         }
         $last = end($header);
-        return is_string($last) ? $last : null;
+        return is_string($last) === true ? $last : null;
     }
 
     public function withHeader(string $name, string $value): self
@@ -370,6 +385,14 @@ final class Response
                 header(sprintf('%s: %s', $name, $value));
             }
         }
-        print $this->body;
+        echo $this->body;
     }
 }
+
+// backward compatibility
+class_alias(\RSSBridge\Http\HttpException::class, 'HttpException');
+class_alias(\RSSBridge\Http\CloudFlareException::class, 'CloudFlareException');
+class_alias(\RSSBridge\Http\HttpClient::class, 'HttpClient');
+class_alias(\RSSBridge\Http\CurlHttpClient::class, 'CurlHttpClient');
+class_alias(\RSSBridge\Http\Request::class, 'Request');
+class_alias(\RSSBridge\Http\Response::class, 'Response');
