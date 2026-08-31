@@ -196,9 +196,11 @@ final class BridgeFactory
 
         file_put_contents($testScript, $code);
 
+        $phpBinary = self::getPhpCliBinary();
+
         $output = [];
         $returnVar = 0;
-        exec('php ' . escapeshellarg($testScript) . ' 2>&1', $output, $returnVar);
+        exec($phpBinary . ' ' . escapeshellarg($testScript) . ' 2>&1', $output, $returnVar);
         unlink($testScript);
 
         $result = trim(implode("\n", $output));
@@ -206,6 +208,55 @@ final class BridgeFactory
         if ($returnVar !== 0 || $result !== 'SANDBOX_SUCCESS') {
             throw new \Exception('Bridge compatibility error: ' . $result);
         }
+    }
+
+    /**
+     * Resolves the path to the PHP CLI binary.
+     *
+     * When running under PHP-FPM, PHP_BINARY points to the FPM executable
+     * which cannot execute scripts from the command line. This method
+     * detects the FPM environment and returns the corresponding CLI
+     * binary path by stripping the "-fpm" suffix.
+     *
+     * Falls back to the original PHP_BINARY if a CLI version cannot be found
+     * or if the application is already running in CLI mode.
+     *
+     * @return string Absolute path to the PHP CLI executable
+     */
+    private static function getPhpCliBinary(): string
+    {
+        $binary = PHP_BINARY;
+        $basename = basename($binary);
+
+        if (str_contains($basename, 'fpm') === false) {
+            return $binary;
+        }
+
+        $candidates = [];
+
+        $cliName = str_replace(['fpm-', '-fpm'], '', $basename);
+        $dir = dirname($binary);
+        $candidates[] = $dir . DIRECTORY_SEPARATOR . $cliName;
+
+        $candidates[] = '/usr/bin/' . $cliName;
+        $candidates[] = '/usr/local/bin/' . $cliName;
+
+        $genericCliName = preg_replace('/[\d.]+/', '', $cliName);
+        if ($genericCliName !== $cliName) {
+            $candidates[] = $dir . DIRECTORY_SEPARATOR . $genericCliName;
+            $candidates[] = '/usr/bin/' . $genericCliName;
+        }
+
+        $candidates[] = '/usr/bin/php';
+        $candidates[] = '/usr/local/bin/php';
+
+        foreach ($candidates as $candidate) {
+            if (is_executable($candidate) === true) {
+                return $candidate;
+            }
+        }
+
+        return $binary;
     }
 
     /**

@@ -9,13 +9,12 @@ class Container implements \ArrayAccess
     private array $values = [];
     private array $resolved = [];
 
-    public function offsetSet($offset, $value): void
+    public function offsetSet(mixed $offset, mixed $value): void
     {
         $this->values[$offset] = $value;
     }
 
-    #[\ReturnTypeWillChange]
-    public function offsetGet($offset)
+    public function offsetGet(mixed $offset): mixed
     {
         if (isset($this->values[$offset]) === false) {
             throw new \Exception(sprintf('Unknown container key: "%s"', $offset));
@@ -26,12 +25,12 @@ class Container implements \ArrayAccess
         return $this->resolved[$offset];
     }
 
-    public function offsetExists($offset): bool
+    public function offsetExists(mixed $offset): bool
     {
         return isset($this->values[$offset]) === true;
     }
 
-    public function offsetUnset($offset): void
+    public function offsetUnset(mixed $offset): void
     {
     }
 }

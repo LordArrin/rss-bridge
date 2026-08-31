@@ -61,8 +61,9 @@ final class DisplayAction implements ActionInterface
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'This bridge is not whitelisted']), 400);
         }
 
+        $proxyUrl = Configuration::getConfig('proxy', 'url');
         if (
-            Configuration::getConfig('proxy', 'url') === true
+            $proxyUrl !== null && $proxyUrl !== '' && $proxyUrl !== false
             && Configuration::getConfig('proxy', 'by_bridge') === true
             && ($noproxy === true || $noproxy === 'on' || $noproxy === '1' || $noproxy === 1)
         ) {

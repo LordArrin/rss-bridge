@@ -38,8 +38,8 @@ final class FrontpageAction implements ActionInterface
 
         foreach ($this->bridgeFactory->getMissingEnabledBridges() as $missingEnabledBridge) {
             $messages[] = [
-                'body' => sprintf('Warning: Bridge "%s" not found', $missingEnabledBridge),
-                'level' => 'warning'
+            'body' => sprintf('Warning: Bridge "%s" not found', $missingEnabledBridge),
+            'level' => 'warning'
             ];
         }
 
@@ -70,23 +70,23 @@ final class FrontpageAction implements ActionInterface
 
         if ($brokenCount > 0) {
             $messages[] = [
-                'body' => sprintf(
-                    'Warning: %d bridge%s failed to load and %s been disabled. Check logs for details.',
-                    $brokenCount,
-                    $brokenCount === 1 ? '' : 's',
-                    $brokenCount === 1 ? 'has' : 'have'
-                ),
+            'body' => sprintf(
+                'Warning: %d bridge%s failed to load and %s been disabled. Check logs for details.',
+                $brokenCount,
+                $brokenCount === 1 ? '' : 's',
+                $brokenCount === 1 ? 'has' : 'have'
+            ),
                 'level' => 'warning'
             ];
         }
 
         $response = new Response(render(__DIR__ . '/../templates/frontpage.html.php', [
-            'messages'          => $messages,
-            'admin_email'       => Configuration::getConfig('admin', 'email'),
-            'admin_telegram'    => Configuration::getConfig('admin', 'telegram'),
-            'bridges'           => $body,
-            'active_bridges'    => $activeBridges,
-            'total_bridges'     => count($bridgeClassNames),
+        'messages'          => $messages,
+        'admin_email'       => Configuration::getConfig('admin', 'email'),
+        'admin_telegram'    => Configuration::getConfig('admin', 'telegram'),
+        'bridges'           => $body,
+        'active_bridges'    => $activeBridges,
+        'total_bridges'     => count($bridgeClassNames),
         ]));
 
         return $response;
@@ -116,13 +116,14 @@ final class FrontpageAction implements ActionInterface
         $uriSafe = $e($uri);
         $descriptionSafe = $e($description);
 
+        $proxyUrl = Configuration::getConfig('proxy', 'url');
         if (
-            Configuration::getConfig('proxy', 'url') === true
+            $proxyUrl !== null && $proxyUrl !== '' && $proxyUrl !== false
             && Configuration::getConfig('proxy', 'by_bridge') === true
         ) {
             $proxyName = Configuration::getConfig('proxy', 'name');
             if ($proxyName === null || $proxyName === false || $proxyName === '') {
-                $proxyName = Configuration::getConfig('proxy', 'url');
+                $proxyName = $proxyUrl;
             }
             $parameters['global']['_noproxy'] = [
                 'name' => sprintf('Disable proxy (%s)', $proxyName),
@@ -168,7 +169,6 @@ final class FrontpageAction implements ActionInterface
 
             <input type="checkbox" class="showmore-box" id="showmore-{$shortClassNameSafe}" />
             <label class="showmore" for="showmore-{$shortClassNameSafe}">Show more</label>
-
 
         CARD;
 
@@ -222,18 +222,18 @@ final class FrontpageAction implements ActionInterface
 
         if (Configuration::getConfig('authentication', 'token') === true && $token !== null && $token !== '') {
             $form .= html_input([
-                    'type'  => 'hidden',
-                    'name'  => 'token',
-                    'value' => $token,
-                ]) . "\n";
+                'type'  => 'hidden',
+                'name'  => 'token',
+                'value' => $token,
+            ]) . "\n";
         }
 
         if ($contextName !== '') {
             $form .= html_input([
-                    'type'  => 'hidden',
-                    'name'  => 'context',
-                    'value' => $contextName,
-                ]) . "\n";
+                'type'  => 'hidden',
+                'name'  => 'context',
+                'value' => $contextName,
+            ]) . "\n";
         }
 
         $form .= '<div class="parameters">' . "\n";
@@ -270,15 +270,15 @@ final class FrontpageAction implements ActionInterface
             $params = [];
             if (isset($parameter['title']) === true) {
                 $params = [
-                    'title' => $parameter['title'],
-                    'class' => 'info',
+                'title' => $parameter['title'],
+                'class' => 'info',
                 ];
             }
             if ($parameter['exampleValue'] !== '') {
                 $params = [
-                    'title'         => sprintf("Example (right click to use):\n%s", $parameter['exampleValue']),
-                    'class'         => 'info',
-                    'data-for'      => $idArg,
+                'title'         => sprintf("Example (right click to use):\n%s", $parameter['exampleValue']),
+                'class'         => 'info',
+                'data-for'      => $idArg,
                 ];
             }
 
@@ -292,11 +292,11 @@ final class FrontpageAction implements ActionInterface
         $form .= "</div>\n\n";
 
         $form .= html_tag('button', 'Generate feed', [
-                'type'          => 'submit',
-                'name'          => 'format',
-                'value'         => 'Html',
-                'formtarget'    => '_blank',
-            ]) . "\n";
+            'type'          => 'submit',
+            'name'          => 'format',
+            'value'         => 'Html',
+            'formtarget'    => '_blank',
+        ]) . "\n";
 
         return $form . "</form>\n\n";
     }
@@ -308,14 +308,14 @@ final class FrontpageAction implements ActionInterface
         $required = $parameter['required'] ?? false;
 
         return html_input([
-            'id'            => $id,
-            'type'          => 'text',
-            'value'         => $parameter['defaultValue'],
-            'placeholder'   => $parameter['exampleValue'],
-            'name'          => $name,
-            'pattern'       => $pattern,
-            'checked'       => $checked,
-            'required'      => $required,
+        'id'            => $id,
+        'type'          => 'text',
+        'value'         => $parameter['defaultValue'],
+        'placeholder'   => $parameter['exampleValue'],
+        'name'          => $name,
+        'pattern'       => $pattern,
+        'checked'       => $checked,
+        'required'      => $required,
         ]);
     }
 
@@ -326,24 +326,24 @@ final class FrontpageAction implements ActionInterface
         $required = $parameter['required'] ?? false;
 
         return html_input([
-            'id'            => $id,
-            'type'          => 'number',
-            'value'         => $parameter['defaultValue'],
-            'placeholder'   => $parameter['exampleValue'],
-            'name'          => $name,
-            'pattern'       => $pattern,
-            'checked'       => $checked,
-            'required'      => $required,
+        'id'            => $id,
+        'type'          => 'number',
+        'value'         => $parameter['defaultValue'],
+        'placeholder'   => $parameter['exampleValue'],
+        'name'          => $name,
+        'pattern'       => $pattern,
+        'checked'       => $checked,
+        'required'      => $required,
         ]);
     }
 
     public static function getCheckboxInput(array $parameter, string $id, string $name): string
     {
         return html_input([
-            'id'        => $id,
-            'type'      => 'checkbox',
-            'name'      => $name,
-            'checked'   => $parameter['defaultValue'] === 'checked',
+        'id'        => $id,
+        'type'      => 'checkbox',
+        'name'      => $name,
+        'checked'   => $parameter['defaultValue'] === 'checked',
         ]);
     }
 
