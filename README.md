@@ -195,7 +195,7 @@ Place a `.php` file in `/config/bridges-v2/` and restart the container. That's a
     └── MyCustomBridge.php
 ```
 
-Each bridge must live under the `RSSBridge\Bridges` namespace, extend `BridgeAbstract` or anpther basic bridge,
+Each bridge must live under the `RSSBridge\Bridges` namespace, extend `BridgeAbstract` or another basic bridge,
 start with `declare(strict_types=1);`, and have a filename ending with `Bridge.php`.
 
 ```php
