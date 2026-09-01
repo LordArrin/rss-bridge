@@ -236,7 +236,7 @@ final class MyCustomBridge extends BridgeAbstract
 
 The legacy `/config/bridges/` directory is no longer supported — the container will emit a warning in the logs on startup. Migrate any such bridges to `bridges-v2/` with a proper namespace.
 
-For a detailed guide on bridge development, see the separate `BRIDGES.md` document.
+For a detailed guide on bridge development, see the [docs](https://github.com/LordArrin/rss-bridge/blob/master/docs/writing-bridges-en.md).
 
 ## Project Structure
 
