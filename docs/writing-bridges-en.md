@@ -1,4 +1,3 @@
-```markdown
 # Writing Bridges for LordArrin's RSS-Bridge Fork
 
 This guide covers bridge development for this fork. It assumes familiarity with the upstream [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge) project and focuses on what is different here: PHP 8.5 with strict types, the native `\Dom\HTMLDocument` API, PSR-4 namespacing, and the `quirks/` utility library.
@@ -666,4 +665,3 @@ final class BlogBridge extends BridgeAbstract
 ## Questions?
 
 Open an issue on [github.com/LordArrin/rss-bridge](https://github.com/LordArrin/rss-bridge).
-```
