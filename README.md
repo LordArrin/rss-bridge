@@ -1,4 +1,4 @@
-# RSS-Bridge (LordArrin Fork)
+# RSS-Bridge
 
 ![RSS-Bridge](static/not_boring_logo_blank.png)
 
