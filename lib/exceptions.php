@@ -13,8 +13,6 @@
 
 declare(strict_types=1);
 
-namespace RSSBridge\Exceptions;
-
 /**
  * Mostly thrown by bridges to indicate user failure.
  * Will only be logged as debug log record.

@@ -27,7 +27,6 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
-use function RSSBridge\Exceptions\throwServerException;
 
 final class ExampleBridge extends BridgeAbstract
 {
@@ -370,15 +369,9 @@ public function collectData(): void
 
 ## Error Handling
 
-Exception helper functions live in the `RSSBridge\Exceptions` namespace. Import them at the top of your bridge:
+Exception helper functions live in global namespace.
 
-```php
-use function RSSBridge\Exceptions\throwClientException;
-use function RSSBridge\Exceptions\throwServerException;
-use function RSSBridge\Exceptions\throwRateLimitException;
-```
-
-Then use them inside `collectData()`:
+Use them inside `collectData()`:
 
 ```php
 // User provided bad input
@@ -571,7 +564,6 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
-use function RSSBridge\Exceptions\throwServerException;
 
 final class BlogBridge extends BridgeAbstract
 {
