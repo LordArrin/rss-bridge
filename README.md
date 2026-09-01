@@ -1,5 +1,3 @@
-# RSS-Bridge
-
 ![RSS-Bridge](static/not_boring_logo_blank.png)
 
 A fork of [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge), rewritten for PHP 8.5 on Alpine Linux. Less legacy code, proper type coverage, safe bridge loading, and working proxy support.
