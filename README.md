@@ -1,46 +1,25 @@
+# RSS-Bridge (LordArrin Fork)
+
 ![RSS-Bridge](static/not_boring_logo_blank.png)
 
-RSS-Bridge is a PHP web application. Works with PHP 8.5.
+A fork of [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge), rewritten for PHP 8.5 on Alpine Linux. Less legacy code, proper type coverage, safe bridge loading, and working proxy support.
 
 [![LICENSE](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![PHP](https://img.shields.io/badge/PHP-8.5+-777BB4.svg?logo=php)](https://www.php.net/)
 [![Docker Image](https://img.shields.io/badge/docker-lordarrin%2Frss--bridge-blue.svg?logo=docker)](https://hub.docker.com/r/lordarrin/rss-bridge)
 
-## A subset of bridges (18/120)
+## What's Inside
 
-* `Nginx`: Returns Nginx releases with changelogs and other news
-* `Pawchive`: Returns posts from Pawchive
-* `Boosty`: Parser for Boosty (free posts and paid announcements)
-* `Sponsr`: Returns posts from Sponsr (free posts and paid announcements)
-* `MSISupport`: Returns BIOS, drivers, manuals, and utilities updates for MSI products
-* `GigabyteSupport`: Returns BIOS and drivers updates for Gigabyte products
-* `AlpineReleases`: Alpine Linux releases with branch info
-* `Rule34`: Returns images from rule34.xxx search
-* `RuStore`: Returns application updates with its changelog
-* `Fimfiction`: Returns chapter updates for stories on Fimfiction
-* `AuthorToday`: Returns updates for stories by chapter
-* `SearchFloor`: Returns updates to all books by an author or a single book by ID
-* `Vk2`: Returns posts from the public feed
-* `Telegram2`: Returns the recent publications from a public Telegram channel. Supports embedded media content, hides ads and unsupported content
-* `IA Panorama`: News feed of the Russian satirical information agency "Panorama"
-* `GitHubRelease`: Returns releases for a GitHub repository (excludes tag-only entries)
-* `FirefoxReleaseNotes`: Returns recent Firefox releases with changelogs for each version
-* `CodebergReleases`: Returns releases for a Codeberg repository with changelogs and downloads
+- **PHP 8.5** with strict types wherever it made sense
+- **Alpine-based image** — noticeably smaller than the Debian variant
+- **SafeBridgeLoader** — bridges are loaded in an isolated process, so a broken bridge cannot crash the entire application
+- **Metadata cache** — the main page renders instantly, regardless of the bridge count
+- **Native PHP DOM parser** (`\Dom\HTMLDocument`) replacing the legacy `simple_html_dom`
+- **Proxy profiles** — FlareSolverr, SOCKS5 via TgWS, and plain HTTP proxies
+- **PSR-4 for bridges** — a single `RSSBridge\Bridges` namespace with proper autoloading
+- Removed `DetectAction`, `FindfeedAction`, the donation UI, and other leftovers from the original project
 
 ## Installation
-
-This fork of RSS-Bridge is distributed as a Docker image based on Alpine Linux: `lordarrin/rss-bridge`.
-
-### Quick start
-
-```bash
-docker run -d \
-  --name rss-bridge \
-  -p 3000:80 \
-  -v $(pwd)/config:/config \
-  lordarrin/rss-bridge
-```
-
-Browse http://localhost:3000/
 
 ### Docker Compose
 
@@ -53,35 +32,51 @@ services:
       - "3000:80"
     volumes:
       - ./config:/config
+    environment:
+      - HTTP_PORT=80
+      - TZ=UTC
     restart: unless-stopped
 ```
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
-### Custom configuration
+Open `http://localhost:3000/` to see the main page with all available bridges.
 
-You can place a custom `config.ini.php` and additional bridge files into the `./config` directory.
-
-**You must restart the container for custom changes to take effect.**
+### Plain docker run
 
 ```bash
-docker restart rss-bridge
+docker run -d \
+  --name rss-bridge \
+  -p 3000:80 \
+  -v ./config:/config \
+  --restart unless-stopped \
+  lordarrin/rss-bridge
+```
+
+### Building from source
+
+```bash
+git clone https://github.com/LordArrin/rss-bridge.git
+cd rss-bridge
+docker build -t lordarrin/rss-bridge .
 ```
 
 ## Configuration
 
-### Password-protect the instance (token)
+Everything is configured through `/config/config.ini.php`. The container copies this file on startup, so changes require a container restart.
 
-In `config/config.ini.php`:
+### Authentication
+
+Token-based (passed via the `token` URL parameter):
 
 ```ini
 [authentication]
 token = "hunter2"
 ```
 
-### Password-protect the instance (HTTP Basic Auth)
+Or HTTP Basic Authentication:
 
 ```ini
 [authentication]
@@ -90,133 +85,252 @@ username = "alice"
 password = "cat"
 ```
 
-### Enable all bridges
+### Enabling Bridges
+
+Enable all discovered bridges:
 
 ```ini
+[system]
 enabled_bridges[] = *
 ```
 
-### Enable specific bridges
+Or pick specific ones:
 
 ```ini
-enabled_bridges[] = TwitchBridge
-enabled_bridges[] = GettrBridge
+[system]
+enabled_bridges[] = Telegram2Bridge
+enabled_bridges[] = BoostyBridge
+enabled_bridges[] = RuStoreBridge
 ```
 
-### Cache backend
+### Cache
 
-Default: `file`. Alternatives: `sqlite`, `memcached`, `null`.
+The default backend is `file`. Alternatives include `sqlite`, `memcached`, `null`, and `array`.
 
 ```ini
 [cache]
 type = "sqlite"
+custom_timeout = true
 ```
 
-### Error reporting
+When `custom_timeout = true`, the bridge form gains a `_cache_timeout` field, letting users set a custom TTL per feed.
+
+### Error Reporting
 
 ```ini
 [error]
-; "feed" = as part of the feed (default)
-; "http" = as HTTP error message
-; "none" = no errors are reported
+; "feed" — errors appear inside the feed (default)
+; "http" — an HTML error page is returned
+; "none" — errors are silently logged
 output = "feed"
 
-; How often an error must occur before it is reported
+; Number of occurrences before an error is reported
 report_limit = 3
 ```
 
-## Troubleshooting
+### Global Proxy
 
-### Clear all cache
-
-```bash
-docker exec rss-bridge bin/cache-clear
+```ini
+[proxy]
+url = "http://proxy.example.com:8080"
+name = "Corporate Proxy"
+by_bridge = true
 ```
 
-### Prune expired cache
+With `by_bridge = true`, each bridge form shows a "Disable proxy" checkbox, allowing users to bypass the proxy on a per-request basis.
 
-```bash
-docker exec rss-bridge bin/cache-prune
+## Proxy Profiles
+
+For more complex scenarios — bypassing Cloudflare, using residential IPs, and similar — use named proxy profiles. Bridges call them via `getProtectedContents()`, `getProtectedSimpleHTMLDOM()`, or `getProtectedBinary()`.
+
+### Direct
+
+A plain direct request with no proxy. Useful when you have a global proxy configured but need a clean IP for a specific site.
+
+```ini
+[proxy_profile_direct]
+type = "Direct"
 ```
 
-### Fix "The FileCache path is not writable"
+### FlareSolverr
 
-Ensure the `/config` volume has write permissions for the container user.
+For sites behind Cloudflare. Requires a running [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) instance.
 
-### Fix "attempt to write a readonly database"
+```ini
+[proxy_profile_flaresolverr]
+type = "FlareSolverr"
+url = "http://flaresolverr:8191"
+timeout = 60000
+```
 
-Ensure the SQLite files inside `/config/cache/` are writable.
+### TgWS (SOCKS5)
 
-## Creating a new bridge
+A SOCKS5 proxy via [TgWS](https://github.com/LordArrin/tg-ws-proxy-docker) — useful for bypassing censorship.
 
-New bridge files MUST have `declare(strict_types=1);` at the top:
+```ini
+[proxy_profile_tgws]
+type = "TgWS"
+socks_url = "socks5h://user:pass@192.168.1.1:14444"
+connect_timeout = 10
+request_timeout = 30
+retries = 3
+```
+
+### Using Profiles in Bridges
+
+```php
+$html = getProtectedContents('https://example.com', 'flaresolverr');
+$dom = getProtectedSimpleHTMLDOM('https://example.com', 'tgws');
+$binary = getProtectedBinary('https://example.com/image.jpg', 'direct');
+```
+
+If a profile is referenced but not defined in `config.ini.php`, `DirectProxy` throws a `ClientException` with a hint about which configuration is missing.
+
+## Custom Bridges
+
+Place a `.php` file in `/config/bridges-v2/` and restart the container. That's all.
+
+```bash
+./config/
+├── config.ini.php
+└── bridges-v2/
+    └── MyCustomBridge.php
+```
+
+Each bridge must live under the `RSSBridge\Bridges` namespace, extend `BridgeAbstract` or anpther basic bridge,
+start with `declare(strict_types=1);`, and have a filename ending with `Bridge.php`.
 
 ```php
 <?php
 
 declare(strict_types=1);
 
-class BearBlogBridge extends \RSSBridge\BridgeAbstract
-{
-    const NAME = 'BearBlog (bearblog.dev)';
+namespace RSSBridge\Bridges;
 
-    public function collectData()
+use RSSBridge\BridgeAbstract;
+
+final class MyCustomBridge extends BridgeAbstract
+{
+    public const NAME = 'My Custom Bridge';
+    public const URI = 'https://example.com';
+    public const DESCRIPTION = 'What this bridge does';
+    public const MAINTAINER = 'your-name';
+    public const CACHE_TIMEOUT = 3600;
+
+    public const PARAMETERS = [
+        [
+            'username' => [
+                'name' => 'Username',
+                'required' => true,
+                'exampleValue' => 'alice',
+            ],
+        ],
+    ];
+
+    public function collectData(): void
     {
-        $dom = getSimpleHTMLDOM('https://herman.bearblog.dev/blog/');
-        foreach ($dom->find('.blog-posts li') as $li) {
-            $a = $li->find('a', 0);
-            $this->items[] = [
-                'title' => $a->plaintext,
-                'uri' => 'https://herman.bearblog.dev' . $a->href,
-            ];
-        }
+        $username = $this->getInput('username');
+        $dom = getSimpleHTMLDOM('https://example.com/' . $username);
+        // ... populate $this->items[]
     }
 }
 ```
 
-Place the file in `bridges/` inside your `config` volume and restart the container.
+The legacy `/config/bridges/` directory is no longer supported — the container will emit a warning in the logs on startup. Migrate any such bridges to `bridges-v2/` with a proper namespace.
 
-## Feed item structure
+For a detailed guide on bridge development, see the separate `BRIDGES.md` document.
 
-```php
-$item = [
-    'uri' => 'https://example.com/blog/hello',
-    'title' => 'Hello world',
-    'timestamp' => 1668706254,
-    'author' => 'Alice',
-    'content' => 'Here be item content',
-    'enclosures' => [
-        'https://example.com/foo.png',
-        'https://example.com/bar.png'
-    ],
-    'categories' => ['news', 'tech'],
-    'uid' => 'e7147580c8747aad',
-];
+## Project Structure
+
+```
+rss-bridge/
+├── actions/              # Request handlers: FrontpageAction, DisplayAction
+├── bridges-v2/           # Bridges (PSR-4, RSSBridge\Bridges namespace)
+├── caches/               # Cache backends: File, SQLite, Memcached, ...
+├── formats/              # Output formats: Atom, Mrss, Json, Html, Plaintext, Sfeed
+├── lib/                  # Core: BridgeAbstract, BridgeFactory, SafeBridgeLoader, ...
+├── middlewares/          # HTTP middleware stack
+├── proxies/              # Proxy profile implementations
+├── templates/            # HTML templates
+├── quirks/               # Rendering helpers: template, html, seo, media_embed, ...
+├── bin/                  # CLI utilities: cache-clear, cache-prune
+├── config/               # Default configuration
+├── static/               # CSS, JS, images
+├── docker-entrypoint.sh  # Container entrypoint
+└── Dockerfile
 ```
 
-## Output formats
+## Migration from Original RSS-Bridge
 
-* `Atom` - Atom feed
-* `Html` - Simple HTML page
-* `Json` - JSON
-* `Mrss` - MRSS feed
-* `Plaintext` - Raw text
-* `Sfeed` - TAB-separated text
+### Breaking Changes
 
-## Cache backends
+- The minimum PHP version has been raised from 7.4 to 8.5, with strict types enforced
+- Bridges now live in `bridges-v2/` under the `RSSBridge\Bridges` namespace
+- `DetectAction` and `FindfeedAction` have been removed — automatic feed detection by URL is no longer available
+- The donation UI and `getDonationURI()` have been removed
+- `simple_html_dom` has been replaced with the built-in `\Dom\HTMLDocument`
+- All broken/abandoned bridges have been removed or rewritten.
 
-* `File`
-* `SQLite`
-* `Memcached`
-* `Array`
-* `Null`
+### Migration Steps
+
+```bash
+# 1. Back up the current configuration and legacy bridges
+cp config/config.ini.php config/config.ini.php.bak
+cp -r config/bridges config/bridges.bak
+
+# 2. Pull the new image
+docker compose pull
+
+# 3. Move custom bridges to bridges-v2/ and add the namespace
+#    (see the "Custom Bridges" section above)
+
+# 4. Restart
+docker compose up -d
+
+# 5. Inspect the logs
+docker compose logs -f
+```
+
+## Troubleshooting
+
+### Logs
+
+```bash
+docker logs rss-bridge
+docker logs -f rss-bridge   # follow mode
+```
+
+### Clearing the Cache
+
+```bash
+docker exec rss-bridge php /app/bin/cache-clear      # clear everything
+docker exec rss-bridge php /app/bin/cache-prune      # remove only expired entries
+```
+
+Note that bridge metadata is rebuilt automatically on every container startup, so there is no need to do it manually.
+
+### "FileCache path is not writable" / "attempt to write a readonly database"
+
+Make sure the `./config` directory is writable by the container user:
+
+```bash
+chmod -R 755 ./config
+```
+
+### Bridges marked as "Broken"
+
+This typically indicates an incompatible method signature in one of the bridges. Open the logs and search for `Bridge compatibility error` — the output will point to the offending bridge and the exact compile error.
 
 ## License
 
-This fork is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+This fork is distributed under the [GNU Affero General Public License v3.0](LICENSE).
 
-RSS-Bridge uses third-party libraries with their own licenses:
+Third-party libraries used:
 
-* [`Parsedown`](https://github.com/erusev/parsedown) - MIT
-* [`PHP Simple HTML DOM Parser`](https://simplehtmldom.sourceforge.io/docs/1.9/index.html) - MIT
-* [`php-urljoin`](https://github.com/fluffy-critter/php-urljoin) - MIT
+| Library | License |
+|---------|---------|
+| [Parsedown](https://github.com/erusev/parsedown) | MIT |
+| [php-urljoin](https://github.com/fluffy-critter/php-urljoin) | MIT |
+| [PHPUnit](https://phpunit.de/) | BSD-3-Clause (dev) |
+| [PHP_CodeSniffer](https://github.com/PHPCSStandards/PHP_CodeSniffer) | BSD-3-Clause (dev) |
+| [PHPStan](https://phpstan.org/) | MIT (dev) |

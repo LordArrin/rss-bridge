@@ -29,6 +29,10 @@ if [ -d /config/bridges ]; then
     echo "Please migrate your custom bridges to /config/bridges-v2 directory."
 fi
 
+# Ensure cache directories are writable by nginx
+chown -R nginx:nginx /app/cache
+chmod 750 /app/cache/opcache
+
 # Clear OPcache file cache on startup
 rm -rf /app/cache/opcache/* 2>/dev/null || true
 
@@ -44,8 +48,8 @@ fi
 # Build bridges metadata cache
 php /app/bin/cache-bridge-metadata || echo "Warning: cache build failed"
 
-# Start nginx
+# Start nginx (daemon mode)
 nginx
 
-# Start PHP-FPM
+# Start PHP-FPM (foreground)
 exec php-fpm85 --nodaemonize
