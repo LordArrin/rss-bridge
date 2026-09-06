@@ -195,7 +195,7 @@ Place a `.php` file in `/config/bridges-v2/` and restart the container. That's a
     └── MyCustomBridge.php
 ```
 
-Each bridge must live under the `RSSBridge\Bridges` namespace, extend `BridgeAbstract` or another basic bridge,
+Each bridge must live under the `RSSBridge\Bridges` namespace, extend `BridgeAbstract` or anpther basic bridge,
 start with `declare(strict_types=1);`, and have a filename ending with `Bridge.php`.
 
 ```php
@@ -236,7 +236,7 @@ final class MyCustomBridge extends BridgeAbstract
 
 The legacy `/config/bridges/` directory is no longer supported — the container will emit a warning in the logs on startup. Migrate any such bridges to `bridges-v2/` with a proper namespace.
 
-For a detailed guide on bridge development, see the [docs](https://github.com/LordArrin/rss-bridge/blob/master/docs/writing-bridges-en.md).
+For a detailed guide on bridge development, see the separate `BRIDGES.md` document.
 
 ## Project Structure
 

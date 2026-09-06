@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
-use RSSBridge\FeedItem;
 
 final class GitHubReleaseBridge extends BridgeAbstract
 {
@@ -35,11 +34,13 @@ final class GitHubReleaseBridge extends BridgeAbstract
         'pre_release' => [
             'name' => 'Include pre-releases',
             'type' => 'checkbox',
+            'defaultValue' => false,
             'title' => 'Check this box to include pre-releases in the feed'
         ],
         'hide_assets' => [
             'name' => 'Hide attachments',
             'type' => 'checkbox',
+            'defaultValue' => false,
             'title' => 'Check this box to hide attachments from feed items.'
         ],
         'limit' => [
@@ -179,6 +180,29 @@ final class GitHubReleaseBridge extends BridgeAbstract
         return $response;
     }
 
+    private function fetchTagCommitMessage(string $owner, string $repo, string $tagName): string
+    {
+        $url = sprintf('https://api.%s/repos/%s/%s/commits/%s', parse_url(self::URI, PHP_URL_HOST), $owner, $repo, rawurlencode($tagName));
+        $headers = ['Accept: application/vnd.github+json'];
+
+        $token = $this->getOption('token');
+        if ($token !== null && $token !== '') {
+            $headers[] = 'Authorization: Bearer ' . $token;
+        }
+
+        try {
+            $response = json_decode(getContents($url, $headers), true, 512, JSON_THROW_ON_ERROR);
+        } catch (\Exception $e) {
+            return '';
+        }
+
+        if (isset($response['commit']['message']) === true) {
+            return (string)$response['commit']['message'];
+        }
+
+        return '';
+    }
+
     private function shouldSkipRelease(array $release, bool $includePrereleases): bool
     {
         if (($release['draft'] ?? false) === true) {
@@ -199,6 +223,12 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $title = $name !== '' ? $name : ($tagName !== '' ? $tagName : 'Untitled');
 
         $body = $release['body'] ?? '';
+        // Если тело релиза пустое, GitHub на сайте показывает сообщение коммита тега.
+        // Повторяем эту логику, чтобы не пропускать текст.
+        if ($body === '' && $tagName !== '') {
+            $body = $this->fetchTagCommitMessage($owner, $repo, $tagName);
+        }
+
         $content = $body !== '' ? $this->processMarkdown((string)$body, $owner, $repo) : '';
 
         if ($hideAssets === false && isset($release['assets']) === true && is_array($release['assets']) === true) {
@@ -323,8 +353,11 @@ final class GitHubReleaseBridge extends BridgeAbstract
         }
 
         $content = $dom->saveHTML($wrapper);
-        $content = preg_replace('#^\s*<div[^>]*>#', '', $content);
-        $content = preg_replace('#</div>\s*$#', '', $content);
+        // Защита от TypeError в strict_types, если preg_replace вернет null
+        $c1 = preg_replace('#^\s*<div[^>]*>#', '', $content);
+        $content = $c1 !== null ? $c1 : $content;
+        $c2 = preg_replace('#</div>\s*$#', '', $content);
+        $content = $c2 !== null ? $c2 : $content;
 
         $allowedTags = '<' . implode('><', self::ALLOWED_TAGS) . '>';
         $content = strip_tags(trim($content), $allowedTags);

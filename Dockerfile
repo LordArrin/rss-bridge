@@ -1,21 +1,15 @@
-# ============================================================
-# Stage 1: Builder
-# ============================================================
 ARG ALPINE_VERSION=3.24
 FROM alpine:${ALPINE_VERSION} AS builder
 
-ARG CURL_VERSION=2.2.1
-ARG BUILD_VERSION=1.31.3
+ARG CURL_VERSION=2.2.2
+ARG BUILD_VERSION=1.31.4
 ARG OPENSSL_VERSION=4.0.2
-ARG PCRE_VERSION=10.47
-ARG MIMALLOC_VERSION=3.5.0
+ARG PCRE_VERSION=10.48
+ARG MIMALLOC_VERSION=2.5.1
 ARG ZLIB_NG_VERSION=2.3.3
 ARG BROTLI_URL=https://github.com/wxx9248/ngx_brotli.git
 ARG HEADERS_MORE_URL=https://github.com/openresty/headers-more-nginx-module.git
 
-# ============================================================
-# Optimization arguments (defaults to broad compatibility)
-# ============================================================
 ARG X86_MARCH=x86-64
 ARG X86_MTUNE=generic
 ARG X86_CFI_FLAGS=""
@@ -24,7 +18,6 @@ ARG ARM_MARCH=armv8-a
 ARG ARM_MTUNE=generic
 ARG ARM_CFI_FLAGS="-mbranch-protection=standard"
 
-# 1. Build curl-impersonate from source
 RUN set -euxo pipefail && \
     apk update && \
     apk add --no-cache --virtual .curl-build-deps \
@@ -63,11 +56,10 @@ RUN set -euxo pipefail && \
     fi && \
     apk del .curl-build-deps
 
-# 2. Build Freenginx and dependencies
 RUN set -euxo pipefail && \
     apk update && \
     apk upgrade --no-cache && \
-    build_pkgs="build-base linux-headers fortify-headers ccache wget perl git mold cmake" && \
+    build_pkgs="build-base linux-headers fortify-headers ccache wget perl git mold cmake pkgconfig" && \
     apk --no-cache add --virtual .build-deps ${build_pkgs} && \
     cd /tmp && \
     NB_PROC=$(grep -c ^processor /proc/cpuinfo) && \
@@ -107,12 +99,12 @@ RUN set -euxo pipefail && \
     cd /tmp/mimalloc && mkdir -p out/release && cd out/release && \
     cmake -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON -DMI_BUILD_SHARED=ON -DMI_BUILD_STATIC=OFF \
           -DMI_BUILD_TESTS=OFF -DMI_BUILD_OBJECT=OFF -DMI_LIBC_MUSL=ON \
-          -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_C_FLAGS="$OPT_CFLAGS -fPIC" \
+          -DCMAKE_INSTALL_PREFIX=/tmp/mimalloc-install -DCMAKE_C_FLAGS="$OPT_CFLAGS -fPIC" \
           -DCMAKE_SHARED_LINKER_FLAGS="$OPT_LDFLAGS" \
           ../.. && \
     PATH="/usr/lib/ccache:${PATH}" make -j $NB_PROC && make install && \
     cd /tmp/openssl-${OPENSSL_VERSION} && \
-    ./config \
+    LDFLAGS="$OPT_LDFLAGS" ./config \
       --prefix=/usr/local/ssl --openssldir=/usr/local/ssl \
       shared \
       enable-quic enable-tfo enable-ktls no-tests \
@@ -160,9 +152,6 @@ RUN set -euxo pipefail && \
     make install && \
     apk del .build-deps
 
-# ============================================================
-# Stage 2: Runtime
-# ============================================================
 FROM alpine:${ALPINE_VERSION} AS runtime
 
 ARG IMAGE_VERSION=1.2.1
@@ -177,7 +166,6 @@ LABEL org.opencontainers.image.title="RSS Bridge" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.source="https://github.com/LordArrin/rss-bridge"
 
-# Runtime dependencies
 RUN set -xe && \
     apk add --no-cache \
       ca-certificates \
@@ -186,7 +174,6 @@ RUN set -xe && \
       php85-pdo_sqlite php85-pecl-igbinary php85-pecl-memcached php85-phar \
       php85-simplexml php85-sqlite3 php85-tokenizer php85-xml php85-xmlwriter php85-zip \
       composer \
-      curl \
       libgcc libstdc++ libatomic \
       tzdata \
     && \
@@ -202,32 +189,36 @@ RUN set -xe && \
     chmod 750 /app/cache/opcache && \
     rm -rf /var/cache/apk/*
 
-# Copy OpenSSL shared libraries to replace system ones
+RUN rm -f /usr/lib/libssl.so* /usr/lib/libcrypto.so*
 COPY --from=builder /usr/local/ssl/lib*/libssl.so* /usr/lib/
 COPY --from=builder /usr/local/ssl/lib*/libcrypto.so* /usr/lib/
 COPY --from=builder /usr/local/ssl/bin/openssl /usr/bin/openssl
 
-# Setup OpenSSL for system and PHP
-RUN ln -sf /usr/lib/libssl.so.3 /usr/lib/libssl.so && \
-    ln -sf /usr/lib/libcrypto.so.3 /usr/lib/libcrypto.so && \
+RUN SSL_LIB=$(ls /usr/lib/libssl.so* | grep -v '\.so$' | head -n1) && \
+    CRYPTO_LIB=$(ls /usr/lib/libcrypto.so* | grep -v '\.so$' | head -n1) && \
+    ln -sf "$SSL_LIB" /usr/lib/libssl.so.3 && \
+    ln -sf "$SSL_LIB" /usr/lib/libssl.so && \
+    ln -sf "$CRYPTO_LIB" /usr/lib/libcrypto.so.3 && \
+    ln -sf "$CRYPTO_LIB" /usr/lib/libcrypto.so && \
+    ldconfig && \
     echo "libssl3" >> /etc/apk/protected_paths.d/lst && \
     echo "libcrypto3" >> /etc/apk/protected_paths.d/lst
 
-# Copy curl-impersonate from builder
 COPY --from=builder /tmp/curl-install/ /tmp/curl-install/
 
-# Replace system libcurl with curl-impersonate
 RUN rm -f /usr/lib/libcurl.so.4 /usr/lib/libcurl.so.* && \
+    rm -f /usr/bin/curl && \
     cp /tmp/curl-install/lib*/libcurl*.so* /usr/lib/ && \
+    cp /tmp/curl-install/bin/curl-impersonate /usr/bin/curl && \
     IMP_LIB=$(ls /usr/lib/libcurl-impersonate*.so* 2>/dev/null | head -n 1) && \
     if [ -n "$IMP_LIB" ]; then \
       ln -sf "$IMP_LIB" /usr/lib/libcurl.so.4; \
       ln -sf "$IMP_LIB" /usr/lib/libcurl.so; \
     fi && \
+    ldconfig && \
     echo "libcurl" >> /etc/apk/protected_paths.d/lst && \
     rm -rf /tmp/curl-install
 
-# Copy Freenginx, default configs and Mimalloc from builder
 COPY --from=builder /usr/sbin/nginx /usr/sbin/nginx
 COPY --from=builder /etc/nginx/mime.types /etc/nginx/
 COPY --from=builder /etc/nginx/fastcgi_params /etc/nginx/
@@ -236,16 +227,16 @@ COPY --from=builder /etc/nginx/uwsgi_params /etc/nginx/
 COPY --from=builder /etc/nginx/win-utf /etc/nginx/
 COPY --from=builder /etc/nginx/koi-utf /etc/nginx/
 COPY --from=builder /etc/nginx/koi-win /etc/nginx/
-COPY --from=builder /usr/lib*/libmimalloc* /usr/lib/
+COPY --from=builder /tmp/mimalloc-install/lib*/libmimalloc* /usr/lib/
 
-# Setup Mimalloc
+RUN MIMALLOC_LIB=$(find /usr/lib -maxdepth 1 \( -name 'libmimalloc*.so*' -type f -o -type l \) | head -n1) && \
+    ln -sf "$MIMALLOC_LIB" /usr/lib/libmimalloc-secure.so
+
 RUN echo "/usr/lib/libmimalloc-secure.so" > /etc/ld.so.preload
 
-# Redirect nginx logs to stdout/stderr for Docker
 RUN ln -sfT /dev/stderr /var/log/nginx/error.log && \
     ln -sfT /dev/stdout /var/log/nginx/access.log
 
-# Copy configuration files
 COPY ./config/php-fpm.conf /etc/php85/php-fpm.conf
 COPY ./config/php-fpm-pool.conf /etc/php85/php-fpm.d/rss-bridge.conf
 COPY ./config/php.ini /etc/php85/conf.d/90-rss-bridge.ini
@@ -253,21 +244,17 @@ COPY ./config/nginx-main.conf /etc/nginx/nginx.conf
 COPY ./config/nginx.conf /etc/nginx/http.d/default.conf
 COPY LICENSE ./
 
-# Copy application
 COPY --chown=nginx:nginx ./ /app/
 
-# Install Composer dependencies
 WORKDIR /app
 RUN composer install --optimize-autoloader --no-interaction --ignore-platform-reqs --classmap-authoritative
 
-# Make scripts executable
 RUN chmod +x /app/bin/* && \
     chmod +x /app/docker-entrypoint.sh
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD curl -fsS --compressed "http://localhost/?action=health" || exit 1
 
-EXPOSE 80/tcp 443/tcp 443/udp
+EXPOSE 80
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
