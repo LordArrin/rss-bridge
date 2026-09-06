@@ -1,17 +1,53 @@
-name: Build and Push Multi-Arch Images
+name: Build and Push Images
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  schedule:
+    - cron: '0 3 * * 0'
   workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force build even if no new commits'
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: lordarrin/rss-bridge
 
 jobs:
+  check-commits:
+    runs-on: ubuntu-26.04
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check for recent commits
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.force_build }}" = "true" ]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "Manual build forced"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "Manual build requested"
+          else
+            COMMITS_LAST_WEEK=$(git log --since="7 days ago" --oneline | wc -l)
+            if [ "$COMMITS_LAST_WEEK" -gt 0 ]; then
+              echo "should_build=true" >> $GITHUB_OUTPUT
+              echo "Found $COMMITS_LAST_WEEK commits in the last 7 days"
+            else
+              echo "should_build=false" >> $GITHUB_OUTPUT
+              echo "No commits in the last 7 days, skipping build"
+            fi
+          fi
+
   build-amd64:
+    needs: check-commits
+    if: needs.check-commits.outputs.should_build == 'true'
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -31,13 +67,19 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_TOKEN }}
 
+      - name: Set date tag
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
       - name: Build and push latest-modern (amd64)
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-amd64
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-modern-amd64
           build-args: |
             X86_MARCH=x86-64-v3
             X86_MTUNE=generic
@@ -53,7 +95,9 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-amd64
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-amd64
           build-args: |
             X86_MARCH=x86-64
             X86_MTUNE=generic
@@ -64,6 +108,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=amd64-base
 
   build-arm64:
+    needs: check-commits
+    if: needs.check-commits.outputs.should_build == 'true'
     runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
@@ -83,13 +129,19 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_TOKEN }}
 
+      - name: Set date tag
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
       - name: Build and push latest-modern (arm64)
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/arm64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-arm64
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-modern-arm64
           build-args: |
             ARM_MARCH=armv8.2-a+crypto+crc+lse+rdma
             ARM_MTUNE=generic
@@ -105,7 +157,9 @@ jobs:
           context: .
           platforms: linux/arm64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-arm64
           build-args: |
             ARM_MARCH=armv8-a
             ARM_MTUNE=generic
@@ -116,8 +170,9 @@ jobs:
           cache-to: type=gha,mode=max,scope=arm64-base
 
   create-manifests:
+    needs: [check-commits, build-amd64, build-arm64]
+    if: needs.check-commits.outputs.should_build == 'true'
     runs-on: ubuntu-26.04
-    needs: [build-amd64, build-arm64]
     permissions:
       contents: read
       packages: write
@@ -133,56 +188,24 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_TOKEN }}
 
+      - name: Set date tag
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
       - name: Create and push latest-modern manifest
         run: |
           docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-arm64
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-modern \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-modern-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-modern-arm64
 
       - name: Create and push latest manifest
         run: |
           docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64
-
-  create-release:
-    runs-on: ubuntu-26.04
-    needs: create-manifests
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: RSS-Bridge ${{ github.ref_name }}
-          generate_release_notes: true
-          draft: false
-          prerelease: false
-          body: |
-            ## Docker Images
-            
-            This release is available as multi-architecture Docker images:
-            
-            ### Standard Build (Broad Compatibility)
-            ```bash
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
-            ```
-            
-            ### Modern Build (Optimized for x86-v3+ and arm v8.2+ CPUs)
-            ```bash
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-modern
-            ```
-            
-            ### Supported Architectures
-            - `linux/amd64` (x86_64)
-            - `linux/arm64` (ARMv8)
-            
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-arm64
