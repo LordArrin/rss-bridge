@@ -1,4 +1,4 @@
-name: Cleanup Old Docker Images
+name: Cleanup old images
 
 on:
   schedule:

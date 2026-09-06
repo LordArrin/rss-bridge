@@ -1,4 +1,4 @@
-name: Lint Bridges
+name: Lint bridges
 
 on:
   push:
