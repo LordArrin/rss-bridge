@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: lordarrin/rss-bridge
 
 jobs:
   build-amd64:
@@ -31,12 +31,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-
       - name: Build and push latest-modern (amd64)
         uses: docker/build-push-action@v6
         with:
@@ -44,7 +38,6 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-amd64
-          labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             X86_MARCH=x86-64-v3
             X86_MTUNE=generic
@@ -61,7 +54,6 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-amd64
-          labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             X86_MARCH=x86-64
             X86_MTUNE=generic
@@ -91,12 +83,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-
       - name: Build and push latest-modern (arm64)
         uses: docker/build-push-action@v6
         with:
@@ -104,7 +90,6 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-arm64
-          labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ARM_MARCH=armv8.2-a+crypto+crc+lse+rdma
             ARM_MTUNE=generic
@@ -121,7 +106,6 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64
-          labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ARM_MARCH=armv8-a
             ARM_MTUNE=generic
@@ -132,7 +116,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=arm64-base
 
   create-manifests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [build-amd64, build-arm64]
     permissions:
       contents: read
@@ -162,7 +146,7 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64
 
   create-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: create-manifests
     permissions:
       contents: write
