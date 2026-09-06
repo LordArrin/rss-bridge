@@ -1,0 +1,160 @@
+name: Cleanup Old Docker Images
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (show what would be deleted without actually deleting)'
+        type: boolean
+        default: true
+      keep_count:
+        description: 'Number of recent builds to keep (default: 10)'
+        type: number
+        default: 10
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: lordarrin/rss-bridge
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Cleanup old images
+        env:
+          GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          KEEP_COUNT: ${{ github.event.inputs.keep_count || '10' }}
+        run: |
+          set -euo pipefail
+          
+          PACKAGE_NAME="rss-bridge"
+          OWNER="lordarrin"
+          
+          echo "Fetching all package versions..."
+          
+          ALL_VERSIONS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/users/$OWNER/packages/container/$PACKAGE_NAME/versions?per_page=100" | \
+            jq -c '.[] | {id: .id, tags: .metadata.container.tags, created_at: .created_at}')
+          
+          if [ -z "$ALL_VERSIONS" ]; then
+            echo "No versions found or failed to fetch versions"
+            exit 1
+          fi
+          
+          echo "Total versions found: $(echo "$ALL_VERSIONS" | wc -l)"
+          
+          declare -A DATE_VERSIONS
+          PROTECTED_VERSIONS=""
+          
+          while IFS= read -r version; do
+            TAGS=$(echo "$version" | jq -r '.tags[]' 2>/dev/null || echo "")
+            ID=$(echo "$version" | jq -r '.id')
+            CREATED=$(echo "$version" | jq -r '.created_at')
+            
+            if [ -z "$TAGS" ]; then
+              continue
+            fi
+            
+            for tag in $TAGS; do
+              if [[ "$tag" == "latest" ]] || [[ "$tag" == "latest-modern" ]]; then
+                PROTECTED_VERSIONS="$PROTECTED_VERSIONS $ID"
+                break
+              fi
+              
+              if [[ "$tag" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2} ]]; then
+                DATE=$(echo "$tag" | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}')
+                DATE_VERSIONS[$DATE]="$ID"
+                break
+              fi
+            done
+          done <<< "$ALL_VERSIONS"
+          
+          echo ""
+          echo "Protected versions (latest/latest-modern): $(echo $PROTECTED_VERSIONS | wc -w)"
+          echo "Unique build dates found: ${#DATE_VERSIONS[@]}"
+          echo ""
+          
+          SORTED_DATES=$(for date in "${!DATE_VERSIONS[@]}"; do echo "$date"; done | sort -r)
+          
+          KEEP_DATES=$(echo "$SORTED_DATES" | head -n "$KEEP_COUNT")
+          DELETE_DATES=$(echo "$SORTED_DATES" | tail -n +"$((KEEP_COUNT + 1))")
+          
+          echo "Dates to keep ($KEEP_COUNT most recent):"
+          echo "$KEEP_DATES"
+          echo ""
+          
+          if [ -z "$DELETE_DATES" ]; then
+            echo "No dates to delete. All builds are within the keep limit."
+            exit 0
+          fi
+          
+          echo "Dates to delete:"
+          echo "$DELETE_DATES"
+          echo ""
+          
+          DELETE_IDS=""
+          while IFS= read -r date; do
+            if [ -n "$date" ]; then
+              DELETE_IDS="$DELETE_IDS ${DATE_VERSIONS[$date]}"
+            fi
+          done <<< "$DELETE_DATES"
+          
+          DELETE_COUNT=$(echo $DELETE_IDS | wc -w)
+          echo "Versions to delete: $DELETE_COUNT"
+          echo ""
+          
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "DRY RUN MODE - No versions were actually deleted"
+            echo "To perform actual deletion, run workflow again with dry_run=false"
+            exit 0
+          fi
+          
+          echo "Starting deletion..."
+          DELETED=0
+          FAILED=0
+          
+          for id in $DELETE_IDS; do
+            if [ -z "$id" ]; then
+              continue
+            fi
+            
+            echo -n "Deleting version $id... "
+            
+            RESPONSE=$(curl -s -w "%{http_code}" -o /tmp/response.txt \
+              -X DELETE \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/users/$OWNER/packages/container/$PACKAGE_NAME/versions/$id")
+            
+            if [ "$RESPONSE" = "204" ]; then
+              echo "SUCCESS"
+              DELETED=$((DELETED + 1))
+            else
+              echo "FAILED (HTTP $RESPONSE)"
+              cat /tmp/response.txt
+              echo ""
+              FAILED=$((FAILED + 1))
+            fi
+            
+            sleep 1
+          done
+          
+          echo ""
+          echo "Cleanup completed:"
+          echo "  - Deleted: $DELETED versions"
+          echo "  - Failed: $FAILED versions"
+          echo "  - Protected (latest/latest-modern): $(echo $PROTECTED_VERSIONS | wc -w) versions"
