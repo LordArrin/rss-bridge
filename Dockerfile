@@ -18,6 +18,9 @@ ARG ARM_MARCH=armv8-a
 ARG ARM_MTUNE=generic
 ARG ARM_CFI_FLAGS="-mbranch-protection=standard"
 
+ARG BUILD_JOBS=0
+ARG ENABLE_LTO=ON
+
 RUN set -euxo pipefail && \
     apk update && \
     apk add --no-cache --virtual .curl-build-deps \
@@ -27,7 +30,8 @@ RUN set -euxo pipefail && \
     git clone --depth 1 -b v${CURL_VERSION} https://github.com/lexiforest/curl-impersonate.git /tmp/curl-impersonate && \
     cd /tmp/curl-impersonate && \
     mkdir -p /tmp/curl-install && \
-    NB_PROC=$(grep -c ^processor /proc/cpuinfo) && \
+    if [ "$BUILD_JOBS" = "0" ]; then NB_PROC=$(grep -c ^processor /proc/cpuinfo); else NB_PROC="$BUILD_JOBS"; fi && \
+    if [ "$ENABLE_LTO" = "ON" ]; then LTO_FLAG="-flto=auto"; else LTO_FLAG=""; fi && \
     ARCH=$(uname -m); \
     case "$ARCH" in \
       x86_64) MARCH="${X86_MARCH}"; MTUNE="${X86_MTUNE}"; CFI_FLAGS="${X86_CFI_FLAGS}" ;; \
@@ -37,8 +41,8 @@ RUN set -euxo pipefail && \
       -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 ${CFI_FLAGS} \
       -fno-plt -fno-semantic-interposition -ftrivial-auto-var-init=zero -fzero-call-used-regs=used-gpr \
       -ftrapv -fno-delete-null-pointer-checks -fipa-pta -fno-math-errno -fmerge-all-constants -fomit-frame-pointer" && \
-    export OPT_CFLAGS="-O3 -march=${MARCH} -mtune=${MTUNE} -pipe -flto=auto ${HARDENING_CFLAGS}" && \
-    export OPT_LDFLAGS="-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wl,-z,defs ${CFI_FLAGS} -flto=auto" && \
+    export OPT_CFLAGS="-O3 -march=${MARCH} -mtune=${MTUNE} -pipe ${LTO_FLAG} ${HARDENING_CFLAGS}" && \
+    export OPT_LDFLAGS="-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wl,-z,defs ${CFI_FLAGS} ${LTO_FLAG}" && \
     BUILD_ARGS="-DCMAKE_INSTALL_PREFIX=/tmp/curl-install \
       -DCURL_CA_PATH=/etc/ssl/certs \
       -DCURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
@@ -46,10 +50,10 @@ RUN set -euxo pipefail && \
       -DCMAKE_CXX_FLAGS=\"$OPT_CFLAGS -fPIC\" \
       -DCMAKE_EXE_LINKER_FLAGS=\"$OPT_LDFLAGS\" \
       -DCMAKE_SHARED_LINKER_FLAGS=\"$OPT_LDFLAGS\"" && \
-    make prepare-libidn2 BUILD_DIR=build && \
-    make build BUILD_DIR=build CMAKE_CONFIGURE_ARGS="$BUILD_ARGS" && \
-    make checkbuild BUILD_DIR=build CMAKE_CONFIGURE_ARGS="$BUILD_ARGS" && \
-    make install-strip BUILD_DIR=build CMAKE_CONFIGURE_ARGS="$BUILD_ARGS" && \
+    make prepare-libidn2 BUILD_DIR=build JOBS=$NB_PROC && \
+    make build BUILD_DIR=build CMAKE_CONFIGURE_ARGS="$BUILD_ARGS" JOBS=$NB_PROC && \
+    make checkbuild BUILD_DIR=build CMAKE_CONFIGURE_ARGS="$BUILD_ARGS" JOBS=$NB_PROC && \
+    make install-strip BUILD_DIR=build CMAKE_CONFIGURE_ARGS="$BUILD_ARGS" JOBS=$NB_PROC && \
     IMP_LIB=$(ls /tmp/curl-install/lib*/libcurl-impersonate*.so* 2>/dev/null | head -n 1) && \
     if [ -n "$IMP_LIB" ]; then \
       patchelf --set-soname libcurl.so.4 "$IMP_LIB"; \
@@ -62,7 +66,8 @@ RUN set -euxo pipefail && \
     build_pkgs="build-base linux-headers fortify-headers ccache wget perl git mold cmake pkgconfig" && \
     apk --no-cache add --virtual .build-deps ${build_pkgs} && \
     cd /tmp && \
-    NB_PROC=$(grep -c ^processor /proc/cpuinfo) && \
+    if [ "$BUILD_JOBS" = "0" ]; then NB_PROC=$(grep -c ^processor /proc/cpuinfo); else NB_PROC="$BUILD_JOBS"; fi && \
+    if [ "$ENABLE_LTO" = "ON" ]; then LTO_FLAG="-flto=auto"; else LTO_FLAG=""; fi && \
     ARCH=$(uname -m); \
     case "$ARCH" in \
       x86_64) MARCH="${X86_MARCH}"; MTUNE="${X86_MTUNE}"; CFI_FLAGS="${X86_CFI_FLAGS}" ;; \
@@ -72,8 +77,8 @@ RUN set -euxo pipefail && \
       -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 ${CFI_FLAGS} \
       -fno-plt -fno-semantic-interposition -ftrivial-auto-var-init=zero -fzero-call-used-regs=used-gpr \
       -ftrapv -fno-delete-null-pointer-checks -fipa-pta -fno-math-errno -fmerge-all-constants -fomit-frame-pointer" && \
-    export OPT_CFLAGS="-O3 -march=${MARCH} -mtune=${MTUNE} -pipe -flto=auto ${HARDENING_CFLAGS}" && \
-    export OPT_LDFLAGS="-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wl,-z,defs ${CFI_FLAGS} -flto=auto" && \
+    export OPT_CFLAGS="-O3 -march=${MARCH} -mtune=${MTUNE} -pipe ${LTO_FLAG} ${HARDENING_CFLAGS}" && \
+    export OPT_LDFLAGS="-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wl,-z,defs ${CFI_FLAGS} ${LTO_FLAG}" && \
     export CC="ccache gcc" CXX="ccache g++" && \
     wget -O - https://freenginx.org/download/freenginx-${BUILD_VERSION}.tar.gz --tries=3 | tar zxf - -C /tmp && \
     wget -O - https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz --tries=3 | tar xzf - -C /tmp && \
@@ -86,7 +91,7 @@ RUN set -euxo pipefail && \
       -DCMAKE_C_FLAGS="$OPT_CFLAGS -fPIC" -DCMAKE_CXX_FLAGS="$OPT_CFLAGS -fPIC" \
       -DCMAKE_EXE_LINKER_FLAGS="$OPT_LDFLAGS" -DCMAKE_INSTALL_PREFIX=./installed \
       .. && \
-    cmake --build . --config Release --target brotlienc brotlidec brotlicommon && make install && \
+    cmake --build . --config Release --target brotlienc brotlidec brotlicommon --parallel $NB_PROC && make install && \
     cd /tmp/pcre2-${PCRE_VERSION} && mkdir -p build && cd build && \
     cmake \
       -DCMAKE_INSTALL_PREFIX=/usr/local/pcre2 -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
@@ -110,7 +115,7 @@ RUN set -euxo pipefail && \
       enable-quic enable-tfo enable-ktls no-tests \
       -O3 -march=${MARCH} -mtune=${MTUNE} -pipe -fomit-frame-pointer \
       ${HARDENING_CFLAGS} -Wformat-security -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 \
-      -DOPENSSL_TLS_SECURITY_LEVEL=3 ${CFI_FLAGS} -fuse-ld=mold -flto=auto && \
+      -DOPENSSL_TLS_SECURITY_LEVEL=3 ${CFI_FLAGS} -fuse-ld=mold ${LTO_FLAG} && \
     PATH="/usr/lib/ccache:${PATH}" make -j $NB_PROC && make install_sw install_ssldirs && \
     git clone --depth 1 -b ${ZLIB_NG_VERSION} https://github.com/zlib-ng/zlib-ng.git /tmp/zlib-ng && \
     cd /tmp/zlib-ng && mkdir -p build && cd build && \
@@ -255,6 +260,6 @@ RUN chmod +x /app/bin/* && \
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD curl -fsS --compressed "http://localhost/?action=health" || exit 1
 
-EXPOSE 80
+EXPOSE 80/tcp
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
