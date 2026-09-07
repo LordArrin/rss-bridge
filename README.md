@@ -54,16 +54,6 @@ Multi-architecture Docker images are built weekly and published to GitHub Contai
 | `latest` | amd64 + arm64 | Baseline (`x86-64` / `armv8-a`) | Maximum compatibility — runs on any x86_64 CPU (2003+) or ARMv8 device |
 | `latest-modern` | amd64 + arm64 | High (`x86-64-v3` / `armv8.2-a` with crypto extensions) | Modern servers — Intel Haswell+ / AMD Zen+, ARM Cortex-A55+ and newer |
 
-### Quick Start
-
-```bash
-# For broad compatibility
-docker run -d --name rss-bridge -p 8080:80 ghcr.io/lordarrin/rss-bridge:latest
-
-# For modern hardware (recommended)
-docker run -d --name rss-bridge -p 8080:80 ghcr.io/lordarrin/rss-bridge:latest-modern
-```
-
 ### Date-Tagged Images
 
 Every build is also tagged with its build date for reproducibility (e.g., `2026-09-07`, `2026-09-07-modern`). Use these when you need to pin to a specific build.
