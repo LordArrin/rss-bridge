@@ -43,6 +43,27 @@ docker compose up -d
 
 Open `http://localhost:3000/` to see the main page with all available bridges.
 
+## Docker Images
+
+Multi-architecture Docker images are built weekly and published to GitHub Container Registry. Each build includes the latest security patches from Alpine, OpenSSL 4.0.2, hardened Freenginx, curl-impersonate (with BoringSSL for TLS fingerprint impersonation), and Mimalloc memory allocator.
+
+### Available Tags
+
+| Tag | Architecture | Optimization Level | Use Case |
+|-----|--------------|-------------------|----------|
+| `latest` | amd64 + arm64 | Baseline (`x86-64` / `armv8-a`) | Maximum compatibility — runs on any x86_64 CPU (2003+) or ARMv8 device |
+| `latest-modern` | amd64 + arm64 | High (`x86-64-v3` / `armv8.2-a` with crypto extensions) | Modern servers — Intel Haswell+ / AMD Zen+, ARM Cortex-A55+ and newer |
+
+### Quick Start
+
+```bash
+# For broad compatibility
+docker run -d --name rss-bridge -p 8080:80 ghcr.io/lordarrin/rss-bridge:latest
+
+# For modern hardware (recommended)
+docker run -d --name rss-bridge -p 8080:80 ghcr.io/lordarrin/rss-bridge:latest-modern
+```
+
 ### Plain docker run
 
 ```bash
