@@ -45,7 +45,7 @@ Open `http://localhost:3000/` to see the main page with all available bridges.
 
 ## Docker Images
 
-Multi-architecture Docker images are built weekly and published to GitHub Container Registry. Each build includes the latest security patches from Alpine, OpenSSL 4.0.2, hardened Freenginx, curl-impersonate (with BoringSSL for TLS fingerprint impersonation), and Mimalloc memory allocator.
+Multi-architecture Docker images are built weekly and published to GitHub Container Registry. Each build includes the latest security patches from Alpine, OpenSSL, hardened Freenginx, curl-impersonate (with BoringSSL for TLS fingerprint impersonation), and Mimalloc memory allocator.
 
 ### Available Tags
 
