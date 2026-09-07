@@ -4,7 +4,8 @@ A fork of [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge), rewritten for 
 
 [![LICENSE](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![PHP](https://img.shields.io/badge/PHP-8.5+-777BB4.svg?logo=php)](https://www.php.net/)
-[![Docker Image](https://img.shields.io/badge/docker-lordarrin%2Frss--bridge-blue.svg?logo=docker)](https://hub.docker.com/r/lordarrin/rss-bridge)
+[![Docker Image](https://img.shields.io/badge/docker-lordarrin%2Frss--bridge-blue.svg?logo=docker)](https://github.com/LordArrin/rss-bridge/pkgs/container/rss-bridge)
+![Build Status](https://github.com/LordArrin/rss-bridge/actions/workflows/build.yml/badge.svg)
 
 ## What's Inside
 
