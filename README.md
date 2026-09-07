@@ -25,7 +25,7 @@ A fork of [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge), rewritten for 
 ```yaml
 services:
   rss-bridge:
-    image: lordarrin/rss-bridge
+    image: ghcr.io/lordarrin/rss-bridge:latest
     container_name: rss-bridge
     ports:
       - "3000:80"
@@ -64,23 +64,12 @@ docker run -d --name rss-bridge -p 8080:80 ghcr.io/lordarrin/rss-bridge:latest
 docker run -d --name rss-bridge -p 8080:80 ghcr.io/lordarrin/rss-bridge:latest-modern
 ```
 
-### Plain docker run
-
-```bash
-docker run -d \
-  --name rss-bridge \
-  -p 3000:80 \
-  -v ./config:/config \
-  --restart unless-stopped \
-  lordarrin/rss-bridge
-```
-
 ### Building from source
 
 ```bash
 git clone https://github.com/LordArrin/rss-bridge.git
 cd rss-bridge
-docker build -t lordarrin/rss-bridge .
+docker build -t yourname/rss-bridge .
 ```
 
 ## Configuration
