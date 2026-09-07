@@ -169,3 +169,63 @@ jobs:
           docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }} \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-arm64
+
+  sync-to-dockerhub:
+    needs: create-manifests
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Set date tag
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Install skopeo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+
+      - name: Log in to GHCR
+        run: |
+          skopeo login ghcr.io \
+            --username ${{ github.repository_owner }} \
+            --password ${{ secrets.GHCR_TOKEN }}
+
+      - name: Log in to Docker Hub
+        run: |
+          skopeo login docker.io \
+            --username ${{ secrets.DOCKERHUB_USERNAME }} \
+            --password ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Sync images to Docker Hub
+        run: |
+          IMAGE="${{ env.IMAGE_NAME }}"
+          DATE="${{ steps.date.outputs.date }}"
+          
+          echo "Syncing multi-architecture images to Docker Hub..."
+          
+          # Sync latest tags
+          echo "Syncing $IMAGE:latest ..."
+          skopeo copy --all \
+            "docker://ghcr.io/$IMAGE:latest" \
+            "docker://docker.io/$IMAGE:latest"
+          
+          echo "Syncing $IMAGE:latest-modern ..."
+          skopeo copy --all \
+            "docker://ghcr.io/$IMAGE:latest-modern" \
+            "docker://docker.io/$IMAGE:latest-modern"
+          
+          # Sync date-tagged versions
+          echo "Syncing $IMAGE:$DATE ..."
+          skopeo copy --all \
+            "docker://ghcr.io/$IMAGE:$DATE" \
+            "docker://docker.io/$IMAGE:$DATE"
+          
+          echo "Syncing $IMAGE:$DATE-modern ..."
+          skopeo copy --all \
+            "docker://ghcr.io/$IMAGE:$DATE-modern" \
+            "docker://docker.io/$IMAGE:$DATE-modern"
+          
+          echo "All images synced successfully to Docker Hub"
