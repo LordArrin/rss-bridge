@@ -45,7 +45,7 @@ Open `http://localhost:3000/` to see the main page with all available bridges.
 
 ## Docker Images
 
-Multi-architecture Docker images are built weekly and published to GitHub Container Registry. Each build includes the latest security patches from Alpine, OpenSSL, hardened Freenginx, curl-impersonate (with BoringSSL for TLS fingerprint impersonation), and Mimalloc memory allocator.
+Multi-architecture Docker images are built weekly and published to GitHub Container Registry. Each build includes the latest security patches from Alpine, OpenSSL 4.0.2, hardened Freenginx, curl-impersonate (with BoringSSL for TLS fingerprint impersonation), and Mimalloc memory allocator.
 
 ### Available Tags
 
@@ -63,6 +63,28 @@ docker run -d --name rss-bridge -p 8080:80 ghcr.io/lordarrin/rss-bridge:latest
 # For modern hardware (recommended)
 docker run -d --name rss-bridge -p 8080:80 ghcr.io/lordarrin/rss-bridge:latest-modern
 ```
+
+### Date-Tagged Images
+
+Every build is also tagged with its build date for reproducibility (e.g., `2026-09-07`, `2026-09-07-modern`). Use these when you need to pin to a specific build.
+
+### Security
+
+- Images are rebuilt **every Sunday at 03:00 UTC** to include the latest security patches
+- All binaries are compiled with full hardening: RELRO, PIE, stack protection, CFI, FORTIFY_SOURCE=3
+- Latest OpenSSL is used system-wide (PHP, Nginx, curl)
+
+### Hardware Compatibility Guide
+
+**Use `latest` if:**
+- You run on older hardware or VPS with unknown CPU model
+- You need guaranteed compatibility with any x86_64 or ARMv8 device
+- You deploy in heterogeneous environments
+
+**Use `latest-modern` if:**
+- Your server has a modern CPU (Intel Haswell or newer, AMD Zen or newer, ARM Cortex-A55 or newer)
+- You want ~15-30% performance improvement through AVX2, AES-NI, and ARM crypto extensions
+- You run on cloud providers with modern instances (AWS Graviton3+, Azure, GCP)
 
 ### Building from source
 
