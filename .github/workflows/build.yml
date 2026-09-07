@@ -4,50 +4,13 @@ on:
   schedule:
     - cron: '0 3 * * 0'
   workflow_dispatch:
-    inputs:
-      force_build:
-        description: 'Force build even if no new commits'
-        type: boolean
-        default: false
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: lordarrin/rss-bridge
 
 jobs:
-  check-commits:
-    runs-on: ubuntu-26.04
-    outputs:
-      should_build: ${{ steps.check.outputs.should_build }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Check for recent commits
-        id: check
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.force_build }}" = "true" ]; then
-            echo "should_build=true" >> $GITHUB_OUTPUT
-            echo "Manual build forced"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "should_build=true" >> $GITHUB_OUTPUT
-            echo "Manual build requested"
-          else
-            COMMITS_LAST_WEEK=$(git log --since="7 days ago" --oneline | wc -l)
-            if [ "$COMMITS_LAST_WEEK" -gt 0 ]; then
-              echo "should_build=true" >> $GITHUB_OUTPUT
-              echo "Found $COMMITS_LAST_WEEK commits in the last 7 days"
-            else
-              echo "should_build=false" >> $GITHUB_OUTPUT
-              echo "No commits in the last 7 days, skipping build"
-            fi
-          fi
-
   build-amd64:
-    needs: check-commits
-    if: needs.check-commits.outputs.should_build == 'true'
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -108,8 +71,6 @@ jobs:
           cache-to: type=gha,mode=max,scope=amd64-base
 
   build-arm64:
-    needs: check-commits
-    if: needs.check-commits.outputs.should_build == 'true'
     runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
@@ -170,8 +131,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=arm64-base
 
   create-manifests:
-    needs: [check-commits, build-amd64, build-arm64]
-    if: needs.check-commits.outputs.should_build == 'true'
+    needs: [build-amd64, build-arm64]
     runs-on: ubuntu-26.04
     permissions:
       contents: read
