@@ -102,30 +102,62 @@ final class CacheFactory
                     throw new \Exception('"memcached" extension not loaded. Please check "php.ini"');
                 }
 
-                $host = Configuration::getConfig('MemcachedCache', 'host');
-                $port = Configuration::getConfig('MemcachedCache', 'port');
+                $type = Configuration::getConfig('MemcachedCache', 'type') ?? 'internal';
 
-                if (empty($host) === true) {
-                    throw new \Exception('"host" param is not set for MemcachedCache');
-                }
-                if (empty($port) === true) {
-                    throw new \Exception('"port" param is not set for MemcachedCache');
+                if ($type === 'external') {
+                    return $this->createMemcachedExternal();
                 }
 
-                $port = (string) $port;
-                if (ctype_digit($port) === false) {
-                    throw new \Exception('"port" param is invalid for MemcachedCache');
-                }
-
-                $portInt = intval($port);
-                if ($portInt < 1 || $portInt > 65535) {
-                    throw new \Exception('"port" param is invalid for MemcachedCache');
-                }
-
-                return new MemcachedCache($this->logger, (string) $host, $portInt);
+                return $this->createMemcachedInternal();
 
             default:
                 throw new \InvalidArgumentException(sprintf('Unknown cache type: %s', $name));
         }
+    }
+
+    /**
+     * Create internal Memcached instance (Unix socket).
+     */
+    private function createMemcachedInternal(): MemcachedCache
+    {
+        $socketPath = Configuration::getConfig('MemcachedCache', 'socket_path');
+
+        if (empty($socketPath) === true) {
+            throw new \Exception('"socket_path" param is not set for MemcachedCache (internal mode)');
+        }
+
+        if (file_exists($socketPath) === false) {
+            throw new \Exception(sprintf('Memcached socket does not exist: %s', $socketPath));
+        }
+
+        return new MemcachedCache($this->logger, $socketPath, 0, $socketPath);
+    }
+
+    /**
+     * Create external Memcached instance (TCP).
+     */
+    private function createMemcachedExternal(): MemcachedCache
+    {
+        $host = Configuration::getConfig('MemcachedCache', 'host');
+        $port = Configuration::getConfig('MemcachedCache', 'port');
+
+        if (empty($host) === true) {
+            throw new \Exception('"host" param is not set for MemcachedCache (external mode)');
+        }
+        if (empty($port) === true) {
+            throw new \Exception('"port" param is not set for MemcachedCache (external mode)');
+        }
+
+        $port = (string) $port;
+        if (ctype_digit($port) === false) {
+            throw new \Exception('"port" param is invalid for MemcachedCache');
+        }
+
+        $portInt = intval($port);
+        if ($portInt < 1 || $portInt > 65535) {
+            throw new \Exception('"port" param is invalid for MemcachedCache');
+        }
+
+        return new MemcachedCache($this->logger, (string) $host, $portInt);
     }
 }

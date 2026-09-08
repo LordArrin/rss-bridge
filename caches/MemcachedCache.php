@@ -7,6 +7,7 @@ namespace RSSBridge\Caches;
 /**
  * Memcached-based distributed cache with performance optimizations.
  * Uses persistent connections to avoid TCP handshake on every request.
+ * Supports both TCP (host:port) and Unix socket connections.
  */
 final class MemcachedCache implements CacheInterface
 {
@@ -14,18 +15,35 @@ final class MemcachedCache implements CacheInterface
     private readonly \Memcached $conn;
     private readonly string $cachePrefix;
 
-    public function __construct(\Logger $logger, string $host, int $port)
+    public function __construct(\Logger $logger, string $host, int $port, string $socketPath = '')
     {
         $this->logger = $logger;
 
+        // Determine connection type: Unix socket or TCP
+        $isUnixSocket = (empty($socketPath) === false) || (str_starts_with($host, '/') === true);
+
+        if ($isUnixSocket === true) {
+            $socketPath = (empty($socketPath) === false) ? $socketPath : $host;
+            $persistentId = 'rssbridge_memcached_unix_' . md5($socketPath);
+        } else {
+            $persistentId = 'rssbridge_memcached_tcp_' . $host . '_' . $port;
+        }
+
         // Use persistent connection (shared across requests in same FPM worker)
-        $persistentId = 'rssbridge_memcached_' . $host . '_' . $port;
         $this->conn = new \Memcached($persistentId);
 
         // Only add server if this is a new persistent connection
         if (count($this->conn->getServerList()) === 0) {
-            if ($this->conn->addServer($host, $port) === false) {
-                throw new \Exception('Unable to add memcached server');
+            if ($isUnixSocket === true) {
+                // Unix socket connection (port must be 0)
+                if ($this->conn->addServer($socketPath, 0) === false) {
+                    throw new \Exception('Unable to add memcached server (unix socket: ' . $socketPath . ')');
+                }
+            } else {
+                // TCP connection
+                if ($this->conn->addServer($host, $port) === false) {
+                    throw new \Exception('Unable to add memcached server (tcp: ' . $host . ':' . $port . ')');
+                }
             }
         }
 
@@ -33,11 +51,15 @@ final class MemcachedCache implements CacheInterface
         $this->conn->setOption(\Memcached::OPT_BINARY_PROTOCOL, true);
         $this->conn->setOption(\Memcached::OPT_COMPRESSION, true);
         $this->conn->setOption(\Memcached::OPT_LIBKETAMA_COMPATIBLE, true);
-        $this->conn->setOption(\Memcached::OPT_TCP_NODELAY, true);  // Disable Nagle's algorithm
         $this->conn->setOption(\Memcached::OPT_CONNECT_TIMEOUT, 1000);  // 1 second connect timeout
         $this->conn->setOption(\Memcached::OPT_RETRY_TIMEOUT, 1);  // 1 second retry timeout
         $this->conn->setOption(\Memcached::OPT_SEND_TIMEOUT, 500000);  // 500ms send timeout
         $this->conn->setOption(\Memcached::OPT_RECV_TIMEOUT, 500000);  // 500ms receive timeout
+
+        // TCP-specific optimization (not applicable to Unix socket)
+        if ($isUnixSocket === false) {
+            $this->conn->setOption(\Memcached::OPT_TCP_NODELAY, true);  // Disable Nagle's algorithm
+        }
 
         // Prefix to avoid conflicts with other applications
         $this->cachePrefix = 'rssbridge:';
