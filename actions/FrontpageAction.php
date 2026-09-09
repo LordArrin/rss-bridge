@@ -160,7 +160,7 @@ final class FrontpageAction implements ActionInterface
                 </svg>
             </button>
 
-            <a href="#bridge-{$shortClassNameSafe}">
+            <a href="#bridge-{$shortClassNameSafe}" class="hash-link" aria-label="Toggle bridge card">
                 <h1>#</h1>
             </a>
 

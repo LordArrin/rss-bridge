@@ -330,8 +330,14 @@ const RssBridge = (() => {
             if (!hash) return;
             const bridge = document.getElementById(hash);
             const showMoreLabel = bridge?.querySelector('label.showmore');
-            if (showMoreLabel) {
-                showMoreLabel.click();
+            const checkbox = bridge?.querySelector('.showmore-box');
+            
+            if (!showMoreLabel || !checkbox) return;
+
+            const wasChecked = checkbox.checked;
+            showMoreLabel.click(); // Toggle
+
+            if (!wasChecked && checkbox.checked) {
                 setTimeout(() => bridge.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
             }
         },
@@ -340,6 +346,14 @@ const RssBridge = (() => {
             document.addEventListener('change', e => this.handleChange(e));
             this.openFromHash();
             window.addEventListener('hashchange', () => this.openFromHash());
+            
+            document.addEventListener('touchend', (e) => {
+                const target = e.target.closest('.hash-link, .favorite-btn');
+                if (!target) return;
+                
+                target.classList.add('touch-active');
+                setTimeout(() => target.classList.remove('touch-active'), 150);
+            }, { passive: true });
         }
     };
 
@@ -560,17 +574,7 @@ const RssBridge = (() => {
                 this.sortBridges(true);
                 this.showToast(isAdded ? 'Added to favorites' : 'Removed from favorites');
             });
-            
-            if (this.isMobile) {
-                document.addEventListener('touchend', (e) => {
-                    const btn = e.target.closest('.favorite-btn');
-                    if (!btn) return;
-                    
-                    btn.classList.add('touch-active');
-                    setTimeout(() => btn.classList.remove('touch-active'), 150);
-                }, { passive: true });
-            }
-            
+                        
             this.sortBridges(false);
             this.updateButtons();
             
