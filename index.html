@@ -1012,35 +1012,24 @@ timeout = 60000</code></pre></div>
                     <div class="bridge-specific-content-inner">
                         <p>This bridge is based on the <a href="https://dev.vk.com/reference" target="_blank" rel="noopener">VK API</a>. Compared to VkBridge, this script has its own advantages and disadvantages.</p>
 
-                        <h4>Advantages</h4>
-                        <ul>
-                            <li>
-                                <strong>Stability.</strong>
-                                The script does not depend on the HTML structure of VK group or user pages, which can change at any moment.
-                            </li>
-                        </ul>
-
-                        <h4>Disadvantages</h4>
-                        <ul>
-                            <li>
-                                <strong>Requires a registered VK user.</strong>
-                                This user must obtain an <code>access_token</code> which is used by this script. See the "Configuration" section for details.
-                            </li>
-                            <li>
-                                <strong>Request limits apply when caching is disabled</strong> — <a href="https://dev.vk.com/ru/reference/roadmap#%D0%9E%D0%B3%D1%80%D0%B0%D0%BD%D0%B8%D1%87%D0%B5%D0%BD%D0%B8%D1%8F%20API%20%D0%B4%D0%BB%D1%8F%20%D0%BF%D0%BE%D0%B8%D1%81%D0%BA%D0%B0" target="_blank" rel="noopener">5000 requests per day</a>.
-                            </li>
-                        </ul>
+                        <li>
+                            <strong>Requires a registered VK user.</strong>
+                            This user must obtain an <code>access_token</code> which is used by this script. See the "Configuration" section for details.
+                        </li>
+                        <li>
+                            <strong>Request limits apply when caching is disabled</strong> — <a href="https://dev.vk.com/ru/reference/roadmap#%D0%9E%D0%B3%D1%80%D0%B0%D0%BD%D0%B8%D1%87%D0%B5%D0%BD%D0%B8%D1%8F%20API%20%D0%B4%D0%BB%D1%8F%20%D0%BF%D0%BE%D0%B8%D1%81%D0%BA%D0%B0" target="_blank" rel="noopener">5000 requests per day</a>.
+                        </li>
 
                         <h4>Configuration</h4>
                         <ol>
                             <li>
-                                <span>Follow this <a href="https://oauth.vk.com/oauth/authorize?client_id=5149410&amp;scope=offline&amp;redirect_uri=https://oauth.vk.com/blank.html&amp;display=page&amp;response_type=token" target="_blank" rel="noopener">link</a>.</span>
+                                <span>Follow this <a href="https://oauth.vk.ru/oauth/authorize?client_id=5149410&amp;scope=offline&amp;redirect_uri=https://oauth.vk.ru/blank.html&amp;display=page&amp;response_type=token" target="_blank" rel="noopener">link</a>.</span>
                             </li>
                             <li>
                                 <span>Authorize the <code>my_personal_app</code> application.</span>
                             </li>
                             <li>
-                                <span>You will receive a URL like <code>https://oauth.vk.com/blank.html#access_token=MNOGO_BUKAV&amp;expires_in=0&amp;user_id=123456</code>. Copy the <code>MNOGO_BUKAV</code> part from this URL.</span>
+                                <span>You will receive a URL like <code>https://oauth.vk.ru/blank.html#access_token=MNOGO_BUKAV&amp;expires_in=0&amp;user_id=123456</code>. Copy the <code>MNOGO_BUKAV</code> part from this URL.</span>
                             </li>
                             <li>
                                 <span>Add the <code>access_token</code> to your <code>config.ini.php</code> in the Vk2Bridge section:</span>
@@ -1052,13 +1041,13 @@ timeout = 60000</code></pre></div>
                                         <span class="copy-label-copied">Copied!</span>
                                     </button>
                                     <pre><code>[Vk2Bridge]
-            access_token = "MNOGO_BUKAV"</code></pre>
+access_token = "**********"</code></pre>
                                 </div>
                             </li>
                         </ol>
 
                         <div class="note info">
-                            💡 <strong>Note:</strong> The link in step 1 uses an application maintained by <a href="https://github.com/em92" target="_blank" rel="noopener">@em92</a>. You may use your own standalone application instead — just replace the <code>client_id</code> value in the URL with your own.
+                            💡 <strong>Note:</strong> The link in step 1 uses an application maintained by <a href="https://github.com/em92" target="_blank" rel="noopener">em92</a>. You may use your own standalone application instead — just replace the <code>client_id</code> value in the URL with your own.
                         </div>
                     </div>
                 </div>
