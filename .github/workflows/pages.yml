@@ -21,11 +21,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate bridges.json
+      - name: Extract bridge metadata
         run: |
-          cd bridges-v2
-          ls -1 *.php | sed 's/\.php$//' | jq -R -s 'split("\n") | map(select(length > 0))' > ../bridges.json
-          echo "Generated bridges.json with $(jq length ../bridges.json) bridges"
+          php .github/workflows/extract-bridges.php > bridges.json
+          echo "Generated bridges.json"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
