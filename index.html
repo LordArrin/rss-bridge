@@ -7,6 +7,9 @@
     <meta name="description" content="Optimized RSS-Bridge fork with PHP 8.5, Memcached, and modern UI">
     <link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/LordArrin/rss-bridge/master/static/logo.svg">
     <style>
+        /* ============================================================
+           1. DESIGN TOKENS
+           ============================================================ */
         :root {
             --md-primary: #E65100;
             --md-on-primary: #FFFFFF;
@@ -21,9 +24,11 @@
             --md-tertiary-container: #E3F3B4;
             --md-on-tertiary-container: #1B2300;
             --md-error: #BA1A1A;
+            --md-on-error: #FFFFFF;
             --md-error-container: #FFDAD6;
             --md-on-error-container: #410002;
             --md-warning: #E89500;
+            --md-on-warning: #FFFFFF;
             --md-warning-container: #FFE9A6;
             --md-on-warning-container: #3D2200;
             --md-surface: #FFF8F5;
@@ -39,21 +44,26 @@
             --md-outline: #85736C;
             --md-outline-variant: #D8C2BB;
             --md-shadow: rgba(61, 18, 0, 0.15);
+            --md-scrim: #000000;
             --md-elevation-1: 0 1px 2px 0 rgba(61,18,0,0.1), 0 1px 3px 1px rgba(61,18,0,0.08);
             --md-elevation-2: 0 1px 2px 0 rgba(61,18,0,0.1), 0 2px 6px 2px rgba(61,18,0,0.08);
             --md-elevation-3: 0 4px 8px 3px rgba(61,18,0,0.08), 0 1px 3px 0 rgba(61,18,0,0.1);
-            --md-motion-short: 300ms;
-            --md-motion-medium: 600ms;
-            --md-motion-long: 900ms;
-            --md-easing: cubic-bezier(0.2, 0, 0, 1);
-            --md-easing-dec: cubic-bezier(0, 0, 0, 1);
+            --md-motion-duration-short: 300ms;
+            --md-motion-duration-medium: 600ms;
+            --md-motion-duration-long: 900ms;
+            --md-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+            --md-motion-easing-decelerate: cubic-bezier(0, 0, 0, 1);
             --md-shape-xs: 4px;
             --md-shape-sm: 8px;
             --md-shape-md: 12px;
             --md-shape-lg: 16px;
             --md-shape-xl: 28px;
             --md-shape-full: 999px;
-            --md-font: 'Roboto', 'Segoe UI', system-ui, sans-serif;
+            --md-typescale-family: 'Roboto', 'Segoe UI', system-ui, sans-serif;
+            --md-typescale-headline-size: 2rem;
+            --md-typescale-title-size: 1.375rem;
+            --md-typescale-body-size: 0.875rem;
+            --md-typescale-label-size: 0.875rem;
         }
 
         @media (prefers-color-scheme: dark) {
@@ -67,12 +77,15 @@
                 --md-secondary-container: #5C4238;
                 --md-on-secondary-container: #FFDBCF;
                 --md-tertiary: #C7D69A;
+                --md-on-tertiary: #313A10;
                 --md-tertiary-container: #475225;
                 --md-on-tertiary-container: #E3F3B4;
                 --md-error: #FFB4AB;
+                --md-on-error: #690005;
                 --md-error-container: #93000A;
                 --md-on-error-container: #FFDAD6;
                 --md-warning: #FFB300;
+                --md-on-warning: #3F2800;
                 --md-warning-container: #453000;
                 --md-on-warning-container: #FFE1A0;
                 --md-surface: #120D0B;
@@ -89,36 +102,47 @@
                 --md-outline-variant: #53433D;
                 --md-shadow: rgba(0, 0, 0, 0.4);
             }
-            * { scrollbar-color: #352C28 #1F1714; }
             a:hover { color: color-mix(in srgb, var(--md-primary) 85%, white); }
         }
 
+        /* ============================================================
+           2. BASE RESET & TYPOGRAPHY
+           ============================================================ */
         html { box-sizing: border-box; font-size: 16px; scroll-behavior: smooth; }
         *, *:before, *:after { box-sizing: inherit; }
-        body, h1, h2, h3, h4, h5, h6, p, ol, ul { margin: 0; padding: 0; }
+        body, h1, h2, h3, h4, h5, h6, p, ol, ul { margin: 0; padding: 0; font-weight: normal; }
+        ol, ul { list-style: none; }
+        img { max-width: 100%; height: auto; }
         body {
-            background: var(--md-surface);
+            background-color: var(--md-surface);
             color: var(--md-on-surface);
-            font-family: var(--md-font);
-            font-size: 0.875rem;
+            font-family: var(--md-typescale-family);
+            font-size: var(--md-typescale-body-size);
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
         }
-        a { color: var(--md-primary); text-decoration: none; transition: color var(--md-motion-short) var(--md-easing); }
-        a:hover { color: color-mix(in srgb, var(--md-primary) 75%, black); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
-        img { max-width: 100%; height: auto; }
-        h1, h2, h3 { font-weight: 500; letter-spacing: -0.01em; }
-        h1, h2 { margin-bottom: 10px; }
+        a, a:link, a:visited {
+            color: var(--md-primary);
+            text-decoration: none;
+            transition: color var(--md-motion-duration-short) var(--md-motion-easing-standard);
+        }
+        a:hover {
+            color: color-mix(in srgb, var(--md-primary) 75%, black);
+            text-decoration: underline;
+            text-decoration-thickness: 2px;
+            text-underline-offset: 3px;
+        }
+        h1, h2 { margin-bottom: 10px; font-weight: 500; letter-spacing: -0.01em; }
         p { margin-bottom: 10px; }
         code {
-            background: var(--md-surface-container-high);
+            background-color: var(--md-surface-container-high);
             padding: 2px 6px;
             border-radius: var(--md-shape-xs);
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
             font-size: 0.85em;
         }
         pre {
-            background: var(--md-surface-container-highest);
+            background-color: var(--md-surface-container-highest);
             padding: 16px 20px;
             border-radius: var(--md-shape-md);
             overflow-x: auto;
@@ -129,119 +153,265 @@
         }
         pre code { background: none; padding: 0; }
 
-        .container { width: 90%; max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+        /* ============================================================
+           3. LAYOUT
+           ============================================================ */
+        .container { width: 80%; max-width: 2400px; margin: 0 auto 40px; padding: 0 16px; }
+        .container:has(.bridge-card) {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+            gap: 20px;
+            align-items: stretch;
+        }
+        .container:has(.bridge-card) > header,
+        .container:has(.bridge-card) > .searchbar,
+        .container:has(.bridge-card) > .doc-section,
+        .container:has(.bridge-card) > .footer {
+            grid-column: 1 / -1;
+        }
+        .container:has(.bridge-card) > header { order: -3; }
+        .container:has(.bridge-card) > .searchbar { order: -1; justify-self: center; width: 100%; }
+        .container:has(.bridge-card) > .doc-section { order: 999998; }
+        .container:has(.bridge-card) > .footer { order: 999999; }
+        .bridge-card { order: 1; }
 
+        /* ============================================================
+           4. COMPONENTS
+           ============================================================ */
         nav {
-            background: var(--md-surface-container);
-            padding: 16px;
+            background-color: var(--md-surface-container);
+            padding: 16px 0;
             position: sticky;
             top: 0;
             z-index: 1000;
             box-shadow: var(--md-elevation-1);
+            margin-bottom: 0;
         }
-        nav .container { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+        nav .nav-container {
+            width: 80%;
+            max-width: 2400px;
+            margin: 0 auto;
+            padding: 0 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
         nav .logo { display: flex; align-items: center; gap: 12px; font-weight: 500; font-size: 1.125rem; }
         nav .logo img { height: 40px; width: auto; }
-        nav .nav-links { display: flex; gap: 24px; flex-wrap: wrap; }
+        nav .nav-links { display: flex; gap: 8px; flex-wrap: wrap; }
         nav .nav-links a {
             padding: 8px 16px;
-            border-radius: var(--md-shape-sm);
-            transition: background-color var(--md-motion-short) var(--md-easing);
+            border-radius: var(--md-shape-full);
+            font-weight: 500;
+            font-size: var(--md-typescale-label-size);
+            transition: background-color var(--md-motion-duration-short) var(--md-motion-easing-standard);
         }
         nav .nav-links a:hover { background: var(--md-surface-container-high); text-decoration: none; }
 
-        header.hero {
+        header {
             padding: 48px 16px;
             text-align: center;
-            background: var(--md-surface-container);
+            background-color: var(--md-surface-container);
             border-radius: var(--md-shape-lg);
-            margin: 32px auto;
+            margin-bottom: 24px;
         }
-        header.hero img.logo-img {
+        header.hero { padding: 56px 16px; }
+        header img {
             max-height: 120px;
             width: auto;
-            padding: 24px 48px;
-            background: var(--md-surface-container-lowest);
+            padding: 20px 40px;
+            background-color: var(--md-surface-container-lowest);
             border-radius: var(--md-shape-xl);
             box-shadow: var(--md-elevation-2);
             margin-bottom: 24px;
-            transition: box-shadow var(--md-motion-medium) var(--md-easing);
+            transition: box-shadow var(--md-motion-duration-medium) var(--md-motion-easing-standard);
         }
-        header.hero img.logo-img:hover { box-shadow: var(--md-elevation-3); }
-        header.hero h1 { font-size: 2.5rem; margin-bottom: 16px; letter-spacing: -0.02em; }
-        header.hero p.subtitle { font-size: 1.125rem; color: var(--md-on-surface-variant); max-width: 700px; margin: 0 auto 24px; }
+        header img:hover { box-shadow: var(--md-elevation-3); }
+        header h1 { font-size: 2.5rem; margin-bottom: 16px; letter-spacing: -0.02em; }
+        header p.subtitle {
+            font-size: 1.125rem;
+            color: var(--md-on-surface-variant);
+            max-width: 700px;
+            margin: 0 auto 24px;
+        }
 
-        .badges { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin: 24px 0; }
+        .badges { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 24px 0; }
         .badge {
-            padding: 6px 14px;
-            background: var(--md-surface-container-lowest);
+            display: inline-block;
+            padding: 6px 12px;
+            background-color: var(--md-surface-container-high);
             color: var(--md-on-surface);
             border-radius: var(--md-shape-sm);
             font-size: 0.8125rem;
             font-weight: 500;
             box-shadow: var(--md-elevation-1);
-            transition: all var(--md-motion-short) var(--md-easing);
+            transition: all var(--md-motion-duration-short) var(--md-motion-easing-standard);
         }
-        .badge:hover { background: var(--md-primary); color: var(--md-on-primary); transform: translateY(-2px); box-shadow: var(--md-elevation-2); }
-
-        .button {
-            display: inline-block;
-            padding: 12px 24px;
-            background: var(--md-primary);
+        .badge:hover {
+            background-color: var(--md-primary);
             color: var(--md-on-primary);
-            border-radius: var(--md-shape-full);
-            font-weight: 500;
-            font-size: 0.875rem;
-            text-decoration: none;
-            margin: 12px 6px;
-            box-shadow: var(--md-elevation-1);
-            transition: all var(--md-motion-short) var(--md-easing);
+            transform: translateY(-2px);
+            box-shadow: var(--md-elevation-2);
         }
-        .button:hover { background: var(--md-primary-container); color: var(--md-on-primary-container); box-shadow: var(--md-elevation-2); text-decoration: none; transform: translateY(-1px); }
-        .button.secondary { background: var(--md-surface-container-high); color: var(--md-on-surface); border: 1px solid var(--md-outline-variant); }
-        .button.secondary:hover { background: var(--md-surface-container-highest); border-color: var(--md-outline); }
 
-        section {
-            margin-bottom: 32px;
-            background: var(--md-surface-container-low);
+        /* ============================================================
+           5. BUTTONS (from original style.css)
+           ============================================================ */
+        button,
+        a.button {
+            line-height: 1.5;
+            color: var(--md-on-primary);
+            font-weight: 500;
+            font-family: inherit;
+            font-size: var(--md-typescale-label-size);
+            letter-spacing: 0.02em;
+            vertical-align: middle;
+            padding: 12px 24px;
+            margin: 12px 6px;
+            border-radius: var(--md-shape-full);
+            border: 1px solid transparent;
+            background: var(--md-primary);
+            cursor: pointer;
+            min-width: 140px;
+            min-height: 48px;
+            text-decoration: none;
+            text-align: center;
+            display: inline-block;
+            transition: all var(--md-motion-duration-short) var(--md-motion-easing-standard);
+            box-shadow: var(--md-elevation-1);
+            position: relative;
+            overflow: hidden;
+        }
+        button:hover,
+        a.button:hover {
+            background: var(--md-primary-container);
+            color: var(--md-on-primary-container);
+            box-shadow: var(--md-elevation-2);
+            text-decoration: none;
+        }
+        button:active,
+        a.button:active {
+            box-shadow: var(--md-elevation-1);
+        }
+        button:focus-visible,
+        a.button:focus-visible {
+            outline: 2px solid var(--md-primary);
+            outline-offset: 2px;
+        }
+        button.backbutton,
+        a.button.backbutton {
+            background: var(--md-surface-container-high);
+            color: var(--md-on-surface);
+            border: 1px solid var(--md-outline-variant);
+        }
+        button.backbutton:hover,
+        a.button.backbutton:hover {
+            background: var(--md-surface-container-highest);
+            color: var(--md-on-surface);
+            border-color: var(--md-outline);
+        }
+        button.secondary,
+        a.button.secondary {
+            background: var(--md-secondary);
+            color: var(--md-on-secondary);
+        }
+        button.secondary:hover,
+        a.button.secondary:hover {
+            background: var(--md-secondary-container);
+            color: var(--md-on-secondary-container);
+        }
+        button::after,
+        a.button::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 1s ease, height 1s ease, opacity 1s ease;
+            opacity: 0;
+        }
+        button:active::after,
+        a.button:active::after {
+            width: 200px;
+            height: 200px;
+            opacity: 1;
+            transition: 0s;
+        }
+
+        /* ============================================================
+           6. SECTIONS
+           ============================================================ */
+        .doc-section {
+            margin-bottom: 16px;
+            background-color: var(--md-surface-container-low);
             padding: 32px;
             box-shadow: var(--md-elevation-1);
             border-radius: var(--md-shape-lg);
-            transition: transform var(--md-motion-medium) var(--md-easing), box-shadow var(--md-motion-medium) var(--md-easing);
+            transition: transform var(--md-motion-duration-medium) var(--md-motion-easing-standard),
+                        box-shadow var(--md-motion-duration-medium) var(--md-motion-easing-standard);
         }
-        section:hover { transform: translateY(-2px); box-shadow: var(--md-elevation-2); }
-        section h2 {
+        .doc-section:hover { transform: translateY(-2px); box-shadow: var(--md-elevation-2); }
+        .doc-section > h2 {
             font-size: 1.75rem;
+            font-weight: 500;
+            text-align: center;
+            letter-spacing: -0.01em;
             margin-bottom: 24px;
             padding-bottom: 12px;
             border-bottom: 2px solid var(--md-outline-variant);
-            text-align: center;
         }
-        section h3 { font-size: 1.375rem; margin: 28px 0 16px; color: var(--md-primary); }
-        section ul, section ol { margin: 0 0 16px 28px; }
-        section li { margin-bottom: 8px; line-height: 1.6; }
-        section ul li { list-style: none; position: relative; padding-left: 4px; }
-        section ul li::before { content: "•"; color: var(--md-primary); font-weight: bold; position: absolute; left: -18px; }
-        section p { margin-bottom: 12px; }
+        .doc-section h3 {
+            font-size: 1.375rem;
+            font-weight: 500;
+            margin: 28px 0 16px;
+            color: var(--md-primary);
+        }
+        .doc-section ul, .doc-section ol { margin: 0 0 16px 28px; }
+        .doc-section li { margin-bottom: 8px; line-height: 1.6; }
+        .doc-section ul li { list-style: none; position: relative; padding-left: 4px; }
+        .doc-section ul li::before {
+            content: "•";
+            color: var(--md-primary);
+            font-weight: bold;
+            position: absolute;
+            left: -18px;
+        }
+        .doc-section p { margin-bottom: 12px; }
 
-        .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin-top: 32px; }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 24px;
+            margin-top: 32px;
+        }
         .feature-card {
             background: var(--md-surface-container-lowest);
             padding: 28px 24px;
             border-radius: var(--md-shape-lg);
             text-align: center;
             box-shadow: var(--md-elevation-1);
-            transition: all var(--md-motion-medium) var(--md-easing);
+            transition: all var(--md-motion-duration-medium) var(--md-motion-easing-standard);
         }
         .feature-card:hover { transform: translateY(-4px); box-shadow: var(--md-elevation-3); }
         .feature-card .icon { font-size: 3rem; margin-bottom: 16px; }
         .feature-card h3 { margin: 0 0 12px; color: var(--md-on-surface); font-size: 1.25rem; }
         .feature-card p { color: var(--md-on-surface-variant); font-size: 0.95rem; margin: 0; line-height: 1.6; }
 
+        /* ============================================================
+           7. SEARCHBAR
+           ============================================================ */
         .searchbar {
+            width: 100%;
             max-width: 700px;
-            margin: 0 auto 32px;
-            background: var(--md-surface-container-low);
+            text-align: center;
+            margin: 0 auto 40px;
+            background-color: var(--md-surface-container-low);
             padding: 24px;
             border-radius: var(--md-shape-lg);
             box-shadow: var(--md-elevation-1);
@@ -250,30 +420,28 @@
             width: 100%;
             font-size: 1.125rem;
             text-align: center;
+            margin: 0 auto 16px;
             border-radius: var(--md-shape-full);
             padding: 16px 24px;
-            background: var(--md-surface-container-high);
+            min-height: 56px;
+            background-color: var(--md-surface-container-high);
             border: 2px solid transparent;
             color: var(--md-on-surface);
             font-family: inherit;
-            transition: all var(--md-motion-medium) var(--md-easing);
+            transition: all var(--md-motion-duration-medium) var(--md-motion-easing-standard);
         }
         .searchbar input[type="text"]:focus {
             outline: none;
-            background: var(--md-surface-container-lowest);
+            background-color: var(--md-surface-container-lowest);
             border-color: var(--md-primary);
             box-shadow: var(--md-elevation-2);
         }
         .searchbar input::placeholder { text-align: center; color: var(--md-on-surface-variant); }
         .bridge-count { text-align: center; color: var(--md-on-surface-variant); font-size: 0.875rem; margin-top: 16px; }
-        
-        /* BRIDGE CARDS - exact match with original */
-        .bridges-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
-            gap: 20px;
-            align-items: stretch;
-        }
+
+        /* ============================================================
+           8. BRIDGE CARD (exact match with original)
+           ============================================================ */
         .bridge-card {
             position: relative;
             padding: 32px 16px 16px;
@@ -281,61 +449,87 @@
             flex-direction: column;
             align-items: center;
             gap: 8px;
-            background: var(--md-surface-container-low);
+            background-color: var(--md-surface-container-low);
             border-radius: var(--md-shape-lg);
             box-shadow: var(--md-elevation-1);
-            transition: transform var(--md-motion-short) var(--md-easing), box-shadow var(--md-motion-short) var(--md-easing);
+            animation: fadeInUp var(--md-motion-duration-long) var(--md-motion-easing-decelerate) both;
+            transform: translateZ(0);
+            backface-visibility: hidden;
+            content-visibility: auto;
+            contain-intrinsic-size: auto 300px;
+            contain: style paint;
+            transition: transform var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                        box-shadow var(--md-motion-duration-short) var(--md-motion-easing-standard);
+            min-height: 200px;
         }
         .bridge-card:hover {
             transform: translateY(-4px) translateZ(0);
             box-shadow: var(--md-elevation-2);
         }
-        .bridge-card h2 {
+        .bridge-card > h2 {
             margin: 0;
-            margin-top: 16px;
+            margin-top: 0;
             text-align: center;
             width: 100%;
-            font-size: 1.5rem;
+            font-size: 1.375rem;
         }
-        .bridge-card h2 a {
+        .bridge-card > h2 a {
             color: var(--md-primary);
             text-decoration: none;
-            transition: color var(--md-motion-short) var(--md-easing);
+            transition: color var(--md-motion-duration-short) var(--md-motion-easing-standard);
         }
-        .bridge-card h2 a:hover {
+        .bridge-card > h2 a:hover {
             color: color-mix(in srgb, var(--md-primary) 75%, black);
             text-decoration: underline;
             text-decoration-thickness: 2px;
             text-underline-offset: 3px;
         }
-        .bridge-card .description {
+        .bridge-card > .description {
             max-width: 90%;
             color: var(--md-on-surface-variant);
             text-align: center;
             margin: 0;
             font-size: 0.875rem;
             line-height: 1.5;
+            flex-grow: 1;
         }
-        .bridge-card .maintainer {
+        .bridge-card > .maintainer {
             width: 100%;
             color: var(--md-on-surface-variant);
             font-size: 0.75rem;
             text-align: right;
             margin-top: 16px;
+            padding-top: 8px;
         }
-        .bridge-card.hidden { display: none; }
-        
-        .loading { text-align: center; padding: 40px; color: var(--md-on-surface-variant); grid-column: 1 / -1; }
+        .bridge-card.hidden { display: none !important; }
 
-        footer {
-            background: var(--md-surface-container);
+        .loading {
             text-align: center;
-            padding: 36px 16px;
-            margin-top: 40px;
-            border-radius: var(--md-shape-lg);
+            padding: 40px;
+            color: var(--md-on-surface-variant);
+            grid-column: 1 / -1;
         }
-        footer p { color: var(--md-on-surface-variant); margin-bottom: 8px; }
-        footer .links { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin: 16px 0; }
+
+        /* ============================================================
+           9. FOOTER
+           ============================================================ */
+        section.footer {
+            background-color: var(--md-surface-container);
+            box-shadow: none;
+            text-align: center;
+            padding: 32px 16px;
+            border-radius: var(--md-shape-lg);
+            margin-top: 24px;
+            margin-bottom: 16px;
+        }
+        section.footer p { color: var(--md-on-surface-variant); margin-bottom: 8px; }
+        section.footer .links {
+            display: flex;
+            gap: 24px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 16px 0;
+        }
 
         .text-center { text-align: center; }
         .mt-24 { margin-top: 24px; }
@@ -348,24 +542,48 @@
             font-weight: 500;
         }
 
+        /* ============================================================
+           10. ANIMATIONS
+           ============================================================ */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ============================================================
+           11. RESPONSIVE & ACCESSIBILITY
+           ============================================================ */
         @media (max-width: 767px) {
-            .container { width: 100%; padding: 0 8px; }
-            header.hero h1 { font-size: 1.75rem; }
-            section { padding: 20px; }
-            section h2 { font-size: 1.5rem; }
-            .bridges-grid { grid-template-columns: 1fr; }
-            nav .container { flex-direction: column; align-items: flex-start; }
+            .container, nav .nav-container { width: 100%; padding: 0 12px; }
+            header h1 { font-size: 1.75rem; }
+            .doc-section { padding: 20px; }
+            .doc-section > h2 { font-size: 1.5rem; }
+            nav .nav-container { flex-direction: column; align-items: flex-start; }
             nav .nav-links { width: 100%; justify-content: center; }
+            button, a.button {
+                display: inline-block;
+                width: 45%;
+                min-width: auto;
+                padding: 12px 16px;
+                margin: 6px 2px;
+            }
         }
         @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+        @media (prefers-color-scheme: dark) {
+            * { scrollbar-color: #352C28 #1F1714; }
         }
     </style>
 </head>
 <body>
 
 <nav>
-    <div class="container">
+    <div class="nav-container">
         <div class="logo">
             <img src="https://raw.githubusercontent.com/LordArrin/rss-bridge/master/static/logo.svg" alt="RSS-Bridge">
             <span>RSS-Bridge LordArrin Fork</span>
@@ -383,7 +601,7 @@
 <div class="container">
 
     <header class="hero">
-        <img class="logo-img" src="https://raw.githubusercontent.com/LordArrin/rss-bridge/master/static/not_boring_logo.png" alt="RSS-Bridge">
+        <img src="https://raw.githubusercontent.com/LordArrin/rss-bridge/master/static/not_boring_logo.png" alt="RSS-Bridge">
         <h1>RSS-Bridge LordArrin Fork</h1>
         <p class="subtitle">Optimized RSS-Bridge fork with PHP 8.5, built-in Memcached, modern architecture, and Material Design 3 interface</p>
         <div class="badges">
@@ -399,7 +617,7 @@
         </div>
     </header>
 
-    <section id="features">
+    <section class="doc-section" id="features">
         <h2>Key Features</h2>
         <div class="features">
             <div class="feature-card">
@@ -425,7 +643,7 @@
         </div>
     </section>
 
-    <section id="installation">
+    <section class="doc-section" id="installation">
         <h2>Installation & Setup</h2>
 
         <h3>Quick Start with Docker</h3>
@@ -486,24 +704,26 @@ timeout = 60000</code></pre>
         </ul>
     </section>
 
-    <section id="bridges">
-        <h2>Available Bridges</h2>
+    <section class="doc-section" id="bridges" style="background: transparent; padding: 0; box-shadow: none;">
+        <h2 style="padding: 32px; background: var(--md-surface-container-low); border-radius: var(--md-shape-lg); box-shadow: var(--md-elevation-1); margin-bottom: 32px;">Available Bridges</h2>
         <p class="text-center mb-24">
             This fork includes <span class="highlight" id="bridge-count">120+</span> bridges for various sites and services.
             All bridges are written in PHP 8.5 with strict typing and native DOM parser.
         </p>
-        <div class="searchbar">
-            <input type="text" id="bridge-search" placeholder="Search bridges by name..." autocomplete="off">
-            <div class="bridge-count">
-                Showing: <span id="visible-count">0</span> of <span id="total-count">0</span>
-            </div>
-        </div>
-        <div class="bridges-grid" id="bridges-grid">
-            <div class="loading" id="loading-message">Loading bridges from repository...</div>
-        </div>
     </section>
 
-    <section id="development">
+    <div class="searchbar">
+        <input type="text" id="bridge-search" placeholder="Search bridges by name or description..." autocomplete="off">
+        <div class="bridge-count">
+            Showing: <span id="visible-count">0</span> of <span id="total-count">0</span>
+        </div>
+    </div>
+
+    <div id="bridges-container">
+        <div class="loading" id="loading-message">Loading bridges from repository...</div>
+    </div>
+
+    <section class="doc-section" id="development">
         <h2>Developing Custom Bridges</h2>
 
         <h3>Requirements</h3>
@@ -593,7 +813,7 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=5</code></pre>
         </div>
     </section>
 
-    <footer>
+    <section class="footer">
         <p><strong>RSS-Bridge LordArrin Fork</strong></p>
         <p>Optimized version for maximum performance</p>
         <div class="links">
@@ -602,13 +822,13 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=5</code></pre>
             <a href="https://github.com/LordArrin/rss-bridge/pulls">Pull Requests</a>
         </div>
         <p style="font-size: 0.8125rem;">Based on <a href="https://github.com/RSS-Bridge/rss-bridge">RSS-Bridge</a></p>
-    </footer>
+    </section>
 
 </div>
 
 <script>
     async function loadBridges() {
-        const grid = document.getElementById('bridges-grid');
+        const bridgesContainer = document.getElementById('bridges-container');
         const loadingMessage = document.getElementById('loading-message');
         
         try {
@@ -621,19 +841,25 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=5</code></pre>
             document.getElementById('total-count').textContent = bridges.length;
             document.getElementById('visible-count').textContent = bridges.length;
             
-            bridges.forEach(bridge => {
+            bridges.forEach((bridge, index) => {
                 const card = document.createElement('section');
                 card.className = 'bridge-card';
-                card.setAttribute('data-name', bridge.name.toLowerCase());
-                card.setAttribute('data-description', bridge.description.toLowerCase());
+                card.setAttribute('data-name', (bridge.name || '').toLowerCase());
+                card.setAttribute('data-description', (bridge.description || '').toLowerCase());
+                card.style.animationDelay = `${Math.min(index * 20, 500)}ms`;
+                
+                const uri = bridge.uri || 'https://github.com/LordArrin/rss-bridge';
+                const name = bridge.name || 'Unknown Bridge';
+                const description = bridge.description || 'No description provided';
+                const maintainer = bridge.maintainer || 'No maintainer';
                 
                 card.innerHTML = `
-                    <h2><a href="${bridge.uri}" target="_blank" rel="noopener">${bridge.name}</a></h2>
-                    <p class="description">${bridge.description}</p>
-                    <p class="maintainer">Maintainer: ${bridge.maintainer}</p>
+                    <h2><a href="${uri}" target="_blank" rel="noopener">${name}</a></h2>
+                    <p class="description">${description}</p>
+                    <p class="maintainer">${maintainer}</p>
                 `;
                 
-                grid.appendChild(card);
+                bridgesContainer.appendChild(card);
             });
             
             setupSearch();
@@ -649,12 +875,12 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=5</code></pre>
         const visibleCount = document.getElementById('visible-count');
         
         searchInput.addEventListener('input', e => {
-            const query = e.target.value.toLowerCase();
+            const query = e.target.value.toLowerCase().trim();
             let visible = 0;
             cards.forEach(card => {
-                const name = card.getAttribute('data-name');
-                const description = card.getAttribute('data-description');
-                const match = name.includes(query) || description.includes(query);
+                const name = card.getAttribute('data-name') || '';
+                const description = card.getAttribute('data-description') || '';
+                const match = !query || name.includes(query) || description.includes(query);
                 card.classList.toggle('hidden', !match);
                 if (match) visible++;
             });
@@ -665,10 +891,10 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=5</code></pre>
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', e => {
             e.preventDefault();
-            document.querySelector(anchor.getAttribute('href'))?.scrollIntoView({ 
-                behavior: 'smooth', 
-                block: 'start' 
-            });
+            const target = document.querySelector(anchor.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         });
     });
     
