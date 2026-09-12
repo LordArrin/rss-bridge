@@ -39,7 +39,7 @@ jobs:
       - name: Fetch latest version and patch Dockerfile
         id: check_version
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PR_CREATE_TOKEN }}
         run: |
           cat << 'EOF' > update_deps.py
           import urllib.request
@@ -206,7 +206,8 @@ jobs:
         if: steps.check_version.outputs.updated == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Use custom PAT instead of GITHUB_TOKEN
+          token: ${{ secrets.PR_CREATE_TOKEN }}
           commit-message: "chore(deps): bump ${{ matrix.dep }} from ${{ steps.check_version.outputs.old_version }} to ${{ steps.check_version.outputs.new_version }}"
           title: "chore(deps): bump ${{ matrix.dep }} to ${{ steps.check_version.outputs.new_version }}"
           body: |
