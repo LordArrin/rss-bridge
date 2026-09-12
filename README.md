@@ -355,7 +355,7 @@ Third-party libraries used:
 |---------|---------|
 | [Parsedown](https://github.com/erusev/parsedown) | MIT |
 | [php-urljoin](https://github.com/fluffy-critter/php-urljoin) | MIT |
-| [PHPUnit](https://phpunit.de/) | BSD-3-Clause (dev) |
-| [PHP_CodeSniffer](https://github.com/PHPCSStandards/PHP_CodeSniffer) | BSD-3-Clause (dev) |
-| [PHPStan](https://phpstan.org/) | MIT (dev) |
-| [memcached](https://github.com/memcached/memcached) | MIT |
+| [PHPUnit](https://phpunit.de/) | BSD-3-Clause |
+| [PHP_CodeSniffer](https://github.com/PHPCSStandards/PHP_CodeSniffer) | BSD-3-Clause |
+| [PHPStan](https://phpstan.org/) | MIT |
+| [memcached](https://github.com/memcached/memcached) | Combined - BSD-3-Clause and others |
