@@ -12,8 +12,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    # fail-fast: false ensures that if one dependency check fails, 
-    # the others will still finish and create their respective PRs.
     strategy:
       fail-fast: false
       matrix:
@@ -50,17 +48,18 @@ jobs:
           import os
           import sys
 
-          # Configuration mapping: ARG_NAME -> (SOURCE, STRIP_PREFIX)
+          # Configuration mapping: ARG_NAME -> (SOURCE, STRIP_PREFIX, VALID_TAG_REGEX)
+          # If a dependency is fetched from a fork, change the repository path here.
           DEPS_CONFIG = {
-              "ALPINE_VERSION": ("alpine_docker", ""),
-              "NGINX_VERSION": ("freenginx", ""),
-              "CURL_VERSION": ("lwthiker/curl-impersonate", "v"),
-              "OPENSSL_VERSION": ("openssl/openssl", "openssl-"),
-              "PCRE_VERSION": ("PCRE2Project/pcre2", "pcre2-"),
-              "MIMALLOC_VERSION": ("microsoft/mimalloc", "v"),
-              "ZLIB_NG_VERSION": ("zlib-ng/zlib-ng", "v"),
-              "LIBEVENT_VERSION": ("libevent/libevent", "release-"),
-              "MEMCACHED_VERSION": ("memcached/memcached", "v"),
+              "ALPINE_VERSION": ("alpine_docker", "", r"^3\.\d+$"),
+              "NGINX_VERSION": ("freenginx", "", r"^\d+\.\d+\.\d+$"),
+              "CURL_VERSION": ("lwthiker/curl-impersonate", "v", r"^v?\d+\.\d+\.\d+$"),
+              "OPENSSL_VERSION": ("openssl/openssl", "openssl-", r"^openssl-\d+\.\d+\.\d+$"),
+              "PCRE_VERSION": ("PCRE2Project/pcre2", "pcre2-", r"^pcre2-\d+\.\d+$"),
+              "MIMALLOC_VERSION": ("microsoft/mimalloc", "v", r"^v?\d+\.\d+\.\d+$"),
+              "ZLIB_NG_VERSION": ("zlib-ng/zlib-ng", "v", r"^v?\d+\.\d+\.\d+$"),
+              "LIBEVENT_VERSION": ("libevent/libevent", "release-", r"^release-\d+\.\d+\.\d+-stable$"),
+              "MEMCACHED_VERSION": ("memcached/memcached", "v", r"^\d+\.\d+\.\d+$"),
           }
 
           def set_github_output(name, value):
@@ -71,7 +70,6 @@ jobs:
 
           def fetch_url(url):
               headers = {'User-Agent': 'Mozilla/5.0 (RSS-Bridge Deps Updater)'}
-              # Authenticate GitHub API requests to avoid rate limits
               if 'api.github.com' in url and 'GITHUB_TOKEN' in os.environ:
                   headers['Authorization'] = f"token {os.environ['GITHUB_TOKEN']}"
               
@@ -79,30 +77,57 @@ jobs:
               with urllib.request.urlopen(req, timeout=15) as response:
                   return response.read().decode()
 
-          def get_github_latest(repo):
-              """Fetches the latest release or tag from a GitHub repository."""
+          def version_sort_key(tag):
+              """Extracts numbers from a tag string to allow proper numerical sorting."""
+              clean = re.sub(r'^[a-zA-Z-]+', '', tag)
+              return tuple(map(int, re.findall(r'\d+', clean)))
+
+          def get_github_latest(repo, tag_regex):
+              """Fetches the latest valid release or tag from a GitHub repository."""
+              # Try latest release first
               try:
                   data = json.loads(fetch_url(f"https://api.github.com/repos/{repo}/releases/latest"))
-                  return data['tag_name']
+                  tag = data['tag_name']
+                  if re.match(tag_regex, tag):
+                      return tag
               except Exception:
-                  # Fallback to tags if no formal releases exist
-                  data = json.loads(fetch_url(f"https://api.github.com/repos/{repo}/tags?per_page=5"))
-                  return data[0]['name'] if data else None
+                  pass
+              
+              # Fallback to tags, filter by regex and sort numerically
+              try:
+                  data = json.loads(fetch_url(f"https://api.github.com/repos/{repo}/tags?per_page=100"))
+                  valid_tags = [t['name'] for t in data if re.match(tag_regex, t['name'])]
+                  if valid_tags:
+                      valid_tags.sort(key=version_sort_key, reverse=True)
+                      return valid_tags[0]
+              except Exception:
+                  pass
+              return None
 
-          def get_alpine_latest():
+          def get_alpine_latest(tag_regex):
               """Fetches the latest stable Alpine Linux tag from Docker Hub."""
-              data = json.loads(fetch_url("https://hub.docker.com/v2/repositories/library/alpine/tags?page_size=50"))
-              for tag in data['results']:
-                  # Match stable versions like 3.20, 3.21 (ignoring 3.21.1 or edge)
-                  if re.match(r'^3\.\d+$', tag['name']):
-                      return tag['name']
-              return "3.20" # Fallback
+              try:
+                  data = json.loads(fetch_url("https://hub.docker.com/v2/repositories/library/alpine/tags?page_size=100"))
+                  valid_tags = [t['name'] for t in data['results'] if re.match(tag_regex, t['name'])]
+                  if valid_tags:
+                      valid_tags.sort(key=lambda x: tuple(map(int, x.split('.'))), reverse=True)
+                      return valid_tags[0]
+              except Exception:
+                  pass
+              return "3.24" # Fallback
 
-          def get_freenginx_latest():
+          def get_freenginx_latest(tag_regex):
               """Parses the official freenginx download page for the stable version."""
-              html = fetch_url("https://freenginx.org/en/download.html")
-              match = re.search(r'freenginx-([0-9\.]+)\.tar\.gz', html)
-              return match.group(1) if match else "1.27.0"
+              try:
+                  html = fetch_url("https://freenginx.org/en/download.html")
+                  matches = re.findall(r'freenginx-([0-9\.]+)\.tar\.gz', html)
+                  valid_tags = [m for m in matches if re.match(tag_regex, m)]
+                  if valid_tags:
+                      valid_tags.sort(key=version_sort_key, reverse=True)
+                      return valid_tags[0]
+              except Exception:
+                  pass
+              return "1.27.0" # Fallback
 
           if len(sys.argv) < 2:
               print("[Error] Dependency name not provided.")
@@ -113,7 +138,7 @@ jobs:
               print(f"[Error] Unknown dependency: {target_dep}")
               sys.exit(1)
 
-          source, strip_pre = DEPS_CONFIG[target_dep]
+          source, strip_pre, tag_regex = DEPS_CONFIG[target_dep]
           dockerfile_path = "Dockerfile"
 
           if not os.path.exists(dockerfile_path):
@@ -135,28 +160,29 @@ jobs:
           # Fetch latest version
           try:
               if source == "alpine_docker":
-                  latest_raw = get_alpine_latest()
+                  latest_raw = get_alpine_latest(tag_regex)
               elif source == "freenginx":
-                  latest_raw = get_freenginx_latest()
+                  latest_raw = get_freenginx_latest(tag_regex)
               else:
-                  latest_raw = get_github_latest(source)
+                  latest_raw = get_github_latest(source, tag_regex)
 
               if not latest_raw:
-                  print(f"[Warning] Could not fetch latest version for {target_dep}")
+                  print(f"[Warning] Could not fetch a valid latest version for {target_dep}")
+                  set_github_output("updated", "false")
                   sys.exit(0)
 
-              # Clean tag prefix (e.g., "openssl-3.0.1" -> "3.0.1")
+              # Clean tag prefixes (e.g., "openssl-3.0.1" -> "3.0.1")
               latest_version = latest_raw[len(strip_pre):] if latest_raw.startswith(strip_pre) else latest_raw
-              print(f"[Info] Latest version found: {latest_version}")
+              print(f"[Info] Latest valid version found: {latest_version}")
 
               if current_version == latest_version:
                   print(f"[Info] {target_dep} is already up-to-date.")
                   set_github_output("updated", "false")
                   sys.exit(0)
 
-              # Update Dockerfile content safely
-              pattern = re.compile(rf'^(ARG\s+{target_dep}\s*=\s*).*$')
-              new_content, count = pattern.subn(rf'\g<1>{latest_version}', content, flags=re.MULTILINE)
+              # Safely update the Dockerfile using re.subn with MULTILINE flag
+              pattern_str = rf'^(ARG\s+{target_dep}\s*=\s*).*$'
+              new_content, count = re.subn(pattern_str, rf'\g<1>{latest_version}', content, flags=re.MULTILINE)
               
               if count > 0:
                   with open(dockerfile_path, "w") as f:
@@ -177,7 +203,6 @@ jobs:
           python update_deps.py "${{ matrix.dep }}"
 
       - name: Create Pull Request
-        # Only run this step if the python script found an update and wrote "updated=true"
         if: steps.check_version.outputs.updated == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
@@ -191,6 +216,5 @@ jobs:
             - **New version:** `${{ steps.check_version.outputs.new_version }}`
             
             This PR modifies only the `${{ matrix.dep }}` argument in the Dockerfile.
-          # Create a unique branch for each dependency so PRs do not conflict
           branch: "automated/deps/${{ matrix.dep }}"
           delete-branch: true
