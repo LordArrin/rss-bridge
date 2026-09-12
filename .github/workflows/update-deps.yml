@@ -53,7 +53,7 @@ jobs:
           DEPS_CONFIG = {
               "ALPINE_VERSION": ("alpine_docker", "", r"^3\.\d+$"),
               "NGINX_VERSION": ("freenginx", "", r"^\d+\.\d+\.\d+$"),
-              "CURL_VERSION": ("lwthiker/curl-impersonate", "v", r"^v?\d+\.\d+\.\d+$"),
+              "CURL_VERSION": ("lexiforest/curl-impersonate", "v", r"^v?\d+\.\d+\.\d+$"),
               "OPENSSL_VERSION": ("openssl/openssl", "openssl-", r"^openssl-\d+\.\d+\.\d+$"),
               "PCRE_VERSION": ("PCRE2Project/pcre2", "pcre2-", r"^pcre2-\d+\.\d+$"),
               "MIMALLOC_VERSION": ("microsoft/mimalloc", "v", r"^v?\d+\.\d+\.\d+$"),
