@@ -67,14 +67,94 @@ jobs:
                   with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                       f.write(f"{name}={value}\n")
 
-          def fetch_url(url):
+          def fetch_url(url, method="GET", data=None):
               headers = {'User-Agent': 'Mozilla/5.0 (RSS-Bridge Deps Updater)'}
               if 'api.github.com' in url and 'GITHUB_TOKEN' in os.environ:
                   headers['Authorization'] = f"token {os.environ['GITHUB_TOKEN']}"
+                  headers['Accept'] = 'application/vnd.github.v3+json'
               
-              req = urllib.request.Request(url, headers=headers)
+              req = urllib.request.Request(url, headers=headers, method=method)
+              if data:
+                  req.data = json.dumps(data).encode('utf-8')
+                  headers['Content-Type'] = 'application/json'
+              
               with urllib.request.urlopen(req, timeout=15) as response:
                   return response.read().decode()
+
+          def close_old_prs(dep_name, new_version):
+              """Close all open PRs for this dependency except the one with new_version."""
+              try:
+                  # Get repository info from environment
+                  repo = os.environ.get('GITHUB_REPOSITORY', '')
+                  if not repo:
+                      print("[Warning] GITHUB_REPOSITORY not set, skipping PR cleanup")
+                      return
+                  
+                  # Search for open PRs with branch pattern
+                  branch_prefix = f"automated/deps/{dep_name}"
+                  url = f"https://api.github.com/repos/{repo}/pulls?state=open&head={repo.split('/')[0]}:{branch_prefix}"
+                  
+                  response = fetch_url(url)
+                  prs = json.loads(response)
+                  
+                  closed_count = 0
+                  for pr in prs:
+                      pr_branch = pr.get('head', {}).get('ref', '')
+                      pr_number = pr.get('number')
+                      pr_title = pr.get('title', '')
+                      
+                      # Extract version from PR title
+                      version_match = re.search(r'to\s+([\d\.]+)', pr_title)
+                      if not version_match:
+                          continue
+                      
+                      pr_version = version_match.group(1)
+                      
+                      # Close PR if it's for an older version
+                      if pr_version != new_version:
+                          close_url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+                          close_data = {
+                              "state": "closed",
+                              "body": f"Automatically closed: superseded by newer version {new_version}"
+                          }
+                          try:
+                              fetch_url(close_url, method="PATCH", data=close_data)
+                              print(f"[Info] Closed outdated PR #{pr_number} (version {pr_version})")
+                              closed_count += 1
+                          except Exception as e:
+                              print(f"[Warning] Failed to close PR #{pr_number}: {str(e)}")
+                  
+                  if closed_count > 0:
+                      print(f"[Info] Closed {closed_count} outdated PR(s) for {dep_name}")
+                      
+              except Exception as e:
+                  print(f"[Warning] Error while closing old PRs: {str(e)}")
+
+          def pr_exists_for_version(dep_name, version):
+              """Check if a PR already exists for this specific version."""
+              try:
+                  repo = os.environ.get('GITHUB_REPOSITORY', '')
+                  if not repo:
+                      return False
+                  
+                  # Search for open PRs with this branch
+                  branch_name = f"automated/deps/{dep_name}"
+                  url = f"https://api.github.com/repos/{repo}/pulls?state=open&head={repo.split('/')[0]}:{branch_name}"
+                  
+                  response = fetch_url(url)
+                  prs = json.loads(response)
+                  
+                  for pr in prs:
+                      pr_title = pr.get('title', '')
+                      # Check if PR title contains the exact version
+                      if version in pr_title:
+                          print(f"[Info] PR already exists for {dep_name} version {version}")
+                          return True
+                  
+                  return False
+              except Exception as e:
+                  print(f"[Warning] Error checking for existing PR: {str(e)}")
+                  return False
 
           def parse_version(v):
               """Convert version string to tuple of integers for comparison."""
@@ -199,6 +279,15 @@ jobs:
                   set_github_output("updated", "false")
                   sys.exit(0)
 
+              # Check if PR already exists for this version
+              if pr_exists_for_version(target_dep, latest_version):
+                  print(f"[Info] PR for {target_dep} version {latest_version} already exists. Skipping.")
+                  set_github_output("updated", "false")
+                  sys.exit(0)
+
+              # Close outdated PRs for this dependency
+              close_old_prs(target_dep, latest_version)
+
               # Safely update the Dockerfile using re.subn with MULTILINE flag
               pattern_str = rf'^(ARG\s+{target_dep}\s*=\s*).*$'
               new_content, count = re.subn(pattern_str, rf'\g<1>{latest_version}', content, flags=re.MULTILINE)
@@ -235,5 +324,7 @@ jobs:
             - **New version:** `${{ steps.check_version.outputs.new_version }}`
             
             This PR modifies only the `${{ matrix.dep }}` argument in the Dockerfile.
+            
+            *Note: Any previous PRs for older versions of this dependency have been automatically closed.*
           branch: "automated/deps/${{ matrix.dep }}"
           delete-branch: true
