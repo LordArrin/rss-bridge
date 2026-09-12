@@ -2,8 +2,8 @@ name: Update Dockerfile Dependencies
 
 on:
   schedule:
-    # Runs every Monday at 08:00 UTC
-    - cron: '0 8 * * 1'
+    # Runs every Friday at 08:00 UTC
+    - cron: '0 8 * * 5'
   workflow_dispatch: # Allows manual triggering from the Actions tab
 
 jobs:
