@@ -467,8 +467,9 @@
             color: var(--md-on-surface-variant);
         }
 
-        .bridge-count { text-align: center; color: var(--md-on-surface-variant); font-size: 0.875rem; margin-top: 16px; }
-
+        /* ============================================================
+           BRIDGES GRID
+           ============================================================ */
         #bridges-container {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
@@ -555,43 +556,144 @@
         }
 
         /* ============================================================
-           BRIDGE SPECIFIC CONFIGURATION (manual)
+           BRIDGE SPECIFIC CONFIGURATION (spoilers)
            ============================================================ */
-        .bridge-specific-article {
+        .bridge-specific-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 24px;
+        }
+        .bridge-specific-item {
             background: var(--md-surface-container-lowest);
             border-radius: var(--md-shape-lg);
-            padding: 32px;
             box-shadow: var(--md-elevation-1);
             border-left: 4px solid var(--md-warning);
-            max-width: 900px;
-            margin: 24px auto 0;
+            overflow: hidden;
+            transition: box-shadow var(--md-motion-duration-medium) var(--md-motion-easing-standard);
         }
-        .bridge-specific-article h3 {
+        .bridge-specific-item:hover {
+            box-shadow: var(--md-elevation-2);
+        }
+        .bridge-specific-header {
+            width: 100%;
+            padding: 20px 24px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            text-align: left;
+            transition: background var(--md-motion-duration-short) var(--md-motion-easing-standard);
+            min-height: auto;
+            box-shadow: none;
+            margin: 0;
+            line-height: 1.5;
+            position: relative;
+        }
+        .bridge-specific-header::after { display: none; }
+        .bridge-specific-header:hover {
+            background: color-mix(in srgb, var(--md-on-surface) 5%, transparent);
+        }
+        .bridge-specific-header .header-main {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+        .bridge-specific-header .bridge-name {
+            font-size: 1.25rem;
+            font-weight: 500;
             color: var(--md-primary);
-            margin-top: 0;
-            font-size: 1.5rem;
+            letter-spacing: -0.01em;
         }
-        .bridge-specific-article .bridge-uri {
+        .bridge-specific-header .bridge-uri {
             color: var(--md-on-surface-variant);
             font-size: 0.875rem;
-            margin-bottom: 20px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
-        .bridge-specific-article ol {
-            margin-left: 0;
-            padding-left: 0;
+        .bridge-specific-header .toggle-icon {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--md-on-surface-variant);
+            transition: transform var(--md-motion-duration-short) var(--md-motion-easing-standard);
+        }
+        .bridge-specific-header .toggle-icon svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+        .bridge-specific-item.open .toggle-icon {
+            transform: rotate(180deg);
+        }
+        .bridge-specific-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height var(--md-motion-duration-medium) var(--md-motion-easing-standard);
+        }
+        .bridge-specific-item.open .bridge-specific-content {
+            max-height: 3000px;
+            transition: max-height var(--md-motion-duration-long) var(--md-motion-easing-decelerate);
+        }
+        .bridge-specific-content-inner {
+            padding: 0 24px 24px;
+            border-top: 1px solid var(--md-outline-variant);
+            margin-top: 0;
+            padding-top: 20px;
+        }
+        .bridge-specific-content-inner h4 {
+            font-size: 1.125rem;
+            font-weight: 500;
+            margin: 20px 0 12px;
+            color: var(--md-on-surface);
+        }
+        .bridge-specific-content-inner h4:first-child {
+            margin-top: 0;
+        }
+        .bridge-specific-content-inner p {
+            margin-bottom: 12px;
+            line-height: 1.6;
+        }
+        .bridge-specific-content-inner .note {
+            background: var(--md-warning-container);
+            color: var(--md-on-warning-container);
+            padding: 14px 18px;
+            border-radius: var(--md-shape-md);
+            margin: 16px 0;
+            font-weight: 500;
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+        .bridge-specific-content-inner .note.info {
+            background: var(--md-primary-container);
+            color: var(--md-on-primary-container);
+        }
+        .bridge-specific-content-inner ol {
             counter-reset: step-counter;
+            margin: 12px 0 16px 0;
+            padding: 0;
         }
-        .bridge-specific-article ol li {
+        .bridge-specific-content-inner ol li {
             list-style: none;
             counter-increment: step-counter;
             position: relative;
-            padding-left: 48px;
+            padding-left: 44px;
             margin-bottom: 16px;
             min-height: 32px;
             display: flex;
+            flex-direction: column;
             align-items: flex-start;
+            gap: 8px;
         }
-        .bridge-specific-article ol li::before {
+        .bridge-specific-content-inner ol li::before {
             content: counter(step-counter);
             position: absolute;
             left: 0;
@@ -607,15 +709,12 @@
             font-weight: 500;
             font-size: 0.875rem;
         }
-        .bridge-specific-article .note {
-            background: var(--md-warning-container);
-            color: var(--md-on-warning-container);
-            padding: 14px 18px;
-            border-radius: var(--md-shape-md);
-            margin: 16px 0;
-            font-weight: 500;
-            font-size: 0.875rem;
+        .bridge-specific-content-inner ol li > span {
             line-height: 1.6;
+        }
+        .bridge-specific-content-inner .code-block {
+            margin: 8px 0;
+            width: 100%;
         }
 
         section.footer {
@@ -734,9 +833,14 @@
             .code-block .copy-btn { opacity: 1; }
             .footer-badges { padding: 12px 16px; }
             .footer-badges .badge { font-size: 0.7rem; }
-            .bridge-specific-article { padding: 20px; }
-            .bridge-specific-article ol li { padding-left: 40px; }
-            .bridge-specific-article ol li::before { width: 28px; height: 28px; font-size: 0.8rem; }
+            .bridge-specific-header {
+                padding: 16px;
+                flex-wrap: wrap;
+            }
+            .bridge-specific-header .bridge-name { font-size: 1.125rem; }
+            .bridge-specific-content-inner { padding: 0 16px 16px; padding-top: 16px; }
+            .bridge-specific-content-inner ol li { padding-left: 36px; }
+            .bridge-specific-content-inner ol li::before { width: 28px; height: 28px; font-size: 0.8rem; }
         }
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
@@ -744,6 +848,7 @@
                 animation-iteration-count: 1 !important;
                 transition-duration: 0.01ms !important;
             }
+            .bridge-specific-content { transition: none; }
         }
         @media (prefers-color-scheme: dark) {
             * { scrollbar-color: #352C28 #1F1714; }
@@ -755,8 +860,8 @@
 <nav>
     <div class="nav-container">
         <div class="logo">
-            <img src="https://raw.githubusercontent.com/LordArrin/rss-bridge/master/static/favicon.svg" alt="RSS-Bridge">
-            <span>RSS-Bridge by LordArrin</span>
+            <img src="https://raw.githubusercontent.com/LordArrin/rss-bridge/master/static/logo.svg" alt="RSS-Bridge">
+            <span>RSS-Bridge LordArrin Fork</span>
         </div>
         <div class="nav-links">
             <a href="#features">Features</a>
@@ -897,46 +1002,63 @@ timeout = 60000</code></pre></div>
 
     <section class="doc-section" id="bridge-specific">
         <h2>Bridge Specific Configuration</h2>
-        <p class="text-center">Some bridges require API keys, tokens, or cookies. Add them to <code>config/config.ini.php</code>.</p>
+        <p class="text-center">Some bridges require API keys, tokens, or cookies. Add them to <code>config/config.ini.php</code>. Click on a bridge to expand the instructions.</p>
 
-        <article class="bridge-specific-article">
-            <h3>Vk2Bridge</h3>
-            <div class="bridge-uri"><a href="https://vk.com/" target="_blank" rel="noopener">https://vk.com/</a></div>
-            <p>Returns posts from a VK user wall, community wall, or search results. VK requires an access token to fetch data through its API.</p>
+        <div class="bridge-specific-list" id="bridge-specific-list">
+            <!-- Vk2Bridge -->
+            <div class="bridge-specific-item">
+                <button type="button" class="bridge-specific-header" aria-expanded="false">
+                    <div class="header-main">
+                        <span class="bridge-name">Vk2Bridge</span>
+                        <span class="bridge-uri">https://vk.com/</span>
+                    </div>
+                    <span class="toggle-icon">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+                    </span>
+                </button>
+                <div class="bridge-specific-content">
+                    <div class="bridge-specific-content-inner">
+                        <p>Returns posts from a VK user wall, community wall, or search results. VK requires an access token to fetch data through its API.</p>
 
-            <div class="note">
-                ⚠️ You need a VK standalone application token. Regular user passwords will <strong>not</strong> work.
-            </div>
+                        <div class="note">
+                            ⚠️ You need a VK standalone application token. Regular user passwords will <strong>not</strong> work.
+                        </div>
 
-            <h3>How to get a token</h3>
-            <ol>
-                <li>
-                    <span>Go to <a href="https://vk.com/apps?act=manage" target="_blank" rel="noopener">https://vk.com/apps?act=manage</a> and create a new <strong>Standalone</strong> application (if you don't have one already).</span>
-                </li>
-                <li>
-                    <span>Copy your <strong>App ID</strong> from the application settings page.</span>
-                </li>
-                <li>
-                    <span>Open the following URL in your browser, replacing <code>YOUR_APP_ID</code> with your actual App ID:</span>
-                    <div class="code-block"><button type="button" class="copy-btn" aria-label="Copy code"><span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span><span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span><span class="copy-label-copy">Copy</span><span class="copy-label-copied">Copied!</span></button><pre><code>https://oauth.vk.com/authorize?client_id=YOUR_APP_ID&amp;scope=wall,offline&amp;response_type=token</code></pre></div>
-                </li>
-                <li>
-                    <span>Log in to VK if prompted and authorize the application.</span>
-                </li>
-                <li>
-                    <span>After authorization you will be redirected to a URL like <code>https://oauth.vk.com/blank.html#access_token=XXXXXXXXX&amp;expires_in=0&amp;user_id=YYYY</code>. Copy the value of <code>access_token</code> (the long string between <code>=</code> and <code>&amp;</code>).</span>
-                </li>
-                <li>
-                    <span>Add the token to your <code>config/config.ini.php</code>:</span>
-                    <div class="code-block"><button type="button" class="copy-btn" aria-label="Copy code"><span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span><span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span><span class="copy-label-copy">Copy</span><span class="copy-label-copied">Copied!</span></button><pre><code>[Vk2Bridge]
+                        <h4>How to get a token</h4>
+                        <ol>
+                            <li>
+                                <span>Go to <a href="https://vk.com/apps?act=manage" target="_blank" rel="noopener">https://vk.com/apps?act=manage</a> and create a new <strong>Standalone</strong> application (if you don't have one already).</span>
+                            </li>
+                            <li>
+                                <span>Copy your <strong>App ID</strong> from the application settings page.</span>
+                            </li>
+                            <li>
+                                <span>Open the following URL in your browser, replacing <code>YOUR_APP_ID</code> with your actual App ID:</span>
+                                <div class="code-block"><button type="button" class="copy-btn" aria-label="Copy code"><span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span><span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span><span class="copy-label-copy">Copy</span><span class="copy-label-copied">Copied!</span></button><pre><code>https://oauth.vk.com/authorize?client_id=YOUR_APP_ID&amp;scope=wall,offline&amp;response_type=token</code></pre></div>
+                            </li>
+                            <li>
+                                <span>Log in to VK if prompted and authorize the application.</span>
+                            </li>
+                            <li>
+                                <span>After authorization you will be redirected to a URL like <code>https://oauth.vk.com/blank.html#access_token=XXXXXXXXX&amp;expires_in=0&amp;user_id=YYYY</code>. Copy the value of <code>access_token</code> (the long string between <code>=</code> and <code>&amp;</code>).</span>
+                            </li>
+                            <li>
+                                <span>Add the token to your <code>config/config.ini.php</code>:</span>
+                                <div class="code-block"><button type="button" class="copy-btn" aria-label="Copy code"><span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span><span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span><span class="copy-label-copy">Copy</span><span class="copy-label-copied">Copied!</span></button><pre><code>[Vk2Bridge]
 access_token = "vk1.a.xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"</code></pre></div>
-                </li>
-            </ol>
+                            </li>
+                        </ol>
 
-            <div class="note">
-                💡 The <code>offline</code> scope makes the token non-expiring. Without it the token would expire in ~24 hours and you'd need to repeat the procedure.
+                        <div class="note info">
+                            💡 The <code>offline</code> scope makes the token non-expiring. Without it the token would expire in ~24 hours and you'd need to repeat the procedure.
+                        </div>
+                    </div>
+                </div>
             </div>
-        </article>
+
+            <!-- Add more bridges here by copying the .bridge-specific-item block above -->
+
+        </div>
     </section>
 
     <section class="doc-section" id="development">
@@ -1073,6 +1195,10 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                 </span>
                 <span class="badge__right">AGPL-3.0</span>
             </a>
+
+            <span class="footer-counter">
+                <span id="active-bridges">0</span>/<span id="total-bridges">0</span> active bridges
+            </span>
         </div>
     </section>
 
@@ -1135,6 +1261,36 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                         setTimeout(() => btn.classList.remove('copied'), 2000);
                     } catch (e) { console.error('Copy failed:', e); }
                     document.body.removeChild(textarea);
+                }
+            });
+        });
+    }
+
+    // ============================================================
+    // BRIDGE SPECIFIC SPOILERS (only one open at a time)
+    // ============================================================
+    function initSpoilers() {
+        document.querySelectorAll('.bridge-specific-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const item = header.closest('.bridge-specific-item');
+                const isOpen = item.classList.contains('open');
+                
+                // Close all other items
+                document.querySelectorAll('.bridge-specific-item.open').forEach(openItem => {
+                    if (openItem !== item) {
+                        openItem.classList.remove('open');
+                        const openHeader = openItem.querySelector('.bridge-specific-header');
+                        if (openHeader) openHeader.setAttribute('aria-expanded', 'false');
+                    }
+                });
+                
+                // Toggle current item
+                if (isOpen) {
+                    item.classList.remove('open');
+                    header.setAttribute('aria-expanded', 'false');
+                } else {
+                    item.classList.add('open');
+                    header.setAttribute('aria-expanded', 'true');
                 }
             });
         });
@@ -1243,6 +1399,7 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
     });
     
     initCopyButtons();
+    initSpoilers();
     loadBridges();
 </script>
 
