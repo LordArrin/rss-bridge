@@ -268,8 +268,10 @@ rss-bridge/
 ├── actions/              # Request handlers: FrontpageAction, DisplayAction
 ├── bridges-v2/           # Bridges (PSR-4, RSSBridge\Bridges namespace)
 ├── caches/               # Cache backends: File, SQLite, Memcached, ...
+├── config/               # Config of internal services - nginx, PHP ...
 ├── formats/              # Output formats: Atom, Mrss, Json, Html, Plaintext, Sfeed
 ├── lib/                  # Core: BridgeAbstract, BridgeFactory, SafeBridgeLoader, ...
+├── docs/                 # Additional documentation
 ├── middlewares/          # HTTP middleware stack
 ├── proxies/              # Proxy profile implementations
 ├── templates/            # HTML templates
@@ -277,6 +279,7 @@ rss-bridge/
 ├── bin/                  # CLI utilities: cache-clear, cache-prune
 ├── config/               # Default configuration
 ├── static/               # CSS, JS, images
+├── supervisor/           # Supervisor. Launches all internal services - Memcached, Nginx, PHP.
 ├── docker-entrypoint.sh  # Container entrypoint
 └── Dockerfile
 ```
@@ -355,3 +358,4 @@ Third-party libraries used:
 | [PHPUnit](https://phpunit.de/) | BSD-3-Clause (dev) |
 | [PHP_CodeSniffer](https://github.com/PHPCSStandards/PHP_CodeSniffer) | BSD-3-Clause (dev) |
 | [PHPStan](https://phpstan.org/) | MIT (dev) |
+| [memcached](https://github.com/memcached/memcached) | MIT |
