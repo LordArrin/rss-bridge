@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RSS-Bridge LordArrin Fork — Documentation</title>
     <meta name="description" content="Optimized RSS-Bridge fork with PHP 8.5, Memcached, and modern UI">
-    <link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/LordArrin/rss-bridge/master/static/logo.svg">
+    <link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/LordArrin/rss-bridge/master/static/favicon.svg">
     <style>
         :root {
             --md-primary: #E65100;
@@ -153,25 +153,6 @@
             margin: 0 auto 40px;
             padding: 0 16px;
         }
-
-        .container:has(.bridge-card) {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
-            gap: 20px;
-            align-items: stretch;
-        }
-        .container:has(.bridge-card) > header,
-        .container:has(.bridge-card) > .searchbar,
-        .container:has(.bridge-card) > .doc-section,
-        .container:has(.bridge-card) > #bridges-container,
-        .container:has(.bridge-card) > .footer {
-            grid-column: 1 / -1;
-        }
-        .container:has(.bridge-card) > header { order: -3; }
-        .container:has(.bridge-card) > .searchbar { order: -1; justify-self: center; width: 100%; }
-        .container:has(.bridge-card) > .doc-section { order: 1; }
-        .container:has(.bridge-card) > #bridges-container { order: 2; }
-        .container:has(.bridge-card) > .footer { order: 999999; }
 
         nav {
             background-color: var(--md-surface-container);
@@ -445,6 +426,7 @@
             grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
             gap: 20px;
             align-items: stretch;
+            margin-bottom: 32px;
         }
 
         .bridge-card {
