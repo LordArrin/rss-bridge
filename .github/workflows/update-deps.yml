@@ -41,7 +41,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PR_CREATE_TOKEN }}
         run: |
-          cat << 'EOF' > update_deps.py
+          cat << 'EOF' > /tmp/update_deps.py
           import urllib.request
           import json
           import re
@@ -49,7 +49,6 @@ jobs:
           import sys
 
           # Configuration mapping: ARG_NAME -> (SOURCE, STRIP_PREFIX, VALID_TAG_REGEX)
-          # If a dependency is fetched from a fork, change the repository path here.
           DEPS_CONFIG = {
               "ALPINE_VERSION": ("alpine_docker", "", r"^3\.\d+$"),
               "NGINX_VERSION": ("freenginx", "", r"^\d+\.\d+\.\d+$"),
@@ -77,10 +76,24 @@ jobs:
               with urllib.request.urlopen(req, timeout=15) as response:
                   return response.read().decode()
 
+          def parse_version(v):
+              """Convert version string to tuple of integers for comparison."""
+              parts = []
+              for p in v.split('.'):
+                  try:
+                      parts.append(int(p))
+                  except ValueError:
+                      parts.append(0)
+              return tuple(parts)
+
+          def is_newer_version(current, latest):
+              """Return True if latest is strictly greater than current."""
+              return parse_version(latest) > parse_version(current)
+
           def version_sort_key(tag):
               """Extracts numbers from a tag string to allow proper numerical sorting."""
               clean = re.sub(r'^[a-zA-Z-]+', '', tag)
-              return tuple(map(int, re.findall(r'\d+', clean)))
+              return parse_version(clean)
 
           def get_github_latest(repo, tag_regex):
               """Fetches the latest valid release or tag from a GitHub repository."""
@@ -110,7 +123,7 @@ jobs:
                   data = json.loads(fetch_url("https://hub.docker.com/v2/repositories/library/alpine/tags?page_size=100"))
                   valid_tags = [t['name'] for t in data['results'] if re.match(tag_regex, t['name'])]
                   if valid_tags:
-                      valid_tags.sort(key=lambda x: tuple(map(int, x.split('.'))), reverse=True)
+                      valid_tags.sort(key=lambda x: parse_version(x), reverse=True)
                       return valid_tags[0]
               except Exception:
                   pass
@@ -180,6 +193,12 @@ jobs:
                   set_github_output("updated", "false")
                   sys.exit(0)
 
+              # Check if the new version is actually newer (prevent downgrades)
+              if not is_newer_version(current_version, latest_version):
+                  print(f"[Warning] Found version {latest_version} is older than current {current_version}. Skipping update to prevent downgrade.")
+                  set_github_output("updated", "false")
+                  sys.exit(0)
+
               # Safely update the Dockerfile using re.subn with MULTILINE flag
               pattern_str = rf'^(ARG\s+{target_dep}\s*=\s*).*$'
               new_content, count = re.subn(pattern_str, rf'\g<1>{latest_version}', content, flags=re.MULTILINE)
@@ -200,13 +219,12 @@ jobs:
               sys.exit(1)
           EOF
           
-          python update_deps.py "${{ matrix.dep }}"
+          python /tmp/update_deps.py "${{ matrix.dep }}"
 
       - name: Create Pull Request
         if: steps.check_version.outputs.updated == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
-          # Use custom PAT instead of GITHUB_TOKEN
           token: ${{ secrets.PR_CREATE_TOKEN }}
           commit-message: "chore(deps): bump ${{ matrix.dep }} from ${{ steps.check_version.outputs.old_version }} to ${{ steps.check_version.outputs.new_version }}"
           title: "chore(deps): bump ${{ matrix.dep }} to ${{ steps.check_version.outputs.new_version }}"
