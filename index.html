@@ -136,13 +136,7 @@
             font-size: 0.85em;
         }
 
-        /* ============================================================
-           CODE BLOCKS (GitHub-style)
-           ============================================================ */
-        .code-block {
-            position: relative;
-            margin: 16px 0;
-        }
+        .code-block { position: relative; margin: 16px 0; }
         .code-block pre {
             background-color: var(--md-surface-container-highest);
             padding: 20px 60px 20px 20px;
@@ -186,9 +180,7 @@
             line-height: 1;
         }
         .code-block:hover .copy-btn,
-        .code-block .copy-btn:focus {
-            opacity: 1;
-        }
+        .code-block .copy-btn:focus { opacity: 1; }
         .code-block .copy-btn:hover {
             background: var(--md-surface-container-lowest);
             color: var(--md-primary);
@@ -196,8 +188,7 @@
             transform: translateY(-1px);
         }
         .code-block .copy-btn svg {
-            width: 14px;
-            height: 14px;
+            width: 14px; height: 14px;
             fill: currentColor;
             pointer-events: none;
         }
@@ -208,16 +199,15 @@
             opacity: 1;
         }
         .code-block .copy-btn::after { display: none; }
-        .code-block .copy-btn .copy-label-copy { display: inline; }
-        .code-block .copy-btn .copy-label-copied { display: none; }
+        .code-block .copy-btn .copy-label-copy,
         .code-block .copy-btn .copy-icon-copy { display: inline; }
+        .code-block .copy-btn .copy-label-copied,
         .code-block .copy-btn .copy-icon-copied { display: none; }
-        .code-block .copy-btn.copied .copy-label-copy { display: none; }
-        .code-block .copy-btn.copied .copy-label-copied { display: inline; }
+        .code-block .copy-btn.copied .copy-label-copy,
         .code-block .copy-btn.copied .copy-icon-copy { display: none; }
+        .code-block .copy-btn.copied .copy-label-copied,
         .code-block .copy-btn.copied .copy-icon-copied { display: inline; }
 
-        /* Syntax highlighting */
         .code-block .tok-kw { color: #CF222E; }
         .code-block .tok-str { color: #0A3069; }
         .code-block .tok-com { color: #6E7781; font-style: italic; }
@@ -233,12 +223,7 @@
             .code-block .tok-var { color: #FFA657; }
         }
 
-        .container {
-            width: 80%;
-            max-width: 2400px;
-            margin: 0 auto 40px;
-            padding: 0 16px;
-        }
+        .container { width: 80%; max-width: 2400px; margin: 0 auto 40px; padding: 0 16px; }
 
         nav {
             background-color: var(--md-surface-container);
@@ -319,8 +304,7 @@
             box-shadow: var(--md-elevation-2);
         }
 
-        button,
-        a.button {
+        button, a.button {
             line-height: 1.5;
             color: var(--md-on-primary);
             font-weight: 500;
@@ -344,31 +328,25 @@
             position: relative;
             overflow: hidden;
         }
-        button:hover,
-        a.button:hover {
+        button:hover, a.button:hover {
             background: var(--md-primary-container);
             color: var(--md-on-primary-container);
             box-shadow: var(--md-elevation-2);
             text-decoration: none;
         }
-        button:active,
-        a.button:active { box-shadow: var(--md-elevation-1); }
-        button:focus-visible,
-        a.button:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
-        button.secondary,
-        a.button.secondary {
+        button:active, a.button:active { box-shadow: var(--md-elevation-1); }
+        button:focus-visible, a.button:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+        button.secondary, a.button.secondary {
             background: var(--md-surface-container-high);
             color: var(--md-on-surface);
             border: 1px solid var(--md-outline-variant);
         }
-        button.secondary:hover,
-        a.button.secondary:hover {
+        button.secondary:hover, a.button.secondary:hover {
             background: var(--md-surface-container-highest);
             color: var(--md-on-surface);
             border-color: var(--md-outline);
         }
-        button::after,
-        a.button::after {
+        button::after, a.button::after {
             content: '';
             position: absolute;
             top: 50%;
@@ -381,8 +359,7 @@
             transition: width 1s ease, height 1s ease, opacity 1s ease;
             opacity: 0;
         }
-        button:active::after,
-        a.button:active::after { width: 200px; height: 200px; opacity: 1; transition: 0s; }
+        button:active::after, a.button:active::after { width: 200px; height: 200px; opacity: 1; transition: 0s; }
 
         .doc-section {
             margin-bottom: 16px;
@@ -594,8 +571,88 @@
         }
 
         /* ============================================================
-           FOOTER (matching original template)
+           BRIDGE SPECIFIC CONFIGURATION
            ============================================================ */
+        .bridge-specific-intro {
+            text-align: center;
+            margin-bottom: 24px;
+            color: var(--md-on-surface-variant);
+        }
+        .bridge-specific-intro .alert-info {
+            display: inline-block;
+            background-color: var(--md-primary-container);
+            color: var(--md-on-primary-container);
+            padding: 12px 20px;
+            border-radius: var(--md-shape-md);
+            font-weight: 500;
+            margin-top: 12px;
+        }
+        .bridge-config-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-top: 24px;
+        }
+        .bridge-config-item {
+            background: var(--md-surface-container-lowest);
+            border-radius: var(--md-shape-lg);
+            padding: 24px;
+            box-shadow: var(--md-elevation-1);
+            transition: all var(--md-motion-duration-medium) var(--md-motion-easing-standard);
+            border-left: 4px solid var(--md-warning);
+        }
+        .bridge-config-item:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--md-elevation-2);
+        }
+        .bridge-config-item h4 {
+            font-size: 1.25rem;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--md-on-surface);
+        }
+        .bridge-config-item h4 a {
+            color: var(--md-primary);
+            text-decoration: none;
+        }
+        .bridge-config-item h4 a:hover {
+            text-decoration: underline;
+        }
+        .bridge-config-item .bridge-uri {
+            font-size: 0.8125rem;
+            color: var(--md-on-surface-variant);
+            margin-bottom: 12px;
+            word-break: break-all;
+        }
+        .bridge-config-item .required-keys {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+        .bridge-config-item .required-keys .key-tag {
+            background: var(--md-warning-container);
+            color: var(--md-on-warning-container);
+            padding: 4px 10px;
+            border-radius: var(--md-shape-xs);
+            font-size: 0.8125rem;
+            font-family: 'JetBrains Mono', 'Consolas', monospace;
+            font-weight: 500;
+        }
+        .bridge-config-item .config-example {
+            margin-top: 12px;
+        }
+        .bridge-config-item .config-example .code-block {
+            margin: 8px 0 0 0;
+        }
+        .bridge-config-item .config-example-label {
+            font-size: 0.8125rem;
+            color: var(--md-on-surface-variant);
+            font-weight: 500;
+            margin-bottom: 6px;
+            display: block;
+        }
+
         section.footer {
             background-color: var(--md-surface-container);
             box-shadow: none;
@@ -637,21 +694,17 @@
             font-weight: normal;
         }
         .footer-badges .badge::after { display: none; }
-        .footer-badges .badge:hover {
-            opacity: 0.85;
-            text-decoration: none;
-            background: none;
-            color: inherit;
-            transform: none;
-            box-shadow: none;
-        }
+        .footer-badges .badge:hover,
         .footer-badges .badge:link,
         .footer-badges .badge:visited,
-        .footer-badges .badge:hover,
         .footer-badges .badge:active {
             text-decoration: none;
             color: inherit;
+            background: none;
+            transform: none;
+            box-shadow: none;
         }
+        .footer-badges .badge:hover { opacity: 0.85; }
         .footer-badges .badge__left {
             display: inline-block;
             padding: 6px 8px;
@@ -713,15 +766,10 @@
                 padding: 12px 16px;
                 margin: 6px 2px;
             }
-            .code-block .copy-btn {
-                opacity: 1;
-            }
-            .footer-badges {
-                padding: 12px 16px;
-            }
-            .footer-badges .badge {
-                font-size: 0.7rem;
-            }
+            .code-block .copy-btn { opacity: 1; }
+            .footer-badges { padding: 12px 16px; }
+            .footer-badges .badge { font-size: 0.7rem; }
+            .bridge-config-item { padding: 16px; }
         }
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
@@ -747,6 +795,7 @@
             <a href="#features">Features</a>
             <a href="#installation">Installation</a>
             <a href="#bridges">Bridges</a>
+            <a href="#bridge-specific">Bridge Specific</a>
             <a href="#development">Development</a>
             <a href="https://github.com/LordArrin/rss-bridge">GitHub</a>
         </div>
@@ -883,6 +932,20 @@ timeout = 60000</code></pre></div>
         <div class="loading" id="loading-message">Loading bridges from repository...</div>
     </div>
 
+    <section class="doc-section" id="bridge-specific">
+        <h2>Bridge Specific Configuration</h2>
+        <div class="bridge-specific-intro">
+            <p>Some bridges require API keys, tokens, or cookies to work properly.</p>
+            <p>These values must be configured in <code>config/config.ini.php</code> using the <code>[BridgeName]</code> section syntax.</p>
+            <div class="alert-info">
+                Bridges listed below have <strong>required</strong> configuration options.
+            </div>
+        </div>
+        <div class="bridge-config-list" id="bridge-config-list">
+            <div class="loading">Scanning bridges for required configuration...</div>
+        </div>
+    </section>
+
     <section class="doc-section" id="development">
         <h2>Developing Custom Bridges</h2>
 
@@ -955,6 +1018,22 @@ timeout = 60000</code></pre></div>
 <span class="tok-var">$username</span> = (<span class="tok-kw">string</span>)<span class="tok-var">$this</span>-&gt;<span class="tok-fn">getInput</span>(<span class="tok-str">'username'</span>);
 <span class="tok-var">$limit</span>    = (<span class="tok-kw">int</span>)(<span class="tok-var">$this</span>-&gt;<span class="tok-fn">getInput</span>(<span class="tok-str">'limit'</span>) ?: <span class="tok-num">10</span>);</code></pre></div>
 
+        <h3>Bridge-Specific Configuration (Secrets)</h3>
+        <p>For API tokens, cookies and other secrets, use the <code>CONFIGURATION</code> constant:</p>
+<div class="code-block"><button type="button" class="copy-btn" aria-label="Copy code"><span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span><span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span><span class="copy-label-copy">Copy</span><span class="copy-label-copied">Copied!</span></button><pre><code><span class="tok-com">// In your bridge class:</span>
+<span class="tok-kw">public const</span> <span class="tok-var">CONFIGURATION</span> = [
+    <span class="tok-str">'api_token'</span> =&gt; [<span class="tok-str">'required'</span> =&gt; <span class="tok-kw">true</span>],
+    <span class="tok-str">'session_cookie'</span> =&gt; [<span class="tok-str">'required'</span> =&gt; <span class="tok-kw">false</span>],
+];
+
+<span class="tok-com">// In config/config.ini.php:</span>
+[ExampleBridge]
+api_token = <span class="tok-str">"your-token-here"</span>
+session_cookie = <span class="tok-str">"abc123"</span>
+
+<span class="tok-com">// Access in bridge code:</span>
+<span class="tok-var">$token</span> = <span class="tok-var">$this</span>-&gt;<span class="tok-fn">getOption</span>(<span class="tok-str">'api_token'</span>);</code></pre></div>
+
         <h3>Useful Functions</h3>
         <ul>
             <li><code>getSimpleHTMLDOM($url)</code> — parse HTML</li>
@@ -975,7 +1054,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
 
     <section class="footer">
         <div class="footer-badges">
-            <!-- Docker Badge -->
             <a href="https://hub.docker.com/repository/docker/lordarrin/rss-bridge/tags/" rel="noopener noreferrer" target="_blank" class="badge">
                 <span class="badge__left">
                     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -985,7 +1063,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                 <span class="badge__right">lordarrin/rss-bridge:latest</span>
             </a>
 
-            <!-- GitHub Badge -->
             <a href="https://github.com/LordArrin/rss-bridge" rel="noopener noreferrer" target="_blank" class="badge">
                 <span class="badge__left">
                     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -995,7 +1072,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                 <span class="badge__right">LordArrin/rss-bridge</span>
             </a>
 
-            <!-- License Badge -->
             <a href="https://github.com/LordArrin/rss-bridge/blob/master/LICENSE" rel="noopener noreferrer" target="_blank" class="badge">
                 <span class="badge__left">
                     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -1005,7 +1081,7 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                 <span class="badge__right">AGPL-3.0</span>
             </a>
 
-            <span class="footer-counter" id="footer-counter">
+            <span class="footer-counter">
                 <span id="active-bridges">0</span>/<span id="total-bridges">0</span> active bridges
             </span>
         </div>
@@ -1024,28 +1100,19 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                 t = setTimeout(() => fn.apply(this, args), delay);
             };
         },
-
         extractDomain(url) {
             if (!url) return '';
-            if (!url.match(/^https?:\/\//)) {
-                url = 'https://' + url;
-            }
+            if (!url.match(/^https?:\/\//)) url = 'https://' + url;
             try {
                 const parsed = new URL(url);
                 let domain = parsed.hostname.toLowerCase();
-                if (domain.startsWith('www.')) {
-                    domain = domain.substring(4);
-                }
+                if (domain.startsWith('www.')) domain = domain.substring(4);
                 return domain;
-            } catch (e) {
-                return '';
-            }
+            } catch (e) { return ''; }
         },
-
         isUrl(str) {
             return /^https?:\/\/.+/.test(str) || /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(str);
         },
-
         domainsMatch(domain1, domain2) {
             if (!domain1 || !domain2) return false;
             if (domain1 === domain2) return true;
@@ -1058,33 +1125,95 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
     // ============================================================
     // CODE COPY BUTTONS
     // ============================================================
-    document.querySelectorAll('.code-block .copy-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const codeEl = btn.closest('.code-block').querySelector('code');
-            const text = codeEl.innerText;
-            try {
-                await navigator.clipboard.writeText(text);
-                btn.classList.add('copied');
-                setTimeout(() => btn.classList.remove('copied'), 2000);
-            } catch (err) {
-                // Fallback for older browsers
-                const textarea = document.createElement('textarea');
-                textarea.value = text;
-                textarea.style.position = 'fixed';
-                textarea.style.opacity = '0';
-                document.body.appendChild(textarea);
-                textarea.select();
+    function initCopyButtons() {
+        document.querySelectorAll('.code-block .copy-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const codeEl = btn.closest('.code-block').querySelector('code');
+                const text = codeEl.innerText;
                 try {
-                    document.execCommand('copy');
+                    await navigator.clipboard.writeText(text);
                     btn.classList.add('copied');
                     setTimeout(() => btn.classList.remove('copied'), 2000);
-                } catch (e) {
-                    console.error('Copy failed:', e);
+                } catch (err) {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    try {
+                        document.execCommand('copy');
+                        btn.classList.add('copied');
+                        setTimeout(() => btn.classList.remove('copied'), 2000);
+                    } catch (e) { console.error('Copy failed:', e); }
+                    document.body.removeChild(textarea);
                 }
-                document.body.removeChild(textarea);
-            }
+            });
         });
-    });
+    }
+
+    // ============================================================
+    // BRIDGE SPECIFIC CONFIGURATION
+    // ============================================================
+    function renderBridgeSpecific(bridges) {
+        const container = document.getElementById('bridge-config-list');
+        const bridgesWithConfig = bridges.filter(b => b.configuration && b.configuration.length > 0);
+        
+        if (bridgesWithConfig.length === 0) {
+            container.innerHTML = '<div class="loading">No bridges require specific configuration.</div>';
+            return;
+        }
+        
+        container.innerHTML = '';
+        
+        bridgesWithConfig.forEach(bridge => {
+            const sectionName = bridge.file;
+            const configLines = bridge.configuration.map(key => `${key} = "your-value-here"`).join('\n');
+            const configExample = `[${sectionName}]\n${configLines}`;
+            
+            const item = document.createElement('div');
+            item.className = 'bridge-config-item';
+            
+            const keyTags = bridge.configuration.map(key => `<span class="key-tag">${key}</span>`).join('');
+            
+            item.innerHTML = `
+                <h4><a href="${bridge.uri || '#'}" target="_blank" rel="noopener">${bridge.name || bridge.file}</a></h4>
+                <div class="bridge-uri">${bridge.uri || '—'}</div>
+                <p>${bridge.description || 'No description provided'}</p>
+                <div class="required-keys">
+                    <strong style="font-size: 0.8125rem; color: var(--md-on-surface-variant); margin-right: 4px;">Required keys:</strong>
+                    ${keyTags}
+                </div>
+                <div class="config-example">
+                    <span class="config-example-label">Add to <code>config/config.ini.php</code>:</span>
+                    <div class="code-block">
+                        <button type="button" class="copy-btn" aria-label="Copy config">
+                            <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                            <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                            <span class="copy-label-copy">Copy</span>
+                            <span class="copy-label-copied">Copied!</span>
+                        </button>
+                        <pre><code>${configExample}</code></pre>
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(item);
+        });
+        
+        // Init copy buttons for newly created elements
+        container.querySelectorAll('.code-block .copy-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const codeEl = btn.closest('.code-block').querySelector('code');
+                const text = codeEl.innerText;
+                try {
+                    await navigator.clipboard.writeText(text);
+                    btn.classList.add('copied');
+                    setTimeout(() => btn.classList.remove('copied'), 2000);
+                } catch (err) { console.error(err); }
+            });
+        });
+    }
 
     // ============================================================
     // BRIDGES LOADING
@@ -1095,15 +1224,18 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         
         try {
             const response = await fetch('./bridges.json');
-            const bridges = await response.json();
+            const data = await response.json();
+            const bridges = data.bridges || [];
+            const total = data.total || bridges.length;
+            const active = data.active || bridges.length;
             
             loadingMessage.remove();
             
-            document.getElementById('bridge-count').textContent = bridges.length;
-            document.getElementById('total-count').textContent = bridges.length;
-            document.getElementById('visible-count').textContent = bridges.length;
-            document.getElementById('active-bridges').textContent = bridges.length;
-            document.getElementById('total-bridges').textContent = bridges.length;
+            document.getElementById('bridge-count').textContent = active;
+            document.getElementById('total-count').textContent = active;
+            document.getElementById('visible-count').textContent = active;
+            document.getElementById('active-bridges').textContent = active;
+            document.getElementById('total-bridges').textContent = total;
             
             bridges.forEach((bridge, index) => {
                 const card = document.createElement('section');
@@ -1130,6 +1262,7 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
             });
             
             initSearch();
+            renderBridgeSpecific(bridges);
         } catch (error) {
             loadingMessage.textContent = 'Failed to load bridges. Please visit the repository directly.';
             console.error('Error loading bridges:', error);
@@ -1149,9 +1282,7 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         });
 
         const savedQuery = sessionStorage.getItem('rssbridge_search_query');
-        if (savedQuery) {
-            searchInput.value = savedQuery;
-        }
+        if (savedQuery) searchInput.value = savedQuery;
         
         performSearch();
         
@@ -1209,6 +1340,7 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         });
     });
     
+    initCopyButtons();
     loadBridges();
 </script>
 
