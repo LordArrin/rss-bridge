@@ -1,0 +1,156 @@
+import urllib.request
+import json
+import re
+import os
+import sys
+
+# Configuration mapping: ARG_NAME -> (SOURCE, STRIP_PREFIX, VALID_TAG_REGEX)
+# If a dependency is fetched from a fork, change the repository path here.
+DEPS_CONFIG = {
+    "ALPINE_VERSION": ("alpine_docker", "", r"^3\.\d+$"),
+    "NGINX_VERSION": ("freenginx", "", r"^\d+\.\d+\.\d+$"),
+    "CURL_VERSION": ("lwthiker/curl-impersonate", "v", r"^v?\d+\.\d+\.\d+$"),
+    "OPENSSL_VERSION": ("openssl/openssl", "openssl-", r"^openssl-\d+\.\d+\.\d+$"),
+    "PCRE_VERSION": ("PCRE2Project/pcre2", "pcre2-", r"^pcre2-\d+\.\d+$"),
+    "MIMALLOC_VERSION": ("microsoft/mimalloc", "v", r"^v?\d+\.\d+\.\d+$"),
+    "ZLIB_NG_VERSION": ("zlib-ng/zlib-ng", "v", r"^v?\d+\.\d+\.\d+$"),
+    "LIBEVENT_VERSION": ("libevent/libevent", "release-", r"^release-\d+\.\d+\.\d+-stable$"),
+    "MEMCACHED_VERSION": ("memcached/memcached", "v", r"^\d+\.\d+\.\d+$"),
+}
+
+def set_github_output(name, value):
+    """Helper to set GitHub Actions output variables."""
+    if 'GITHUB_OUTPUT' in os.environ:
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            f.write(f"{name}={value}\n")
+
+def fetch_url(url):
+    headers = {'User-Agent': 'Mozilla/5.0 (RSS-Bridge Deps Updater)'}
+    if 'api.github.com' in url and 'GITHUB_TOKEN' in os.environ:
+        headers['Authorization'] = f"token {os.environ['GITHUB_TOKEN']}"
+    
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=15) as response:
+        return response.read().decode()
+
+def version_sort_key(tag):
+    """Extracts numbers from a tag string to allow proper numerical sorting."""
+    clean = re.sub(r'^[a-zA-Z-]+', '', tag)
+    return tuple(map(int, re.findall(r'\d+', clean)))
+
+def get_github_latest(repo, tag_regex):
+    """Fetches the latest valid release or tag from a GitHub repository."""
+    # Try latest release first
+    try:
+        data = json.loads(fetch_url(f"https://api.github.com/repos/{repo}/releases/latest"))
+        tag = data['tag_name']
+        if re.match(tag_regex, tag):
+            return tag
+    except Exception:
+        pass
+    
+    # Fallback to tags, filter by regex and sort numerically
+    try:
+        data = json.loads(fetch_url(f"https://api.github.com/repos/{repo}/tags?per_page=100"))
+        valid_tags = [t['name'] for t in data if re.match(tag_regex, t['name'])]
+        if valid_tags:
+            valid_tags.sort(key=version_sort_key, reverse=True)
+            return valid_tags[0]
+    except Exception:
+        pass
+    return None
+
+def get_alpine_latest(tag_regex):
+    """Fetches the latest stable Alpine Linux tag from Docker Hub."""
+    try:
+        data = json.loads(fetch_url("https://hub.docker.com/v2/repositories/library/alpine/tags?page_size=100"))
+        valid_tags = [t['name'] for t in data['results'] if re.match(tag_regex, t['name'])]
+        if valid_tags:
+            valid_tags.sort(key=lambda x: tuple(map(int, x.split('.'))), reverse=True)
+            return valid_tags[0]
+    except Exception:
+        pass
+    return "3.24" # Fallback
+
+def get_freenginx_latest(tag_regex):
+    """Parses the official freenginx download page for the stable version."""
+    try:
+        html = fetch_url("https://freenginx.org/en/download.html")
+        matches = re.findall(r'freenginx-([0-9\.]+)\.tar\.gz', html)
+        valid_tags = [m for m in matches if re.match(tag_regex, m)]
+        if valid_tags:
+            valid_tags.sort(key=version_sort_key, reverse=True)
+            return valid_tags[0]
+    except Exception:
+        pass
+    return "1.27.0" # Fallback
+
+if len(sys.argv) < 2:
+    print("[Error] Dependency name not provided.")
+    sys.exit(1)
+
+target_dep = sys.argv[1]
+if target_dep not in DEPS_CONFIG:
+    print(f"[Error] Unknown dependency: {target_dep}")
+    sys.exit(1)
+
+source, strip_pre, tag_regex = DEPS_CONFIG[target_dep]
+dockerfile_path = "Dockerfile"
+
+if not os.path.exists(dockerfile_path):
+    print(f"[Error] {dockerfile_path} not found!")
+    sys.exit(1)
+
+with open(dockerfile_path, "r") as f:
+    content = f.read()
+
+# Extract current version from Dockerfile
+current_match = re.search(rf'^ARG\s+{target_dep}\s*=\s*(.*)$', content, flags=re.MULTILINE)
+if not current_match:
+    print(f"[Error] ARG {target_dep} not found in Dockerfile")
+    sys.exit(1)
+    
+current_version = current_match.group(1).strip()
+print(f"[Info] Current version for {target_dep}: {current_version}")
+
+# Fetch latest version
+try:
+    if source == "alpine_docker":
+        latest_raw = get_alpine_latest(tag_regex)
+    elif source == "freenginx":
+        latest_raw = get_freenginx_latest(tag_regex)
+    else:
+        latest_raw = get_github_latest(source, tag_regex)
+
+    if not latest_raw:
+        print(f"[Warning] Could not fetch a valid latest version for {target_dep}")
+        set_github_output("updated", "false")
+        sys.exit(0)
+
+    # Clean tag prefixes (e.g., "openssl-3.0.1" -> "3.0.1")
+    latest_version = latest_raw[len(strip_pre):] if latest_raw.startswith(strip_pre) else latest_raw
+    print(f"[Info] Latest valid version found: {latest_version}")
+
+    if current_version == latest_version:
+        print(f"[Info] {target_dep} is already up-to-date.")
+        set_github_output("updated", "false")
+        sys.exit(0)
+
+    # Safely update the Dockerfile using re.subn with MULTILINE flag
+    pattern_str = rf'^(ARG\s+{target_dep}\s*=\s*).*$'
+    new_content, count = re.subn(pattern_str, rf'\g<1>{latest_version}', content, flags=re.MULTILINE)
+    
+    if count > 0:
+        with open(dockerfile_path, "w") as f:
+            f.write(new_content)
+        print(f"[Success] Updated {target_dep} from {current_version} to {latest_version}")
+        set_github_output("updated", "true")
+        set_github_output("new_version", latest_version)
+        set_github_output("old_version", current_version)
+    else:
+        print("[Error] Regex failed to update the Dockerfile.")
+        sys.exit(1)
+
+except Exception as e:
+    print(f"[Error] Exception while processing {target_dep}: {str(e)}")
+    sys.exit(1)
