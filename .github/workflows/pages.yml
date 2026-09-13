@@ -48,14 +48,12 @@ jobs:
           
           echo "=== Generating specific-bridges.json ==="
           
-          # Always create the file (even if empty)
-          echo "[" > "$OUTPUT_FILE"
-          
           # Check if directory exists
           if [ ! -d "$SPECIFIC_DIR" ]; then
             echo "⚠️  Directory $SPECIFIC_DIR does not exist"
-            echo "]" >> "$OUTPUT_FILE"
+            echo "[]" > "$OUTPUT_FILE"
             echo "✓ Created empty $OUTPUT_FILE"
+            cat "$OUTPUT_FILE"
             exit 0
           fi
           
@@ -65,39 +63,47 @@ jobs:
           
           if [ "$FILE_COUNT" -eq 0 ]; then
             echo "⚠️  No HTML files found in $SPECIFIC_DIR"
-            echo "]" >> "$OUTPUT_FILE"
+            echo "[]" > "$OUTPUT_FILE"
             echo "✓ Created empty $OUTPUT_FILE"
+            cat "$OUTPUT_FILE"
             exit 0
           fi
           
-          # Build JSON
+          # Build JSON using jq for valid formatting
           cd "$SPECIFIC_DIR"
-          FIRST=true
+          
+          RESULT="[]"
           
           for f in *.html; do
             [ -f "$f" ] || continue
             NAME="${f%.html}"
             
             # Extract URI from meta comment
-            URI=$(grep -m1 "<!-- meta:uri:" "$f" 2>/dev/null | sed 's/.*<!-- meta:uri:\(.*\) -->.*/\1/' | sed 's/"/\\"/g' || echo "")
-            
-            if [ "$FIRST" = true ]; then
-              FIRST=false
-            else
-              echo "," >> "../$OUTPUT_FILE"
-            fi
+            URI=$(grep -m1 "<!-- meta:uri:" "$f" 2>/dev/null | sed 's/.*<!-- meta:uri:\(.*\) -->.*/\1/' || echo "")
             
             echo "  ✓ Processing: $NAME (uri: $URI)"
-            printf '  {"name":"%s","file":"%s","uri":"%s"}' "$NAME" "$f" "$URI" >> "../$OUTPUT_FILE"
+            
+            # Use jq to properly add to array
+            RESULT=$(echo "$RESULT" | jq --arg name "$NAME" --arg file "$f" --arg uri "$URI" \
+              '. + [{"name": $name, "file": $file, "uri": $uri}]')
           done
           
-          echo "" >> "../$OUTPUT_FILE"
-          echo "]" >> "../$OUTPUT_FILE"
-          
           cd ..
+          
+          # Write formatted JSON
+          echo "$RESULT" | jq '.' > "$OUTPUT_FILE"
+          
           echo "✓ Generated $OUTPUT_FILE ($(wc -c < "$OUTPUT_FILE") bytes)"
-          echo "Content preview:"
-          head -20 "$OUTPUT_FILE"
+          echo "Content:"
+          cat "$OUTPUT_FILE"
+          
+          # Validate JSON
+          if jq empty "$OUTPUT_FILE" 2>/dev/null; then
+            echo "✓ JSON is valid"
+          else
+            echo "✗ JSON validation FAILED"
+            exit 1
+          fi
 
       - name: Verify files
         run: |
