@@ -19,7 +19,7 @@
         <div class="nav-links">
             <a href="#features">Features</a>
             <a href="#installation">Installation</a>
-            <a href="#Search">Bridges</a>
+            <a href="#bridges">Bridges</a>
             <a href="#bridge-specific">Specific</a>
             <a href="#development">Development</a>
         </div>
@@ -301,6 +301,11 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
 <script>
     const SEARCH_DELAY = 100;
 
+    let bridgesReady;
+    let specificReady;
+    const bridgesReadyPromise = new Promise(r => bridgesReady = r);
+    const specificReadyPromise = new Promise(r => specificReady = r);
+
     const Utils = {
         debounce(fn, delay) {
             let t;
@@ -430,6 +435,8 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         } catch (error) {
             loadingMessage.textContent = 'Failed to load bridges. Please visit the repository directly.';
             console.error('Error loading bridges:', error);
+        } finally {
+            bridgesReady();
         }
     }
 
@@ -575,22 +582,48 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                     </small>
                 </div>
             `;
+        } finally {
+            specificReady();
         }
     }
 
+    async function scrollToTarget(href, behavior = 'smooth') {
+        const target = document.querySelector(href);
+        if (!target) return;
+
+        const bridgesContainer = document.getElementById('bridges-container');
+        const isBelowBridgesContainer = bridgesContainer && 
+            (bridgesContainer.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+        if (isBelowBridgesContainer) {
+            await Promise.all([bridgesReadyPromise, specificReadyPromise]);
+            await new Promise(r => requestAnimationFrame(r));
+            await new Promise(r => requestAnimationFrame(r));
+        }
+
+        target.scrollIntoView({ behavior, block: 'start' });
+    }
+
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', e => {
+        anchor.addEventListener('click', async e => {
             e.preventDefault();
-            const target = document.querySelector(anchor.getAttribute('href'));
-            if (target) {
-                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
+            const href = anchor.getAttribute('href');
+            history.replaceState(null, '', href);
+            await scrollToTarget(href, 'smooth');
         });
     });
-    
+
     initCopyButtons();
     loadBridges();
     loadSpecificBridges();
+
+    if (window.location.hash) {
+        (async () => {
+            await Promise.all([bridgesReadyPromise, specificReadyPromise]);
+            await new Promise(r => requestAnimationFrame(r));
+            await scrollToTarget(window.location.hash, 'auto');
+        })();
+    }
 </script>
 
 </body>
