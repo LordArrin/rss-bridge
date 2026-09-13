@@ -20,7 +20,7 @@
             <a href="#features">Features</a>
             <a href="#installation">Installation</a>
             <a href="#bridges">Bridges</a>
-            <a href="#bridge-specific">Bridge Specific</a>
+            <a href="#bridge-specific">Specific</a>
             <a href="#development">Development</a>
         </div>
     </div>
@@ -147,7 +147,7 @@ timeout = 60000</code></pre></div>
     </div>
 
     <section class="doc-section" id="bridge-specific">
-        <h2>Bridge Specific Configuration</h2>
+        <h2>Specific Bridges Configuration</h2>
         <p class="text-center">Some bridges require API keys, tokens, or cookies. Add them to <code>config/config.ini.php</code>. Click on a bridge to expand the instructions.</p>
 
         <div class="bridge-specific-list" id="bridge-specific-list">
@@ -227,7 +227,7 @@ timeout = 60000</code></pre></div>
 <span class="tok-var">$username</span> = (<span class="tok-kw">string</span>)<span class="tok-var">$this</span>-&gt;<span class="tok-fn">getInput</span>(<span class="tok-str">'username'</span>);
 <span class="tok-var">$limit</span>    = (<span class="tok-kw">int</span>)(<span class="tok-var">$this</span>-&gt;<span class="tok-fn">getInput</span>(<span class="tok-str">'limit'</span>) ?: <span class="tok-num">10</span>);</code></pre></div>
 
-        <h3>Bridge-Specific Configuration (Secrets)</h3>
+        <h3>Bridges Configuration (Secrets)</h3>
         <p>For API tokens, cookies and other secrets, use the <code>CONFIGURATION</code> constant:</p>
 <div class="code-block"><button type="button" class="copy-btn" aria-label="Copy code"><span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span><span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span><span class="copy-label-copy">Copy</span><span class="copy-label-copied">Copied!</span></button><pre><code><span class="tok-com">// In your bridge class:</span>
 <span class="tok-kw">public const</span> <span class="tok-var">CONFIGURATION</span> = [
