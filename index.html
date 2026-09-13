@@ -130,6 +130,10 @@ timeout = 60000</code></pre></div>
         </ul>
     </section>
 
+    <section class="doc-section" id="bridges">
+        <h2>Available Bridges</h2>
+    </section>
+
     <section class="searchbar">
         <h3>Search</h3>
         <input
@@ -331,9 +335,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         }
     };
 
-    // ============================================================
-    // COPY BUTTONS
-    // ============================================================
     function initCopyButtons(root = document) {
         root.querySelectorAll('.code-block .copy-btn').forEach(btn => {
             if (btn.dataset.bound) return;
@@ -363,9 +364,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         });
     }
 
-    // ============================================================
-    // BRIDGE SPECIFIC SPOILERS (only one open at a time, content preloaded)
-    // ============================================================
     function initSpoilers() {
         document.querySelectorAll('.bridge-specific-header').forEach(header => {
             if (header.dataset.bound) return;
@@ -375,7 +373,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                 const item = header.closest('.bridge-specific-item');
                 const isOpen = item.classList.contains('open');
                 
-                // Close all other items
                 document.querySelectorAll('.bridge-specific-item.open').forEach(openItem => {
                     if (openItem !== item) {
                         openItem.classList.remove('open');
@@ -384,7 +381,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                     }
                 });
                 
-                // Toggle current item
                 if (isOpen) {
                     item.classList.remove('open');
                     header.setAttribute('aria-expanded', 'false');
@@ -396,9 +392,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         });
     }
 
-    // ============================================================
-    // LOAD BRIDGES
-    // ============================================================
     async function loadBridges() {
         const bridgesContainer = document.getElementById('bridges-container');
         const loadingMessage = document.getElementById('loading-message');
@@ -444,9 +437,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         }
     }
 
-    // ============================================================
-    // SEARCH
-    // ============================================================
     function initSearch() {
         const searchInput = document.getElementById('bridge-search');
         const cards = document.querySelectorAll('.bridge-card');
@@ -492,15 +482,11 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         }
     }
 
-    // ============================================================
-    // LOAD SPECIFIC BRIDGES (eager-load all HTML upfront)
-    // ============================================================
     async function loadSpecificBridges() {
         const container = document.getElementById('bridge-specific-list');
         const loadingMessage = document.getElementById('specific-loading');
         
         try {
-            console.log('Loading specific-bridges.json...');
             const response = await fetch('./specific-bridges.json');
             
             if (!response.ok) {
@@ -508,7 +494,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
             }
             
             const bridges = await response.json();
-            console.log('Loaded bridges:', bridges);
             
             if (!Array.isArray(bridges)) {
                 throw new Error('Invalid JSON format: expected array');
@@ -522,7 +507,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
             
             loadingMessage.remove();
             
-            // Phase 1: Create all spoiler shells (fast DOM creation)
             bridges.forEach(bridge => {
                 const item = document.createElement('div');
                 item.className = 'bridge-specific-item';
@@ -551,8 +535,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                 container.appendChild(item);
             });
             
-            // Phase 2: Fetch all HTML files in parallel
-            console.log('Preloading', bridges.length, 'bridge configurations...');
             const htmlFetches = bridges.map(bridge => 
                 fetch(`./documentation/pages/specific-bridges/${bridge.file}`)
                     .then(resp => {
@@ -565,7 +547,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
             
             const results = await Promise.all(htmlFetches);
             
-            // Phase 3: Insert HTML into corresponding spoilers
             results.forEach(result => {
                 const item = container.querySelector(`[data-file="${result.file}"]`);
                 if (!item) return;
@@ -579,20 +560,16 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                             <small>Error: ${result.error}</small>
                         </div>
                     `;
-                    console.error('Failed to load:', result.file, result.error);
                 } else {
                     const cleanHtml = result.html.replace(/^<!--\s*meta:uri:.*\s*-->\s*/m, '');
                     inner.innerHTML = cleanHtml;
-                    console.log('✓ Loaded:', result.file);
                 }
             });
             
-            // Phase 4: Init copy buttons and spoilers
             initCopyButtons(container);
             initSpoilers();
             
         } catch (error) {
-            console.error('Specific bridges error:', error);
             loadingMessage.innerHTML = `
                 <div style="color: var(--md-error); padding: 20px; text-align: center;">
                     <strong>Failed to load bridge configurations</strong><br>
@@ -605,47 +582,16 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         }
     }
 
-    // ============================================================
-    // SMOOTH SCROLL
-    // ============================================================
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', async e => {
+        anchor.addEventListener('click', e => {
             e.preventDefault();
-            const href = anchor.getAttribute('href');
-            const target = document.querySelector(href);
-            if (!target) return;
-            
-            const bridgesLoading = document.getElementById('loading-message') !== null;
-            const isBelowBridges = target.compareDocumentPosition(
-                document.getElementById('bridges-container')
-            ) & Node.DOCUMENT_POSITION_PRECEDING;
-            
-            if (bridgesLoading && isBelowBridges) {
-                await new Promise(resolve => {
-                    const check = () => {
-                        if (!document.getElementById('loading-message')) {
-                            resolve();
-                        } else {
-                            requestAnimationFrame(check);
-                        }
-                    };
-                    check();
-                    setTimeout(resolve, 3000);
-                });
-                
-                await new Promise(r => requestAnimationFrame(r));
-                
-                target.scrollIntoView({ behavior: 'instant', block: 'start' });
-                return;
+            const target = document.querySelector(anchor.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
-            
-            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
     });
     
-    // ============================================================
-    // INITIALIZE
-    // ============================================================
     initCopyButtons();
     loadBridges();
     loadSpecificBridges();
