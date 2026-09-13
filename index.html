@@ -257,7 +257,7 @@ vendor/bin/phpcbf --standard=phpcs.xml bridges-v2/YourBridge.php
 vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-num">5</span></code></pre></div>
 
         <div class="text-center mt-24">
-            <a href="https://github.com/LordArrin/rss-bridge/blob/master/docs/writing-bridges-en.md" class="button">Full Documentation</a>
+            <a href="https://github.com/LordArrin/rss-bridge/blob/master/documentation/writing-bridges-en.md" class="button">Full Documentation</a>
         </div>
     </section>
 
@@ -398,7 +398,7 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                         const inner = item.querySelector('.bridge-specific-content-inner');
                         const file = item.dataset.file;
                         try {
-                            const resp = await fetch(`./docs/pages/specific-bridges/${file}`);
+                            const resp = await fetch(`./documentation/pages/specific-bridges/${file}`);
                             if (!resp.ok) throw new Error('Failed to load');
                             const html = await resp.text();
                             // Strip meta comment from the start

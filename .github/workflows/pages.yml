@@ -28,7 +28,7 @@ jobs:
 
       - name: Generate specific-bridges.json
         run: |
-          cd docs/pages/specific-bridges || exit 0
+          cd documentation/pages/specific-bridges || exit 0
           RESULT="["
           FIRST=true
           for f in *.html; do
