@@ -609,12 +609,37 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
     // SMOOTH SCROLL
     // ============================================================
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', e => {
+        anchor.addEventListener('click', async e => {
             e.preventDefault();
-            const target = document.querySelector(anchor.getAttribute('href'));
-            if (target) {
-                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const href = anchor.getAttribute('href');
+            const target = document.querySelector(href);
+            if (!target) return;
+            
+            const bridgesLoading = document.getElementById('loading-message') !== null;
+            const isBelowBridges = target.compareDocumentPosition(
+                document.getElementById('bridges-container')
+            ) & Node.DOCUMENT_POSITION_PRECEDING;
+            
+            if (bridgesLoading && isBelowBridges) {
+                await new Promise(resolve => {
+                    const check = () => {
+                        if (!document.getElementById('loading-message')) {
+                            resolve();
+                        } else {
+                            requestAnimationFrame(check);
+                        }
+                    };
+                    check();
+                    setTimeout(resolve, 3000);
+                });
+                
+                await new Promise(r => requestAnimationFrame(r));
+                
+                target.scrollIntoView({ behavior: 'instant', block: 'start' });
+                return;
             }
+            
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
     });
     
