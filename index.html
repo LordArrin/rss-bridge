@@ -397,20 +397,33 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                     if (!wasLoaded) {
                         const inner = item.querySelector('.bridge-specific-content-inner');
                         const file = item.dataset.file;
+                        const filePath = `./documentation/pages/specific-bridges/${file}`;
+                        
+                        console.log('Loading bridge config from:', filePath);
+                        
                         try {
-                            const resp = await fetch(`./documentation/pages/specific-bridges/${file}`);
-                            if (!resp.ok) throw new Error('Failed to load');
+                            const resp = await fetch(filePath);
+                            
+                            if (!resp.ok) {
+                                throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+                            }
+                            
                             const html = await resp.text();
-                            // Strip meta comment from the start
                             const cleanHtml = html.replace(/^<!--\s*meta:uri:.*\s*-->\s*/m, '');
                             inner.innerHTML = cleanHtml;
                             item.dataset.loaded = 'true';
-                            
-                            // Re-bind copy buttons for newly added code blocks
                             initCopyButtons(inner);
+                            console.log('✓ Loaded:', file);
+                            
                         } catch (err) {
-                            inner.innerHTML = '<div class="note">Failed to load configuration. Please check the repository.</div>';
                             console.error('Failed to load bridge config:', err);
+                            inner.innerHTML = `
+                                <div class="note">
+                                    Failed to load configuration for ${file}<br>
+                                    <small>Error: ${err.message}</small><br>
+                                    <small>Path: ${filePath}</small>
+                                </div>
+                            `;
                         }
                     }
                 }
@@ -522,12 +535,23 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         const loadingMessage = document.getElementById('specific-loading');
         
         try {
+            console.log('Loading specific-bridges.json...');
             const response = await fetch('./specific-bridges.json');
-            if (!response.ok) throw new Error('No specific bridges found');
-            const bridges = await response.json();
             
-            if (!Array.isArray(bridges) || bridges.length === 0) {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const bridges = await response.json();
+            console.log('Loaded bridges:', bridges);
+            
+            if (!Array.isArray(bridges)) {
+                throw new Error('Invalid JSON format: expected array');
+            }
+            
+            if (bridges.length === 0) {
                 loadingMessage.textContent = 'No bridges require specific configuration yet.';
+                loadingMessage.classList.add('empty-state');
                 return;
             }
             
@@ -562,12 +586,19 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                 container.appendChild(item);
             });
             
-            // Init spoilers after creating items
             initSpoilers();
             
         } catch (error) {
-            loadingMessage.textContent = 'No specific bridge configurations available.';
-            console.warn('Specific bridges:', error.message);
+            console.error('Specific bridges error:', error);
+            loadingMessage.innerHTML = `
+                <div style="color: var(--md-error); padding: 20px; text-align: center;">
+                    <strong>Failed to load bridge configurations</strong><br>
+                    <small style="color: var(--md-on-surface-variant);">
+                        ${error.message}<br>
+                        Check browser console for details
+                    </small>
+                </div>
+            `;
         }
     }
 

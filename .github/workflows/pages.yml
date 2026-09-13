@@ -21,34 +21,102 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Debug - Show repository structure
+        run: |
+          echo "=== Repository root ==="
+          ls -la
+          echo ""
+          echo "=== Looking for specific-bridges directory ==="
+          find . -type d -name "specific-bridges" 2>/dev/null || echo "Not found"
+          echo ""
+          echo "=== Content of documentation/pages/specific-bridges ==="
+          ls -la documentation/pages/specific-bridges/ 2>/dev/null || echo "Directory not found"
+
       - name: Extract bridge metadata
         run: |
           php .github/workflows/extract-bridges.php > bridges.json
-          echo "Generated bridges.json"
+          echo "✓ Generated bridges.json"
+          echo "Size: $(wc -c < bridges.json) bytes"
+          echo "Bridges count: $(jq length bridges.json)"
 
       - name: Generate specific-bridges.json
         run: |
-          cd documentation/pages/specific-bridges || exit 0
-          RESULT="["
+          SPECIFIC_DIR="documentation/pages/specific-bridges"
+          OUTPUT_FILE="specific-bridges.json"
+          
+          echo "=== Checking for specific bridges ==="
+          
+          # Check if directory exists
+          if [ ! -d "$SPECIFIC_DIR" ]; then
+            echo "⚠️  Directory $SPECIFIC_DIR does not exist"
+            echo "Creating empty JSON array"
+            echo "[]" > "$OUTPUT_FILE"
+            exit 0
+          fi
+          
+          # Count HTML files
+          FILE_COUNT=$(find "$SPECIFIC_DIR" -maxdepth 1 -name "*.html" -type f | wc -l)
+          echo "Found $FILE_COUNT HTML files in $SPECIFIC_DIR"
+          
+          if [ "$FILE_COUNT" -eq 0 ]; then
+            echo "⚠️  No HTML files found"
+            echo "[]" > "$OUTPUT_FILE"
+            exit 0
+          fi
+          
+          # Build JSON
+          cd "$SPECIFIC_DIR"
+          echo "[" > "../$OUTPUT_FILE"
           FIRST=true
+          
           for f in *.html; do
             [ -f "$f" ] || continue
             NAME="${f%.html}"
-            # Extract URI from meta comment (first line)
-            URI=$(grep -m1 "<!-- meta:uri:" "$f" 2>/dev/null | sed 's/.*<!-- meta:uri:\(.*\) -->.*/\1/' || echo "")
-            # Escape quotes in URI for JSON
-            URI=$(echo "$URI" | sed 's/"/\\"/g')
+            
+            # Extract URI from meta comment
+            URI=$(grep -m1 "<!-- meta:uri:" "$f" 2>/dev/null | sed 's/.*<!-- meta:uri:\(.*\) -->.*/\1/' | sed 's/"/\\"/g' || echo "")
             
             if [ "$FIRST" = true ]; then
               FIRST=false
             else
-              RESULT="$RESULT,"
+              echo "," >> "../$OUTPUT_FILE"
             fi
-            RESULT="$RESULT{\"name\":\"$NAME\",\"file\":\"$f\",\"uri\":\"$URI\"}"
+            
+            echo "  ✓ Processing: $NAME (uri: $URI)"
+            printf '  {"name":"%s","file":"%s","uri":"%s"}' "$NAME" "$f" "$URI" >> "../$OUTPUT_FILE"
           done
-          RESULT="$RESULT]"
-          echo "$RESULT" > ../../specific-bridges.json
-          echo "Generated specific-bridges.json with $(echo "$RESULT" | grep -o '"name"' | wc -l) bridges"
+          
+          echo "" >> "../$OUTPUT_FILE"
+          echo "]" >> "../$OUTPUT_FILE"
+          
+          cd ..
+          echo ""
+          echo "✓ Generated $OUTPUT_FILE"
+          echo "Content:"
+          cat "$OUTPUT_FILE"
+          echo ""
+          echo "File size: $(wc -c < "$OUTPUT_FILE") bytes"
+
+      - name: Verify all required files
+        run: |
+          echo "=== Verifying required files ==="
+          FILES="index.html style.css bridges.json specific-bridges.json"
+          ALL_OK=true
+          
+          for file in $FILES; do
+            if [ -f "$file" ]; then
+              echo "✓ $file exists ($(wc -c < "$file") bytes)"
+            else
+              echo "✗ $file MISSING"
+              ALL_OK=false
+            fi
+          done
+          
+          if [ "$ALL_OK" = false ]; then
+            echo ""
+            echo "ERROR: Some required files are missing!"
+            exit 1
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -61,3 +129,7 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Show deployment URL
+        run: |
+          echo "✓ Deployed to: ${{ steps.deployment.outputs.page_url }}"

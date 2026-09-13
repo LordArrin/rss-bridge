@@ -880,3 +880,12 @@ section.footer {
 @media (prefers-color-scheme: dark) {
     * { scrollbar-color: #352C28 #1F1714; }
 }
+/* Empty state for bridge-specific list */
+#specific-loading.empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--md-on-surface-variant);
+    background: var(--md-surface-container-low);
+    border-radius: var(--md-shape-lg);
+    border: 2px dashed var(--md-outline-variant);
+}
