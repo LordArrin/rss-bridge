@@ -509,12 +509,6 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
     background-color: var(--md-surface-container-low);
     border-radius: var(--md-shape-lg);
     box-shadow: var(--md-elevation-1);
-    animation: fadeInUp var(--md-motion-duration-long) var(--md-motion-easing-decelerate) both;
-    transform: translateZ(0);
-    backface-visibility: hidden;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 300px;
-    contain: style paint;
     transition: transform var(--md-motion-duration-short) var(--md-motion-easing-standard),
                 box-shadow var(--md-motion-duration-short) var(--md-motion-easing-standard);
     min-height: 200px;

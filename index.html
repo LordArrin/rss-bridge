@@ -130,7 +130,7 @@ timeout = 60000</code></pre></div>
         </ul>
     </section>
 
-    <section class="searchbar">
+    <section class="searchbar" id="bridges">
         <h3>Search</h3>
         <input
             type="text"
@@ -407,7 +407,7 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
 
             document.getElementById('active-bridges').textContent = active;
             
-            bridges.forEach((bridge, index) => {
+            bridges.forEach((bridge) => {
                 const card = document.createElement('section');
                 card.className = 'bridge-card';
                 card.id = 'bridge-' + bridge.file;
@@ -415,7 +415,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                 card.setAttribute('data-short-name', bridge.file.toLowerCase());
                 card.setAttribute('data-description', (bridge.description || '').toLowerCase());
                 card.setAttribute('data-domain', Utils.extractDomain(bridge.uri));
-                card.style.animationDelay = `${Math.min(index * 20, 500)}ms`;
                 
                 const uri = bridge.uri || 'https://github.com/LordArrin/rss-bridge';
                 const name = bridge.name || bridge.file;
