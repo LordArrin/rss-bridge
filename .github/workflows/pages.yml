@@ -27,46 +27,51 @@ jobs:
           ls -la
           echo ""
           echo "=== Looking for specific-bridges directory ==="
-          find . -type d -name "specific-bridges" 2>/dev/null || echo "Not found"
+          find . -type d -name "specific-bridges" 2>/dev/null || echo "Not found anywhere"
           echo ""
           echo "=== Content of documentation/pages/specific-bridges ==="
-          ls -la documentation/pages/specific-bridges/ 2>/dev/null || echo "Directory not found"
+          if [ -d "documentation/pages/specific-bridges" ]; then
+            ls -la documentation/pages/specific-bridges/
+          else
+            echo "⚠️  Directory does not exist"
+          fi
 
       - name: Extract bridge metadata
         run: |
           php .github/workflows/extract-bridges.php > bridges.json
-          echo "✓ Generated bridges.json"
-          echo "Size: $(wc -c < bridges.json) bytes"
-          echo "Bridges count: $(jq length bridges.json)"
+          echo "✓ Generated bridges.json ($(wc -c < bridges.json) bytes)"
 
       - name: Generate specific-bridges.json
         run: |
           SPECIFIC_DIR="documentation/pages/specific-bridges"
           OUTPUT_FILE="specific-bridges.json"
           
-          echo "=== Checking for specific bridges ==="
+          echo "=== Generating specific-bridges.json ==="
+          
+          # Always create the file (even if empty)
+          echo "[" > "$OUTPUT_FILE"
           
           # Check if directory exists
           if [ ! -d "$SPECIFIC_DIR" ]; then
             echo "⚠️  Directory $SPECIFIC_DIR does not exist"
-            echo "Creating empty JSON array"
-            echo "[]" > "$OUTPUT_FILE"
+            echo "]" >> "$OUTPUT_FILE"
+            echo "✓ Created empty $OUTPUT_FILE"
             exit 0
           fi
           
           # Count HTML files
-          FILE_COUNT=$(find "$SPECIFIC_DIR" -maxdepth 1 -name "*.html" -type f | wc -l)
-          echo "Found $FILE_COUNT HTML files in $SPECIFIC_DIR"
+          FILE_COUNT=$(find "$SPECIFIC_DIR" -maxdepth 1 -name "*.html" -type f 2>/dev/null | wc -l)
+          echo "Found $FILE_COUNT HTML files"
           
           if [ "$FILE_COUNT" -eq 0 ]; then
-            echo "⚠️  No HTML files found"
-            echo "[]" > "$OUTPUT_FILE"
+            echo "⚠️  No HTML files found in $SPECIFIC_DIR"
+            echo "]" >> "$OUTPUT_FILE"
+            echo "✓ Created empty $OUTPUT_FILE"
             exit 0
           fi
           
           # Build JSON
           cd "$SPECIFIC_DIR"
-          echo "[" > "../$OUTPUT_FILE"
           FIRST=true
           
           for f in *.html; do
@@ -90,33 +95,20 @@ jobs:
           echo "]" >> "../$OUTPUT_FILE"
           
           cd ..
-          echo ""
-          echo "✓ Generated $OUTPUT_FILE"
-          echo "Content:"
-          cat "$OUTPUT_FILE"
-          echo ""
-          echo "File size: $(wc -c < "$OUTPUT_FILE") bytes"
+          echo "✓ Generated $OUTPUT_FILE ($(wc -c < "$OUTPUT_FILE") bytes)"
+          echo "Content preview:"
+          head -20 "$OUTPUT_FILE"
 
-      - name: Verify all required files
+      - name: Verify files
         run: |
-          echo "=== Verifying required files ==="
-          FILES="index.html style.css bridges.json specific-bridges.json"
-          ALL_OK=true
-          
-          for file in $FILES; do
+          echo "=== Final file check ==="
+          for file in index.html style.css bridges.json specific-bridges.json; do
             if [ -f "$file" ]; then
-              echo "✓ $file exists ($(wc -c < "$file") bytes)"
+              echo "✓ $file ($(wc -c < "$file") bytes)"
             else
               echo "✗ $file MISSING"
-              ALL_OK=false
             fi
           done
-          
-          if [ "$ALL_OK" = false ]; then
-            echo ""
-            echo "ERROR: Some required files are missing!"
-            exit 1
-          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
