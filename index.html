@@ -364,17 +364,16 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
     }
 
     // ============================================================
-    // BRIDGE SPECIFIC SPOILERS (only one open at a time, lazy-load)
+    // BRIDGE SPECIFIC SPOILERS (only one open at a time, content preloaded)
     // ============================================================
     function initSpoilers() {
         document.querySelectorAll('.bridge-specific-header').forEach(header => {
             if (header.dataset.bound) return;
             header.dataset.bound = '1';
             
-            header.addEventListener('click', async () => {
+            header.addEventListener('click', () => {
                 const item = header.closest('.bridge-specific-item');
                 const isOpen = item.classList.contains('open');
-                const wasLoaded = item.dataset.loaded === 'true';
                 
                 // Close all other items
                 document.querySelectorAll('.bridge-specific-item.open').forEach(openItem => {
@@ -392,40 +391,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                 } else {
                     item.classList.add('open');
                     header.setAttribute('aria-expanded', 'true');
-                    
-                    // Lazy-load content on first open
-                    if (!wasLoaded) {
-                        const inner = item.querySelector('.bridge-specific-content-inner');
-                        const file = item.dataset.file;
-                        const filePath = `./documentation/pages/specific-bridges/${file}`;
-                        
-                        console.log('Loading bridge config from:', filePath);
-                        
-                        try {
-                            const resp = await fetch(filePath);
-                            
-                            if (!resp.ok) {
-                                throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-                            }
-                            
-                            const html = await resp.text();
-                            const cleanHtml = html.replace(/^<!--\s*meta:uri:.*\s*-->\s*/m, '');
-                            inner.innerHTML = cleanHtml;
-                            item.dataset.loaded = 'true';
-                            initCopyButtons(inner);
-                            console.log('✓ Loaded:', file);
-                            
-                        } catch (err) {
-                            console.error('Failed to load bridge config:', err);
-                            inner.innerHTML = `
-                                <div class="note">
-                                    Failed to load configuration for ${file}<br>
-                                    <small>Error: ${err.message}</small><br>
-                                    <small>Path: ${filePath}</small>
-                                </div>
-                            `;
-                        }
-                    }
                 }
             });
         });
@@ -528,7 +493,7 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
     }
 
     // ============================================================
-    // LOAD SPECIFIC BRIDGES (dynamic loader)
+    // LOAD SPECIFIC BRIDGES (eager-load all HTML upfront)
     // ============================================================
     async function loadSpecificBridges() {
         const container = document.getElementById('bridge-specific-list');
@@ -557,11 +522,11 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
             
             loadingMessage.remove();
             
+            // Phase 1: Create all spoiler shells (fast DOM creation)
             bridges.forEach(bridge => {
                 const item = document.createElement('div');
                 item.className = 'bridge-specific-item';
                 item.dataset.file = bridge.file;
-                item.dataset.loaded = 'false';
                 
                 const uri = bridge.uri || '';
                 const uriHtml = uri ? `<span class="bridge-uri">${uri}</span>` : '';
@@ -578,7 +543,7 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                     </button>
                     <div class="bridge-specific-content">
                         <div class="bridge-specific-content-inner">
-                            <div class="loading" style="padding: 20px; text-align: center;">Click to load instructions...</div>
+                            <div class="loading" style="padding: 20px; text-align: center;">Loading instructions...</div>
                         </div>
                     </div>
                 `;
@@ -586,6 +551,44 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
                 container.appendChild(item);
             });
             
+            // Phase 2: Fetch all HTML files in parallel
+            console.log('Preloading', bridges.length, 'bridge configurations...');
+            const htmlFetches = bridges.map(bridge => 
+                fetch(`./documentation/pages/specific-bridges/${bridge.file}`)
+                    .then(resp => {
+                        if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${bridge.file}`);
+                        return resp.text();
+                    })
+                    .then(html => ({ file: bridge.file, html }))
+                    .catch(err => ({ file: bridge.file, error: err.message }))
+            );
+            
+            const results = await Promise.all(htmlFetches);
+            
+            // Phase 3: Insert HTML into corresponding spoilers
+            results.forEach(result => {
+                const item = container.querySelector(`[data-file="${result.file}"]`);
+                if (!item) return;
+                
+                const inner = item.querySelector('.bridge-specific-content-inner');
+                
+                if (result.error) {
+                    inner.innerHTML = `
+                        <div class="note">
+                            Failed to load configuration for ${result.file}<br>
+                            <small>Error: ${result.error}</small>
+                        </div>
+                    `;
+                    console.error('Failed to load:', result.file, result.error);
+                } else {
+                    const cleanHtml = result.html.replace(/^<!--\s*meta:uri:.*\s*-->\s*/m, '');
+                    inner.innerHTML = cleanHtml;
+                    console.log('✓ Loaded:', result.file);
+                }
+            });
+            
+            // Phase 4: Init copy buttons and spoilers
+            initCopyButtons(container);
             initSpoilers();
             
         } catch (error) {
