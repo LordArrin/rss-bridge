@@ -21,20 +21,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Debug - Show repository structure
+      - name: Debug repository structure
         run: |
           echo "=== Repository root ==="
           ls -la
           echo ""
-          echo "=== Looking for specific-bridges directory ==="
-          find . -type d -name "specific-bridges" 2>/dev/null || echo "Not found anywhere"
+          echo "=== Looking for specific-bridges ==="
+          find . -name "specific-bridges" -type d 2>/dev/null || echo "Not found"
           echo ""
-          echo "=== Content of documentation/pages/specific-bridges ==="
-          if [ -d "documentation/pages/specific-bridges" ]; then
-            ls -la documentation/pages/specific-bridges/
-          else
-            echo "⚠️  Directory does not exist"
-          fi
+          echo "=== Looking for Vk2Bridge.html ==="
+          find . -name "Vk2Bridge.html" -type f 2>/dev/null || echo "Not found"
 
       - name: Extract bridge metadata
         run: |
@@ -43,78 +39,91 @@ jobs:
 
       - name: Generate specific-bridges.json
         run: |
-          SPECIFIC_DIR="documentation/pages/specific-bridges"
-          OUTPUT_FILE="specific-bridges.json"
+          python3 << 'PYTHON_SCRIPT'
+          import os
+          import json
+          import re
           
-          echo "=== Generating specific-bridges.json ==="
+          SPECIFIC_DIR = "documentation/pages/specific-bridges"
+          OUTPUT_FILE = "specific-bridges.json"
+          
+          print(f"=== Generating {OUTPUT_FILE} ===")
+          print(f"Looking in: {SPECIFIC_DIR}")
           
           # Check if directory exists
-          if [ ! -d "$SPECIFIC_DIR" ]; then
-            echo "⚠️  Directory $SPECIFIC_DIR does not exist"
-            echo "[]" > "$OUTPUT_FILE"
-            echo "✓ Created empty $OUTPUT_FILE"
-            cat "$OUTPUT_FILE"
-            exit 0
-          fi
+          if not os.path.isdir(SPECIFIC_DIR):
+              print(f"⚠️  Directory {SPECIFIC_DIR} does not exist")
+              print(f"Current directory: {os.getcwd()}")
+              print(f"Contents of current directory:")
+              for item in os.listdir('.'):
+                  print(f"  {item} {'[DIR]' if os.path.isdir(item) else ''}")
+              
+              # Write empty array
+              with open(OUTPUT_FILE, 'w') as f:
+                  json.dump([], f, indent=2)
+              print(f"✓ Created empty {OUTPUT_FILE}")
+              exit(0)
           
-          # Count HTML files
-          FILE_COUNT=$(find "$SPECIFIC_DIR" -maxdepth 1 -name "*.html" -type f 2>/dev/null | wc -l)
-          echo "Found $FILE_COUNT HTML files"
+          # Collect HTML files
+          bridges = []
+          html_files = [f for f in os.listdir(SPECIFIC_DIR) if f.endswith('.html')]
+          print(f"Found {len(html_files)} HTML files: {html_files}")
           
-          if [ "$FILE_COUNT" -eq 0 ]; then
-            echo "⚠️  No HTML files found in $SPECIFIC_DIR"
-            echo "[]" > "$OUTPUT_FILE"
-            echo "✓ Created empty $OUTPUT_FILE"
-            cat "$OUTPUT_FILE"
-            exit 0
-          fi
+          for filename in sorted(html_files):
+              filepath = os.path.join(SPECIFIC_DIR, filename)
+              name = filename[:-5]  # Remove .html
+              
+              # Read file and extract URI
+              with open(filepath, 'r', encoding='utf-8') as f:
+                  content = f.read()
+              
+              # Extract URI from meta comment
+              uri_match = re.search(r'<!--\s*meta:uri:(.*?)\s*-->', content)
+              uri = uri_match.group(1).strip() if uri_match else ""
+              
+              bridges.append({
+                  "name": name,
+                  "file": filename,
+                  "uri": uri
+              })
+              print(f"  ✓ {name} (uri: {uri})")
           
-          # Build JSON using jq for valid formatting
-          cd "$SPECIFIC_DIR"
+          # Write JSON
+          with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+              json.dump(bridges, f, indent=2, ensure_ascii=False)
           
-          RESULT="[]"
+          print(f"✓ Generated {OUTPUT_FILE} with {len(bridges)} bridges")
           
-          for f in *.html; do
-            [ -f "$f" ] || continue
-            NAME="${f%.html}"
-            
-            # Extract URI from meta comment
-            URI=$(grep -m1 "<!-- meta:uri:" "$f" 2>/dev/null | sed 's/.*<!-- meta:uri:\(.*\) -->.*/\1/' || echo "")
-            
-            echo "  ✓ Processing: $NAME (uri: $URI)"
-            
-            # Use jq to properly add to array
-            RESULT=$(echo "$RESULT" | jq --arg name "$NAME" --arg file "$f" --arg uri "$URI" \
-              '. + [{"name": $name, "file": $file, "uri": $uri}]')
-          done
-          
-          cd ..
-          
-          # Write formatted JSON
-          echo "$RESULT" | jq '.' > "$OUTPUT_FILE"
-          
-          echo "✓ Generated $OUTPUT_FILE ($(wc -c < "$OUTPUT_FILE") bytes)"
-          echo "Content:"
-          cat "$OUTPUT_FILE"
+          # Verify
+          with open(OUTPUT_FILE, 'r') as f:
+              content = f.read()
+              print(f"File size: {len(content)} bytes")
+              print(f"Content:\n{content}")
           
           # Validate JSON
-          if jq empty "$OUTPUT_FILE" 2>/dev/null; then
-            echo "✓ JSON is valid"
-          else
-            echo "✗ JSON validation FAILED"
-            exit 1
-          fi
+          try:
+              with open(OUTPUT_FILE, 'r') as f:
+                  json.load(f)
+              print("✓ JSON is valid")
+          except json.JSONDecodeError as e:
+              print(f"✗ JSON validation FAILED: {e}")
+              exit(1)
+          PYTHON_SCRIPT
 
-      - name: Verify files
+      - name: Verify all files exist
         run: |
-          echo "=== Final file check ==="
+          echo "=== Final verification ==="
           for file in index.html style.css bridges.json specific-bridges.json; do
             if [ -f "$file" ]; then
-              echo "✓ $file ($(wc -c < "$file") bytes)"
+              echo "✓ $file exists ($(wc -c < "$file") bytes)"
             else
               echo "✗ $file MISSING"
+              exit 1
             fi
           done
+          echo ""
+          echo "=== specific-bridges directory ==="
+          ls -la documentation/pages/specific-bridges/ 2>/dev/null || echo "Directory not found"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
