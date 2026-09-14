@@ -10,12 +10,13 @@ final class MatreshkaBridge extends BridgeAbstract
 {
     public const NAME = 'Matreshka.tv';
     public const URI = 'https://matreshka.tv/';
-    public const DESCRIPTION = 'Returns latest videos from Matreshka.tv channels';
+    public const DESCRIPTION = 'Returns latest videos from Matreshka.tv channels and playlists';
     public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 3600;
 
     private const API_URL = 'https://matreshka.tv/api/v2/video';
     private const CHANNEL_API_URL = 'https://matreshka.tv/api/v2/channel';
+    private const PLAYLIST_API_URL = 'https://matreshka.tv/api/v2/playlist';
 
     private const CSS = [
         'img' => 'display: block; float: none; clear: both; max-width: 1280px; width: auto; height: auto; margin: 16px 0 16px 0; padding: 0;',
@@ -23,7 +24,7 @@ final class MatreshkaBridge extends BridgeAbstract
     ];
 
     public const PARAMETERS = [
-        [
+        'By channel' => [
             'channel' => [
                 'name' => 'Channel URL or ID',
                 'type' => 'text',
@@ -31,6 +32,17 @@ final class MatreshkaBridge extends BridgeAbstract
                 'exampleValue' => 'https://matreshka.tv/channel/-ABgPphiTAI/internal/videos',
                 'title' => 'Full channel URL (e.g. https://matreshka.tv/channel/-ABgPphiTAI/internal/videos) or just the channel ID (e.g. -ABgPphiTAI)',
             ],
+        ],
+        'By playlist' => [
+            'playlist' => [
+                'name' => 'Playlist URL or ID',
+                'type' => 'text',
+                'required' => true,
+                'exampleValue' => 'https://matreshka.tv/playlist/GgHALuP9YwY',
+                'title' => 'Full playlist URL (e.g. https://matreshka.tv/playlist/GgHALuP9YwY) or just the playlist ID (e.g. GgHALuP9YwY)',
+            ],
+        ],
+        'global' => [
             'limit' => [
                 'name' => 'Limit',
                 'type' => 'number',
@@ -43,7 +55,7 @@ final class MatreshkaBridge extends BridgeAbstract
                 'defaultValue' => false,
                 'title' => 'Hide video description text from feed items',
             ],
-        ]
+        ],
     ];
 
     private string $channelName = '';
@@ -60,6 +72,19 @@ final class MatreshkaBridge extends BridgeAbstract
         }
 
         throw new \ClientException('Invalid channel input. Provide either a full Matreshka.tv channel URL or a channel ID.');
+    }
+
+    private function extractPlaylistId(string $input): string
+    {
+        if (preg_match('/^https?:\/\/matreshka\.tv\/playlist\/([a-zA-Z0-9_-]+)/', $input, $matches) === 1) {
+            return $matches[1];
+        }
+
+        if (preg_match('/^[a-zA-Z0-9_-]+$/', $input) === 1) {
+            return $input;
+        }
+
+        throw new \ClientException('Invalid playlist input. Provide either a full Matreshka.tv playlist URL or a playlist ID.');
     }
 
     private function formatDuration(int $milliseconds): string
@@ -157,7 +182,44 @@ final class MatreshkaBridge extends BridgeAbstract
         }
     }
 
-    private function fetchVideos(string $channelId, int $limit): array
+    private function fetchPlaylistInfo(string $playlistId): array
+    {
+        $postData = json_encode([
+            'field_mask' => ['id', 'name', 'description', 'videos.id', 'videos'],
+            'filter' => [
+                [
+                    'is' => '=',
+                    'field' => 'id',
+                    'value' => $playlistId,
+                ],
+            ],
+        ]);
+
+        $headers = [
+            'Content-Type: application/json',
+            'Accept: application/json, text/plain, */*',
+        ];
+
+        $curlOptions = [
+            CURLOPT_POSTFIELDS => $postData,
+        ];
+
+        $response = getContents(self::PLAYLIST_API_URL, $headers, $curlOptions);
+
+        if ($response === '') {
+            throw new \Exception('Failed to fetch playlist info from Matreshka.tv API');
+        }
+
+        $data = json_decode($response, true);
+
+        if (is_array($data) === false || isset($data['data'][0]) === false) {
+            throw new \Exception('Invalid playlist API response from Matreshka.tv');
+        }
+
+        return $data['data'][0];
+    }
+
+    private function fetchVideosByChannel(string $channelId, int $limit): array
     {
         $postData = json_encode([
             'field_mask' => ['id', 'name', 'description', 'created_at', 'duration', 'cover'],
@@ -198,7 +260,49 @@ final class MatreshkaBridge extends BridgeAbstract
             throw new \Exception('Invalid API response from Matreshka.tv');
         }
 
-        return $data['data'];
+        return array_slice($data['data'], 0, $limit);
+    }
+
+    private function fetchVideoById(string $videoId): ?array
+    {
+        $url = 'https://matreshka.tv/api/video-service/v1/video/' . $videoId;
+
+        try {
+            $response = getContents($url);
+
+            if ($response === '') {
+                return null;
+            }
+
+            $data = json_decode($response, true);
+
+            if (is_array($data) === false || isset($data['data']) === false) {
+                return null;
+            }
+
+            return $data['data'];
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    private function fetchVideosByIds(array $videoIds, int $limit): array
+    {
+        if (count($videoIds) === 0) {
+            return [];
+        }
+
+        $limitedIds = array_slice($videoIds, 0, $limit);
+        $videos = [];
+
+        foreach ($limitedIds as $videoId) {
+            $video = $this->fetchVideoById($videoId);
+            if ($video !== null) {
+                $videos[] = $video;
+            }
+        }
+
+        return $videos;
     }
 
     private function applyStyles(string $html): string
@@ -265,19 +369,49 @@ final class MatreshkaBridge extends BridgeAbstract
 
     public function collectData(): void
     {
-        $channelInput = (string)$this->getInput('channel');
-
         $limitInput = $this->getInput('limit');
         $limit = (is_numeric($limitInput) === true) ? (int)$limitInput : 10;
 
         $hideDescriptionInput = $this->getInput('hide_description');
         $hideDescription = (is_string($hideDescriptionInput) === true && $hideDescriptionInput !== '') || $hideDescriptionInput === true;
 
-        $channelId = $this->extractChannelId($channelInput);
+        $videos = [];
+        $isPlaylist = false;
 
-        $this->fetchChannelInfo($channelId);
+        if ($this->queriedContext === 'By channel') {
+            $channelInput = (string)$this->getInput('channel');
+            $channelId = $this->extractChannelId($channelInput);
 
-        $videos = $this->fetchVideos($channelId, $limit);
+            $this->fetchChannelInfo($channelId);
+
+            $videos = $this->fetchVideosByChannel($channelId, $limit);
+        } elseif ($this->queriedContext === 'By playlist') {
+            $isPlaylist = true;
+            $playlistInput = (string)$this->getInput('playlist');
+            $playlistId = $this->extractPlaylistId($playlistInput);
+
+            $playlistInfo = $this->fetchPlaylistInfo($playlistId);
+
+            if (isset($playlistInfo['name']) === true) {
+                $this->channelName = (string)$playlistInfo['name'];
+            }
+
+            $videoIds = [];
+            if (isset($playlistInfo['videos']) === true && is_array($playlistInfo['videos']) === true) {
+                foreach ($playlistInfo['videos'] as $video) {
+                    if (is_array($video) === true && isset($video['id']) === true) {
+                        $videoIds[] = (string)$video['id'];
+                    }
+                }
+            }
+
+            $videoIds = array_reverse($videoIds);
+
+            $videos = $this->fetchVideosByIds($videoIds, $limit);
+        }
+
+        $baseTimestamp = time();
+        $playlistIndex = 0;
 
         foreach ($videos as $video) {
             if (is_array($video) === false) {
@@ -321,12 +455,14 @@ final class MatreshkaBridge extends BridgeAbstract
 
             $content = $this->applyStyles($content);
 
-            $timestamp = time();
+            $timestamp = $baseTimestamp;
             if ($createdAt !== '') {
                 $parsedTime = strtotime($createdAt);
                 if ($parsedTime !== false) {
                     $timestamp = $parsedTime;
                 }
+            } elseif ($isPlaylist === true) {
+                $timestamp = $baseTimestamp - $playlistIndex;
             }
 
             $this->items[] = [
@@ -336,6 +472,8 @@ final class MatreshkaBridge extends BridgeAbstract
                 'timestamp' => $timestamp,
                 'uid' => $videoId,
             ];
+
+            $playlistIndex++;
         }
     }
 }
