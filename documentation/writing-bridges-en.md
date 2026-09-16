@@ -9,6 +9,7 @@ This guide covers bridge development for this fork. It assumes familiarity with 
 | PHP version | 7.4+ | 8.5+ |
 | Strict types | Optional | Required (`declare(strict_types=1)`) |
 | HTML parser | `simple_html_dom` (embedded) | `\Dom\HTMLDocument` (PHP 8.4+) |
+| HTML cleanup | Manual | `tidy` extension for malformed HTML |
 | Bridge location | `bridges/` (global namespace) | `bridges-v2/` with `RSSBridge\Bridges` namespace |
 | HTML utilities | Inline in each bridge | Centralized in `quirks/` directory |
 | Markdown | Embedded Parsedown | `erusev/parsedown` via Composer |
@@ -16,6 +17,20 @@ This guide covers bridge development for this fork. It assumes familiarity with 
 | Bridge loading | Direct `include` | Sandboxed subprocess via `SafeBridgeLoader` |
 
 Legacy `bridges/` directory is not supported. All bridges live in `bridges-v2/`.
+
+## Available PHP Extensions
+
+This fork also includes modern PHP extensions that enable advanced features:
+
+| Extension | Purpose | Use Case |
+|---|---|---|
+| `tidy` | HTML cleanup | Fix malformed HTML before parsing |
+| `sodium` | Cryptography | HMAC signatures, API authentication |
+| `igbinary` | Fast serialization | Efficient caching of complex data |
+| `msgpack` | Alternative serialization | JSON-like binary format |
+| `zstd` | Compression | Compress large cached objects |
+| `apcu` | In-memory cache | Ultra-fast local caching |
+| `ffi` | C library integration | Direct calls to native libraries |
 
 ## Minimal Bridge
 
@@ -248,6 +263,39 @@ while ($current !== null && $current instanceof \Dom\Element) {
 }
 ```
 
+## HTML Cleanup with Tidy
+
+Many websites generate malformed HTML (unclosed tags, broken attributes) that can break `\Dom\HTMLDocument`. Use the `tidy` extension to fix these issues:
+
+```php
+// Clean HTML before parsing
+$html = getContents($url);
+$tidy = new \tidy();
+$tidy->parseString($html, [
+    'clean' => true,
+    'output-xhtml' => true,
+    'wrap' => 0,
+    'drop-empty-elements' => false,
+], 'utf8');
+$tidy->cleanRepair();
+
+$dom = \Dom\HTMLDocument::createFromString((string)$tidy);
+```
+
+Or use the helper function (if available in `quirks/`):
+
+```php
+$cleanHtml = tidy_html($html);
+$dom = \Dom\HTMLDocument::createFromString($cleanHtml);
+```
+
+**When to use tidy:**
+- Site returns HTML with parsing errors
+- `\Dom\HTMLDocument` throws exceptions on valid pages
+- You need to normalize HTML from multiple sources
+
+**Performance note:** `tidy` adds ~5-10ms overhead per request. Use only when necessary.
+
 ## Utility Functions (`quirks/`)
 
 The `quirks/` directory contains battle-tested helpers. All are loaded globally via Composer `files` autoload — no import needed.
@@ -367,6 +415,68 @@ public function collectData(): void
 
 `Json::decode()` and `Json::encode()` are provided by the `RSSBridge` namespace (loaded via Composer classmap). They throw `\JsonException` on invalid input.
 
+## APCu In-Memory Cache
+
+For ultra-fast local caching (faster than memcached), use APCu. Data persists across requests within the same container:
+
+```php
+public function collectData(): void
+{
+    $cacheKey = 'api_config_' . $this->getInput('site');
+    
+    // Try APCu first (fastest, local to this container)
+    $config = apcu_fetch($cacheKey, $success);
+    
+    if (!$success) {
+        // Fetch from API
+        $config = $this->fetchConfigFromAPI();
+        
+        // Cache for 5 minutes (APCu is local, so use shorter TTL)
+        apcu_store($cacheKey, $config, 300);
+    }
+    
+    // Use $config...
+}
+```
+
+**APCu vs Memcached:**
+- **APCu**: In-memory, local to container, ~1µs access time, lost on container restart
+- **Memcached**: Network-based, shared across containers, ~100µs access time, persistent
+
+**Best practice:** Use APCu for frequently accessed, rarely changing data (config, metadata). Use memcached for shared data across multiple instances.
+
+## Advanced Compression with Zstd
+
+For caching large objects (full HTML pages, JSON responses), compress with `zstd` to save memory:
+
+```php
+public function collectData(): void
+{
+    $cacheKey = 'full_page_' . md5($url);
+    
+    $cached = $this->cache->get($cacheKey);
+    if ($cached !== null) {
+        $html = zstd_uncompress($cached);
+    } else {
+        $html = getContents($url);
+        
+        // Compress before storing (level 3 = good balance)
+        $compressed = zstd_compress($html, 3);
+        $this->cache->set($cacheKey, $compressed, 86400);
+    }
+    
+    $dom = \Dom\HTMLDocument::createFromString($html);
+    // ... process
+}
+```
+
+**Compression levels:** 1 (fastest) to 22 (smallest). Level 3-5 is optimal for most use cases.
+
+**When to use:**
+- Caching full HTML pages (>50KB)
+- Large JSON API responses
+- Binary data (images, archives)
+
 ## Error Handling
 
 Exception helper functions live in global namespace.
@@ -431,6 +541,11 @@ Alternatively, access the cache backend directly:
 $this->cache->get($cacheKey);
 $this->cache->set($cacheKey, $data, $ttl);
 ```
+
+**Cache backend priority:**
+1. APCu (if enabled, fastest)
+2. Memcached (shared across instances)
+3. File cache (fallback)
 
 ## Proxy Profiles
 
@@ -539,6 +654,42 @@ docker logs rss-bridge | grep -i "YourBridge"
 
 The `SafeBridgeLoader` reports compile errors (e.g. signature mismatches) with the exact file and line.
 
+## Performance Optimization Tips
+
+### 1. Use Efficient Serialization
+For caching large datasets, use `igbinary_serialize()` instead of native `serialize()`:
+```php
+$this->cache->set($key, igbinary_serialize($data), $ttl);
+```
+
+### 2. Compress Large Objects
+Use `zstd_compress()` for HTML pages or JSON responses >50KB:
+```php
+$compressed = zstd_compress($html, 3); // Level 3 = good balance
+```
+
+### 3. Leverage APCu for Hot Data
+Cache frequently accessed config or metadata in APCu:
+```php
+$config = apcu_fetch($key) ?? $this->fetchConfig();
+```
+
+### 4. Clean Malformed HTML
+Use `tidy` for sites with broken HTML to prevent parsing errors:
+```php
+$tidy = new \tidy();
+$tidy->parseString($html, ['clean' => true], 'utf8');
+$tidy->cleanRepair();
+```
+
+### 5. Batch API Requests
+When fetching multiple items, use parallel requests or batch endpoints when available.
+
+### 6. Use Appropriate Cache TTLs
+- Static content: 24-48 hours
+- Frequently updated: 15-60 minutes
+- Real-time data: 1-5 minutes
+
 ## Checklist Before Committing
 
 - [ ] File is in `bridges-v2/`
@@ -553,6 +704,10 @@ The `SafeBridgeLoader` reports compile errors (e.g. signature mismatches) with t
 - [ ] Relative URLs handled via `urljoin()` or manual DOM processing
 - [ ] `phpcs` passes with no errors
 - [ ] Bridge tested with real data in Docker
+- [ ] Malformed HTML sites use `tidy` cleanup
+- [ ] Large cached objects use `igbinary` or `zstd` compression
+- [ ] API authentication uses `sodium` for signatures
+- [ ] APCu used for frequently accessed local data
 
 ## Full Reference Example
 
@@ -599,7 +754,18 @@ final class BlogBridge extends BridgeAbstract
         $limit = (int)($this->getInput('limit') ?: 20);
 
         $url = $category !== '' ? self::URI . "category/{$category}/" : self::URI;
-        $dom = getSimpleHTMLDOM($url);
+        
+        // Fetch and clean HTML with tidy
+        $html = getContents($url);
+        $tidy = new \tidy();
+        $tidy->parseString($html, [
+            'clean' => true,
+            'output-xhtml' => true,
+            'wrap' => 0,
+        ], 'utf8');
+        $tidy->cleanRepair();
+        
+        $dom = \Dom\HTMLDocument::createFromString((string)$tidy);
 
         $count = 0;
         foreach ($dom->querySelectorAll('article.post') as $post) {
@@ -618,7 +784,7 @@ final class BlogBridge extends BridgeAbstract
                 continue;
             }
 
-            // Fetch full article
+            // Fetch full article with caching
             $articleDom = getSimpleHTMLDOMCached($uri, 86400);
             $articleHtml = $articleDom->querySelector('.entry-content')?->innerHTML ?? '';
 

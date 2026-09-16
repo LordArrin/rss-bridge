@@ -263,7 +263,7 @@ RUN apk del .build-deps
 # ============================================================
 FROM alpine:${ALPINE_VERSION} AS runtime
 
-ARG IMAGE_VERSION=1.2.2
+ARG IMAGE_VERSION=1.2.3
 ENV RSSBRIDGE_SYSTEM_VERSION=${IMAGE_VERSION}
 ENV CURL_IMPERSONATE=chrome150
 ENV LD_PRELOAD=/usr/lib/libmimalloc-secure.so \
@@ -277,15 +277,55 @@ LABEL org.opencontainers.image.title="RSS Bridge" \
 
 # Install runtime dependencies + users
 RUN set -xe && \
+    apk update && \
+    apk upgrade --no-cache && \
     apk add --no-cache \
       ca-certificates \
-      php85 php85-ctype php85-curl php85-dom php85-fileinfo php85-fpm \
-      php85-gd php85-iconv php85-intl php85-mbstring php85-openssl \
-      php85-pdo_sqlite php85-pecl-igbinary php85-pecl-memcached php85-phar \
-      php85-simplexml php85-sqlite3 php85-tokenizer php85-xml php85-xmlwriter php85-zip \
+      # Core
+      php85 \
+      php85-fpm \
+      php85-ctype \
+      php85-tokenizer \
+      php85-phar \
+      # XML/HTML parsing
+      php85-dom \
+      php85-xml \
+      php85-xmlreader \
+      php85-xmlwriter \
+      php85-simplexml \
+      php85-tidy \
+      # Strings & encoding
+      php85-mbstring \
+      php85-intl \
+      php85-iconv \
+      # Network & security
+      php85-curl \
+      php85-openssl \
+      php85-sodium \
+      # Cache & performance
+      php85-pecl-memcached \
+      php85-pecl-apcu \
+      # Serialization & compression
+      php85-pecl-igbinary \
+      php85-pecl-msgpack \
+      php85-pecl-zstd \
+      php85-pecl-brotli \
+      # Files & databases
+      php85-fileinfo \
+      php85-sqlite3 \
+      php85-pdo_sqlite \
+      php85-zip \
+      # Images
+      php85-gd \
+      # System & processes
+      php85-calendar \
+      php85-pcntl \
+      php85-shmop \
+      php85-ffi \
+      #
       composer \
       supervisor \
-      libgcc libstdc++ libatomic \
+      libgcc libstdc++ libatomic libmemcached \
       tzdata \
     && \
     update-ca-certificates && \
