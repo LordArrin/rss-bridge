@@ -6,5 +6,4 @@ docker-compose.yml
 Dockerfile
 docs/*
 pictures/*
-tests/*
 documentation/*
