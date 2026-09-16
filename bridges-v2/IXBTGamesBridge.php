@@ -187,14 +187,8 @@ final class IXBTGamesBridge extends BridgeAbstract
                 continue;
             }
 
-            $thumbnailUrl = "https://img.youtube.com/vi/{$videoId}/maxresdefault.jpg";
-            $fallbackUrl = "https://img.youtube.com/vi/{$videoId}/hqdefault.jpg";
+            $thumbnailUrl = "https://img.youtube.com/vi/{$videoId}/hqdefault.jpg";
             $videoUrl = "https://www.youtube.com/watch?v={$videoId}";
-            $thumbnailData = @file_get_contents($thumbnailUrl);
-
-            if ($thumbnailData === false || strlen($thumbnailData) < 100) {
-                $thumbnailUrl = $fallbackUrl;
-            }
 
             $html = $this->buildYouTubePreview($videoUrl, $thumbnailUrl);
 
@@ -321,14 +315,8 @@ final class IXBTGamesBridge extends BridgeAbstract
             '/<iframe[^>]*src=["\'](?:https?:)?\/\/(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]+)[^"\']*["\'][^>]*>/i',
             function ($matches) {
                 $videoId = $matches[1];
-                $thumbnailUrl = "https://img.youtube.com/vi/{$videoId}/maxresdefault.jpg";
-                $fallbackUrl = "https://img.youtube.com/vi/{$videoId}/hqdefault.jpg";
+                $thumbnailUrl = "https://img.youtube.com/vi/{$videoId}/hqdefault.jpg";
                 $videoUrl = "https://www.youtube.com/watch?v={$videoId}";
-                $thumbnailData = @file_get_contents($thumbnailUrl);
-
-                if ($thumbnailData === false || strlen($thumbnailData) < 100) {
-                    $thumbnailUrl = $fallbackUrl;
-                }
 
                 return $this->buildYouTubePreview($videoUrl, $thumbnailUrl);
             },
