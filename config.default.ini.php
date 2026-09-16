@@ -93,7 +93,7 @@ socket_path = "/var/run/memcached/memcached.sock"
 memory = 512m
 max_connections = 1024
 threads = 4
-item_size_limit = 24M
+item_size_limit = 32M
 modern = true
 prealloc = true
 lock_memory = false
@@ -102,11 +102,5 @@ backlog = 1024
 idle_timeout = 0
 verbosity = 0
 
-[TelegramBridge]
-max_pages = 20
-
 [Telegram2Bridge]
-embed_max_size = 20m
-
-[DiscogsBridge]
-personal_access_token = ""
+embed_max_size = 28m
