@@ -1,0 +1,130 @@
+<!-- meta:uri:https://livetennisapi.com/ -->
+<p>This bridge uses the <a href="https://livetennisapi.com" target="_blank" rel="noopener">Live Tennis API</a> to provide tennis scores, schedules, results and fixtures for ATP, WTA, Challenger and ITF tournaments.</p>
+
+<ul>
+    <li>
+        <strong>Requires an API key.</strong>
+        The free tier allows 100 requests per day with no credit card required. See the "Configuration" section for details.
+    </li>
+    <li>
+        <strong>Stable API-based approach.</strong>
+        Unlike HTML scraping, this bridge uses the official API and does not depend on website structure changes.
+    </li>
+    <li>
+        <strong>Real-time updates.</strong>
+        Live matches include current scores, serving player, break points and detailed game-by-game breakdown.
+    </li>
+</ul>
+
+<h4>Configuration</h4>
+<ol>
+    <li>
+        <span>Visit <a href="https://livetennisapi.com" target="_blank" rel="noopener">livetennisapi.com</a> and sign up for a free account.</span>
+    </li>
+    <li>
+        <span>Navigate to your dashboard and copy your API key.</span>
+    </li>
+    <li>
+        <span>Choose one of two methods to provide the key:</span>
+        <h5>Method 1: Per-request (recommended for testing)</h5>
+        <p>Enter your API key in the "API Key" field when generating the feed. This key is used only for that specific request.</p>
+        
+        <h5>Method 2: Server-wide (recommended for production)</h5>
+        <p>Add the API key to your <code>config.ini.php</code> in the LiveTennisApiBridge section:</p>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>[LiveTennisApiBridge]
+api_key = "your-api-key-here"</code></pre>
+        </div>
+        <p>Or set the environment variable:</p>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>RSSBRIDGE_LiveTennisApiBridge_api_key=your-api-key-here</code></pre>
+        </div>
+    </li>
+</ol>
+
+<div class="note info">
+    💡 <strong>Security:</strong> Your API key is sent in the <code>X-API-Key</code> header, never in the query string. This keeps it out of access logs, browser history and error messages.
+</div>
+
+<h4>Request budget</h4>
+<p>The free tier allows <strong>30 requests per minute and 100 requests per day</strong>. Each feed fetch costs exactly one API request. The default cache timeout is 900 seconds (15 minutes), so a single feed costs at most 96 requests per day regardless of how often your reader polls it.</p>
+
+<p>Each distinct set of feed parameters (mode, tour, draw, player filter) is cached separately. If you subscribe to four different feed variants on one free key, you'll use four times as many requests. On the free tier, consider:</p>
+<ul>
+    <li>Subscribing to only one or two feed variants</li>
+    <li>Increasing the cache timeout in your feed reader</li>
+    <li>Upgrading to a paid plan if you need more feeds</li>
+</ul>
+
+<h4>Available feeds</h4>
+<table>
+    <thead>
+        <tr>
+            <th>Feed</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Live matches</strong></td>
+            <td>Matches currently in play with real-time scores</td>
+        </tr>
+        <tr>
+            <td><strong>Today, still to start</strong></td>
+            <td>Today's scheduled matches that haven't started yet (UTC timezone)</td>
+        </tr>
+        <tr>
+            <td><strong>Today, finished</strong></td>
+            <td>Today's completed matches — <em>requires a paid plan</em></td>
+        </tr>
+        <tr>
+            <td><strong>Upcoming fixtures</strong></td>
+            <td>Future scheduled matches, sorted by start time (earliest first)</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="note warning">
+    ⚠️ <strong>Note:</strong> The "Today, finished" feed accesses the completed-match history, which is part of the paid product. On a free key, it returns a "not included in the plan" error rather than an empty feed.
+</div>
+
+<h4>Filters</h4>
+<ul>
+    <li>
+        <strong>Tour filter:</strong>
+        Each tour (ATP, WTA, Challenger, ITF, Juniors) covers both singles and doubles draws. Select "All tours" to see everything.
+    </li>
+    <li>
+        <strong>Draw filter:</strong>
+        Filter by singles, doubles, or both. Team events like Davis Cup (where one event covers both singles and doubles rubbers) match neither filter.
+    </li>
+    <li>
+        <strong>Player filter:</strong>
+        Search for matches containing a specific player's name (case-insensitive). The filter is applied after fetching results, so increase the limit if you expect matches further down the list.
+    </li>
+</ul>
+
+<h4>Feed content</h4>
+<p>Each match appears as one item with:</p>
+<ul>
+    <li>Tournament name and round</li>
+    <li>Surface type (clay, hard, grass) and indoor/outdoor status</li>
+    <li>Match format (best of 3 or 5 sets)</li>
+    <li>Current status (live, completed, scheduled, etc.)</li>
+    <li>Set scores and game-by-game breakdown</li>
+    <li>Current game score and serving player</li>
+    <li>Break point status</li>
+    <li>Both players with country and current ranking (when available)</li>
+</ul>
