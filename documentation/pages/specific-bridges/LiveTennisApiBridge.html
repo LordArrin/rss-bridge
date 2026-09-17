@@ -29,10 +29,10 @@
     </li>
 </ol>
 
-<h5>Method 1: Per-request (recommended for testing)</h5>
+<h4>Method 1: Per-request (recommended for testing)</h4>
 <p>Enter your API key in the "API Key" field when generating the feed. This key is used only for that specific request and is never stored on the server.</p>
 
-<h5>Method 2: Server-wide (recommended for production)</h5>
+<h4>Method 2: Server-wide (recommended for production)</h4>
 <p>Add the API key to your <code>config.ini.php</code> in the <code>LiveTennisApiBridge</code> section:</p>
 <div class="code-block">
     <button type="button" class="copy-btn" aria-label="Copy code">
@@ -59,20 +59,26 @@ api_key = "your-api-key-here"</code></pre>
     <li>Upgrading to a paid plan if you need more feeds</li>
 </ul>
 
-<h4>Available feeds</h4>
-<dl>
-    <dt><strong>Live matches</strong></dt>
-    <dd>Matches currently in play with real-time scores.</dd>
+<p>Available feeds</p>
 
-    <dt><strong>Today, still to start</strong></dt>
-    <dd>Today's scheduled matches that haven't started yet (UTC timezone).</dd>
-
-    <dt><strong>Today, finished</strong></dt>
-    <dd>Today's completed matches — <em>requires a paid plan</em>.</dd>
-
-    <dt><strong>Upcoming fixtures</strong></dt>
-    <dd>Future scheduled matches, sorted by start time (earliest first).</dd>
-</dl>
+<ul>
+    <li>
+        <strong>Live matches</strong>
+        - matches currently in play with real-time scores.
+    </li>
+    <li>
+        <strong>Today, still to start</strong>
+        - today's scheduled matches that haven't started yet (UTC timezone).
+    </li>
+    <li>
+        <strong>Today, finished</strong>
+        - today's completed matches — <em>requires a paid plan</em>.
+    </li>
+    <li>
+        <strong>Upcoming fixtures</strong>
+        - Future scheduled matches, sorted by start time (earliest first).
+    </li>
+</ul>
 
 <div class="note warning">
     ⚠️ <strong>Note:</strong> The "Today, finished" feed accesses the completed-match history, which is part of the paid product. On a free key, it returns a "not included in the plan" error rather than an empty feed.
