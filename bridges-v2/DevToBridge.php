@@ -8,230 +8,253 @@ use RSSBridge\BridgeAbstract;
 
 final class DevToBridge extends BridgeAbstract
 {
-    public const NAME = 'dev.to';
-    public const URI = 'https://dev.to';
-    public const DESCRIPTION = 'Returns feeds for tags';
+    public const NAME = 'DEV.to';
+    public const URI = 'https://dev.to/';
+    public const DESCRIPTION = 'Top posts and trending guides from DEV.to community';
     public const MAINTAINER = 'No maintainer';
-    public const CACHE_TIMEOUT = 10800;
-
-    public const CONTEXT_BY_TAG = 'By tag';
-    public const CONTEXT_BY_USER = 'By user';
+    public const CACHE_TIMEOUT = 3600;
 
     public const PARAMETERS = [
-        self::CONTEXT_BY_TAG => [
-            'tag' => [
-                'name' => 'Tag',
-                'type' => 'text',
-                'required' => true,
-                'title' => 'Insert your tag',
-                'exampleValue' => 'python'
+        'Top Posts' => [
+            'period' => [
+                'name' => 'Time Period',
+                'type' => 'list',
+                'values' => [
+                    'Week' => 'week',
+                    'Month' => 'month',
+                    'Year' => 'year',
+                    'All Time' => 'infinity',
+                ],
+                'defaultValue' => 'week',
             ],
-            'full' => [
-                'name' => 'Full article',
-                'type' => 'checkbox',
-                'required' => false,
-                'title' => 'Enable to receive the full article for each item'
+            'limit' => [
+                'name' => 'Number of Posts',
+                'type' => 'number',
+                'defaultValue' => 15,
             ],
-            'hide_categories' => [
-                'name' => 'Hide categories',
-                'type' => 'checkbox',
-                'required' => false,
-                'title' => 'Hide tags/categories from feed items',
-                'defaultValue' => 'checked'
-            ]
         ],
-        self::CONTEXT_BY_USER => [
-            'user' => [
-                'name' => 'User',
-                'type' => 'text',
-                'required' => true,
-                'title' => 'Insert your username',
-                'exampleValue' => 'n3wt0n'
+        'Trending Guides' => [
+            'limit' => [
+                'name' => 'Number of Guides',
+                'type' => 'number',
+                'defaultValue' => 10,
             ],
-            'full' => [
-                'name' => 'Full article',
-                'type' => 'checkbox',
-                'required' => false,
-                'title' => 'Enable to receive the full article for each item'
-            ],
-            'hide_categories' => [
-                'name' => 'Hide categories',
-                'type' => 'checkbox',
-                'required' => false,
-                'title' => 'Hide tags/categories from feed items',
-                'defaultValue' => 'checked'
-            ]
-        ]
+        ],
     ];
-
-    public function getURI(): string
-    {
-        switch ($this->queriedContext) {
-            case self::CONTEXT_BY_TAG:
-                $tag = $this->getInput('tag');
-                if ($tag !== null && $tag !== '') {
-                    return self::URI . '/t/' . urlencode((string)$tag);
-                }
-                break;
-            case self::CONTEXT_BY_USER:
-                $user = $this->getInput('user');
-                if ($user !== null && $user !== '') {
-                    return self::URI . '/' . urlencode((string)$user);
-                }
-                break;
-        }
-
-        return parent::getURI();
-    }
-
-    public function getIcon(): string
-    {
-        return 'https://practicaldev-herokuapp-com.freetls.fastly.net/assets/apple-icon-5c6fa9f2bce280428589c6195b7f1924206a53b782b371cfe2d02da932c8c173.png';
-    }
 
     public function collectData(): void
     {
-        $uri = $this->getURI();
-        $html = getContents($uri);
-        if ($html === '') {
-            throwServerException('Could not fetch: ' . $uri);
+        if ($this->queriedContext === 'Top Posts') {
+            $this->collectTopPosts();
+        } else {
+            $this->collectGuides();
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
-
-        $this->resolveRelativeUrls($dom->documentElement);
-
-        $articles = $dom->querySelectorAll('div.crayons-story');
-        if ($articles->length === 0) {
-            throwServerException('Could not find articles!');
-        }
-
-        foreach ($articles as $article) {
-            $item = [];
-
-            $articleLink = $article->querySelector('a[id*="article-link"]');
-            if ($articleLink === null) {
-                continue;
-            }
-            $item['uri'] = $articleLink->getAttribute('href') ?? '';
-            if ($item['uri'] === '') {
-                continue;
-            }
-
-            $titleLink = $article->querySelector('h2 > a');
-            if ($titleLink === null) {
-                continue;
-            }
-            $item['title'] = trim($titleLink->textContent ?? '');
-
-            $timeEl = $article->querySelector('time');
-            if ($timeEl !== null) {
-                $datetime = $timeEl->getAttribute('datetime') ?? '';
-                if ($datetime !== '') {
-                    $parsed = strtotime($datetime);
-                    if ($parsed !== false) {
-                        $item['timestamp'] = $parsed;
-                    }
-                }
-            }
-
-            $authorEl = $article->querySelector('a.crayons-story__secondary.fw-medium');
-            if ($authorEl !== null) {
-                $item['author'] = trim($authorEl->textContent ?? '');
-            }
-
-            $profileImg = $article->querySelector('img');
-            $imgSrc = '';
-            if ($profileImg !== null) {
-                $imgSrc = $profileImg->getAttribute('src') ?? '';
-            }
-
-            if ($this->getInput('full') === true) {
-                $fullArticle = $this->getFullArticle($item['uri']);
-                $item['content'] = '<p>' . $fullArticle . '</p>';
-            } else {
-                $escapedImg = htmlspecialchars($imgSrc, ENT_QUOTES, 'UTF-8');
-                $escapedAuthor = htmlspecialchars($item['author'] ?? '', ENT_QUOTES, 'UTF-8');
-                $escapedTitle = htmlspecialchars($item['title'], ENT_QUOTES, 'UTF-8');
-                $item['content'] = '<img src="' . $escapedImg . '" alt="' . $escapedAuthor . '"><p>' . $escapedTitle . '</p>';
-            }
-
-            if ($this->getInput('hide_categories') !== true) {
-                $tags = $article->querySelectorAll('a.crayons-tag');
-                $categories = [];
-                foreach ($tags as $tag) {
-                    $tagText = trim($tag->textContent ?? '');
-                    if ($tagText !== '') {
-                        $categories[] = str_replace('#', '', $tagText);
-                    }
-                }
-                if ($categories !== []) {
-                    $item['categories'] = $categories;
-                }
-            }
-
-            $this->items[] = $item;
+        if (empty($this->items) === true) {
+            throwServerException('No items found. The site structure may have changed.');
         }
     }
 
-    public function getName(): string
+    private function cleanArticleContent(string $html): string
     {
-        $tag = $this->getInput('tag');
-        if ($tag !== null && $tag !== '') {
-            return ucfirst((string)$tag) . ' - dev.to';
-        }
-
-        return parent::getName();
-    }
-
-    private function getFullArticle(string $url): string
-    {
-        $html = getContents($url);
         if ($html === '') {
             return '';
         }
 
-        libxml_use_internal_errors(true);
         $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
-
-        $this->resolveRelativeUrls($dom->documentElement);
-
-        $result = '';
-
-        $cover = $dom->querySelector('div.crayons-article__cover');
-        if ($cover !== null) {
-            $result .= $dom->saveHTML($cover);
+        if ($dom === null) {
+            return $html;
         }
 
-        $articleBody = $dom->querySelector('[id="article-body"]');
-        if ($articleBody !== null) {
-            $result .= $dom->saveHTML($articleBody);
+        $selectorsToRemove = [
+            '.highlight__panel',
+            '.js-fullscreen-code-action',
+            '.highlight__panel-action',
+            '.crayons-icon',
+            '.js-actions-panel',
+            'button[class*="highlight"]',
+            'div[class*="panel"][class*="action"]',
+        ];
+
+        foreach ($selectorsToRemove as $selector) {
+            foreach ($dom->querySelectorAll($selector) as $element) {
+                $element->remove();
+            }
         }
 
-        return $result;
+        $savedHtml = $dom->saveHTML($dom->documentElement);
+        $cleanedHtml = $savedHtml !== false ? $savedHtml : '';
+        $cleaned = break_annoying_html_tags($cleanedHtml);
+
+        return $cleaned;
     }
 
-    private function resolveRelativeUrls(?\Dom\Element $container): void
+    private function collectTopPosts(): void
     {
-        if ($container === null) {
-            return;
+        $period = (string)$this->getInput('period');
+
+        $limitInput = $this->getInput('limit');
+        $limit = $limitInput !== null && $limitInput !== '' ? (int)$limitInput : 15;
+
+        // Calculate date based on period
+        $date = new \DateTime();
+        switch ($period) {
+            case 'week':
+                $date->modify('-7 days');
+                break;
+            case 'month':
+                $date->modify('-1 month');
+                break;
+            case 'year':
+                $date->modify('-1 year');
+                break;
+            case 'infinity':
+            default:
+                $date->modify('-5 years');
+                break;
         }
 
-        $base = rtrim(self::URI, '/');
-        $elements = $container->querySelectorAll('[src], [href]');
-        foreach ($elements as $el) {
-            foreach (['src', 'href'] as $attr) {
-                $value = $el->getAttribute($attr);
-                if ($value === null) {
-                    continue;
-                }
-                if (str_starts_with($value, '/') === true && str_starts_with($value, '//') === false) {
-                    $el->setAttribute($attr, $base . $value);
+        $apiUrl = sprintf(
+            'https://dev.to/search/feed_content?per_page=%d&sort_by=public_reactions_count&sort_direction=desc&approved=&class_name=Article&published_at[gte]=%s',
+            $limit,
+            urlencode($date->format('Y-m-d\TH:i:s.v\Z'))
+        );
+
+        $cacheKey = 'devto_api_' . md5($apiUrl);
+        $success = false;
+        $response = apcu_fetch($cacheKey, $success);
+
+        if ($success === false) {
+            try {
+                $response = getContents($apiUrl, ['Accept: application/json']);
+                apcu_store($cacheKey, $response, 300);
+            } catch (\Exception $e) {
+                throwServerException('Failed to fetch data from DEV.to API: ' . $e->getMessage());
+            }
+        }
+
+        $data = json_decode((string)$response, true, 512, JSON_THROW_ON_ERROR);
+
+        if (isset($data['result']) === false) {
+            throwServerException('Invalid API response structure');
+        }
+
+        if (is_array($data['result']) === false) {
+            throwServerException('Invalid API response structure');
+        }
+
+        foreach ($data['result'] as $item) {
+            $articleUrl = 'https://dev.to' . ($item['path'] ?? '');
+
+            if ($articleUrl === 'https://dev.to') {
+                continue;
+            }
+
+            if ($articleUrl === '') {
+                continue;
+            }
+
+            $articleDom = getSimpleHTMLDOMCached($articleUrl, 86400);
+            if ($articleDom === null) {
+                continue;
+            }
+
+            $content = $articleDom->querySelector('.crayons-article__body')?->innerHTML ?? '';
+            $content = $this->cleanArticleContent($content);
+
+            $metadata = html_find_seo_metadata($articleDom->saveHTML());
+
+            $publishedAtInt = isset($item['published_at_int']) === true ? (int)$item['published_at_int'] : time();
+
+            $this->items[] = [
+                'title' => $item['title'] ?? 'Untitled',
+                'uri' => $articleUrl,
+                'content' => $content,
+                'timestamp' => $metadata['timestamp'] ?? $publishedAtInt,
+                'author' => $item['user']['name'] ?? null,
+                'categories' => $item['tag_list'] ?? [],
+                'uid' => $articleUrl,
+            ];
+        }
+    }
+
+    private function collectGuides(): void
+    {
+        $limitInput = $this->getInput('limit');
+        $limit = $limitInput !== null && $limitInput !== '' ? (int)$limitInput : 10;
+
+        $dom = getSimpleHTMLDOM(self::URI);
+        if ($dom === null) {
+            throwServerException('Failed to fetch DEV.to homepage');
+        }
+
+        $guideLinks = $dom->querySelectorAll('.widget-link-list .crayons-link--contentful');
+
+        $count = 0;
+        foreach ($guideLinks as $link) {
+            if ($count >= $limit) {
+                break;
+            }
+
+            $href = $link->getAttribute('href');
+            if ($href === null) {
+                continue;
+            }
+
+            if ($href === '/') {
+                continue;
+            }
+
+            $guideUrl = urljoin(self::URI, $href);
+            $title = trim($link->textContent);
+
+            if ($title === '') {
+                continue;
+            }
+
+            $guideDom = getSimpleHTMLDOMCached($guideUrl, 86400);
+            if ($guideDom === null) {
+                continue;
+            }
+
+            $content = $guideDom->querySelector('.crayons-article__body')?->innerHTML ?? '';
+            $content = $this->cleanArticleContent($content);
+
+            $authorName = $guideDom->querySelector('.crayons-article__header__meta .fw-bold')?->textContent ?? null;
+
+            $tags = [];
+            foreach ($guideDom->querySelectorAll('.spec__tags .crayons-tag') as $tag) {
+                $tagText = trim($tag->textContent);
+                if ($tagText !== '') {
+                    $tags[] = ltrim($tagText, '#');
                 }
             }
+
+            $dateStr = $guideDom->querySelector('time[datetime]')?->getAttribute('datetime');
+            $timestamp = null;
+            if ($dateStr !== null) {
+                $parsedTime = strtotime($dateStr);
+                if ($parsedTime !== false) {
+                    $timestamp = $parsedTime;
+                }
+            }
+
+            $finalTimestamp = time();
+            if ($timestamp !== null) {
+                $finalTimestamp = $timestamp;
+            }
+
+            $this->items[] = [
+                'title' => $title,
+                'uri' => $guideUrl,
+                'content' => $content,
+                'timestamp' => $finalTimestamp,
+                'author' => $authorName !== null ? trim($authorName) : null,
+                'categories' => $tags,
+                'uid' => $guideUrl,
+            ];
+
+            $count++;
         }
     }
 }
