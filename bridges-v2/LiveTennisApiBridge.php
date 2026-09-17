@@ -81,8 +81,8 @@ final class LiveTennisApiBridge extends BridgeAbstract
                 'type' => 'number',
                 'required' => false,
                 'title' => 'How many matches to ask the api for, 1 to 200',
-                'defaultValue' => 5,
-                'exampleValue' => 5,
+                'defaultValue' => 10,
+                'exampleValue' => 10,
             ],
         ],
     ];
@@ -94,9 +94,8 @@ final class LiveTennisApiBridge extends BridgeAbstract
         $apiKey = $this->resolveCredential('api_key');
         if ($apiKey === '') {
             throwClientException(sprintf(
-                'This bridge needs a Live Tennis API key. Provide it in the bridge parameters or in config.ini.php as %s, or set %s. Keys are issued at %s',
+                'This bridge needs a Live Tennis API key. Provide it in the bridge parameters or in config.ini.php as %s. Keys are issued at %s',
                 '[LiveTennisApiBridge] api_key = "yourkey"',
-                'RSSBRIDGE_LiveTennisApiBridge_api_key',
                 'https://livetennisapi.com/'
             ));
         }
