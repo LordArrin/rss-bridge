@@ -55,7 +55,7 @@ final class DevToBridge extends BridgeAbstract
         }
     }
 
-    private function cleanArticleContent(string $html): string
+    private function cleanArticleContent(string $html, string $baseUrl): string
     {
         if ($html === '') {
             return '';
@@ -64,6 +64,30 @@ final class DevToBridge extends BridgeAbstract
         $dom = \Dom\HTMLDocument::createFromString($html);
         if ($dom === null) {
             return $html;
+        }
+
+        foreach ($dom->querySelectorAll('img[src]') as $img) {
+            $src = $img->getAttribute('src');
+            if ($src !== null) {
+                $hasHttp = str_starts_with($src, 'http://');
+                $hasHttps = str_starts_with($src, 'https://');
+                if ($hasHttp === false && $hasHttps === false) {
+                    $absoluteUrl = urljoin($baseUrl, $src);
+                    $img->setAttribute('src', $absoluteUrl);
+                }
+            }
+        }
+
+        foreach ($dom->querySelectorAll('a[href]') as $link) {
+            $href = $link->getAttribute('href');
+            if ($href !== null) {
+                $hasHttp = str_starts_with($href, 'http://');
+                $hasHttps = str_starts_with($href, 'https://');
+                if ($hasHttp === false && $hasHttps === false) {
+                    $absoluteUrl = urljoin($baseUrl, $href);
+                    $link->setAttribute('href', $absoluteUrl);
+                }
+            }
         }
 
         $selectorsToRemove = [
@@ -82,8 +106,22 @@ final class DevToBridge extends BridgeAbstract
             }
         }
 
-        $savedHtml = $dom->saveHTML($dom->documentElement);
+        $body = $dom->querySelector('body');
+        if ($body !== null) {
+            $savedHtml = $dom->saveHTML($body);
+        } else {
+            $savedHtml = $dom->saveHTML($dom->documentElement);
+        }
+
         $cleanedHtml = $savedHtml !== false ? $savedHtml : '';
+
+        if (str_starts_with($cleanedHtml, '<body>') === true) {
+            $replaced = preg_replace('/^<body>|<\/body>$/', '', $cleanedHtml);
+            if ($replaced !== null && $replaced !== '') {
+                $cleanedHtml = $replaced;
+            }
+        }
+
         $cleaned = break_annoying_html_tags($cleanedHtml);
 
         return $cleaned;
@@ -160,7 +198,7 @@ final class DevToBridge extends BridgeAbstract
             }
 
             $content = $articleDom->querySelector('.crayons-article__body')?->innerHTML ?? '';
-            $content = $this->cleanArticleContent($content);
+            $content = $this->cleanArticleContent($content, $articleUrl);
 
             $metadata = html_find_seo_metadata($articleDom->saveHTML());
 
@@ -218,7 +256,7 @@ final class DevToBridge extends BridgeAbstract
             }
 
             $content = $guideDom->querySelector('.crayons-article__body')?->innerHTML ?? '';
-            $content = $this->cleanArticleContent($content);
+            $content = $this->cleanArticleContent($content, $guideUrl);
 
             $authorName = $guideDom->querySelector('.crayons-article__header__meta .fw-bold')?->textContent ?? null;
 
