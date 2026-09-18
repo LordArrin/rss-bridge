@@ -4,215 +4,148 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
-use RSSBridge\FeedExpander;
+use RSSBridge\BridgeAbstract;
+use RSSBridge\FeedParser;
 
-final class ArsTechnicaBridge extends FeedExpander
+final class ArsTechnicaBridge extends BridgeAbstract
 {
     public const NAME = 'Ars Technica';
     public const URI = 'https://arstechnica.com/';
-    public const DESCRIPTION = 'Returns the latest articles from Ars Technica';
+    public const DESCRIPTION = 'Ars Technica news feeds';
     public const MAINTAINER = 'No maintainer';
-    public const CACHE_TIMEOUT = 3600;
+    public const CACHE_TIMEOUT = 1800;
 
-    public const PARAMETERS = [[
-        'section' => [
-            'name' => 'Site section',
-            'type' => 'list',
-            'defaultValue' => 'index',
-            'values' => [
-                'All' => 'index',
-                'Apple' => 'apple',
-                'Board Games' => 'cardboard',
-                'Cars' => 'cars',
-                'Features' => 'features',
-                'Gaming' => 'gaming',
-                'Information Technology' => 'technology-lab',
-                'Science' => 'science',
-                'Staff Blogs' => 'staff-blogs',
-                'Tech Policy' => 'tech-policy',
-                'Tech' => 'gadgets',
-            ]
-        ]
-    ]];
+    public const PARAMETERS = [
+        '' => [
+            'channel' => [
+                'name' => 'Channel',
+                'type' => 'list',
+                'values' => [
+                    'All' => 'all',
+                    'Technology' => 'technology',
+                    'Science' => 'science',
+                    'Gaming' => 'gaming',
+                    'Business' => 'business',
+                    'Cars' => 'cars',
+                    'Staff' => 'staff',
+                ],
+                'defaultValue' => 'all',
+            ],
+            'limit' => [
+                'name' => 'Limit',
+                'type' => 'number',
+                'required' => false,
+                'defaultValue' => 10,
+                'title' => 'Maximum number of articles to fetch',
+            ],
+        ],
+    ];
+
+    private const FEED_URLS = [
+        'all' => 'https://feeds.arstechnica.com/arstechnica/index',
+        'technology' => 'https://feeds.arstechnica.com/arstechnica/technology-lab',
+        'science' => 'https://feeds.arstechnica.com/arstechnica/science',
+        'gaming' => 'https://feeds.arstechnica.com/arstechnica/gaming',
+        'business' => 'https://feeds.arstechnica.com/arstechnica/business',
+        'cars' => 'https://feeds.arstechnica.com/arstechnica/cars',
+        'staff' => 'https://feeds.arstechnica.com/arstechnica/staff',
+    ];
 
     public function collectData(): void
     {
-        $section = (string)$this->getInput('section');
-        $url = 'https://feeds.arstechnica.com/arstechnica/' . $section;
-        $this->collectExpandableDatas($url, 10);
-    }
-
-    protected function parseItem($item): array
-    {
-        $html = getContents($item['uri']);
-        if ($html === '') {
-            return $item;
+        $channel = (string)$this->getInput('channel');
+        if ($channel === '') {
+            $channel = 'all';
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $limitInput = $this->getInput('limit');
+        $limit = $limitInput !== null && $limitInput !== '' ? (int)$limitInput : 10;
+        if ($limit < 1) {
+            $limit = 1;
+        }
+        if ($limit > 50) {
+            $limit = 50;
+        }
 
-        $this->resolveRelativeUrls($dom);
+        $feedUrl = self::FEED_URLS[$channel] ?? self::FEED_URLS['all'];
 
-        $content = '';
-        $article = $dom->querySelector('article');
-        $header = $article !== null ? $article->querySelector('header') : null;
+        $feedContent = getContents($feedUrl);
+        if ($feedContent === '') {
+            throwServerException('Failed to fetch RSS feed from Ars Technica');
+        }
 
-        if ($header !== null) {
-            $leading = $header->querySelector('p[class*="leading"]');
-            if ($leading !== null) {
-                $content .= '<p>' . $dom->saveHTML($leading) . '</p>';
+        $parser = new FeedParser();
+        $feed = $parser->parseFeed($feedContent);
+
+        if ($feed === null) {
+            throwServerException('Failed to parse Ars Technica RSS feed');
+        }
+
+        $count = 0;
+        foreach ($feed['items'] as $item) {
+            if ($count >= $limit) {
+                break;
             }
 
-            $intro_image = $header->querySelector('img.intro-image');
-            if ($intro_image !== null) {
-                $content .= '<figure>' . $dom->saveHTML($intro_image);
-                $image_caption = $header->querySelector('.caption .caption-content');
-                if ($image_caption !== null) {
-                    $content .= '<figcaption>' . $dom->saveHTML($image_caption) . '</figcaption>';
-                }
-                $content .= '</figure>';
+            $articleUrl = $item['uri'] ?? '';
+            if ($articleUrl === '') {
+                continue;
             }
-        }
 
-        $postContentElements = $dom->querySelectorAll('.post-content');
-        foreach ($postContentElements as $content_tag) {
-            $content .= $dom->saveHTML($content_tag);
-        }
+            $title = $item['title'] ?? 'Untitled';
+            $timestamp = $item['timestamp'] ?? time();
+            $author = $item['author'] ?? null;
+            $content = $item['content'] ?? '';
 
-        libxml_use_internal_errors(true);
-        $contentDom = \Dom\HTMLDocument::createFromString('<div>' . $content . '</div>');
-        libxml_use_internal_errors(false);
+            $this->items[] = [
+                'title' => $title,
+                'uri' => $articleUrl,
+                'content' => $content,
+                'timestamp' => $timestamp,
+                'author' => $author,
+                'uid' => $articleUrl,
+            ];
 
-        $wrapper = $contentDom->querySelector('div');
-        if ($wrapper === null) {
-            return $item;
-        }
-
-        $parsely = $dom->querySelector('[name="parsely-page"]');
-        $parselyJson = null;
-        if ($parsely !== null) {
-            $parselyContent = $parsely->getAttribute('content');
-            if ($parselyContent !== null) {
-                $decoded = html_entity_decode($parselyContent, ENT_QUOTES, 'UTF-8');
-                $parsed = json_decode($decoded, true);
-                if (is_array($parsed) === true) {
-                    $parselyJson = $parsed;
-                }
-            }
-        }
-
-        if ($parselyJson !== null && isset($parselyJson['tags']) === true && is_array($parselyJson['tags']) === true) {
-            $item['categories'] = $parselyJson['tags'];
-        }
-
-        $weirdLightboxes = $wrapper->querySelectorAll('figure div div.ars-lightbox');
-        foreach ($weirdLightboxes as $weird_lightbox) {
-            $parent = $weird_lightbox->parentElement;
-            if ($parent !== null) {
-                $grandparent = $parent->parentElement;
-                if ($grandparent !== null) {
-                    $grandparent->replaceWith($weird_lightbox);
-                }
-            }
-        }
-
-        $lightboxes = $wrapper->querySelectorAll('.ars-lightbox');
-        foreach ($lightboxes as $lightbox) {
-            $lightbox_content = '';
-            $lightbox_items = $lightbox->querySelectorAll('.ars-lightbox-item');
-            foreach ($lightbox_items as $lightbox_item) {
-                $img = $lightbox_item->querySelector('img');
-                if ($img !== null) {
-                    $lightbox_content .= '<figure>' . $contentDom->saveHTML($img);
-                    $caption = $lightbox_item->querySelector('div.pswp-caption-content');
-                    if ($caption !== null) {
-                        $credit = $lightbox_item->querySelector('div.ars-gallery-caption-credit');
-                        if ($credit !== null) {
-                            $creditText = $credit->textContent ?? '';
-                            $credit->textContent = 'Credit: ' . $creditText;
-                        }
-                        $lightbox_content .= '<figcaption>' . $contentDom->saveHTML($caption) . '</figcaption>';
-                    }
-                    $lightbox_content .= '</figure>';
-                }
-            }
-            $lightbox->innerHTML = $lightbox_content;
-        }
-
-        $interludes = $wrapper->querySelectorAll('.ars-interlude-container');
-        foreach ($interludes as $ad) {
-            $ad->remove();
-        }
-
-        $tocs = $wrapper->querySelectorAll('.toc-container');
-        foreach ($tocs as $toc) {
-            $toc->remove();
-        }
-
-        $iframes = $wrapper->querySelectorAll('iframe');
-        foreach ($iframes as $iframe) {
-            $src = $iframe->getAttribute('src') ?? '';
-            if ($src !== '') {
-                $replacement = $contentDom->createTextNode('');
-                $a = $contentDom->createElement('a');
-                $a->setAttribute('href', $src);
-                $a->textContent = $src;
-                $iframe->replaceWith($a);
-            }
-        }
-
-        $styledDivs = $wrapper->querySelectorAll('div[style*="aspect-ratio"]');
-        foreach ($styledDivs as $styled) {
-            $styled->removeAttribute('style');
-        }
-
-        $this->backgroundToImg($wrapper);
-
-        $result = '';
-        foreach ($wrapper->childNodes as $child) {
-            $result .= $contentDom->saveHTML($child);
-        }
-
-        $item['content'] = $result;
-
-        if ($parselyJson !== null && isset($parselyJson['post_id']) === true) {
-            $item['uid'] = (string)$parselyJson['post_id'];
-        }
-
-        return $item;
-    }
-
-    private function resolveRelativeUrls(\Dom\HTMLDocument $dom): void
-    {
-        $base = rtrim(self::URI, '/');
-        $elements = $dom->querySelectorAll('[src], [href]');
-        foreach ($elements as $el) {
-            foreach (['src', 'href'] as $attr) {
-                $value = $el->getAttribute($attr);
-                if ($value === null) {
-                    continue;
-                }
-                if (str_starts_with($value, '/') === true && str_starts_with($value, '//') === false) {
-                    $el->setAttribute($attr, $base . $value);
-                }
-            }
+            $count++;
         }
     }
 
-    private function backgroundToImg(\Dom\Element $wrapper): void
+    public function getName(): string
     {
-        $elements = $wrapper->querySelectorAll('[style]');
-        foreach ($elements as $el) {
-            $style = $el->getAttribute('style') ?? '';
-            if (preg_match('/background(?:-image)?:\s*url\(["\']?([^"\')\s]+)["\']?\)/i', $style, $matches) === 1) {
-                $url = $matches[1];
-                $img = $wrapper->ownerDocument->createElement('img');
-                $img->setAttribute('src', $url);
-                $img->setAttribute('style', 'max-width:100%;height:auto;display:block');
-                $el->replaceWith($img);
-            }
+        $channel = (string)$this->getInput('channel');
+        if ($channel === '' || $channel === 'all') {
+            return parent::getName();
         }
+
+        $channelNames = [
+            'technology' => 'Technology',
+            'science' => 'Science',
+            'gaming' => 'Gaming',
+            'business' => 'Business',
+            'cars' => 'Cars',
+            'staff' => 'Staff',
+        ];
+
+        $name = $channelNames[$channel] ?? $channel;
+        return parent::getName() . ' - ' . $name;
+    }
+
+    public function getURI(): string
+    {
+        $channel = (string)$this->getInput('channel');
+        if ($channel === '' || $channel === 'all') {
+            return parent::getURI();
+        }
+
+        $channelUris = [
+            'technology' => 'https://arstechnica.com/technology/',
+            'science' => 'https://arstechnica.com/science/',
+            'gaming' => 'https://arstechnica.com/gaming/',
+            'business' => 'https://arstechnica.com/business/',
+            'cars' => 'https://arstechnica.com/cars/',
+            'staff' => 'https://arstechnica.com/staff/',
+        ];
+
+        return $channelUris[$channel] ?? parent::getURI();
     }
 }
