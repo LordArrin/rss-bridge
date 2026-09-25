@@ -45,7 +45,7 @@ final class GoodreadsBridge extends BridgeAbstract
         $regex = '/goodreads\.com\/author\/show\/(\d+)/';
 
         if (preg_match($regex, $url, $matches) !== 1) {
-            \throwClientException('Invalid author URL format');
+            throwClientException('Invalid author URL format');
         }
 
         $authorId = (string) $matches[1];
@@ -54,7 +54,7 @@ final class GoodreadsBridge extends BridgeAbstract
         $html = getContents($authorListUrl);
 
         if (is_string($html) === false || $html === '') {
-            \throwServerException('Empty response from Goodreads author page');
+            throwServerException('Empty response from Goodreads author page');
         }
 
         libxml_use_internal_errors(true);
@@ -62,6 +62,9 @@ final class GoodreadsBridge extends BridgeAbstract
         libxml_use_internal_errors(false);
 
         $rows = $dom->querySelectorAll('tr[itemtype="http://schema.org/Book"]');
+
+        $publishedOnly = (bool)$this->getInput('published_only');
+        $now = time();
 
         foreach ($rows as $row) {
             if ($row instanceof \Dom\Element === false) {
@@ -71,12 +74,25 @@ final class GoodreadsBridge extends BridgeAbstract
             $dateSpan = $row->querySelector('.uitext');
             $dateSpanText = ($dateSpan !== null) ? (string) $dateSpan->textContent : '';
             $date = null;
+            $isPublished = false;
 
-            if (preg_match('/published\s+(\d{4})/', $dateSpanText, $dateMatches) === 1) {
-                $date = (string) $dateMatches[1] . '-01-01';
-            } elseif ((string) ($this->getInput('published_only') ?? '') !== 'checked') {
+            if (preg_match('/published\s+(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d+(?:st|nd|rd|th)?\s+)?(\d{4})/', $dateSpanText, $dateMatches) === 1) {
+                $date = $dateMatches[1] . '-01-01';
+                $timestamp = strtotime($date);
+                $isPublished = ($timestamp !== false && $timestamp <= $now);
+            } elseif (preg_match('/expected publication:\s*(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d+(?:st|nd|rd|th)?,?\s+)?(\d{4})/', $dateSpanText, $dateMatches) === 1) {
+                $date = $dateMatches[1] . '-01-01';
+                $isPublished = false;
+            } elseif (preg_match('/not yet published/', $dateSpanText) === 1) {
+                $isPublished = false;
+            } elseif ($publishedOnly === false) {
                 $date = date('Y-01-01');
+                $isPublished = true;
             } else {
+                continue;
+            }
+
+            if ($publishedOnly === true && $isPublished === false) {
                 continue;
             }
 
@@ -95,8 +111,24 @@ final class GoodreadsBridge extends BridgeAbstract
             $authorNameNode = $row->querySelector('.authorName');
             $authorName = ($authorNameNode !== null) ? trim((string) $authorNameNode->textContent) : '';
 
+            $coverSrc = '';
             $bookCoverNode = $row->querySelector('.bookCover');
-            $coverSrc = ($bookCoverNode !== null) ? (string) ($bookCoverNode->getAttribute('src') ?? '') : '';
+            if ($bookCoverNode !== null) {
+                if ($bookCoverNode->tagName === 'img') {
+                    $coverSrc = (string) ($bookCoverNode->getAttribute('data-src') ?? '');
+                    if ($coverSrc === '') {
+                        $coverSrc = (string) ($bookCoverNode->getAttribute('src') ?? '');
+                    }
+                } else {
+                    $imgNode = $bookCoverNode->querySelector('img');
+                    if ($imgNode !== null) {
+                        $coverSrc = (string) ($imgNode->getAttribute('data-src') ?? '');
+                        if ($coverSrc === '') {
+                            $coverSrc = (string) ($imgNode->getAttribute('src') ?? '');
+                        }
+                    }
+                }
+            }
             $coverSrc = $this->normalizeImageUrl($coverSrc);
 
             $content = '';
@@ -113,9 +145,11 @@ final class GoodreadsBridge extends BridgeAbstract
             $item['content'] = $content;
             $item['uid'] = $href;
 
-            $timestamp = strtotime($date);
-            if ($timestamp !== false) {
-                $item['timestamp'] = $timestamp;
+            if ($date !== null) {
+                $timestamp = strtotime($date);
+                if ($timestamp !== false) {
+                    $item['timestamp'] = $timestamp;
+                }
             }
 
             $this->items[] = $item;
@@ -129,23 +163,30 @@ final class GoodreadsBridge extends BridgeAbstract
         }
 
         $patterns = [
-            '/_S[XY]\d+_?/',
-            '/_U[XY]\d+_?/',
+            '/\._SX?\d+_/',
+            '/\._SY?\d+_/',
+            '/_SX?\d+_\./',
+            '/_SY?\d+_\./',
+            '/_S[X,Y]\d+_\./',
+            '/_U[X,Y]\d+_\./',
             '/\._S[X,Y]\d+_/',
             '/\._U[X,Y]\d+_/',
+            '/_S[XY]\d+_?/',
+            '/_U[XY]\d+_?/',
         ];
 
         $normalized = $url;
         foreach ($patterns as $pattern) {
-            $normalized = preg_replace($pattern, '', $normalized);
-            if (is_string($normalized) === false) {
+            $result = preg_replace($pattern, '.', $normalized);
+            if (is_string($result) === false) {
                 $normalized = $url;
                 break;
             }
+            $normalized = $result;
         }
 
-        if ($normalized === '' || $normalized === null) {
-            return $url;
+        if (str_starts_with($normalized, '//') === true) {
+            $normalized = 'https:' . $normalized;
         }
 
         return $normalized;
@@ -158,11 +199,11 @@ final class GoodreadsBridge extends BridgeAbstract
         if ($context === self::CONTEXT_AUTHOR_BOOKS) {
             $authorUrl = (string) ($this->getInput('author_url') ?? '');
             if ($authorUrl === '') {
-                \throwClientException('Author URL is required');
+                throwClientException('Author URL is required');
             }
             $this->collectAuthorBooks($authorUrl);
         } else {
-            \throwServerException('Invalid context');
+            throwServerException('Invalid context');
         }
     }
 }
