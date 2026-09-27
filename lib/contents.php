@@ -131,7 +131,7 @@ function getContents(
                     break;
                 }
             }
-            $cache->set($cacheKey, $response, 86400 * 10);
+            $cache->set($cacheKey, $response, 86400);
             break;
         case 301:
         case 302:

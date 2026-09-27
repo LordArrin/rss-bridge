@@ -72,8 +72,6 @@ final class CurlHttpClient implements HttpClient
 {
     public function request(string $url, array $config = []): Response
     {
-        $config = array_filter($config, fn ($value) => $value !== null);
-
         $ch = curl_init($url);
         if ($ch === false) {
             throw new HttpException('Failed to initialize cURL');
@@ -105,6 +103,7 @@ final class CurlHttpClient implements HttpClient
             CURLOPT_FOLLOWLOCATION  => true,
             CURLOPT_MAXREDIRS       => $config['max_redirections'],
             CURLOPT_TIMEOUT         => $config['timeout'],
+            CURLOPT_CONNECTTIMEOUT  => min(10, (int)($config['timeout'] / 2)),
             CURLOPT_ENCODING        => '',
             CURLOPT_PROTOCOLS       => CURLPROTO_HTTP | CURLPROTO_HTTPS,
             CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
@@ -146,7 +145,7 @@ final class CurlHttpClient implements HttpClient
         }
 
         $responseHeaders = [];
-        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, $rawHeader) use (&$responseHeaders) {
+        $headerCallback = function ($ch, $rawHeader) use (&$responseHeaders) {
             $len = strlen($rawHeader);
             if ($rawHeader === "\r\n") {
                 return $len;
@@ -165,7 +164,9 @@ final class CurlHttpClient implements HttpClient
             }
             $responseHeaders[$name][] = $value;
             return $len;
-        });
+        };
+
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, $headerCallback);
 
         $maxAttempts = 1 + (int)$config['retries'];
         $lastError = '';
@@ -189,6 +190,16 @@ final class CurlHttpClient implements HttpClient
                 ], true) === true
             ) {
                 break;
+            }
+
+            if ($attempt < $maxAttempts) {
+                curl_reset($ch);
+                curl_setopt($ch, CURLOPT_URL, $url);
+                if (curl_setopt_array($ch, $curlOptions) === false) {
+                    throw new HttpException('Failed to set cURL options: tried to set an illegal curl option');
+                }
+                curl_setopt($ch, CURLOPT_HEADERFUNCTION, $headerCallback);
+                usleep($attempt * 500_000);
             }
         }
 

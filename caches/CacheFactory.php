@@ -130,7 +130,8 @@ final class CacheFactory
             throw new \Exception(sprintf('Memcached socket does not exist: %s', $socketPath));
         }
 
-        return new MemcachedCache($this->logger, $socketPath, 0, $socketPath);
+        // Pass empty string as host, socket path as fourth parameter
+        return new MemcachedCache($this->logger, '', 0, $socketPath);
     }
 
     /**

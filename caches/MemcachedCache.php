@@ -51,10 +51,10 @@ final class MemcachedCache implements CacheInterface
         $this->conn->setOption(\Memcached::OPT_BINARY_PROTOCOL, true);
         $this->conn->setOption(\Memcached::OPT_COMPRESSION, true);
         $this->conn->setOption(\Memcached::OPT_LIBKETAMA_COMPATIBLE, true);
-        $this->conn->setOption(\Memcached::OPT_CONNECT_TIMEOUT, 1000);  // 1 second connect timeout
+        $this->conn->setOption(\Memcached::OPT_CONNECT_TIMEOUT, 2000);  // 2 seconds connect timeout
         $this->conn->setOption(\Memcached::OPT_RETRY_TIMEOUT, 1);  // 1 second retry timeout
-        $this->conn->setOption(\Memcached::OPT_SEND_TIMEOUT, 500000);  // 500ms send timeout
-        $this->conn->setOption(\Memcached::OPT_RECV_TIMEOUT, 500000);  // 500ms receive timeout
+        $this->conn->setOption(\Memcached::OPT_SEND_TIMEOUT, 2000000);  // 2 seconds send timeout
+        $this->conn->setOption(\Memcached::OPT_RECV_TIMEOUT, 2000000);  // 2 seconds receive timeout
 
         // TCP-specific optimization (not applicable to Unix socket)
         if ($isUnixSocket === false) {
@@ -92,10 +92,22 @@ final class MemcachedCache implements CacheInterface
         $result = $this->conn->set($cacheKey, $value, $expiration);
 
         if ($result === false) {
-            $this->logger->warning('Failed to store an item in memcached', [
+            $resultCode = $this->conn->getResultCode();
+            $resultMessage = $this->conn->getResultMessage();
+
+            // Log with severity based on error type
+            $logLevel = match ($resultCode) {
+                \Memcached::RES_SERVER_END => 'error',
+                \Memcached::RES_TIMEOUT => 'error',
+                \Memcached::RES_E2BIG => 'warning',
+                \Memcached::RES_NOTSTORED => 'debug',
+                default => 'warning',
+            };
+
+            $this->logger->$logLevel('Failed to store an item in memcached', [
                 'key'           => $cacheKey,
-                'resultCode'    => $this->conn->getResultCode(),
-                'resultMessage' => $this->conn->getResultMessage(),
+                'resultCode'    => $resultCode,
+                'resultMessage' => $resultMessage,
             ]);
         }
     }
