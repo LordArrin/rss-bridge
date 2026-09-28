@@ -319,9 +319,11 @@ final class TgWSProxy extends ProxyAbstract
             'could not connect',
             'curl error 7',
             'curl error 28',
+            'curl error 35',
             'curl error 56',
             'socket',
             'eof',
+            'ssl',
         ];
 
         $errorMsgLower = strtolower($errorMsg);
