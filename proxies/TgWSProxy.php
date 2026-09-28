@@ -17,7 +17,7 @@ final class TgWSProxy extends ProxyAbstract
 
         $this->log('info', sprintf(
             'TgWSProxy initialized: proxy=%s, max_retries=%d',
-            preg_replace('#://([^:@]+):([^@]+)@#', '://***:***@', $this->proxyUrl ?? 'null'),
+            $this->maskProxyUrl($this->proxyUrl),
             (int)($this->config['retries'] ?? 3)
         ));
     }
@@ -32,44 +32,105 @@ final class TgWSProxy extends ProxyAbstract
         return empty($this->proxyUrl) === false;
     }
 
+    /**
+     * Safely masks credentials in proxy URL using parse_url instead of regex
+     */
+    private function maskProxyUrl(?string $url): string
+    {
+        if ($url === null) {
+            return 'null';
+        }
+
+        $parsed = parse_url($url);
+        if ($parsed === false || isset($parsed['host']) === false) {
+            return '***';
+        }
+
+        $masked = ($parsed['scheme'] ?? 'socks5') . '://';
+        if (isset($parsed['user']) === true) {
+            $masked .= '***:***@';
+        }
+        $masked .= $parsed['host'];
+        if (isset($parsed['port']) === true) {
+            $masked .= ':' . $parsed['port'];
+        }
+
+        return $masked;
+    }
+
     private function getPersistentHandle(): \CurlHandle
     {
         if (self::$persistentHandle === null || self::$requestCount >= self::$maxRequestsBeforeReset) {
-            self::$persistentHandle = null;
-
-            self::$persistentHandle = curl_init();
-            if (self::$persistentHandle === false) {
-                throw new \RuntimeException('Failed to initialize cURL handle');
+            if (self::$persistentHandle !== null) {
+                curl_reset(self::$persistentHandle);
+            } else {
+                self::$persistentHandle = curl_init();
+                if (self::$persistentHandle === false) {
+                    throw new \RuntimeException('Failed to initialize cURL handle');
+                }
             }
             self::$requestCount = 0;
-
-            curl_setopt(self::$persistentHandle, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5_HOSTNAME);
-            curl_setopt(self::$persistentHandle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-
-            // Allow connection reuse for persistent handle
-            curl_setopt(self::$persistentHandle, CURLOPT_FRESH_CONNECT, false);
-            curl_setopt(self::$persistentHandle, CURLOPT_FORBID_REUSE, false);
-
-            curl_setopt(self::$persistentHandle, CURLOPT_TCP_KEEPALIVE, 1);
-            curl_setopt(self::$persistentHandle, CURLOPT_TCP_KEEPIDLE, 60);
-            curl_setopt(self::$persistentHandle, CURLOPT_TCP_KEEPINTVL, 30);
-
-            curl_setopt(self::$persistentHandle, CURLOPT_ENCODING, '');
-            curl_setopt(self::$persistentHandle, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt(self::$persistentHandle, CURLOPT_MAXREDIRS, 5);
-
-            // Security: restrict protocols
-            curl_setopt(self::$persistentHandle, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
-            curl_setopt(self::$persistentHandle, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
-
-            curl_setopt(self::$persistentHandle, CURLOPT_SSL_VERIFYPEER, true);
-            curl_setopt(self::$persistentHandle, CURLOPT_SSL_VERIFYHOST, 2);
-
-            if ((bool) $this->proxyUrl === true) {
-                curl_setopt(self::$persistentHandle, CURLOPT_PROXY, $this->proxyUrl);
-            }
+            $this->setupBaseOptions(self::$persistentHandle);
         }
+
         return self::$persistentHandle;
+    }
+
+    /**
+     * Sets up base cURL options that apply to all requests using this handle.
+     * Called after curl_reset() to ensure consistent state.
+     */
+    private function setupBaseOptions(\CurlHandle $ch): void
+    {
+        $baseOptions = [
+            CURLOPT_PROXYTYPE => CURLPROXY_SOCKS5_HOSTNAME,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_FRESH_CONNECT => false,
+            CURLOPT_FORBID_REUSE => false,
+            CURLOPT_TCP_KEEPALIVE => 1,
+            CURLOPT_TCP_KEEPIDLE => 60,
+            CURLOPT_TCP_KEEPINTVL => 30,
+            CURLOPT_ENCODING => '',
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 5,
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_NOSIGNAL => true,
+            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+            CURLOPT_DNS_CACHE_TIMEOUT => 120,
+        ];
+
+        if ($this->proxyUrl !== null && $this->proxyUrl !== '') {
+            $baseOptions[CURLOPT_PROXY] = $this->proxyUrl;
+        }
+
+        curl_setopt_array($ch, $baseOptions);
+    }
+
+    /**
+     * Applies request-specific options to the handle, resetting any previous state.
+     * Must be called after getPersistentHandle() which ensures base options are set.
+     */
+    private function applyRequestOptions(\CurlHandle $ch, string $url, int $connectTimeout, int $requestTimeout, bool $includeHeaders): void
+    {
+        curl_reset($ch);
+        $this->setupBaseOptions($ch);
+
+        $options = [
+            CURLOPT_URL => $url,
+            CURLOPT_CONNECTTIMEOUT => $connectTimeout,
+            CURLOPT_TIMEOUT => $requestTimeout,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HEADER => $includeHeaders,
+            CURLOPT_CUSTOMREQUEST => 'GET',
+            CURLOPT_HTTPGET => true,
+            CURLOPT_HTTPHEADER => [],
+            CURLOPT_POSTFIELDS => null,
+        ];
+
+        curl_setopt_array($ch, $options);
     }
 
     protected function fetchHtml(string $url, array $options): string
@@ -83,21 +144,18 @@ final class TgWSProxy extends ProxyAbstract
         for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
             try {
                 $ch = $this->getPersistentHandle();
-
-                curl_setopt($ch, CURLOPT_URL, $url);
-                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $connectTimeout);
-                curl_setopt($ch, CURLOPT_TIMEOUT, $requestTimeout);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_HEADER, false);
+                $this->applyRequestOptions($ch, $url, $connectTimeout, $requestTimeout, false);
 
                 if ($attempt > 1 === true) {
+                    $delay = min($attempt * 500000, 2000000);
                     $this->log('warning', sprintf(
-                        'TgWSProxy retry %d/%d for %s',
+                        'TgWSProxy retry %d/%d for %s (delay: %dms)',
                         $attempt,
                         $maxRetries,
-                        $url
+                        $url,
+                        (int)($delay / 1000)
                     ));
-                    usleep(500000 * $attempt);
+                    usleep($delay);
                 }
 
                 self::$requestCount++;
@@ -153,7 +211,6 @@ final class TgWSProxy extends ProxyAbstract
                 }
 
                 if ($this->isConnectionError($errorMsg) === true) {
-                    // Reset persistent handle on connection error
                     self::$persistentHandle = null;
                     self::$requestCount = 0;
                 }
@@ -180,31 +237,49 @@ final class TgWSProxy extends ProxyAbstract
             try {
                 $ch = $this->getPersistentHandle();
 
-                curl_setopt($ch, CURLOPT_URL, $url);
-                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $connectTimeout);
-                curl_setopt($ch, CURLOPT_TIMEOUT, $requestTimeout);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_HEADER, true);
+                // Reset handle and set base + request options
+                curl_reset($ch);
+                $this->setupBaseOptions($ch);
+
+                $responseHeaders = '';
+                $headerCallback = function ($ch, $header) use (&$responseHeaders) {
+                    $responseHeaders .= $header;
+                    return strlen($header);
+                };
+
+                curl_setopt_array($ch, [
+                    CURLOPT_URL => $url,
+                    CURLOPT_CONNECTTIMEOUT => $connectTimeout,
+                    CURLOPT_TIMEOUT => $requestTimeout,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_HEADER => false,
+                    CURLOPT_HEADERFUNCTION => $headerCallback,
+                    CURLOPT_CUSTOMREQUEST => 'GET',
+                    CURLOPT_HTTPGET => true,
+                    CURLOPT_HTTPHEADER => [],
+                    CURLOPT_POSTFIELDS => null,
+                ]);
 
                 if ($attempt > 1 === true) {
+                    $delay = min($attempt * 500000, 2000000);
                     $this->log('warning', sprintf(
-                        'TgWSProxy binary retry %d/%d for %s',
+                        'TgWSProxy binary retry %d/%d for %s (delay: %dms)',
                         $attempt,
                         $maxRetries,
-                        $url
+                        $url,
+                        (int)($delay / 1000)
                     ));
-                    usleep(500000 * $attempt);
+                    usleep($delay);
                 }
 
                 self::$requestCount++;
 
-                $response = curl_exec($ch);
+                $body = curl_exec($ch);
                 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
                 $curlError = curl_error($ch);
                 $curlErrno = curl_errno($ch);
 
-                if ($response === false || $curlErrno !== 0) {
+                if ($body === false || $curlErrno !== 0) {
                     throw new \RuntimeException(sprintf(
                         'cURL error %d: %s (HTTP %d)',
                         $curlErrno,
@@ -217,15 +292,12 @@ final class TgWSProxy extends ProxyAbstract
                     throw new \RuntimeException(sprintf('HTTP %d for %s', $httpCode, $url));
                 }
 
-                $headers = substr($response, 0, $headerSize);
-                $body = substr($response, $headerSize);
-
                 if (empty($body) === true) {
                     throw new \RuntimeException('Empty response');
                 }
 
                 $contentType = 'application/octet-stream';
-                if ((bool) preg_match('/content-type:\s*([^\r\n]+)/i', $headers, $matches) === true) {
+                if (preg_match('/content-type:\s*([^\r\n]+)/i', $responseHeaders, $matches) === 1) {
                     $contentType = trim(explode(';', $matches[1])[0]);
                 }
 
@@ -238,7 +310,7 @@ final class TgWSProxy extends ProxyAbstract
                     $httpCode
                 ));
 
-                return ['body' => $body, 'type' => $contentType];
+                return ['body' => (string)$body, 'type' => $contentType];
             } catch (\Throwable $e) {
                 $lastException = $e;
 
