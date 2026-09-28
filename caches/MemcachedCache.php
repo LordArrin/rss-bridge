@@ -15,6 +15,14 @@ final class MemcachedCache implements CacheInterface
     private readonly \Memcached $conn;
     private readonly string $cachePrefix;
 
+    // Memcached result codes (numeric values for compatibility)
+    private const RES_SUCCESS = 0;
+    private const RES_NOTFOUND = 16;
+    private const RES_SERVER_END = 2;  // Server connection failed
+    private const RES_TIMEOUT = 5;     // Operation timed out
+    private const RES_E2BIG = 3;       // Item too large
+    private const RES_NOTSTORED = 15;  // Item not stored (conditional failure)
+
     public function __construct(\Logger $logger, string $host, int $port, string $socketPath = '')
     {
         $this->logger = $logger;
@@ -69,7 +77,7 @@ final class MemcachedCache implements CacheInterface
     {
         $value = $this->conn->get($this->createCacheKey($key));
 
-        if ($this->conn->getResultCode() === \Memcached::RES_NOTFOUND) {
+        if ($this->conn->getResultCode() === self::RES_NOTFOUND) {
             return $default;
         }
 
@@ -97,10 +105,10 @@ final class MemcachedCache implements CacheInterface
 
             // Log with severity based on error type
             $logLevel = match ($resultCode) {
-                \Memcached::RES_SERVER_END => 'error',
-                \Memcached::RES_TIMEOUT => 'error',
-                \Memcached::RES_E2BIG => 'warning',
-                \Memcached::RES_NOTSTORED => 'debug',
+                self::RES_SERVER_END => 'error',
+                self::RES_TIMEOUT => 'error',
+                self::RES_E2BIG => 'warning',
+                self::RES_NOTSTORED => 'debug',
                 default => 'warning',
             };
 
