@@ -61,8 +61,10 @@ final class FlareSolverrProxy extends ProxyAbstract
     protected function fetchHtml(string $url, array $options): string
     {
         $parsedHost = parse_url($url, PHP_URL_HOST);
-        $domain = (bool) $parsedHost === true ? $parsedHost : 'localhost';
+        $domain = is_string($parsedHost) ? $parsedHost : 'localhost';
         $wait = $this->calculateWaitTime($url, $options);
+
+        $cookies = $options['cookies'] ?? [];
 
         $payload = [
             'cmd' => 'request.get',
@@ -70,8 +72,6 @@ final class FlareSolverrProxy extends ProxyAbstract
             'maxTimeout' => $options['timeout'] ?? 180000,
             'wait' => $wait,
         ];
-
-        $cookies = $options['cookies'] ?? [];
 
         if ((bool) $this->sessionName === true) {
             $payload['session'] = $this->sessionName;
@@ -82,13 +82,36 @@ final class FlareSolverrProxy extends ProxyAbstract
             $payload['cookies'] = $cookies;
         }
 
-        $response = $this->request('POST', $this->apiUrl, $payload);
+        $maxRetries = 2;
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+            try {
+                $response = $this->request('POST', $this->apiUrl, $payload);
 
-        if (isset($response['solution']['response']) === false) {
-            throw new \RuntimeException('FlareSolverr did not return HTML content');
+                if (isset($response['solution']['response']) === false) {
+                    throw new \RuntimeException('FlareSolverr did not return HTML content');
+                }
+
+                return (string)$response['solution']['response'];
+            } catch (\RuntimeException $e) {
+                if ($attempt === $maxRetries) {
+                    throw $e;
+                }
+                
+                // Если ошибка связана с сессией, очищаем кэш и пробуем пересоздать
+                if (str_contains($e->getMessage(), 'session') || str_contains($e->getMessage(), 'Session')) {
+                    $this->log('warning', "FlareSolverr session error on attempt {$attempt}, invalidating cache and retrying");
+                    if ($this->cache !== null && $this->sessionName !== null) {
+                        $cacheKey = self::SESSION_FLAG_PREFIX . md5($this->sessionName);
+                        $this->cache->delete($cacheKey);
+                    }
+                    $this->ensureSession($domain, $cookies);
+                } else {
+                    throw $e;
+                }
+            }
         }
-
-        return (string)$response['solution']['response'];
+        
+        throw new \RuntimeException('Failed to fetch HTML after retries');
     }
 
     private function calculateWaitTime(string $url, array $options): int
@@ -98,11 +121,11 @@ final class FlareSolverrProxy extends ProxyAbstract
         }
 
         $parsedHost = parse_url($url, PHP_URL_HOST);
-        $domain = (bool) $parsedHost === true ? $parsedHost : 'unknown';
+        $domain = is_string($parsedHost) ? $parsedHost : 'unknown';
 
-        if ((bool) $this->cache === true) {
+        if ($this->cache !== null) {
             $cacheKey = 'flaresolverr_domain_visited_' . md5($domain);
-            if ((bool) $this->cache->get($cacheKey) === true) {
+            if ($this->cache->get($cacheKey) !== null) {
                 $this->log('debug', "Domain {$domain} already visited, using short wait");
                 return 2000;
             }
@@ -119,9 +142,9 @@ final class FlareSolverrProxy extends ProxyAbstract
             return;
         }
 
-        if ((bool) $this->cache === true) {
+        if ($this->cache !== null) {
             $cacheKey = self::SESSION_FLAG_PREFIX . md5($this->sessionName);
-            if ((bool) $this->cache->get($cacheKey) === true) {
+            if ($this->cache->get($cacheKey) !== null) {
                 $this->log('debug', "Session {$this->sessionName} already created (cached)");
                 return;
             }
@@ -150,7 +173,7 @@ final class FlareSolverrProxy extends ProxyAbstract
             $this->log('debug', "Session {$this->sessionName} already exists");
         }
 
-        if ((bool) $this->cache === true) {
+        if ($this->cache !== null) {
             $cacheKey = self::SESSION_FLAG_PREFIX . md5($this->sessionName);
             $this->cache->set($cacheKey, time(), self::SESSION_FLAG_TTL);
         }
@@ -159,41 +182,63 @@ final class FlareSolverrProxy extends ProxyAbstract
     protected function executeRequest(string $method, string $url, array $payload, array $headers): array
     {
         $ch = curl_init($url);
+        if ($ch === false) {
+            throw new \RuntimeException('Failed to initialize cURL');
+        }
 
         $curlHeaders = array_merge(['Content-Type: application/json'], $headers);
+        $jsonData = json_encode($payload, JSON_THROW_ON_ERROR);
 
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => $method === 'POST',
-            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_POSTFIELDS => $jsonData,
             CURLOPT_HTTPHEADER => $curlHeaders,
             CURLOPT_TIMEOUT => $this->timeout,
             CURLOPT_CONNECTTIMEOUT => 10,
         ]);
 
-        $response = curl_exec($ch);
-        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error = curl_error($ch);
+        try {
+            $response = curl_exec($ch);
+            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
 
-        if ($response === false || $httpCode !== 200) {
-            $this->log('error', 'HTTP failed', [
-                'url' => $url,
-                'http_code' => $httpCode,
-                'error' => $error
+            if ($response === false || $httpCode !== 200) {
+                $this->log('error', 'HTTP failed', [
+                    'url' => $url,
+                    'http_code' => $httpCode,
+                    'error' => $error
+                ]);
+                throw new \RuntimeException("HTTP {$httpCode}: {$error}");
+            }
+
+            $result = json_decode((string)$response, true, 512, JSON_THROW_ON_ERROR);
+
+            if (($result['status'] ?? '') !== 'ok') {
+                $this->log('error', 'FlareSolverr API error', [
+                    'message' => $result['message'] ?? 'Unknown'
+                ]);
+                
+                // Инвалидация кэша сессии, если ошибка связана с ней
+                if ($this->cache !== null && isset($result['message']) && str_contains((string)$result['message'], 'session')) {
+                    $cacheKey = self::SESSION_FLAG_PREFIX . md5($this->sessionName);
+                    $this->cache->delete($cacheKey);
+                    $this->log('warning', 'FlareSolverr session cache invalidated due to API error');
+                }
+
+                throw new \RuntimeException('API error: ' . ($result['message'] ?? 'Unknown'));
+            }
+
+            return $result;
+        } catch (\JsonException $e) {
+            $this->log('error', 'Invalid JSON response from FlareSolverr', [
+                'error' => $e->getMessage(),
+                'response' => substr((string)$response ?? '', 0, 500)
             ]);
-            throw new \RuntimeException("HTTP {$httpCode}: {$error}");
+            throw new \RuntimeException('Invalid JSON response: ' . $e->getMessage());
+        } finally {
+            curl_close($ch);
         }
-
-        $result = json_decode((string)$response, true);
-
-        if (($result['status'] ?? '') !== 'ok') {
-            $this->log('error', 'FlareSolverr API error', [
-                'message' => $result['message'] ?? 'Unknown'
-            ]);
-            throw new \RuntimeException('API error: ' . ($result['message'] ?? 'Unknown'));
-        }
-
-        return $result;
     }
 
     /**
@@ -204,6 +249,8 @@ final class FlareSolverrProxy extends ProxyAbstract
     public function getBinary(string $url, array $options = []): array
     {
         $this->log('info', "Fetching binary {$url} via FlareSolverr");
+
+        $cookies = $options['cookies'] ?? [];
 
         $payload = [
             'cmd' => 'request.get',
@@ -216,33 +263,57 @@ final class FlareSolverrProxy extends ProxyAbstract
             $payload['session'] = $this->sessionName;
         }
 
-        $response = $this->request('POST', $this->apiUrl, $payload);
+        $maxRetries = 2;
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+            try {
+                $response = $this->request('POST', $this->apiUrl, $payload);
 
-        if (isset($response['solution']['response']) === false) {
-            throw new \RuntimeException('FlareSolverr did not return content');
+                if (isset($response['solution']['response']) === false) {
+                    throw new \RuntimeException('FlareSolverr did not return content');
+                }
+
+                $body = (string)$response['solution']['response'];
+
+                $extension = pathinfo(parse_url($url, PHP_URL_PATH) ?: '', PATHINFO_EXTENSION);
+                $type = 'application/octet-stream';
+
+                $mimeMap = [
+                    'jpg' => 'image/jpeg',
+                    'jpeg' => 'image/jpeg',
+                    'png' => 'image/png',
+                    'gif' => 'image/gif',
+                    'webp' => 'image/webp',
+                    'svg' => 'image/svg+xml',
+                    'mp4' => 'video/mp4',
+                    'webm' => 'video/webm',
+                    'pdf' => 'application/pdf',
+                ];
+
+                if (isset($mimeMap[strtolower($extension)]) === true) {
+                    $type = $mimeMap[strtolower($extension)];
+                }
+
+                return ['body' => $body, 'type' => $type];
+            } catch (\RuntimeException $e) {
+                if ($attempt === $maxRetries) {
+                    throw $e;
+                }
+                
+                if (str_contains($e->getMessage(), 'session') || str_contains($e->getMessage(), 'Session')) {
+                    $this->log('warning', "FlareSolverr session error on attempt {$attempt} for binary, invalidating cache and retrying");
+                    if ($this->cache !== null && $this->sessionName !== null) {
+                        $cacheKey = self::SESSION_FLAG_PREFIX . md5($this->sessionName);
+                        $this->cache->delete($cacheKey);
+                    }
+                    $parsedHost = parse_url($url, PHP_URL_HOST);
+                    $domain = is_string($parsedHost) ? $parsedHost : 'localhost';
+                    $this->ensureSession($domain, $cookies);
+                } else {
+                    throw $e;
+                }
+            }
         }
-
-        $body = (string)$response['solution']['response'];
-
-        $extension = pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION);
-        $type = 'application/octet-stream';
-
-        $mimeMap = [
-            'jpg' => 'image/jpeg',
-            'jpeg' => 'image/jpeg',
-            'png' => 'image/png',
-            'gif' => 'image/gif',
-            'webp' => 'image/webp',
-            'svg' => 'image/svg+xml',
-            'mp4' => 'video/mp4',
-            'webm' => 'video/webm',
-            'pdf' => 'application/pdf',
-        ];
-
-        if (isset($mimeMap[strtolower($extension)]) === true) {
-            $type = $mimeMap[strtolower($extension)];
-        }
-
-        return ['body' => $body, 'type' => $type];
+        
+        throw new \RuntimeException('Failed to fetch binary after retries');
     }
 }
