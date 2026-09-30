@@ -157,6 +157,9 @@ jobs:
           docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-arm64
+
+      - name: Create and push date-modern manifest
+        run: |
           docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-modern \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-modern-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-modern-arm64
@@ -166,6 +169,9 @@ jobs:
           docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64
+
+      - name: Create and push date manifest
+        run: |
           docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }} \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-arm64
@@ -206,7 +212,6 @@ jobs:
           
           echo "Syncing multi-architecture images to Docker Hub..."
           
-          # Sync latest tags
           echo "Syncing $IMAGE:latest ..."
           skopeo copy --all \
             "docker://ghcr.io/$IMAGE:latest" \
@@ -217,7 +222,6 @@ jobs:
             "docker://ghcr.io/$IMAGE:latest-modern" \
             "docker://docker.io/$IMAGE:latest-modern"
           
-          # Sync date-tagged versions
           echo "Syncing $IMAGE:$DATE ..."
           skopeo copy --all \
             "docker://ghcr.io/$IMAGE:$DATE" \
