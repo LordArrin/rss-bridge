@@ -7,14 +7,19 @@ namespace RSSBridge\Caches;
 /**
  * File-based cache storage with security hardening.
  * Each cache entry is stored as a separate file with serialized data.
+ *
+ * Implements Stale-while-revalidate: entries are kept beyond their fresh TTL
+ * (up to 7 additional days) so that stale data can be served when upstream fails.
+ *
+ * Storage format per file:
+ *   serialized(['value' => $actualData, 'fresh_until' => int, 'expires_at' => int])
  */
 final class FileCache implements CacheInterface
 {
-    private const ALLOWED_CLASSES = [
-        'stdClass',
-        'DateTime',
-        'DateTimeImmutable',
-    ];
+    /**
+     * How long stale data is retained after fresh TTL expires (7 days).
+     */
+    private const DEFAULT_STALE_TTL = 604800;
 
     private readonly string $path;
     private readonly bool $enablePurge;
@@ -49,33 +54,54 @@ final class FileCache implements CacheInterface
 
     public function get(string $key, mixed $default = null): mixed
     {
+        $cached = $this->getWithStale($key);
+
+        return $cached['fresh'] ?? $default;
+    }
+
+    public function getWithStale(string $key): array
+    {
         $cacheFile = $this->createCacheFile($key);
 
         if (file_exists($cacheFile) === false) {
-            return $default;
+            return ['fresh' => null, 'stale' => null];
         }
 
         $data = file_get_contents($cacheFile);
         if ($data === false) {
-            return $default;
+            return ['fresh' => null, 'stale' => null];
         }
 
-        $item = unserialize($data, ['allowed_classes' => self::ALLOWED_CLASSES]);
-
-        if ($item === false) {
-            $this->logger->warning(sprintf('Failed to unserialize: %s', $cacheFile));
+        $item = unserialize($data, ['allowed_classes' => true]);
+        if ($item === false || is_array($item) === false) {
+            $this->logger->warning(sprintf('Failed to unserialize cache file: %s', $cacheFile));
             $this->delete($key);
-            return $default;
+            return ['fresh' => null, 'stale' => null];
         }
 
-        $expiration = $item['expiration'] ?? time();
-
-        if ($expiration === 0 || $expiration > time()) {
-            return $item['value'];
+        // Handle legacy format (old structure without fresh_until)
+        if (array_key_exists('fresh_until', $item) === false) {
+            $value = $item['value'] ?? $item;
+            return ['fresh' => $value, 'stale' => $value];
         }
 
-        $this->delete($key);
-        return $default;
+        $now = time();
+        $expiresAt = (int) ($item['expires_at'] ?? 0);
+
+        // Hard-expired: data is too old even for stale serving
+        if ($expiresAt !== 0 && $expiresAt <= $now) {
+            $this->delete($key);
+            return ['fresh' => null, 'stale' => null];
+        }
+
+        $value = $item['value'] ?? null;
+        $freshUntil = (int) ($item['fresh_until'] ?? 0);
+        $isFresh = ($freshUntil === 0 || $freshUntil > $now);
+
+        return [
+            'fresh' => $isFresh === true ? $value : null,
+            'stale' => $value,
+        ];
     }
 
     public function set(string $key, mixed $value, ?int $ttl = null): void
@@ -84,22 +110,31 @@ final class FileCache implements CacheInterface
             return;
         }
 
+        $cacheFile = $this->createCacheFile($key);
+        $now = time();
+
+        $freshUntil = $ttl === null ? 0 : $now + $ttl;
+        $expiresAt = $ttl === null ? 0 : $freshUntil + self::DEFAULT_STALE_TTL;
+
         $item = [
-            'value'      => $value,
-            'expiration' => $ttl === null ? 0 : time() + $ttl,
+            'value'       => $value,
+            'fresh_until' => $freshUntil,
+            'expires_at'  => $expiresAt,
         ];
 
-        $cacheFile = $this->createCacheFile($key);
-        $bytes = file_put_contents($cacheFile, serialize($item), LOCK_EX);
+        $data = serialize($item);
 
-        if ($bytes === false) {
-            $this->logger->warning(sprintf('Failed to write to: %s', $cacheFile));
+        try {
+            file_put_contents($cacheFile, $data, LOCK_EX);
+        } catch (\Exception $e) {
+            $this->logger->warning(create_sane_exception_message($e));
         }
     }
 
     public function delete(string $key): void
     {
         $cacheFile = $this->createCacheFile($key);
+
         if (file_exists($cacheFile) === true) {
             unlink($cacheFile);
         }
@@ -113,6 +148,7 @@ final class FileCache implements CacheInterface
             }
 
             $cacheFile = $this->path . $filename;
+
             if (is_file($cacheFile) === true) {
                 unlink($cacheFile);
             }
@@ -133,6 +169,7 @@ final class FileCache implements CacheInterface
             }
 
             $cacheFile = $this->path . $filename;
+
             if (is_file($cacheFile) === false) {
                 continue;
             }
@@ -143,16 +180,16 @@ final class FileCache implements CacheInterface
                 continue;
             }
 
-            $item = unserialize($data, ['allowed_classes' => self::ALLOWED_CLASSES]);
-
-            if ($item === false) {
+            $item = unserialize($data, ['allowed_classes' => true]);
+            if ($item === false || is_array($item) === false) {
                 unlink($cacheFile);
                 continue;
             }
 
-            $expiration = $item['expiration'] ?? time();
+            // Handle legacy format: use 'expiration' key if present
+            $expiresAt = (int) ($item['expires_at'] ?? $item['expiration'] ?? 0);
 
-            if ($expiration !== 0 && $expiration <= $now) {
+            if ($expiresAt !== 0 && $expiresAt <= $now) {
                 unlink($cacheFile);
             }
         }
@@ -160,19 +197,11 @@ final class FileCache implements CacheInterface
 
     private function createCacheFile(string $key): string
     {
-        return $this->path . hash('sha256', $key) . '.cache';
+        return $this->path . md5($key) . '.cache';
     }
 
     private function isExcludedFile(string $filename): bool
     {
-        return in_array($filename, ['.', '..', '.gitkeep'], true);
-    }
-
-    public function getConfig(): array
-    {
-        return [
-            'path'         => $this->path,
-            'enable_purge' => $this->enablePurge,
-        ];
+        return in_array($filename, ['.', '..', '.gitkeep', '.htaccess'], true);
     }
 }

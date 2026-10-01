@@ -8,12 +8,20 @@ namespace RSSBridge\Caches;
  * Memcached-based distributed cache with performance optimizations.
  * Uses persistent connections to avoid TCP handshake on every request.
  * Supports both TCP (host:port) and Unix socket connections.
+ *
+ * Implements Stale-while-revalidate pattern: data is kept in cache beyond
+ * its fresh TTL to allow serving stale content when upstream fails.
  */
 final class MemcachedCache implements CacheInterface
 {
     private readonly \Logger $logger;
     private readonly \Memcached $conn;
     private readonly string $cachePrefix;
+
+    /**
+     * Default stale TTL: keep expired data for 7 days for fallback purposes.
+     */
+    private const DEFAULT_STALE_TTL = 604800;
 
     // Memcached result codes (numeric values for compatibility)
     private const RES_SUCCESS = 0;
@@ -75,17 +83,41 @@ final class MemcachedCache implements CacheInterface
 
     public function get(string $key, mixed $default = null): mixed
     {
-        $value = $this->conn->get($this->createCacheKey($key));
+        $cached = $this->getWithStale($key);
+
+        return $cached['fresh'] ?? $default;
+    }
+
+    public function getWithStale(string $key): array
+    {
+        $cacheKey = $this->createCacheKey($key);
+        $item = $this->conn->get($cacheKey);
 
         if ($this->conn->getResultCode() === self::RES_NOTFOUND) {
-            return $default;
+            return ['fresh' => null, 'stale' => null];
         }
 
-        if ($value === false) {
-            return $default;
+        if ($item === false) {
+            return ['fresh' => null, 'stale' => null];
         }
 
-        return $value;
+        // Handle legacy format (raw value without metadata wrapper)
+        if (is_array($item) === false || array_key_exists('value', $item) === false) {
+            // Legacy data: treat as fresh for backward compatibility
+            return ['fresh' => $item, 'stale' => $item];
+        }
+
+        $now = time();
+        $value = $item['value'] ?? null;
+        $freshUntil = $item['fresh_until'] ?? 0;
+
+        // fresh_until = 0 means "never expires" (always fresh)
+        $isFresh = ($freshUntil === 0 || $freshUntil > $now);
+
+        return [
+            'fresh' => $isFresh === true ? $value : null,
+            'stale' => $value,
+        ];
     }
 
     public function set(string $key, mixed $value, ?int $ttl = null): void
@@ -94,10 +126,25 @@ final class MemcachedCache implements CacheInterface
             return;
         }
 
-        $expiration = $ttl === null ? 0 : time() + $ttl;
         $cacheKey = $this->createCacheKey($key);
+        $now = time();
 
-        $result = $this->conn->set($cacheKey, $value, $expiration);
+        // Calculate fresh period
+        $freshUntil = $ttl === null ? 0 : $now + $ttl;
+
+        // Calculate when the stale data should also expire
+        $staleTtl = self::DEFAULT_STALE_TTL;
+        $expiresAt = $ttl === null ? 0 : $freshUntil + $staleTtl;
+
+        // Wrap value with metadata for Stale-while-revalidate
+        $item = [
+            'value'       => $value,
+            'fresh_until' => $freshUntil,
+            'expires_at'  => $expiresAt,
+        ];
+
+        // Memcached uses 0 to mean "never expire"
+        $result = $this->conn->set($cacheKey, $item, $expiresAt);
 
         if ($result === false) {
             $resultCode = $this->conn->getResultCode();

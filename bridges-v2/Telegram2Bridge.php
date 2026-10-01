@@ -108,9 +108,8 @@ TXT,
     private const TG_HOSTS = '(?:[\w-]+\.)*(?:telegram\.org|t\.me|telesco\.pe)';
 
     private const MAX_PAGES = 100;
-    private const PROXY_RETRIES = 3;
+    private const PROXY_RETRIES = 2;
     private const PAGE_DELAY_US = 500000;
-    private const RETRY_BACKOFF_US = 1000000;
 
     private const MAX_TITLE_LENGTH = 60;
     private const MIN_TITLE_SPACE_POS = 30;
@@ -123,6 +122,14 @@ TXT,
         'addstickers', 'addtheme', 'boost', 'confirmphone', 'donate',
         'giftcode', 'invoice', 'joinchat', 'login', 'proxy',
         'socks', 'setlanguage', 'share', 'addemoji', 'addlist',
+    ];
+
+    private const FATAL_ERROR_PATTERNS = [
+        'port restricted',
+        'only supports port 443',
+        'authentication failed',
+        '403 forbidden',
+        '401 unauthorized',
     ];
 
     private const CSS = [
@@ -393,22 +400,41 @@ CSS,
                 return $fn();
             } catch (\Throwable $e) {
                 $lastException = $e;
+                $errorMsg = $e->getMessage();
+
+                if ($this->isFatalError($errorMsg) === true) {
+                    break;
+                }
+
                 $this->logger->warning(sprintf(
                     '%s failed (attempt %d/%d)%s: %s',
                     $context,
                     $i + 1,
                     self::PROXY_RETRIES,
                     $url !== '' ? " for {$url}" : '',
-                    $e->getMessage()
+                    $errorMsg
                 ));
 
                 if ($i < self::PROXY_RETRIES - 1) {
-                    usleep(($i + 1) * self::RETRY_BACKOFF_US);
+                    usleep(($i + 1) * 1000000);
                 }
             }
         }
 
         throw $lastException;
+    }
+
+    private function isFatalError(string $errorMsg): bool
+    {
+        $errorMsgLower = strtolower($errorMsg);
+
+        foreach (self::FATAL_ERROR_PATTERNS as $pattern) {
+            if (str_contains($errorMsgLower, $pattern) === true) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function validateUsername(): void
@@ -435,17 +461,32 @@ CSS,
         if ($useProxy === true) {
             try {
                 return $this->withRetry(
-                    fn(): \Dom\HTMLDocument => \Dom\HTMLDocument::createFromString(
-                        source: getProtectedSimpleHTMLDOM($url, self::PROXY_PROFILE)->saveHTML(),
-                        options: LIBXML_NOERROR
-                    ),
+                    function () use ($url): \Dom\HTMLDocument {
+                        $html = getProtectedSimpleHTMLDOM($url, self::PROXY_PROFILE);
+
+                        if ($html === null) {
+                            throw new \RuntimeException('getProtectedSimpleHTMLDOM returned null');
+                        }
+
+                        $htmlString = $html->saveHTML();
+
+                        if ($htmlString === false || $htmlString === '') {
+                            throw new \RuntimeException('saveHTML returned empty result');
+                        }
+
+                        return \Dom\HTMLDocument::createFromString(
+                            source: $htmlString,
+                            options: LIBXML_NOERROR
+                        );
+                    },
                     'TgWSProxy page fetch',
                     $url
                 );
             } catch (\Throwable $e) {
                 $this->logger->warning(sprintf(
-                    'TgWSProxy exhausted for %s, falling back to direct HTTP',
-                    $url
+                    'TgWSProxy failed for %s: %s, falling back to direct',
+                    $url,
+                    $e->getMessage()
                 ));
             }
         }
@@ -457,10 +498,24 @@ CSS,
     {
         try {
             return $this->withRetry(
-                fn(): \Dom\HTMLDocument => \Dom\HTMLDocument::createFromString(
-                    source: getSimpleHTMLDOM($url)->saveHTML(),
-                    options: LIBXML_NOERROR
-                ),
+                function () use ($url): \Dom\HTMLDocument {
+                    $html = getSimpleHTMLDOM($url);
+
+                    if ($html === null) {
+                        throw new \RuntimeException('getSimpleHTMLDOM returned null');
+                    }
+
+                    $htmlString = $html->saveHTML();
+
+                    if ($htmlString === false || $htmlString === '') {
+                        throw new \RuntimeException('saveHTML returned empty result');
+                    }
+
+                    return \Dom\HTMLDocument::createFromString(
+                        source: $htmlString,
+                        options: LIBXML_NOERROR
+                    );
+                },
                 'Direct page fetch',
                 $url
             );
@@ -1351,7 +1406,7 @@ CSS,
             maxSize: $maxSize,
             proxyProfile: $useProxy === true ? self::PROXY_PROFILE : null,
             logger: $this->logger,
-            retries: self::PROXY_RETRIES
+            retries: 1
         );
     }
 

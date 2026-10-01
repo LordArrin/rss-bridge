@@ -22,6 +22,18 @@ interface CacheInterface
     public function get(string $key, mixed $default = null): mixed;
 
     /**
+     * Fetch both fresh and stale values from the cache.
+     *
+     * Returns an associative array with two keys:
+     * - 'fresh': The value if it's still within its TTL, or null if expired/missing
+     * - 'stale': The value regardless of TTL (for fallback purposes), or null if missing
+     *
+     * @param string $key The unique key of this item in the cache.
+     * @return array{fresh: mixed, stale: mixed}
+     */
+    public function getWithStale(string $key): array;
+
+    /**
      * Persist data in the cache, uniquely referenced by a key with an optional expiration TTL time.
      *
      * @param string   $key   The key of the item to store.

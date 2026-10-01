@@ -8,14 +8,22 @@ use RSSBridge\Configuration;
 
 /**
  * SQLite-based persistent cache with WAL mode for better concurrency.
+ *
+ * Implements Stale-while-revalidate: entries are kept beyond their fresh TTL
+ * (up to 7 additional days) so that stale data can be served when upstream fails.
+ *
+ * Storage format in the 'value' BLOB column:
+ *   serialized(['value' => $actualData, 'fresh_until' => int])
+ *
+ * The 'expiration' column stores the hard-expiry timestamp (fresh + stale TTL)
+ * and is used exclusively by prune() for garbage collection.
  */
 final class SQLiteCache implements CacheInterface
 {
-    private const ALLOWED_CLASSES = [
-        'stdClass',
-        'DateTime',
-        'DateTimeImmutable',
-    ];
+    /**
+     * How long stale data is retained after fresh TTL expires (7 days).
+     */
+    private const DEFAULT_STALE_TTL = 604800;
 
     private readonly \Logger $logger;
     private readonly bool $enablePurge;
@@ -82,6 +90,13 @@ final class SQLiteCache implements CacheInterface
 
     public function get(string $key, mixed $default = null): mixed
     {
+        $cached = $this->getWithStale($key);
+
+        return $cached['fresh'] ?? $default;
+    }
+
+    public function getWithStale(string $key): array
+    {
         $cacheKey = $this->createCacheKey($key);
 
         $stmt = $this->db->prepare('SELECT value, expiration FROM storage WHERE key = :key');
@@ -89,32 +104,47 @@ final class SQLiteCache implements CacheInterface
 
         $result = $stmt->execute();
         if ($result === false) {
-            return $default;
+            return ['fresh' => null, 'stale' => null];
         }
 
         $row = $result->fetchArray(\SQLITE3_ASSOC);
         if ($row === false) {
-            return $default;
+            return ['fresh' => null, 'stale' => null];
         }
 
-        $expiration = (int) $row['expiration'];
+        $hardExpiration = (int) $row['expiration'];
+        $now = time();
 
-        if ($expiration === 0 || $expiration > time()) {
-            $blob = $row['value'];
-            $value = unserialize((string) $blob, ['allowed_classes' => self::ALLOWED_CLASSES]);
-
-            if ($value === false) {
-                $this->logger->error(sprintf(
-                    "Failed to unserialize: '%s'",
-                    mb_substr((string) $blob, 0, 100)
-                ));
-                return $default;
-            }
-
-            return $value;
+        // Hard-expired: data is too old even for stale serving
+        if ($hardExpiration !== 0 && $hardExpiration <= $now) {
+            return ['fresh' => null, 'stale' => null];
         }
 
-        return $default;
+        $blob = $row['value'];
+        $unserialized = unserialize((string) $blob, ['allowed_classes' => true]);
+
+        if ($unserialized === false) {
+            $this->logger->error(sprintf(
+                "Failed to unserialize cache entry: '%s'",
+                mb_substr((string) $blob, 0, 100)
+            ));
+            return ['fresh' => null, 'stale' => null];
+        }
+
+        // Handle legacy format (raw value without metadata wrapper)
+        if (is_array($unserialized) === false || array_key_exists('value', $unserialized) === false) {
+            return ['fresh' => $unserialized, 'stale' => $unserialized];
+        }
+
+        $value = $unserialized['value'];
+        $freshUntil = (int) ($unserialized['fresh_until'] ?? 0);
+
+        $isFresh = ($freshUntil === 0 || $freshUntil > $now);
+
+        return [
+            'fresh' => $isFresh === true ? $value : null,
+            'stale' => $value,
+        ];
     }
 
     public function set(string $key, mixed $value, ?int $ttl = null): void
@@ -124,13 +154,24 @@ final class SQLiteCache implements CacheInterface
         }
 
         $cacheKey = $this->createCacheKey($key);
-        $blob = serialize($value);
-        $expiration = $ttl === null ? 0 : time() + $ttl;
+        $now = time();
 
-        $stmt = $this->db->prepare('INSERT OR REPLACE INTO storage (key, value, expiration) VALUES (:key, :value, :expiration)');
+        $freshUntil = $ttl === null ? 0 : $now + $ttl;
+        $hardExpiration = $ttl === null ? 0 : $freshUntil + self::DEFAULT_STALE_TTL;
+
+        $wrapper = [
+            'value'       => $value,
+            'fresh_until' => $freshUntil,
+        ];
+
+        $blob = serialize($wrapper);
+
+        $stmt = $this->db->prepare(
+            'INSERT OR REPLACE INTO storage (key, value, expiration) VALUES (:key, :value, :expiration)'
+        );
         $stmt->bindValue(':key', $cacheKey, \SQLITE3_BLOB);
         $stmt->bindValue(':value', $blob, \SQLITE3_BLOB);
-        $stmt->bindValue(':expiration', $expiration, \SQLITE3_INTEGER);
+        $stmt->bindValue(':expiration', $hardExpiration, \SQLITE3_INTEGER);
 
         try {
             $stmt->execute();

@@ -8,29 +8,46 @@ namespace RSSBridge\Caches;
  * In-memory/runtime cache.
  * Data is lost when the process ends.
  * Useful for testing or single-request caching.
+ *
+ * Supports Stale-while-revalidate: expired entries remain accessible
+ * via getWithStale() until explicitly pruned or the process terminates.
  */
 final class ArrayCache implements CacheInterface
 {
     /**
-     * @var array<string, array{value: mixed, expiration: int}>
+     * @var array<string, array{value: mixed, fresh_until: int, expires_at: int}>
      */
     private array $data = [];
 
+    private const DEFAULT_STALE_TTL = 604800;
+
     public function get(string $key, mixed $default = null): mixed
     {
+        $cached = $this->getWithStale($key);
+
+        return $cached['fresh'] ?? $default;
+    }
+
+    public function getWithStale(string $key): array
+    {
         if (array_key_exists($key, $this->data) === false) {
-            return $default;
+            return ['fresh' => null, 'stale' => null];
         }
 
         $item = $this->data[$key];
-        $expiration = $item['expiration'];
+        $now = time();
 
-        if ($expiration === 0 || $expiration > time()) {
-            return $item['value'];
+        if ($item['expires_at'] !== 0 && $item['expires_at'] <= $now) {
+            unset($this->data[$key]);
+            return ['fresh' => null, 'stale' => null];
         }
 
-        unset($this->data[$key]);
-        return $default;
+        $isFresh = ($item['fresh_until'] === 0 || $item['fresh_until'] > $now);
+
+        return [
+            'fresh' => $isFresh === true ? $item['value'] : null,
+            'stale' => $item['value'],
+        ];
     }
 
     public function set(string $key, mixed $value, ?int $ttl = null): void
@@ -39,9 +56,14 @@ final class ArrayCache implements CacheInterface
             return;
         }
 
+        $now = time();
+        $freshUntil = $ttl === null ? 0 : $now + $ttl;
+        $expiresAt = $ttl === null ? 0 : $freshUntil + self::DEFAULT_STALE_TTL;
+
         $this->data[$key] = [
-            'value'      => $value,
-            'expiration' => $ttl === null ? 0 : time() + $ttl,
+            'value'       => $value,
+            'fresh_until' => $freshUntil,
+            'expires_at'  => $expiresAt,
         ];
     }
 
@@ -58,9 +80,9 @@ final class ArrayCache implements CacheInterface
     public function prune(): void
     {
         $now = time();
+
         foreach ($this->data as $key => $item) {
-            $expiration = $item['expiration'];
-            if ($expiration !== 0 && $expiration <= $now) {
+            if ($item['expires_at'] !== 0 && $item['expires_at'] <= $now) {
                 unset($this->data[$key]);
             }
         }

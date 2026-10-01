@@ -6,14 +6,19 @@ namespace RSSBridge\Caches;
 
 /**
  * Null cache implementation.
- * Does not store anything, always returns default values.
- * Useful for testing or when caching should be disabled.
+ * Never stores anything, always returns default values.
+ * Useful for debugging or when caching must be disabled entirely.
  */
 final class NullCache implements CacheInterface
 {
     public function get(string $key, mixed $default = null): mixed
     {
         return $default;
+    }
+
+    public function getWithStale(string $key): array
+    {
+        return ['fresh' => null, 'stale' => null];
     }
 
     public function set(string $key, mixed $value, ?int $ttl = null): void

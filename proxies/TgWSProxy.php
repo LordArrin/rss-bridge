@@ -9,16 +9,60 @@ final class TgWSProxy extends ProxyAbstract
     private ?string $proxyUrl = null;
     private static ?\CurlHandle $persistentHandle = null;
     private static int $requestCount = 0;
-    private static int $maxRequestsBeforeReset = 100;
+    private static int $maxRequestsBeforeReset = 50;
+
+    private const FATAL_ERROR_PATTERNS = [
+        'port restricted',
+        'port 443',
+        'host unreachable',
+        'command unsupported',
+        'authentication failed',
+        'access denied',
+    ];
+
+    private const RETRYABLE_ERROR_PATTERNS = [
+        'timeout',
+        'timed out',
+        'connection reset',
+        'connection refused',
+        'connection failed',
+        'could not connect',
+        'network is unreachable',
+        'temporary failure',
+        'operation timed out',
+        'curl error 7',
+        'curl error 28',
+        'curl error 52',
+        'curl error 56',
+        'socket',
+        'eof',
+        'ssl',
+    ];
 
     protected function initialize(): void
     {
         $this->proxyUrl = $this->config['socks_url'] ?? null;
 
+        if (isset($this->config['connect_timeout']) === false) {
+            $this->config['connect_timeout'] = 8;
+        }
+        if (isset($this->config['request_timeout']) === false) {
+            $this->config['request_timeout'] = 15;
+        }
+        if (isset($this->config['retries']) === false) {
+            $this->config['retries'] = 3;
+        }
+        if (isset($this->config['fallback_direct']) === false) {
+            $this->config['fallback_direct'] = true;
+        }
+
         $this->log('info', sprintf(
-            'TgWSProxy initialized: proxy=%s, max_retries=%d',
+            'TgWSProxy initialized: proxy=%s, connect_timeout=%ds, request_timeout=%ds, retries=%d, fallback_direct=%s',
             $this->maskProxyUrl($this->proxyUrl),
-            (int)($this->config['retries'] ?? 3)
+            (int) $this->config['connect_timeout'],
+            (int) $this->config['request_timeout'],
+            (int) $this->config['retries'],
+            ($this->config['fallback_direct'] ?? false) === true ? 'yes' : 'no'
         ));
     }
 
@@ -32,9 +76,6 @@ final class TgWSProxy extends ProxyAbstract
         return empty($this->proxyUrl) === false;
     }
 
-    /**
-     * Safely masks credentials in proxy URL using parse_url instead of regex
-     */
     private function maskProxyUrl(?string $url): string
     {
         if ($url === null) {
@@ -42,15 +83,19 @@ final class TgWSProxy extends ProxyAbstract
         }
 
         $parsed = parse_url($url);
+
         if ($parsed === false || isset($parsed['host']) === false) {
             return '***';
         }
 
         $masked = ($parsed['scheme'] ?? 'socks5') . '://';
+
         if (isset($parsed['user']) === true) {
             $masked .= '***:***@';
         }
+
         $masked .= $parsed['host'];
+
         if (isset($parsed['port']) === true) {
             $masked .= ':' . $parsed['port'];
         }
@@ -58,47 +103,118 @@ final class TgWSProxy extends ProxyAbstract
         return $masked;
     }
 
+    private function normalizeUrl(string $url): string
+    {
+        $parsed = parse_url($url);
+        if ($parsed === false) {
+            return $url;
+        }
+
+        $scheme = strtolower($parsed['scheme'] ?? 'https');
+
+        if ($scheme === 'http') {
+            $parsed['scheme'] = 'https';
+            if (isset($parsed['port']) === true && $parsed['port'] === 80) {
+                unset($parsed['port']);
+            }
+            return $this->buildUrl($parsed);
+        }
+
+        return $url;
+    }
+
+    private function buildUrl(array $parsed): string
+    {
+        $url = $parsed['scheme'] . '://';
+
+        if (isset($parsed['user']) === true) {
+            $url .= $parsed['user'];
+            if (isset($parsed['pass']) === true) {
+                $url .= ':' . $parsed['pass'];
+            }
+            $url .= '@';
+        }
+
+        $url .= $parsed['host'];
+
+        if (isset($parsed['port']) === true) {
+            $url .= ':' . $parsed['port'];
+        }
+
+        $url .= $parsed['path'] ?? '/';
+
+        if (isset($parsed['query']) === true) {
+            $url .= '?' . $parsed['query'];
+        }
+
+        if (isset($parsed['fragment']) === true) {
+            $url .= '#' . $parsed['fragment'];
+        }
+
+        return $url;
+    }
+
+    private function assertPort443(string $url): void
+    {
+        $parsed = parse_url($url);
+        $scheme = strtolower($parsed['scheme'] ?? 'https');
+        $port = $parsed['port'] ?? ($scheme === 'https' ? 443 : 80);
+
+        if ((int) $port !== 443) {
+            throw new \RuntimeException(sprintf(
+                'TgWSProxy only supports port 443 (got %d for %s). URL will be automatically upgraded to HTTPS if possible.',
+                $port,
+                $url
+            ));
+        }
+    }
+
     private function getPersistentHandle(): \CurlHandle
     {
-        if (self::$persistentHandle === null || self::$requestCount >= self::$maxRequestsBeforeReset) {
+        $needsReset = (
+            self::$persistentHandle === null
+            || self::$requestCount >= self::$maxRequestsBeforeReset
+        );
+
+        if ($needsReset === true) {
             if (self::$persistentHandle !== null) {
-                curl_reset(self::$persistentHandle);
-            } else {
-                self::$persistentHandle = curl_init();
-                if (self::$persistentHandle === false) {
-                    throw new \RuntimeException('Failed to initialize cURL handle');
-                }
+                curl_close(self::$persistentHandle);
             }
+
+            $handle = curl_init();
+
+            if ($handle === false) {
+                throw new \RuntimeException('Failed to initialize cURL handle');
+            }
+
+            self::$persistentHandle = $handle;
             self::$requestCount = 0;
             $this->setupBaseOptions(self::$persistentHandle);
         }
 
+        self::$requestCount++;
         return self::$persistentHandle;
     }
 
-    /**
-     * Sets up base cURL options that apply to all requests using this handle.
-     * Called after curl_reset() to ensure consistent state.
-     */
     private function setupBaseOptions(\CurlHandle $ch): void
     {
         $baseOptions = [
-            CURLOPT_PROXYTYPE => CURLPROXY_SOCKS5_HOSTNAME,
-            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-            CURLOPT_FRESH_CONNECT => false,
-            CURLOPT_FORBID_REUSE => false,
-            CURLOPT_TCP_KEEPALIVE => 1,
-            CURLOPT_TCP_KEEPIDLE => 60,
-            CURLOPT_TCP_KEEPINTVL => 30,
-            CURLOPT_ENCODING => '',
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS => 5,
-            CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_NOSIGNAL => true,
-            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+            CURLOPT_PROXYTYPE        => CURLPROXY_SOCKS5_HOSTNAME,
+            CURLOPT_HTTP_VERSION     => CURL_HTTP_VERSION_1_1,
+            CURLOPT_FRESH_CONNECT    => false,
+            CURLOPT_FORBID_REUSE     => false,
+            CURLOPT_TCP_KEEPALIVE    => 1,
+            CURLOPT_TCP_KEEPIDLE     => 60,
+            CURLOPT_TCP_KEEPINTVL    => 30,
+            CURLOPT_ENCODING         => '',
+            CURLOPT_FOLLOWLOCATION   => true,
+            CURLOPT_MAXREDIRS        => 5,
+            CURLOPT_PROTOCOLS        => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS  => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_SSL_VERIFYPEER   => true,
+            CURLOPT_SSL_VERIFYHOST   => 2,
+            CURLOPT_NOSIGNAL         => true,
+            CURLOPT_USERAGENT        => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
             CURLOPT_DNS_CACHE_TIMEOUT => 120,
         ];
 
@@ -109,25 +225,24 @@ final class TgWSProxy extends ProxyAbstract
         curl_setopt_array($ch, $baseOptions);
     }
 
-    /**
-     * Applies request-specific options to the handle, resetting any previous state.
-     * Must be called after getPersistentHandle() which ensures base options are set.
-     */
-    private function applyRequestOptions(\CurlHandle $ch, string $url, int $connectTimeout, int $requestTimeout, bool $includeHeaders): void
-    {
-        curl_reset($ch);
+    private function applyRequestOptions(
+        \CurlHandle $ch,
+        string $url,
+        int $connectTimeout,
+        int $requestTimeout,
+        bool $includeHeaders
+    ): void {
         $this->setupBaseOptions($ch);
 
         $options = [
-            CURLOPT_URL => $url,
+            CURLOPT_URL            => $url,
             CURLOPT_CONNECTTIMEOUT => $connectTimeout,
-            CURLOPT_TIMEOUT => $requestTimeout,
+            CURLOPT_TIMEOUT        => $requestTimeout,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HEADER => $includeHeaders,
-            CURLOPT_CUSTOMREQUEST => 'GET',
-            CURLOPT_HTTPGET => true,
-            CURLOPT_HTTPHEADER => [],
-            CURLOPT_POSTFIELDS => null,
+            CURLOPT_HEADER         => $includeHeaders,
+            CURLOPT_HTTPGET        => true,
+            CURLOPT_HTTPHEADER     => [],
+            CURLOPT_POSTFIELDS     => null,
         ];
 
         curl_setopt_array($ch, $options);
@@ -135,9 +250,22 @@ final class TgWSProxy extends ProxyAbstract
 
     protected function fetchHtml(string $url, array $options): string
     {
-        $connectTimeout = (int)($this->config['connect_timeout'] ?? 15);
-        $requestTimeout = (int)($this->config['request_timeout'] ?? 60);
-        $maxRetries = (int)($this->config['retries'] ?? 3);
+        $url = $this->normalizeUrl($url);
+
+        try {
+            $this->assertPort443($url);
+        } catch (\RuntimeException $e) {
+            $this->log('warning', $e->getMessage());
+            if (($this->config['fallback_direct'] ?? false) === true) {
+                $this->log('info', sprintf('Falling back to direct connection for %s', $url));
+                return parent::fetchHtml($url, $options);
+            }
+            throw $e;
+        }
+
+        $connectTimeout = (int) ($this->config['connect_timeout'] ?? 8);
+        $requestTimeout = (int) ($this->config['request_timeout'] ?? 15);
+        $maxRetries = (int) ($this->config['retries'] ?? 3);
 
         $lastException = null;
 
@@ -146,21 +274,23 @@ final class TgWSProxy extends ProxyAbstract
                 $ch = $this->getPersistentHandle();
                 $this->applyRequestOptions($ch, $url, $connectTimeout, $requestTimeout, false);
 
-                if ($attempt > 1 === true) {
-                    $delay = min($attempt * 500000, 2000000);
+                if ($attempt > 1) {
+                    $baseDelay = min($attempt * 1000000, 3000000);
+                    $jitter = mt_rand(-200000, 200000);
+                    $delayUs = max(500000, $baseDelay + $jitter);
+
                     $this->log('warning', sprintf(
                         'TgWSProxy retry %d/%d for %s (delay: %dms)',
                         $attempt,
                         $maxRetries,
                         $url,
-                        (int)($delay / 1000)
+                        (int) ($delayUs / 1000)
                     ));
-                    usleep($delay);
+                    usleep($delayUs);
                 }
 
-                self::$requestCount++;
-
                 $html = curl_exec($ch);
+
                 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 $curlError = curl_error($ch);
                 $curlErrno = curl_errno($ch);
@@ -190,10 +320,9 @@ final class TgWSProxy extends ProxyAbstract
                     $httpCode
                 ));
 
-                return (string)$html;
+                return (string) $html;
             } catch (\Throwable $e) {
                 $lastException = $e;
-
                 $errorMsg = $e->getMessage();
                 $isRetryable = $this->isRetryableError($errorMsg);
 
@@ -211,9 +340,24 @@ final class TgWSProxy extends ProxyAbstract
                 }
 
                 if ($this->isConnectionError($errorMsg) === true) {
+                    if (self::$persistentHandle !== null) {
+                        curl_close(self::$persistentHandle);
+                    }
                     self::$persistentHandle = null;
                     self::$requestCount = 0;
                 }
+            }
+        }
+
+        if (($this->config['fallback_direct'] ?? false) === true) {
+            $this->log('warning', sprintf(
+                'All proxy attempts failed for %s, falling back to direct connection',
+                $url
+            ));
+            try {
+                return parent::fetchHtml($url, $options);
+            } catch (\Throwable $e) {
+                $this->log('error', sprintf('Direct fallback also failed: %s', $e->getMessage()));
             }
         }
 
@@ -221,15 +365,75 @@ final class TgWSProxy extends ProxyAbstract
             'TgWS request failed for %s after %d attempts: %s',
             $url,
             $maxRetries,
-            $lastException?->getMessage() ?? 'Unknown error'
+            $lastException instanceof \Throwable ? $lastException->getMessage() : 'Unknown error'
         ));
     }
 
     public function getBinary(string $url, array $options = []): array
     {
-        $connectTimeout = (int)($this->config['connect_timeout'] ?? 15);
-        $requestTimeout = (int)($this->config['request_timeout'] ?? 90);
-        $maxRetries = (int)($this->config['retries'] ?? 3);
+        $url = $this->normalizeUrl($url);
+
+        try {
+            $this->assertPort443($url);
+        } catch (\RuntimeException $e) {
+            $this->log('warning', $e->getMessage());
+            if (($this->config['fallback_direct'] ?? false) === true) {
+                $this->log('info', sprintf('Falling back to direct connection for binary %s', $url));
+                return parent::getBinary($url, $options);
+            }
+            throw $e;
+        }
+
+        $cacheTtl = $options['cache_ttl'] ?? 86400;
+        $useCache = $options['use_cache'] ?? true;
+
+        $cached = ['fresh' => null, 'stale' => null];
+
+        if ($useCache === true && $this->cache instanceof \RSSBridge\Caches\CacheInterface) {
+            $cacheKey = $this->buildCacheKey('binary_' . $url, $options);
+            $cached = $this->cache->getWithStale($cacheKey);
+
+            if ($this->isValidBinaryPayload($cached['fresh']) === true) {
+                return $cached['fresh'];
+            }
+        }
+
+        try {
+            $payload = $this->doFetchBinaryInternal($url, $options);
+
+            if (
+                $useCache === true
+                && $this->cache instanceof \RSSBridge\Caches\CacheInterface
+                && $cacheTtl > 0
+            ) {
+                $cacheKey = $this->buildCacheKey('binary_' . $url, $options);
+                $this->cache->set($cacheKey, $payload, $cacheTtl);
+            }
+
+            return $payload;
+        } catch (\Throwable $e) {
+            if (
+                $useCache === true
+                && $this->cache instanceof \RSSBridge\Caches\CacheInterface
+                && $this->isValidBinaryPayload($cached['stale']) === true
+            ) {
+                $this->log('warning', sprintf(
+                    'Returning stale binary cache for %s due to proxy error: %s',
+                    $url,
+                    $e->getMessage()
+                ));
+                return $cached['stale'];
+            }
+
+            throw $e;
+        }
+    }
+
+    private function doFetchBinaryInternal(string $url, array $options): array
+    {
+        $connectTimeout = (int) ($this->config['connect_timeout'] ?? 8);
+        $requestTimeout = (int) ($this->config['request_timeout'] ?? 30);
+        $maxRetries = (int) ($this->config['retries'] ?? 3);
 
         $lastException = null;
 
@@ -237,44 +441,43 @@ final class TgWSProxy extends ProxyAbstract
             try {
                 $ch = $this->getPersistentHandle();
 
-                // Reset handle and set base + request options
-                curl_reset($ch);
-                $this->setupBaseOptions($ch);
-
                 $responseHeaders = '';
-                $headerCallback = function ($ch, $header) use (&$responseHeaders) {
+                $headerCallback = function ($ch, $header) use (&$responseHeaders): int {
                     $responseHeaders .= $header;
                     return strlen($header);
                 };
 
+                $this->setupBaseOptions($ch);
+
                 curl_setopt_array($ch, [
-                    CURLOPT_URL => $url,
+                    CURLOPT_URL            => $url,
                     CURLOPT_CONNECTTIMEOUT => $connectTimeout,
-                    CURLOPT_TIMEOUT => $requestTimeout,
+                    CURLOPT_TIMEOUT        => $requestTimeout,
                     CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_HEADER => false,
+                    CURLOPT_HEADER         => false,
                     CURLOPT_HEADERFUNCTION => $headerCallback,
-                    CURLOPT_CUSTOMREQUEST => 'GET',
-                    CURLOPT_HTTPGET => true,
-                    CURLOPT_HTTPHEADER => [],
-                    CURLOPT_POSTFIELDS => null,
+                    CURLOPT_HTTPGET        => true,
+                    CURLOPT_HTTPHEADER     => [],
+                    CURLOPT_POSTFIELDS     => null,
                 ]);
 
-                if ($attempt > 1 === true) {
-                    $delay = min($attempt * 500000, 2000000);
+                if ($attempt > 1) {
+                    $baseDelay = min($attempt * 1000000, 3000000);
+                    $jitter = mt_rand(-200000, 200000);
+                    $delayUs = max(500000, $baseDelay + $jitter);
+
                     $this->log('warning', sprintf(
                         'TgWSProxy binary retry %d/%d for %s (delay: %dms)',
                         $attempt,
                         $maxRetries,
                         $url,
-                        (int)($delay / 1000)
+                        (int) ($delayUs / 1000)
                     ));
-                    usleep($delay);
+                    usleep($delayUs);
                 }
 
-                self::$requestCount++;
-
                 $body = curl_exec($ch);
+
                 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 $curlError = curl_error($ch);
                 $curlErrno = curl_errno($ch);
@@ -310,10 +513,9 @@ final class TgWSProxy extends ProxyAbstract
                     $httpCode
                 ));
 
-                return ['body' => (string)$body, 'type' => $contentType];
+                return ['body' => (string) $body, 'type' => $contentType];
             } catch (\Throwable $e) {
                 $lastException = $e;
-
                 $errorMsg = $e->getMessage();
                 $isRetryable = $this->isRetryableError($errorMsg);
 
@@ -331,9 +533,24 @@ final class TgWSProxy extends ProxyAbstract
                 }
 
                 if ($this->isConnectionError($errorMsg) === true) {
+                    if (self::$persistentHandle !== null) {
+                        curl_close(self::$persistentHandle);
+                    }
                     self::$persistentHandle = null;
                     self::$requestCount = 0;
                 }
+            }
+        }
+
+        if (($this->config['fallback_direct'] ?? false) === true) {
+            $this->log('warning', sprintf(
+                'All proxy attempts failed for binary %s, falling back to direct connection',
+                $url
+            ));
+            try {
+                return parent::getBinary($url, $options);
+            } catch (\Throwable $e) {
+                $this->log('error', sprintf('Direct fallback also failed: %s', $e->getMessage()));
             }
         }
 
@@ -341,7 +558,7 @@ final class TgWSProxy extends ProxyAbstract
             'TgWS binary fetch failed for %s after %d attempts: %s',
             $url,
             $maxRetries,
-            $lastException?->getMessage() ?? 'Unknown error'
+            $lastException instanceof \Throwable ? $lastException->getMessage() : 'Unknown error'
         ));
     }
 
@@ -352,28 +569,15 @@ final class TgWSProxy extends ProxyAbstract
 
     private function isRetryableError(string $errorMsg): bool
     {
-        $retryablePatterns = [
-            'timeout',
-            'timed out',
-            'connection reset',
-            'connection refused',
-            'connection failed',
-            'could not connect',
-            'network is unreachable',
-            'temporary failure',
-            'operation timed out',
-            'curl error 7',
-            'curl error 28',
-            'curl error 56',
-            'curl error 52',
-            'socket',
-            'eof',
-            'ssl',
-        ];
-
         $errorMsgLower = strtolower($errorMsg);
 
-        foreach ($retryablePatterns as $pattern) {
+        foreach (self::FATAL_ERROR_PATTERNS as $pattern) {
+            if (str_contains($errorMsgLower, $pattern) === true) {
+                return false;
+            }
+        }
+
+        foreach (self::RETRYABLE_ERROR_PATTERNS as $pattern) {
             if (str_contains($errorMsgLower, $pattern) === true) {
                 return true;
             }
