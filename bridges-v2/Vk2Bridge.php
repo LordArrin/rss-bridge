@@ -207,7 +207,13 @@ final class Vk2Bridge extends BridgeAbstract
             $this->handleError(self::ERR_NO_POSTS_FOUND, $reason);
         }
 
-        $this->generateFeed(array_slice($filteredPosts, 0, $targetCount), $ownerId);
+        $postsForFeed = array_slice($filteredPosts, 0, $targetCount);
+        $this->generateFeed($postsForFeed, $ownerId);
+
+        $groupName = $this->getInput('u');
+        if ($groupName !== null && $groupName !== '') {
+            $this->processArticlesFromPosts($postsForFeed, $groupName);
+        }
     }
 
     protected function getPostURI(array $post): string
@@ -608,6 +614,553 @@ final class Vk2Bridge extends BridgeAbstract
         $this->handleError(self::ERR_OWNER_NOT_FOUND, "Short name '{$u}'");
     }
 
+    private function processArticlesFromPosts(array $posts, string $groupName): void
+    {
+        /** @var array<string, array{url: string, timestamp: int, author: string}> $articles */
+        $articles = [];
+        $groupLower = strtolower($groupName);
+
+        foreach ($posts as $post) {
+            $displayPost = $this->isRepost($post) === true ? $post['copy_history'][0] : $post;
+            $postTimestamp = (int) ($displayPost['date'] ?? time());
+            $fromId = (int) ($displayPost['from_id'] ?? $displayPost['owner_id'] ?? 0);
+            $postAuthor = $fromId !== 0 ? ($this->ownerNames[$fromId] ?? 'Unknown') : '';
+
+            $text = $post['text'] ?? '';
+            foreach ($this->findArticleLinks($text, $groupLower) as $url) {
+                $norm = $this->normalizeArticleUrl($url);
+                if (isset($articles[$norm]) === false) {
+                    $articles[$norm] = [
+                        'url' => $url,
+                        'timestamp' => $postTimestamp,
+                        'author' => $postAuthor,
+                    ];
+                }
+            }
+
+            foreach ($post['attachments'] ?? [] as $attachment) {
+                $type = $attachment['type'] ?? '';
+
+                if ($type === 'article') {
+                    $viewUrl = $attachment['article']['view_url'] ?? '';
+                    if ($viewUrl !== '' && $this->isArticleUrl($viewUrl, $groupLower) === true) {
+                        $norm = $this->normalizeArticleUrl($viewUrl);
+                        if (isset($articles[$norm]) === false) {
+                            $articles[$norm] = [
+                                'url' => $viewUrl,
+                                'timestamp' => $postTimestamp,
+                                'author' => $postAuthor,
+                            ];
+                        }
+                    }
+                }
+
+                if ($type === 'link') {
+                    $linkUrl = $attachment['link']['url'] ?? '';
+                    if ($this->isArticleUrl($linkUrl, $groupLower) === true) {
+                        $norm = $this->normalizeArticleUrl($linkUrl);
+                        if (isset($articles[$norm]) === false) {
+                            $articles[$norm] = [
+                                'url' => $linkUrl,
+                                'timestamp' => $postTimestamp,
+                                'author' => $postAuthor,
+                            ];
+                        }
+                    }
+                }
+            }
+
+            $copyHistory = $post['copy_history'] ?? [];
+            foreach ($copyHistory as $repost) {
+                $repostTimestamp = (int) ($repost['date'] ?? $postTimestamp);
+                $repostFromId = (int) ($repost['from_id'] ?? $repost['owner_id'] ?? 0);
+                $repostAuthor = $repostFromId !== 0 ? ($this->ownerNames[$repostFromId] ?? $postAuthor) : $postAuthor;
+
+                $repostText = $repost['text'] ?? '';
+                foreach ($this->findArticleLinks($repostText, $groupLower) as $url) {
+                    $norm = $this->normalizeArticleUrl($url);
+                    if (isset($articles[$norm]) === false) {
+                        $articles[$norm] = [
+                            'url' => $url,
+                            'timestamp' => $repostTimestamp,
+                            'author' => $repostAuthor,
+                        ];
+                    }
+                }
+
+                foreach ($repost['attachments'] ?? [] as $attachment) {
+                    $type = $attachment['type'] ?? '';
+
+                    if ($type === 'article') {
+                        $viewUrl = $attachment['article']['view_url'] ?? '';
+                        if ($viewUrl !== '' && $this->isArticleUrl($viewUrl, $groupLower) === true) {
+                            $norm = $this->normalizeArticleUrl($viewUrl);
+                            if (isset($articles[$norm]) === false) {
+                                $articles[$norm] = [
+                                    'url' => $viewUrl,
+                                    'timestamp' => $repostTimestamp,
+                                    'author' => $repostAuthor,
+                                ];
+                            }
+                        }
+                    }
+
+                    if ($type === 'link') {
+                        $linkUrl = $attachment['link']['url'] ?? '';
+                        if ($this->isArticleUrl($linkUrl, $groupLower) === true) {
+                            $norm = $this->normalizeArticleUrl($linkUrl);
+                            if (isset($articles[$norm]) === false) {
+                                $articles[$norm] = [
+                                    'url' => $linkUrl,
+                                    'timestamp' => $repostTimestamp,
+                                    'author' => $repostAuthor,
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        foreach ($articles as $a) {
+            $article = $this->parseArticle($a['url'], $a['timestamp'], $a['author']);
+            if ($article !== null) {
+                $this->items[] = $article;
+            }
+        }
+    }
+
+    private function findArticleLinks(string $text, string $groupLower): array
+    {
+        $urls = [];
+        $groupPattern = preg_quote($groupLower, '~');
+
+        $patterns = [
+            '~https?://(?:www\.|m\.)?vk\.ru/@' . $groupPattern . '-[\p{L}0-9_-]+~iu',
+            '~\[(https?://(?:www\.|m\.)?vk\.ru/@' . $groupPattern . '-[\p{L}0-9_-]+)\|[^\]]+\]~iu',
+            '~https?://(?:www\.|m\.)?vk\.ru/@' . $groupPattern . '[^\s<\[\]]*~iu',
+            '~(?:www\.|m\.)?vk\.ru/@' . $groupPattern . '-[\p{L}0-9_-]+~iu',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match_all($pattern, $text, $matches) === 0) {
+                continue;
+            }
+
+            foreach ($matches as $matchGroup) {
+                if (is_array($matchGroup) === false) {
+                    continue;
+                }
+                foreach ($matchGroup as $match) {
+                    if (is_string($match) === false) {
+                        continue;
+                    }
+                    $cleanUrl = $this->normalizeArticleUrl($match);
+                    if ($cleanUrl !== '' && $this->isArticleUrl($cleanUrl, $groupLower) === true) {
+                        $urls[] = $cleanUrl;
+                    }
+                }
+            }
+        }
+
+        return array_unique($urls);
+    }
+
+    private function isArticleUrl(string $url, string $groupLower): bool
+    {
+        if ($url === '') {
+            return false;
+        }
+
+        $pattern = '~https?://(?:www\.|m\.)?vk\.ru/@' . preg_quote($groupLower, '~') . '~i';
+        return preg_match($pattern, $url) === 1;
+    }
+
+    private function parseArticle(string $url, int $parentTimestamp, string $parentAuthor): ?array
+    {
+        $normalized = $this->normalizeArticleUrl($url);
+        $cacheKey = 'vk2_article_' . md5($normalized);
+        $cached = $this->cache->get($cacheKey);
+
+        if ($cached !== null) {
+            $cached['timestamp'] = $parentTimestamp;
+            $cached['author'] = $parentAuthor;
+            return $cached;
+        }
+
+        try {
+            $html = getContents($url);
+        } catch (\Exception) {
+            return null;
+        }
+
+        if ($html === '') {
+            return null;
+        }
+
+        $tidy = new \tidy();
+        $tidy->parseString($html, [
+            'clean' => true,
+            'output-xhtml' => true,
+            'wrap' => 0,
+            'show-warnings' => false,
+            'quiet' => true,
+        ], 'utf8');
+        $tidy->cleanRepair();
+
+        $dom = \Dom\HTMLDocument::createFromString((string) $tidy);
+
+        $articleBlock = $dom->querySelector('[id^="article_view_"]');
+        if ($articleBlock === null) {
+            $articleBlock = $dom->querySelector('.article_content');
+        }
+        if ($articleBlock === null) {
+            $articleBlock = $dom->querySelector('.article__content');
+        }
+        if ($articleBlock === null) {
+            $articleBlock = $dom->querySelector('[class*="article"]');
+        }
+        if ($articleBlock === null) {
+            $articleBlock = $dom->querySelector('article');
+        }
+        if ($articleBlock === null) {
+            return null;
+        }
+
+        $title = $this->extractArticleTitle($dom);
+        $content = $this->cleanArticleContent($articleBlock);
+
+        if (trim(strip_tags($content)) === '') {
+            return null;
+        }
+
+        $article = [
+            'title' => $title,
+            'uri' => $normalized,
+            'content' => $content,
+            'timestamp' => $parentTimestamp,
+            'author' => $parentAuthor,
+            'uid' => 'vk:article:' . md5($normalized),
+            'categories' => ['article'],
+        ];
+
+        $this->cache->set($cacheKey, $article, self::CACHE_TIMEOUT);
+
+        return $article;
+    }
+
+    private function extractArticleTitle(\Dom\HTMLDocument $dom): string
+    {
+        $selectors = [
+            '.article_title',
+            'h1.article__title',
+            '.article__title',
+        ];
+
+        foreach ($selectors as $selector) {
+            $element = $dom->querySelector($selector);
+            if ($element === null) {
+                continue;
+            }
+            $title = trim($element->textContent);
+            if ($title !== '') {
+                return $title;
+            }
+        }
+
+        $ogTitle = $dom->querySelector('meta[property="og:title"]');
+        if ($ogTitle !== null) {
+            $content = $ogTitle->getAttribute('content');
+            if ($content !== null && trim($content) !== '') {
+                return trim($content);
+            }
+        }
+
+        $titleTag = $dom->querySelector('title');
+        if ($titleTag !== null) {
+            $text = trim($titleTag->textContent);
+            if ($text !== '') {
+                return $text;
+            }
+        }
+
+        return 'Article';
+    }
+
+    private function cleanArticleContent(\Dom\Element $articleBlock): string
+    {
+        foreach ($articleBlock->querySelectorAll('.article__info_line') as $el) {
+            $el->remove();
+        }
+        foreach ($articleBlock->querySelectorAll('h1') as $el) {
+            $el->remove();
+        }
+        foreach ($articleBlock->querySelectorAll('script, style, noscript, iframe') as $el) {
+            $el->remove();
+        }
+
+        foreach ($articleBlock->querySelectorAll('figure') as $figure) {
+            $parent = $figure->parentNode;
+            if ($parent === null) {
+                continue;
+            }
+
+            $img = $figure->querySelector('img');
+            if ($img !== null) {
+                $sizesJson = null;
+                $sizerWrap = $figure->querySelector('.article_object_sizer_wrap');
+                if ($sizerWrap !== null) {
+                    $sizesAttr = $sizerWrap->getAttribute('data-sizes');
+                    if ($sizesAttr !== null && $sizesAttr !== '') {
+                        $decoded = html_entity_decode($sizesAttr, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                        $parsed = json_decode($decoded, true);
+                        if (is_array($parsed) === true) {
+                            $sizesJson = $parsed;
+                        }
+                    }
+                }
+
+                $bestUrl = null;
+                if (is_array($sizesJson) === true) {
+                    $maxWidth = 0;
+                    foreach ($sizesJson as $sizeData) {
+                        if (is_array($sizeData) === true && isset($sizeData[0], $sizeData[1]) === true) {
+                            $url = $sizeData[0];
+                            $width = (int) $sizeData[1];
+                            if ($width > $maxWidth) {
+                                $maxWidth = $width;
+                                $bestUrl = $url;
+                            }
+                        }
+                    }
+                }
+
+                if ($bestUrl === null) {
+                    $src = $img->getAttribute('src');
+                    $dataSrc = $img->getAttribute('data-src');
+                    $dataFull = $img->getAttribute('data-full');
+                    $dataOriginal = $img->getAttribute('data-original');
+
+                    foreach ([$dataFull, $dataOriginal, $dataSrc, $src] as $candidate) {
+                        if ($candidate !== null && $candidate !== '' && preg_match('/^(?:data:|javascript:)/i', $candidate) === 0) {
+                            $bestUrl = $candidate;
+                            break;
+                        }
+                    }
+                }
+
+                if ($bestUrl !== null) {
+                    $newImg = $articleBlock->ownerDocument->createElement('img');
+                    $newImg->setAttribute('src', $this->fixVkArticleImageUrl($bestUrl));
+                    $alt = $img->getAttribute('alt');
+                    if ($alt !== null) {
+                        $newImg->setAttribute('alt', $alt);
+                    }
+                    $newImg->setAttribute('style', 'display: block; max-width: 1600px; width: auto; height: auto;');
+                    $parent->insertBefore($newImg, $figure);
+                }
+            }
+
+            $caption = $figure->querySelector('figcaption');
+            if ($caption !== null) {
+                $captionsJson = $caption->getAttribute('data-captions');
+                $captionText = '';
+                if ($captionsJson !== null && $captionsJson !== '') {
+                    $decoded = html_entity_decode($captionsJson, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    $parsed = json_decode($decoded, true);
+                    if (is_array($parsed) === true && isset($parsed[0]) === true && $parsed[0] !== '') {
+                        $captionText = $parsed[0];
+                    }
+                }
+                if ($captionText === '') {
+                    $captionText = trim($caption->textContent);
+                }
+                if ($captionText !== '') {
+                    $wrapper = $articleBlock->ownerDocument->createElement('p');
+                    $wrapper->textContent = $captionText;
+                    $wrapper->setAttribute('style', 'font-style: italic; font-size: 0.9em; color: #666; text-align: center;');
+                    $parent->insertBefore($wrapper, $figure);
+                }
+            }
+
+            $figure->remove();
+        }
+
+        foreach ($articleBlock->querySelectorAll('img') as $img) {
+            $src = $img->getAttribute('src');
+            $dataSrc = $img->getAttribute('data-src');
+            $dataFull = $img->getAttribute('data-full');
+            $dataOriginal = $img->getAttribute('data-original');
+
+            $bestSrc = null;
+            foreach ([$dataFull, $dataOriginal, $dataSrc, $src] as $candidate) {
+                if ($candidate !== null && $candidate !== '' && preg_match('/^(?:data:|javascript:)/i', $candidate) === 0) {
+                    $bestSrc = $candidate;
+                    break;
+                }
+            }
+
+            if ($bestSrc !== null) {
+                $img->setAttribute('src', $this->fixVkArticleImageUrl($bestSrc));
+            }
+
+            $srcset = $img->getAttribute('srcset');
+            if ($srcset !== null && $srcset !== '') {
+                $img->setAttribute('srcset', $this->fixVkSrcset($srcset));
+            }
+
+            $img->removeAttribute('onerror');
+            $img->removeAttribute('onload');
+            $img->removeAttribute('loading');
+            $img->removeAttribute('width');
+            $img->removeAttribute('height');
+            $img->setAttribute('style', 'display: block; max-width: 1600px; width: auto; height: auto;');
+        }
+
+        foreach ($articleBlock->querySelectorAll('ol, ul') as $list) {
+            $list->removeAttribute('class');
+
+            $isOrdered = $list->tagName === 'ol';
+            $startAttr = $list->getAttribute('start');
+
+            $style = 'display: block !important; margin: 1em 0 !important; padding-left: 2em !important; ';
+            if ($isOrdered === true) {
+                $style .= 'list-style: decimal outside !important; ';
+            } else {
+                $style .= 'list-style: disc outside !important; ';
+            }
+
+            if ($isOrdered === true && $startAttr !== null && $startAttr !== '') {
+                $start = (int) $startAttr;
+                if ($start > 1) {
+                    $style .= 'counter-reset: item ' . ($start - 1) . ' !important; ';
+                }
+            }
+
+            $list->setAttribute('style', $style);
+        }
+
+        foreach ($articleBlock->querySelectorAll('ol > li, ul > li') as $li) {
+            $li->removeAttribute('class');
+
+            $parentList = $li->parentNode;
+            $isOrdered = $parentList !== null && $parentList->tagName === 'ol';
+
+            $style = 'display: list-item !important; margin: 0.5em 0 !important; ';
+            if ($isOrdered === true) {
+                $style .= 'list-style-type: decimal !important; ';
+            } else {
+                $style .= 'list-style-type: disc !important; ';
+            }
+
+            $li->setAttribute('style', $style);
+        }
+
+        $content = $articleBlock->innerHTML ?? '';
+
+        if (function_exists('break_annoying_html_tags') === true) {
+            $content = break_annoying_html_tags($content);
+        }
+
+        return trim($content);
+    }
+
+    private function fixVkArticleImageUrl(string $url): string
+    {
+        $url = html_entity_decode($url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $url = trim($url);
+
+        if ($url === '') {
+            return '';
+        }
+
+        if (preg_match('/^(javascript|data|vbscript):/i', $url) === 1) {
+            return '';
+        }
+
+        if (preg_match('~^https?://~i', $url) === 0) {
+            if (str_starts_with($url, '//') === true) {
+                $url = 'https:' . $url;
+            } else {
+                return '';
+            }
+        }
+
+        $parsed = parse_url($url);
+        if ($parsed === false || isset($parsed['query']) === false) {
+            return $this->proxyImage($url);
+        }
+
+        parse_str($parsed['query'], $queryParams);
+        $as = $queryParams['as'] ?? '';
+
+        if ($as !== '') {
+            $sizes = explode(',', $as);
+            $maxWidth = 0;
+            foreach ($sizes as $size) {
+                $parts = explode('x', $size);
+                if (isset($parts[0]) === true) {
+                    $w = (int) $parts[0];
+                    if ($w > $maxWidth) {
+                        $maxWidth = $w;
+                    }
+                }
+            }
+
+            if ($maxWidth > 0) {
+                $replaced = preg_replace(
+                    '/([?&])cs=[^&]+/',
+                    '$1cs=' . $maxWidth . 'x0',
+                    $url
+                );
+                if ($replaced !== null) {
+                    $url = $replaced;
+                }
+            }
+        }
+
+        return $this->proxyImage($url);
+    }
+
+    private function fixVkSrcset(string $srcset): string
+    {
+        $parts = explode(',', $srcset);
+        $result = [];
+
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part === '') {
+                continue;
+            }
+
+            $spacePos = strpos($part, ' ');
+            if ($spacePos === false) {
+                $result[] = $part;
+                continue;
+            }
+
+            $url = substr($part, 0, $spacePos);
+            $descriptor = substr($part, $spacePos);
+            $result[] = $this->fixVkArticleImageUrl($url) . $descriptor;
+        }
+
+        return implode(', ', $result);
+    }
+
+    private function normalizeArticleUrl(string $url): string
+    {
+        $url = html_entity_decode($url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+        $parsed = parse_url($url);
+        if ($parsed === false || isset($parsed['scheme'], $parsed['host'], $parsed['path']) === false) {
+            return $url;
+        }
+
+        $host = str_replace('m.vk.ru', 'vk.ru', $parsed['host']);
+
+        return $parsed['scheme'] . '://' . $host . $parsed['path'];
+    }
+
     private function renderDocAttachment(array $d): string
     {
         if (($d['ext'] ?? '') === 'gif') {
@@ -693,8 +1246,7 @@ final class Vk2Bridge extends BridgeAbstract
             $rate = (float) ($answer['rate'] ?? 0);
             $votes = (int) ($answer['votes'] ?? 0);
 
-            // Calculate progress bar (20 characters wide)
-            $filled = (int) round($rate / 5); // Each # = 5%
+            $filled = (int) round($rate / 5);
             $bar = str_repeat('#', $filled) . str_repeat('.', 20 - $filled);
 
             $rateFormatted = rtrim(rtrim(number_format($rate, 1, '.', ''), '0'), '.');
@@ -704,7 +1256,6 @@ final class Vk2Bridge extends BridgeAbstract
             $lines[] = '';
         }
 
-        // Footer with metadata
         $footer = "Total votes: {$totalVotes}";
 
         if (($d['anonymous'] ?? false) !== false) {
@@ -721,7 +1272,6 @@ final class Vk2Bridge extends BridgeAbstract
 
         $lines[] = $footer;
 
-        // Return as preformatted text block for proper ASCII display
         return '<pre>' . implode("\n", $lines) . '</pre>';
     }
 
@@ -979,7 +1529,7 @@ final class Vk2Bridge extends BridgeAbstract
 
     private function image(string $url, string $alt): string
     {
-        return "<img src='{$this->e($url)}' alt='{$this->e($alt)}'>";
+        return "<img src='{$this->e($url)}' alt='{$this->e($alt)}' style='display: block; max-width: 1600px; width: auto; height: auto;'>";
     }
 
     private function proxyImage(string $url): string
