@@ -31,9 +31,6 @@ services:
       - "3000:80"
     volumes:
       - ./config:/config
-    environment:
-      - HTTP_PORT=80
-      - TZ=UTC
     restart: unless-stopped
 ```
 
