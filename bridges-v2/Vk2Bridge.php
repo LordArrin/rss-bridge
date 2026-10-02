@@ -956,7 +956,7 @@ final class Vk2Bridge extends BridgeAbstract
                     if ($alt !== null) {
                         $newImg->setAttribute('alt', $alt);
                     }
-                    $newImg->setAttribute('style', 'display: block; max-width: 1600px; width: auto; height: auto;');
+                    $newImg->setAttribute('style', 'display: block; max-width: 1400px; width: auto; height: auto;');
                     $parent->insertBefore($newImg, $figure);
                 }
             }
@@ -1014,7 +1014,7 @@ final class Vk2Bridge extends BridgeAbstract
             $img->removeAttribute('loading');
             $img->removeAttribute('width');
             $img->removeAttribute('height');
-            $img->setAttribute('style', 'display: block; max-width: 1600px; width: auto; height: auto;');
+            $img->setAttribute('style', 'display: block; max-width: 1400px; width: auto; height: auto;');
         }
 
         foreach ($articleBlock->querySelectorAll('ol, ul') as $list) {
@@ -1529,7 +1529,7 @@ final class Vk2Bridge extends BridgeAbstract
 
     private function image(string $url, string $alt): string
     {
-        return "<img src='{$this->e($url)}' alt='{$this->e($alt)}' style='display: block; max-width: 1600px; width: auto; height: auto;'>";
+        return "<img src='{$this->e($url)}' alt='{$this->e($alt)}' style='display: block; max-width: 1400px; width: auto; height: auto;'>";
     }
 
     private function proxyImage(string $url): string
