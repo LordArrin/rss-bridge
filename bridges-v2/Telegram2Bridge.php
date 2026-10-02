@@ -108,8 +108,8 @@ TXT,
     private const TG_HOSTS = '(?:[\w-]+\.)*(?:telegram\.org|t\.me|telesco\.pe)';
 
     private const MAX_PAGES = 100;
-    private const PROXY_RETRIES = 2;
-    private const PAGE_DELAY_US = 500000;
+    private const PROXY_RETRIES = 4;
+    private const PAGE_DELAY_US = 1000000;
 
     private const MAX_TITLE_LENGTH = 60;
     private const MIN_TITLE_SPACE_POS = 30;
