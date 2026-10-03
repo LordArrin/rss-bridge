@@ -81,7 +81,6 @@ final class CurlHttpClient implements HttpClient
             'useragent'             => null,
             'timeout'               => 5,
             'headers'               => [],
-            'proxy'                 => null,
             'curl_options'          => [],
             'if_not_modified_since' => null,
             'retries'               => 2,
@@ -111,10 +110,6 @@ final class CurlHttpClient implements HttpClient
 
         if ($config['useragent'] !== null) {
             $curlOptions[CURLOPT_USERAGENT] = $config['useragent'];
-        }
-
-        if ($config['proxy'] !== null) {
-            $curlOptions[CURLOPT_PROXY] = $config['proxy'];
         }
 
         if ($config['if_not_modified_since'] !== null) {

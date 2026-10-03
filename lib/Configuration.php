@@ -108,18 +108,6 @@ final class Configuration
             self::throwConfigError('system', 'timezone', 'Is not a valid timezone');
         }
 
-        if (is_string(self::getConfig('proxy', 'url')) === false) {
-            self::throwConfigError('proxy', 'url', 'Is not a valid string');
-        }
-
-        if (is_bool(self::getConfig('proxy', 'by_bridge')) === false) {
-            self::throwConfigError('proxy', 'by_bridge', 'Is not a valid Boolean');
-        }
-
-        if (is_string(self::getConfig('proxy', 'name')) === false) {
-            self::throwConfigError('proxy', 'name', 'Is not a valid string');
-        }
-
         if (is_string(self::getConfig('cache', 'type')) === false) {
             self::throwConfigError('cache', 'type', 'Is not a valid string');
         }
@@ -138,6 +126,10 @@ final class Configuration
 
         if (is_string(self::getConfig('authentication', 'password')) === false) {
             self::throwConfigError('authentication', 'password', 'Is not a valid string');
+        }
+
+        if (is_string(self::getConfig('authentication', 'password_hash')) === false) {
+            self::throwConfigError('authentication', 'password_hash', 'Is not a valid string');
         }
 
         $email = self::getConfig('admin', 'email');

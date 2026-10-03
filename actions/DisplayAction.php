@@ -42,7 +42,6 @@ final class DisplayAction implements ActionInterface
     {
         $bridgeName = $request->get('bridge');
         $format = $request->get('format');
-        $noproxy = $request->get('_noproxy');
 
         if ($bridgeName === false || $bridgeName === null || $bridgeName === '') {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Missing bridge name parameter']), 400);
@@ -59,15 +58,6 @@ final class DisplayAction implements ActionInterface
 
         if ($this->bridgeFactory->isEnabled($bridgeClassName) === false) {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'This bridge is not whitelisted']), 400);
-        }
-
-        $proxyUrl = Configuration::getConfig('proxy', 'url');
-        if (
-            $proxyUrl !== null && $proxyUrl !== '' && $proxyUrl !== false
-            && Configuration::getConfig('proxy', 'by_bridge') === true
-            && ($noproxy === true || $noproxy === 'on' || $noproxy === '1' || $noproxy === 1)
-        ) {
-            define('NOPROXY', true);
         }
 
         $params = $request->toArray();
@@ -105,7 +95,6 @@ final class DisplayAction implements ActionInterface
                 'action',
                 'bridge',
                 'format',
-                '_noproxy',
                 '_cache_timeout',
                 '_error_time',
                 '_',

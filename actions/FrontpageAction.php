@@ -116,21 +116,6 @@ final class FrontpageAction implements ActionInterface
         $uriSafe = $e($uri);
         $descriptionSafe = $e($description);
 
-        $proxyUrl = Configuration::getConfig('proxy', 'url');
-        if (
-            $proxyUrl !== null && $proxyUrl !== '' && $proxyUrl !== false
-            && Configuration::getConfig('proxy', 'by_bridge') === true
-        ) {
-            $proxyName = Configuration::getConfig('proxy', 'name');
-            if ($proxyName === null || $proxyName === false || $proxyName === '') {
-                $proxyName = $proxyUrl;
-            }
-            $parameters['global']['_noproxy'] = [
-                'name' => sprintf('Disable proxy (%s)', $proxyName),
-                'type' => 'checkbox',
-            ];
-        }
-
         if (Configuration::getConfig('cache', 'custom_timeout') === true) {
             $parameters['global']['_cache_timeout'] = [
                 'name' => 'Cache timeout in seconds',
