@@ -62,11 +62,7 @@ final class HealthAction implements ActionInterface
     private function checkCache(): array
     {
         try {
-            // Fixed key (no uniqid): a random key per poll would leave a new
-            // entry in the cache backend on every request. With a constant
-            // key and a short TTL, entries expire quickly and are removed by
-            // prune() at the latest; delete() below cleans up immediately.
-            $testKey = 'rssbridge_health_check';
+            $testKey = 'health_check_' . uniqid();
             $testValue = 'test_' . time();
 
             $startSet = microtime(true);
@@ -77,9 +73,9 @@ final class HealthAction implements ActionInterface
             $retrieved = $this->cache->get($testKey);
             $getLatency = round((microtime(true) - $startGet) * 1000, 2);
 
-            // delete() is part of CacheInterface since this fork reworked the
-            // cache layer, so no method_exists() guard is needed anymore.
-            $this->cache->delete($testKey);
+            if (method_exists($this->cache, 'delete') === true) {
+                $this->cache->delete($testKey);
+            }
 
             $result = [
                 'status' => 'ok',
