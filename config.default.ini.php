@@ -22,12 +22,6 @@ max_filesize = 20
 type = "memcached"
 custom_timeout = false
 
-[proxy]
-
-url = ""
-name = "Hidden proxy name"
-by_bridge = false
-
 [proxy_profile_direct]
 
 type = "Direct"
@@ -54,7 +48,11 @@ headless = false
 
 enable = false
 username = "admin"
+; Plaintext password. Discouraged: prefer password_hash below.
 password = ""
+; A password_hash() compatible hash (bcrypt/argon2id). Takes precedence over
+; the plaintext password and is safe to commit to config.ini.php.
+password_hash = ""
 token = ""
 
 [error]

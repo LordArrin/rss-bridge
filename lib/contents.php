@@ -103,16 +103,6 @@ function getContents(
         $config['max_filesize'] = $maxFileSize * 2 ** 20;
     }
 
-    $proxyUrl = Configuration::getConfig('proxy', 'url');
-    if (
-        $proxyUrl !== null
-        && $proxyUrl !== ''
-        && $proxyUrl !== false
-        && defined('NOPROXY') === false
-    ) {
-        $config['proxy'] = $proxyUrl;
-    }
-
     $response = $httpClient->request($url, $config);
 
     switch ($response->getCode()) {
