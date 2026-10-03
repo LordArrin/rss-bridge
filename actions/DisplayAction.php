@@ -70,7 +70,10 @@ final class DisplayAction implements ActionInterface
             define('NOPROXY', true);
         }
 
-        $cacheKey = 'http_' . json_encode($request->toArray());
+        $params = $request->toArray();
+        unset($params['token'], $params['action']);
+        ksort($params);
+        $cacheKey = 'http_' . json_encode($params);
 
         $bridge = $this->safeLoader->createSafely($bridgeClassName);
 
@@ -80,6 +83,7 @@ final class DisplayAction implements ActionInterface
             $ttl = $request->get('_cache_timeout');
             if (Configuration::getConfig('cache', 'custom_timeout') === true && isset($ttl) === true) {
                 $ttl = (int) $ttl;
+                $ttl = max(1, min($ttl, 86400));
             } else {
                 $ttl = $bridge->getCacheTimeout();
             }

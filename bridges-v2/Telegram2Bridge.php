@@ -110,6 +110,7 @@ TXT,
     private const MAX_PAGES = 100;
     private const PROXY_RETRIES = 4;
     private const PAGE_DELAY_US = 1000000;
+    private const RETRY_BUDGET_SECONDS = 30;
 
     private const MAX_TITLE_LENGTH = 60;
     private const MIN_TITLE_SPACE_POS = 30;
@@ -144,7 +145,7 @@ CSS,
         'wrapper'     => 'font-size:14px;line-height:1.6;word-wrap:break-word',
         'quote'       => 'border-left:4px solid #4a76a8;padding-left:12px;margin:8px 0',
         'reply_compact' => 'border-left:4px solid #27a7e7;padding:8px 12px;margin-bottom:12px;font-size:13px;line-height:1.4',
-        'reply_link'  => 'font-weight:bold;font-weight:500',
+        'reply_link'  => 'font-weight:500',
         'poll'        => 'background:#f9f9f9;padding:15px;margin:10px 0;border-left:4px solid #4a76a8',
         'poll_t'      => 'margin:0 0 10px 0;font-weight:bold',
         'poll_o'      => 'margin:8px 0',
@@ -393,6 +394,8 @@ CSS,
 
     private function withRetry(\Closure $fn, string $context, string $url = ''): mixed
     {
+        $deadline = microtime(true) + self::RETRY_BUDGET_SECONDS;
+
         $lastException = null;
 
         for ($i = 0; $i < self::PROXY_RETRIES; $i++) {
@@ -406,6 +409,21 @@ CSS,
                     break;
                 }
 
+                $remaining = $deadline - microtime(true);
+                if ($remaining <= 1.0 || $i >= self::PROXY_RETRIES - 1) {
+                    if ($remaining <= 1.0) {
+                        $this->logger->warning(sprintf(
+                            '%s retry budget (%ds) exhausted after %d attempt(s)%s: %s',
+                            $context,
+                            self::RETRY_BUDGET_SECONDS,
+                            $i + 1,
+                            $url !== '' ? " for {$url}" : '',
+                            $errorMsg
+                        ));
+                    }
+                    break;
+                }
+
                 $this->logger->warning(sprintf(
                     '%s failed (attempt %d/%d)%s: %s',
                     $context,
@@ -415,9 +433,9 @@ CSS,
                     $errorMsg
                 ));
 
-                if ($i < self::PROXY_RETRIES - 1) {
-                    usleep(($i + 1) * 1000000);
-                }
+                $delayUs = min(($i + 1) * 500000, 2000000);
+                $delayUs = min($delayUs, (int) (($remaining - 1.0) * 1000000));
+                usleep(max(100000, $delayUs));
             }
         }
 
