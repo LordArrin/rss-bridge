@@ -17,36 +17,64 @@ if ($config === false) {
     exit(1);
 }
 
+// Single source of truth for embedded memcached defaults.
+// Values from [MemcachedCache] in config.ini.php override these.
+$defaults = [];
+$defaultsFile = __DIR__ . '/config/memcached.conf';
+if (file_exists($defaultsFile)) {
+    // parse_ini_file() treats '#' as a literal character, so strip full-line
+    // comments before parsing the consolidated defaults file.
+    $rawDefaults = (string)file_get_contents($defaultsFile);
+    // Replace '#'-style comment lines with ';'-style ones, which PHP's INI
+    // parser understands natively (keeps line structure intact for errors).
+    $strippedDefaults = preg_replace('/^(\h*)#.*$/m', '$1;', $rawDefaults);
+    $parsedDefaults = parse_ini_string($strippedDefaults, true, INI_SCANNER_RAW);
+    if (is_array($parsedDefaults)) {
+        foreach ($parsedDefaults as $section => $values) {
+            if (is_array($values) && array_key_exists('value', $values)) {
+                $defaults[$section] = trim((string)$values['value']);
+            }
+        }
+    }
+}
+
+/**
+ * Resolve a setting: user config > config/memcached.conf defaults > fallback.
+ */
+function mcSetting(array $mc, array $defaults, string $key, string $fallback): string
+{
+    $userValue = $mc[$key] ?? null;
+    if ($userValue !== null && trim((string)$userValue) !== '') {
+        return trim((string)$userValue);
+    }
+    return $defaults[$key] ?? $fallback;
+}
+
 $mc = $config['MemcachedCache'] ?? [];
 
-$type = ($mc['type'] ?? 'internal') === 'external' ? 'external' : 'internal';
-$socketPath = $mc['socket_path'] ?? '/var/run/memcached/memcached.sock';
-$host = $mc['host'] ?? '127.0.0.1';
-$port = (int)($mc['port'] ?? 11211);
+$type = mcSetting($mc, $defaults, 'type', 'internal') === 'external' ? 'external' : 'internal';
+$socketPath = mcSetting($mc, $defaults, 'socket_path', '/var/run/memcached/memcached.sock');
+$host = mcSetting($mc, $defaults, 'host', '127.0.0.1');
+$port = (int)mcSetting($mc, $defaults, 'port', '11211');
 
 // Common output
 printf("MEMCACHED_TYPE=%s\n", escapeshellarg($type));
 
 if ($type === 'internal') {
     // Internal mode: emit socket path and server tuning parameters
-    $memory = $mc['memory'] ?? '128m';
-    $maxConnections = (int)($mc['max_connections'] ?? 1024);
-    $threads = (int)($mc['threads'] ?? 4);
-    $itemSizeLimit = $mc['item_size_limit'] ?? '1M';
-    
-    $modernValue = $mc['modern'] ?? '';
-    $modern = in_array($modernValue, ['true', '1'], true);
-    
-    $preallocValue = $mc['prealloc'] ?? '';
-    $prealloc = in_array($preallocValue, ['true', '1'], true);
-    
-    $lockMemoryValue = $mc['lock_memory'] ?? '';
-    $lockMemory = in_array($lockMemoryValue, ['true', '1'], true);
-    
-    $hashPower = (int)($mc['hash_power'] ?? 16);
-    $backlog = (int)($mc['backlog'] ?? 1024);
-    $idleTimeout = (int)($mc['idle_timeout'] ?? 0);
-    $verbosity = (int)($mc['verbosity'] ?? 0);
+    $memory = mcSetting($mc, $defaults, 'memory', '512m');
+    $maxConnections = (int)mcSetting($mc, $defaults, 'connections', '1024');
+    $threads = (int)mcSetting($mc, $defaults, 'threads', '4');
+    $itemSizeLimit = mcSetting($mc, $defaults, 'item_size_limit', '32M');
+
+    $modern = in_array(mcSetting($mc, $defaults, 'modern', 'true'), ['true', '1'], true);
+    $prealloc = in_array(mcSetting($mc, $defaults, 'prealloc', 'true'), ['true', '1'], true);
+    $lockMemory = in_array(mcSetting($mc, $defaults, 'lock_memory', 'false'), ['true', '1'], true);
+
+    $hashPower = (int)mcSetting($mc, $defaults, 'hash_power', '16');
+    $backlog = (int)mcSetting($mc, $defaults, 'backlog', '1024');
+    $idleTimeout = (int)mcSetting($mc, $defaults, 'idle_timeout', '0');
+    $verbosity = (int)mcSetting($mc, $defaults, 'verbosity', '0');
 
     printf("MEMCACHED_SOCKET_PATH=%s\n", escapeshellarg($socketPath));
     printf("MEMCACHED_MEMORY=%s\n", escapeshellarg($memory));

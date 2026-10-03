@@ -116,6 +116,69 @@ final class CacheFactory
     }
 
     /**
+     * Read a memcached client setting, falling back to the consolidated
+     * defaults file /config/memcached.conf when not present in config.ini.php.
+     */
+    private function readMemcachedSetting(string $key): ?string
+    {
+        $value = Configuration::getConfig('MemcachedCache', $key);
+        if ($value !== null && trim((string)$value) !== '') {
+            return trim((string)$value);
+        }
+
+        static $defaults = null;
+        if ($defaults === null) {
+            $defaults = [];
+            $file = '/config/memcached.conf';
+            if (is_readable($file)) {
+                // '#' comments are not understood by PHP's INI parser: convert them to ';'
+                $raw = (string)file_get_contents($file);
+                $parsed = parse_ini_string(preg_replace('/^(\h*)#.*$/m', '$1;', $raw), true, INI_SCANNER_RAW);
+                if (is_array($parsed)) {
+                    foreach ($parsed as $section => $values) {
+                        if (is_array($values) && array_key_exists('value', $values)) {
+                            $defaults[$section] = trim((string)$values['value']);
+                        }
+                    }
+                }
+            }
+        }
+
+        return $defaults[$key] ?? null;
+    }
+
+    /**
+     * Resolve chunking parameters for the Memcached client from
+     * config.ini.php ([MemcachedCache]) or /config/memcached.conf defaults.
+     *
+     * @return array{?int, ?int} [itemSizeLimitBytes, maxChunks]
+     */
+    private function memcachedClientOptions(): array
+    {
+        $itemSizeLimit = null;
+
+        $chunkSizeRaw = $this->readMemcachedSetting('client_chunk_size');
+        if ($chunkSizeRaw !== null) {
+            $parsed = MemcachedCache::parseSize($chunkSizeRaw);
+            if ($parsed !== null) {
+                $itemSizeLimit = $parsed + 65536; // restore safety margin -> effective per-item cap
+            }
+        }
+
+        // Legacy/explicit item_size_limit (e.g. "32M") also accepted here;
+        // MemcachedCache clamps it to the 1 MB protocol hard cap internally.
+        if ($itemSizeLimit === null) {
+            $legacyRaw = $this->readMemcachedSetting('item_size_limit');
+            $itemSizeLimit = MemcachedCache::parseSize($legacyRaw);
+        }
+
+        $maxChunksRaw = $this->readMemcachedSetting('client_max_chunks');
+        $maxChunks = ($maxChunksRaw !== null && ctype_digit($maxChunksRaw)) ? (int)$maxChunksRaw : null;
+
+        return [$itemSizeLimit, $maxChunks];
+    }
+
+    /**
      * Create internal Memcached instance (Unix socket).
      */
     private function createMemcachedInternal(): MemcachedCache
@@ -130,8 +193,10 @@ final class CacheFactory
             throw new \Exception(sprintf('Memcached socket does not exist: %s', $socketPath));
         }
 
+        [$itemSizeLimit, $maxChunks] = $this->memcachedClientOptions();
+
         // Pass empty string as host, socket path as fourth parameter
-        return new MemcachedCache($this->logger, '', 0, $socketPath);
+        return new MemcachedCache($this->logger, '', 0, $socketPath, $itemSizeLimit, $maxChunks);
     }
 
     /**
@@ -159,6 +224,8 @@ final class CacheFactory
             throw new \Exception('"port" param is invalid for MemcachedCache');
         }
 
-        return new MemcachedCache($this->logger, (string) $host, $portInt);
+        [$itemSizeLimit, $maxChunks] = $this->memcachedClientOptions();
+
+        return new MemcachedCache($this->logger, (string) $host, $portInt, '', $itemSizeLimit, $maxChunks);
     }
 }

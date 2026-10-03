@@ -49,9 +49,38 @@ final class MemcachedCache implements CacheInterface
     private const MAX_CHUNKS = 128;
 
     private readonly int $chunkSize;
+    private readonly int $maxChunks;
 
-    public function __construct(\Logger $logger, string $host, int $port, string $socketPath = '', ?int $itemSizeLimit = null)
+    /**
+     * Parses size strings like "32M", "983040", "1G" into bytes.
+     * Returns null when the value is empty or unparseable.
+     */
+    public static function parseSize(?string $value): ?int
     {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        $matches = [];
+        if (preg_match('/^(\d+)\s*([KMG])?B?$/i', trim($value), $matches) !== 1) {
+            return null;
+        }
+
+        $bytes = (int)$matches[1];
+        $unit = strtoupper($matches[2] ?? '');
+        $multipliers = ['K' => 1024, 'M' => 1048576, 'G' => 1073741824];
+
+        return $bytes * ($multipliers[$unit] ?? 1);
+    }
+
+    public function __construct(
+        \Logger $logger,
+        string $host,
+        int $port,
+        string $socketPath = '',
+        ?int $itemSizeLimit = null,
+        ?int $maxChunks = null
+    ) {
         $this->logger = $logger;
 
         // Effective per-item limit: min(configured item_size_limit, 1MB hard cap)
@@ -60,6 +89,7 @@ final class MemcachedCache implements CacheInterface
             $effectiveLimit = $itemSizeLimit;
         }
         $this->chunkSize = max(65536, $effectiveLimit - self::CHUNK_SAFETY);
+        $this->maxChunks = ($maxChunks !== null && $maxChunks > 0) ? $maxChunks : self::MAX_CHUNKS;
 
         // Determine connection type: Unix socket or TCP
         $isUnixSocket = (empty($socketPath) === false) || (str_starts_with($host, '/') === true);
@@ -210,11 +240,11 @@ final class MemcachedCache implements CacheInterface
         if ($encoded !== false && strlen($encoded) > $this->chunkSize) {
             $parts = str_split($encoded, $this->chunkSize);
 
-            if (count($parts) > self::MAX_CHUNKS) {
+            if (count($parts) > $this->maxChunks) {
                 $this->logger->warning('Refusing to store oversized memcached item', [
                     'key'       => $cacheKey,
                     'size'      => strlen($encoded),
-                    'maxChunks' => self::MAX_CHUNKS,
+                    'maxChunks' => $this->maxChunks,
                 ]);
                 return;
             }
