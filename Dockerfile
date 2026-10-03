@@ -265,6 +265,7 @@ FROM alpine:${ALPINE_VERSION} AS runtime
 
 ARG IMAGE_VERSION=1.2.4
 ENV RSSBRIDGE_SYSTEM_VERSION=${IMAGE_VERSION}
+ARG VERSION_PLACEHOLDER=__RSSBRIDGE_IMAGE_VERSION__
 ENV CURL_IMPERSONATE=chrome150
 ENV LD_PRELOAD=/usr/lib/libmimalloc-secure.so \
     MIMALLOC_PURGE_DELAY=120 \
@@ -434,6 +435,7 @@ COPY --chown=nginx:nginx ./ /app/
 WORKDIR /app
 
 RUN composer install --optimize-autoloader --no-interaction --ignore-platform-reqs --classmap-authoritative && \
+    sed -i "s/__RSSBRIDGE_IMAGE_VERSION__/${IMAGE_VERSION}/g" /app/index.html && \
     chmod +x /app/bin/* && \
     chmod +x /app/memcached-config.php && \
     chmod +x /app/docker-entrypoint.sh

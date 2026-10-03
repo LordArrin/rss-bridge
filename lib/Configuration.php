@@ -11,8 +11,6 @@ namespace RSSBridge;
  */
 final class Configuration
 {
-    public const VERSION = '1.2.0';
-
     /**
      * @var array<string, array<string, mixed>>
      */
@@ -169,10 +167,14 @@ final class Configuration
 
     public static function getVersion(): string
     {
+        // Single source of truth: ARG IMAGE_VERSION in the Dockerfile,
+        // exported as ENV RSSBRIDGE_SYSTEM_VERSION into the image.
         $envVersion = getenv('RSSBRIDGE_SYSTEM_VERSION');
-        $baseVersion = ($envVersion !== false && $envVersion !== '') ? $envVersion : self::VERSION;
+        if ($envVersion !== false && $envVersion !== '') {
+            return (string)$envVersion;
+        }
 
-        return (string)$baseVersion;
+        return self::VERSION;
     }
 
     private static function throwConfigError(string $section, string $key, string $message = ''): never
