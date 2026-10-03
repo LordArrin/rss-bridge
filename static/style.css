@@ -207,6 +207,13 @@ p {
     align-items: stretch;
 }
 
+/*
+ * The frontpage is a CSS Grid. Static elements (header, alerts, searchbar,
+ * footer) span the full width and are pinned with fixed `order` values.
+ * Bridge cards must NEVER receive an inline `order` outside of this band,
+ * otherwise they would jump above the header or below the footer when the
+ * favorites script re-sorts them (see Favorites.sortBridges in rss-bridge.js).
+ */
 .container:has(.bridge-card) > header,
 .container:has(.bridge-card) > [class^="alert-"],
 .container:has(.bridge-card) > .searchbar,
@@ -233,6 +240,20 @@ p {
 }
 
 .bridge-card {
+    order: 1;
+}
+
+/*
+ * Feed pages (HtmlFormat) reuse .container but contain no bridge cards.
+ * Without these rules the default `order: 1` on .bridge-card would put the
+ * feed items BEFORE the page title/header (both have order 0), and the
+ * "back to rss-bridge" button would be rendered after all items.
+ */
+.feeditem {
+    order: 2;
+}
+
+.buttons:has(.backbutton) {
     order: 1;
 }
 

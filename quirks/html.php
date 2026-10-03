@@ -194,41 +194,154 @@ function html_tag(
 }
 
 /**
- * Break potentially dangerous HTML tags by inserting a zero-width non-joiner.
+ * Sanitize remote HTML for direct rendering in the browser.
  *
- * This function is used to sanitize user-generated content that may contain
- * script tags or other executable content. It replaces opening tags like
- * <script> with <‌script> (note the zero-width non-joiner character),
- * which prevents browsers from executing the tag while preserving the visual
- * appearance in most cases.
+ * Feed content comes from untrusted third-party sources, so it must be
+ * filtered before being echoed into the HTML format page. The previous
+ * implementation only "broke" a fixed list of opening tags with a ZWNJ
+ * character, which was trivially bypassed (e.g. `<img src=x onerror=...>`
+ * and inline event handlers passed through untouched).
+ *
+ * This implementation uses DOM-based filtering:
+ *   - Removes dangerous elements entirely (script, iframe, object, embed,
+ *     applet, form, base, link, meta[http-equiv], style, ...).
+ *   - Strips all event handler attributes (on*) and unsafe href/src/xlink
+ *     schemes (javascript:, data:, vbscript:); file:// and external feeds
+ *     are left alone.
+ *   - Rewrites every remaining link's rel attribute to include
+ *     "noopener noreferrer nofollow". This is not cosmetic: referrer
+ *     leakage matters here because the auth token travels as a GET
+ *     parameter and could otherwise leak via the Referer header.
+ *   - Keeps everything else intact, so normal feed markup (text formatting,
+ *     images, tables, links) still renders exactly as before.
+ *
+ * If the input cannot be parsed as HTML, it is escaped in full rather than
+ * rendered raw.
  *
  * Usage in templates:
  *   <?= break_annoying_html_tags($userContent) ?>
  *
- * @param string $html The HTML content to sanitize.
- * @return string The sanitized HTML with dangerous tags broken.
+ * @param string $html The (untrusted) HTML content to sanitize.
+ * @return string The sanitized, render-safe HTML.
  */
 function break_annoying_html_tags(string $html): string
 {
-    // Zero-width non-joiner character
-    $zwnj = "\u{200C}";
+    if (trim($html) === '') {
+        return '';
+    }
 
-    $replacements = [
-        '<script' => '<' . $zwnj . 'script',
-        '</script' => '</' . $zwnj . 'script',
-        '<iframe' => '<' . $zwnj . 'iframe',
-        '</iframe' => '</' . $zwnj . 'iframe',
-        '<object' => '<' . $zwnj . 'object',
-        '</object' => '</' . $zwnj . 'object',
-        '<embed' => '<' . $zwnj . 'embed',
-        '</embed' => '</' . $zwnj . 'embed',
-        '<applet' => '<' . $zwnj . 'applet',
-        '</applet' => '</' . $zwnj . 'applet',
-    ];
-
-    return str_replace(
-        array_keys($replacements),
-        array_values($replacements),
-        $html
+    libxml_use_internal_errors(true);
+    $doc = new \DOMDocument();
+    // Wrap in a real document so UTF-8 is preserved and malformed fragments
+    // still parse; the wrapper itself is discarded on output.
+    $loaded = $doc->loadHTML(
+        '<!DOCTYPE html><html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head><body>'
+        . $html . '</body></html>',
+        LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
     );
+    libxml_clear_errors();
+
+    if ($loaded === false || $doc->getElementsByTagName('body')->length === 0) {
+        // Unparseable markup: fall back to fully escaping it.
+        return e($html);
+    }
+
+    $body = $doc->getElementsByTagName('body')->item(0);
+
+    // Drop any <head> that libxml may have synthesized around the fragment.
+    foreach ($doc->documentElement === null ? [] : iterator_to_array($doc->documentElement->childNodes) as $topNode) {
+        if (strtolower($topNode->nodeName) === 'head') {
+            $doc->documentElement->removeChild($topNode);
+        }
+    }
+
+    // Elements that can execute code or reframe the page.
+    $dangerousTags = [
+        'script', 'iframe', 'frame', 'frameset', 'object', 'embed', 'applet',
+        'form', 'input', 'button', 'textarea', 'select', 'base', 'link', 'style',
+    ];
+    foreach ($dangerousTags as $tagName) {
+        $nodes = $body->getElementsByTagName($tagName);
+        // iterate() snapshot + collect first: live NodeList shrinks on removal
+        $toRemove = [];
+        foreach ($nodes as $node) {
+            $toRemove[] = $node;
+        }
+        foreach ($toRemove as $node) {
+            $parent = $node->parentNode;
+            if ($parent !== null) {
+                $parent->removeChild($node);
+            }
+        }
+    }
+
+    // meta http-equiv (refresh, set-cookie, CSP overrides) -> drop element;
+    // plain <meta> inside feed content is harmless, unwrap it.
+    $metas = [];
+    foreach ($body->getElementsByTagName('meta') as $meta) {
+        $metas[] = $meta;
+    }
+    foreach ($metas as $meta) {
+        $parent = $meta->parentNode;
+        if ($parent === null) {
+            continue;
+        }
+        if ($meta->hasAttribute('http-equiv')) {
+            $parent->removeChild($meta);
+        } else {
+            $parent->removeChild($meta);
+        }
+    }
+
+    // Walk every element: strip event handlers and dangerous URLs.
+    $xpath = new \DOMXPath($doc);
+    /** @var \DOMElement $element */
+    foreach ($xpath->query('//body//*') as $element) {
+        foreach (iterator_to_array($element->attributes) as $attribute) {
+            $name = strtolower($attribute->name);
+            $value = trim($attribute->value);
+
+            if (str_starts_with($name, 'on')) {
+                $element->removeAttribute($attribute->name);
+                continue;
+            }
+
+            if (in_array($name, ['href', 'src', 'xlink:href', 'action', 'formaction', 'poster', 'background'], true) === true) {
+                // Collapse whitespace/control chars that hide the scheme,
+                // e.g. "java\tscript:" or "java\nscript:".
+                $probe = strtolower(preg_replace('/[\s\x00-\x1F]+/', '', $value) ?? $value);
+                if (
+                    str_starts_with($probe, 'javascript:')
+                    || str_starts_with($probe, 'vbscript:')
+                    || str_starts_with($probe, 'data:text/html')
+                ) {
+                    $element->removeAttribute($attribute->name);
+                    continue;
+                }
+            }
+
+            // Defense-in-depth: never let a rendered link echo our own URL
+            // (which may carry the ?token= parameter) to a third-party site.
+            if ($name === 'rel') {
+                $element->removeAttribute('rel');
+            }
+        }
+
+        if (strtolower($element->nodeName) === 'a' && $element->hasAttribute('href')) {
+            $element->setAttribute('rel', 'noopener noreferrer nofollow');
+            if ($element->hasAttribute('target') === false) {
+                $element->setAttribute('target', '_blank');
+            }
+        }
+    }
+
+    $output = '';
+    foreach ($body->childNodes as $child) {
+        $fragment = $doc->saveHTML($child);
+        if ($fragment !== false) {
+            $output .= $fragment;
+        }
+    }
+
+    return $output;
 }

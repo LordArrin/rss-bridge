@@ -26,7 +26,7 @@ $container = new Container();
 // === Actions ===
 
 $container[ConnectivityAction::class] = function ($c) {
-    return new ConnectivityAction($c['bridge_factory'], $c['safe_bridge_loader']);
+    return new ConnectivityAction($c['bridge_factory'], $c['safe_bridge_loader'], $c['logger']);
 };
 
 $container[DisplayAction::class] = function ($c) {

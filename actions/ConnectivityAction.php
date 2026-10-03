@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Actions;
 
 use Json;
+use Logger;
 use Request;
 use Response;
 use RSSBridge\BridgeFactory;
@@ -15,13 +16,16 @@ final class ConnectivityAction implements ActionInterface
 {
     private BridgeFactory $bridgeFactory;
     private SafeBridgeLoader $safeLoader;
+    private Logger $logger;
 
     public function __construct(
         BridgeFactory $bridgeFactory,
-        SafeBridgeLoader $safeLoader
+        SafeBridgeLoader $safeLoader,
+        Logger $logger
     ) {
         $this->bridgeFactory = $bridgeFactory;
         $this->safeLoader = $safeLoader;
+        $this->logger = $logger;
     }
 
     public function __invoke(Request $request): Response
@@ -31,24 +35,40 @@ final class ConnectivityAction implements ActionInterface
         }
 
         $bridgeName = $request->get('bridge');
-        if ($bridgeName === false) {
+        if ($bridgeName === false || $bridgeName === null || $bridgeName === '') {
             return new Response(render_template('connectivity.html.php'));
         }
 
-        $bridgeClassName = $this->bridgeFactory->createBridgeClassName($bridgeName);
+        $bridgeClassName = $this->bridgeFactory->createBridgeClassName((string) $bridgeName);
         if ($bridgeClassName === false) {
-            return new Response('Bridge not found', 404);
+            // This endpoint is consumed by static/connectivity.js via fetch(),
+            // so answer with JSON instead of a plain-text body or an
+            // uncaught exception (which would render a stack trace page).
+            return $this->jsonError(404, 'Bridge not found: ' . $bridgeName);
+        }
+
+        if ($this->bridgeFactory->isEnabled($bridgeClassName) === false) {
+            return $this->jsonError(403, 'Bridge is not whitelisted: ' . $bridgeClassName);
         }
 
         return $this->reportBridgeConnectivity($bridgeClassName);
     }
 
+    private function jsonError(int $code, string $message): Response
+    {
+        return new Response(
+            Json::encode([
+                'successful' => false,
+                'http_code'  => null,
+                'error'      => $message,
+            ]),
+            $code,
+            ['content-type' => 'application/json']
+        );
+    }
+
     private function reportBridgeConnectivity(string $bridgeClassName): Response
     {
-        if ($this->bridgeFactory->isEnabled($bridgeClassName) === false) {
-            throw new \Exception('Bridge is not whitelisted!');
-        }
-
         $bridge = $this->safeLoader->createSafely($bridgeClassName);
 
         if ($this->safeLoader->isBridgeBroken($bridge) === true) {
@@ -58,7 +78,7 @@ final class ConnectivityAction implements ActionInterface
                 'successful' => false,
                 'http_code'  => null,
                 'error'      => 'Bridge is invalid: ' . $brokenInfo['message']
-            ]), 200, ['content-type' => 'text/json']);
+            ]), 200, ['content-type' => 'application/json']);
         }
 
         $curl_opts = [
@@ -78,9 +98,20 @@ final class ConnectivityAction implements ActionInterface
             if (in_array($result['http_code'], [200], true) === true) {
                 $result['successful'] = true;
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            // Do not swallow the failure silently: log it and surface the
+            // reason in the JSON report. Catching \Throwable on purpose -
+            // connection problems may also raise \Error (e.g. type errors
+            // inside the HTTP client), which \Exception would miss.
+            $this->logger->info(sprintf(
+                'Connectivity check failed for %s (%s): %s',
+                $bridgeClassName,
+                $bridge::URI,
+                $e->getMessage()
+            ));
+            $result['error'] = $e->getMessage();
         }
 
-        return new Response(Json::encode($result), 200, ['content-type' => 'text/json']);
+        return new Response(Json::encode($result), 200, ['content-type' => 'application/json']);
     }
 }
