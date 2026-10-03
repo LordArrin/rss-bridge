@@ -89,18 +89,5 @@ socket_path = "/var/run/memcached/memcached.sock"
 ;host = "127.0.0.1"
 ;port = 11211
 
-; Performance tuning (internal only, ignored for external)
-memory = 512m
-max_connections = 1024
-threads = 4
-item_size_limit = 32M
-modern = true
-prealloc = true
-lock_memory = false
-hash_power = 16
-backlog = 1024
-idle_timeout = 0
-verbosity = 0
-
 [Telegram2Bridge]
 embed_max_size = 28m

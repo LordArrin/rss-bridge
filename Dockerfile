@@ -263,7 +263,7 @@ RUN apk del .build-deps
 # ============================================================
 FROM alpine:${ALPINE_VERSION} AS runtime
 
-ARG IMAGE_VERSION=1.2.3
+ARG IMAGE_VERSION=1.2.4
 ENV RSSBRIDGE_SYSTEM_VERSION=${IMAGE_VERSION}
 ENV CURL_IMPERSONATE=chrome150
 ENV LD_PRELOAD=/usr/lib/libmimalloc-secure.so \
