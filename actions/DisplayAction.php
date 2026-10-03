@@ -70,7 +70,15 @@ final class DisplayAction implements ActionInterface
             define('NOPROXY', true);
         }
 
-        $cacheKey = 'http_' . json_encode($request->toArray());
+        // Normalized cache key: same algorithm as CacheMiddleware::createCacheKey().
+        // Both layers must produce IDENTICAL keys, otherwise every response is
+        // stored twice under different keys (double memory, desynced TTLs).
+        // Note: the raw request array may contain an 'action' element injected by
+        // routing; it must not influence the key.
+        $params = $request->toArray();
+        unset($params['token'], $params['action']);
+        ksort($params);
+        $cacheKey = 'http_' . json_encode($params);
 
         $bridge = $this->safeLoader->createSafely($bridgeClassName);
 
@@ -80,6 +88,9 @@ final class DisplayAction implements ActionInterface
             $ttl = $request->get('_cache_timeout');
             if (Configuration::getConfig('cache', 'custom_timeout') === true && isset($ttl) === true) {
                 $ttl = (int) $ttl;
+                // Guard against cache pollution / DoS via user-supplied TTL:
+                // clamp to a sane range [1 second .. 1 day].
+                $ttl = max(1, min($ttl, 86400));
             } else {
                 $ttl = $bridge->getCacheTimeout();
             }
