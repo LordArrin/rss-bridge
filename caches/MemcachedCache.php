@@ -147,6 +147,10 @@ final class MemcachedCache implements CacheInterface
     public function getWithStale(string $key): array
     {
         $cacheKey = $this->createCacheKey($key);
+
+        // Fetch the metadata wrapper first: for chunked entries it contains
+        // only a small list of chunk keys, so we avoid downloading (and
+        // keeping in memory) the full payload when the entry is still fresh.
         $item = $this->conn->get($cacheKey);
 
         $resultCode = $this->conn->getResultCode();
@@ -176,9 +180,16 @@ final class MemcachedCache implements CacheInterface
         $now = time();
         $value = $item['value'] ?? null;
         $freshUntil = (int) ($item['fresh_until'] ?? 0);
+        $isChunked = isset($item['chunks']) === true && is_array($item['chunks']) === true;
 
-        // Chunked entry: reassemble payload from secondary keys
-        if (isset($item['chunks']) === true && is_array($item['chunks']) === true) {
+        // Fast path: non-chunked fresh entry - no payload reassembly needed.
+        if ($isChunked === false && ($freshUntil === 0 || $freshUntil > $now)) {
+            return ['fresh' => $value, 'stale' => $value];
+        }
+
+        // Chunked entry: reassemble payload from secondary keys (only reached
+        // for stale reads or expired chunks).
+        if ($isChunked === true) {
             $value = $this->readChunked($item['chunks']);
 
             if ($value === null) {
@@ -216,17 +227,16 @@ final class MemcachedCache implements CacheInterface
         // Calculate fresh period
         $freshUntil = $ttl === null ? 0 : $now + $ttl;
 
-        // Calculate when the stale data should also expire
-        $expiresAt = $ttl === null ? 0 : $freshUntil + self::DEFAULT_STALE_TTL;
+        // Absolute expiry timestamp for the memcached server. The server only
+        // understands absolute unix timestamps, which keeps long-lived entries
+        // (e.g. bridge metadata with a 30-day TTL) from being re-interpreted as
+        // a relative TTL of ~1970 when it exceeds the 30-day boundary.
+        $serverExpiresAt = match (true) {
+            $ttl === null => 0, // 0 means "never expire" in memcached
+            $freshUntil <= $now => 1, // expired immediately: store for 1 second
+            default => $freshUntil + self::DEFAULT_STALE_TTL,
+        };
 
-        // Memcached treats any TTL above 30 days as an absolute unix timestamp.
-        // Clamp relative TTLs so they never cross that boundary.
-        $relativeTtlCap = 60 * 60 * 24 * 30 - 1; // 2591999 seconds
-        if ($expiresAt > $relativeTtlCap) {
-            $expiresAt = $relativeTtlCap;
-        }
-
-        // Memcached uses 0 to mean "never expire"
         $storeValue = $value;
         $chunkKeys = [];
 
@@ -255,7 +265,7 @@ final class MemcachedCache implements CacheInterface
                 $chunkKey = $cacheKey . sprintf('#c%04d', $index);
                 $chunkKeys[] = $chunkKey;
 
-                if ($this->conn->set($chunkKey, $part, $expiresAt) === false) {
+                if ($this->conn->set($chunkKey, $part, $serverExpiresAt) === false) {
                     $this->logStoreFailure($chunkKey, strlen($part));
                     $chunkFailed = true;
                     break;
@@ -277,14 +287,17 @@ final class MemcachedCache implements CacheInterface
             ];
         }
 
-        // Wrap value with metadata for Stale-while-revalidate
+        // Wrap value with metadata for Stale-while-revalidate.
+        // 'expires_at' is informational only: reads decide freshness via
+        // 'fresh_until', and actual removal is handled by memcached itself
+        // using $serverExpiresAt above.
         $item = [
             'value'       => $storeValue,
             'fresh_until' => $freshUntil,
-            'expires_at'  => $expiresAt,
+            'expires_at'  => $serverExpiresAt,
         ];
 
-        if ($this->conn->set($cacheKey, $item, $expiresAt) === false) {
+        if ($this->conn->set($cacheKey, $item, $serverExpiresAt) === false) {
             // Clean up orphaned chunks if the metadata write failed
             if ($chunkKeys !== []) {
                 foreach ($chunkKeys as $chunkKey) {

@@ -161,6 +161,19 @@ final class CacheFactory
         if ($chunkSizeRaw !== null) {
             $parsed = MemcachedCache::parseSize($chunkSizeRaw);
             if ($parsed !== null) {
+                // Never let the client chunk exceed the server's -I limit,
+                // otherwise every chunk write would fail with E2BIG and the
+                // cache would silently stop storing anything.
+                $serverLimitRaw = $this->readMemcachedSetting('item_size_limit');
+                $serverLimit = MemcachedCache::parseSize($serverLimitRaw);
+                if ($serverLimit !== null && $serverLimit > 0 && $parsed > $serverLimit) {
+                    $this->logger->warning(sprintf(
+                        'Memcached client_chunk_size (%d) exceeds server item_size_limit (%d); clamping.',
+                        $parsed,
+                        $serverLimit
+                    ));
+                    $parsed = $serverLimit;
+                }
                 $itemSizeLimit = $parsed + 65536; // restore safety margin -> effective per-item cap
             }
         }
