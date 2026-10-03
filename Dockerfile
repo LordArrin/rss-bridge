@@ -438,8 +438,10 @@ RUN composer install --optimize-autoloader --no-interaction --ignore-platform-re
     chmod +x /app/memcached-config.php && \
     chmod +x /app/docker-entrypoint.sh
 
+# Liveness check hits a static nginx endpoint (see config/nginx.conf):
+# no PHP execution, no access-log spam ("GET /index.php 200" every 30s).
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-  CMD curl -fsS --compressed "http://localhost/?action=health" || exit 1
+  CMD curl -fsS "http://localhost/healthcheck.txt" || exit 1
 
 EXPOSE 80/tcp
 

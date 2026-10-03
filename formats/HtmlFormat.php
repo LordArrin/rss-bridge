@@ -20,19 +20,22 @@ final class HtmlFormat extends FormatAbstract
 
     public function render(): string
     {
-        $queryString = $_SERVER['QUERY_STRING'] ?? '';
         $bridgeName = $_GET['bridge'] ?? 'Unknown';
 
         $feedArray = $this->getFeed();
 
-        // Create links to other formats
+        // Create links to other formats. Rebuild the query string from the
+        // actual GET parameters instead of doing a blind str_ireplace on it:
+        // the old code only matched the literal "format=Html", so any URL
+        // whose format parameter had a different spelling or value (or was
+        // absent) produced broken switcher links, and it could also corrupt
+        // unrelated parameters that merely contained that substring.
         $formats = [];
         $formatNames = ['Atom', 'Mrss', 'Json', 'Plaintext', 'Sfeed'];
 
         foreach ($formatNames as $formatName) {
-            $formatUrl = '?' . str_ireplace('format=Html', 'format=' . $formatName, $queryString);
             $formats[] = [
-                'url'  => $formatUrl,
+                'url'  => $this->buildFormatUrl($formatName),
                 'name' => $formatName,
                 'type' => $this->getMimeTypeForFormat($formatName),
             ];
@@ -70,5 +73,24 @@ final class HtmlFormat extends FormatAbstract
             'Sfeed' => 'text/plain',
             default => 'application/octet-stream',
         };
+    }
+
+    /**
+     * Build a URL for the current request with the format parameter replaced.
+     * All other parameters (including the auth token, when configured to be
+     * passed via query string) are preserved and properly re-encoded.
+     */
+    private function buildFormatUrl(string $formatName): string
+    {
+        $params = $_GET;
+        // Remove the existing format key case-insensitively so we never end
+        // up with two conflicting "format" entries after re-adding it.
+        foreach (array_keys($params) as $key) {
+            if (strtolower((string) $key) === 'format') {
+                unset($params[$key]);
+            }
+        }
+        $params['format'] = $formatName;
+        return '?' . http_build_query($params);
     }
 }

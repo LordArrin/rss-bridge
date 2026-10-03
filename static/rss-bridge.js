@@ -460,7 +460,10 @@ const RssBridge = (() => {
             });
             
             // Phase 4: Apply CSS Grid order (no DOM manipulation!)
-            let orderIndex = 1;
+            // Cards live in the "order corridor" between the searchbar
+            // (order -1, see style.css) and the footer (order 999999), so
+            // indexes must stay >= 0. Favorites sort before regular cards.
+            let orderIndex = 0;
             for (const card of favoriteCards) {
                 card.classList.add('favorite');
                 card.style.order = orderIndex++;
@@ -555,9 +558,10 @@ const RssBridge = (() => {
             this.cardsCache = Array.from(document.querySelectorAll('section.bridge-card'));
             this.originalOrder = this.cardsCache.map(card => card.id);
             
-            // Set initial order values for CSS Grid
+            // Set initial order values for CSS Grid (same corridor as sortBridges:
+            // searchbar has order -1, footer 999999, so cards must stay >= 0)
             this.cardsCache.forEach((card, index) => {
-                card.style.order = index + 1;
+                card.style.order = index;
             });
             
             document.addEventListener('click', (e) => {

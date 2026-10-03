@@ -241,6 +241,23 @@ final class Request
     {
         $self = new self();
         $self->get = $cliArgs;
+        // Typed properties must be initialized explicitly, otherwise any
+        // access (e.g. BasicAuthMiddleware reading PHP_AUTH_USER in CLI)
+        // triggers "must not be accessed before initialization".
+        // REQUEST_URI/SCRIPT_NAME are populated so that code which logs or
+        // inspects the request (index.php error handler, middlewares) sees a
+        // plausible pseudo-URI like "/index.php?action=health" instead of an
+        // empty value.
+        $action = $cliArgs['action'] ?? null;
+        $query = http_build_query($cliArgs);
+        $self->server = [
+            'SCRIPT_NAME' => '/index.php',
+            'REQUEST_METHOD' => 'CLI',
+            'REQUEST_URI' => '/index.php' . ($query !== '' ? '?' . $query : ''),
+            'QUERY_STRING' => $query,
+            'HTTP_USER_AGENT' => 'RSS-Bridge-CLI' . ($action !== null ? '/' . $action : ''),
+        ];
+        $self->attributes = [];
         return $self;
     }
 
