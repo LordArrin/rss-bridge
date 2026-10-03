@@ -421,6 +421,8 @@ COPY ./config/php-fpm-pool.conf /etc/php85/php-fpm.d/rss-bridge.conf
 COPY ./config/php.ini /etc/php85/conf.d/90-rss-bridge.ini
 COPY ./config/nginx-main.conf /etc/nginx/nginx.conf
 COPY ./config/nginx.conf /etc/nginx/http.d/default.conf
+# Memcached consolidated defaults (parsed by memcached-config.php at runtime)
+COPY ./config/memcached.conf /app/config/memcached.conf
 
 COPY ./supervisor/supervisord.conf /etc/supervisord.conf
 COPY ./supervisor/nginx.conf /etc/supervisor/conf.d/nginx.conf
