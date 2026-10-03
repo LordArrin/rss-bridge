@@ -27,7 +27,7 @@ final class CacheMiddleware implements Middleware
             return $next($request);
         }
 
-        // Build cache key from request parameters
+        // Build cache key from request parameters (must match DisplayAction's key)
         $cacheKey = $this->createCacheKey($request);
 
         // Try to get cached response
@@ -51,8 +51,19 @@ final class CacheMiddleware implements Middleware
         $response = $next($request);
 
         $code = $response->getCode();
+
+        // Success responses are already stored by DisplayAction under this same
+        // key with the bridge's own cache timeout. Re-storing them here would
+        // overwrite that TTL with a fixed one and double the cache writes, so
+        // only persist error responses (short-TTL negative caching).
+        if ($code === 200) {
+            return $response;
+        }
+
         if (in_array($code, [400, 403, 404, 429, 500, 503], true) === true) {
-            $ttl = 60 * 5 + random_int(1, 60 * 10);
+            // Negative caching must be short: a stale 429/500 would block the
+            // feed for every user while upstream is temporarily unavailable.
+            $ttl = 60 + random_int(0, 120);
             $this->cache->set($cacheKey, $response, $ttl);
         }
 

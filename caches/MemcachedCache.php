@@ -93,7 +93,17 @@ final class MemcachedCache implements CacheInterface
         $cacheKey = $this->createCacheKey($key);
         $item = $this->conn->get($cacheKey);
 
-        if ($this->conn->getResultCode() === self::RES_NOTFOUND) {
+        $resultCode = $this->conn->getResultCode();
+        if ($resultCode !== self::RES_SUCCESS) {
+            if ($resultCode !== self::RES_NOTFOUND) {
+                // Server error/timeout: report as miss but log it so failures
+                // are not silently indistinguishable from a cache miss.
+                $this->logger->warning(sprintf(
+                    'Memcached get failed (code %d: %s)',
+                    $resultCode,
+                    (string) $this->conn->getResultMessage()
+                ));
+            }
             return ['fresh' => null, 'stale' => null];
         }
 
@@ -109,7 +119,7 @@ final class MemcachedCache implements CacheInterface
 
         $now = time();
         $value = $item['value'] ?? null;
-        $freshUntil = $item['fresh_until'] ?? 0;
+        $freshUntil = (int) ($item['fresh_until'] ?? 0);
 
         // fresh_until = 0 means "never expires" (always fresh)
         $isFresh = ($freshUntil === 0 || $freshUntil > $now);
@@ -135,6 +145,11 @@ final class MemcachedCache implements CacheInterface
         // Calculate when the stale data should also expire
         $staleTtl = self::DEFAULT_STALE_TTL;
         $expiresAt = $ttl === null ? 0 : $freshUntil + $staleTtl;
+
+        $memcachedMaxTtl = 60 * 60 * 24 * 30; // 2592000 seconds
+        if ($expiresAt > $memcachedMaxTtl) {
+            $expiresAt = $memcachedMaxTtl;
+        }
 
         // Wrap value with metadata for Stale-while-revalidate
         $item = [
