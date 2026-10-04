@@ -71,10 +71,23 @@ interface HttpClient
 final class CurlHttpClient implements HttpClient
 {
     /**
-     * Fallback User-Agent used when none is configured and no
-     * impersonation profile is active.
+     * The curl-impersonate extension option used to select/disable a
+     * spoofed browser profile per handle. Defined by the patched libcurl
+     * shipped in the Docker image (lexiforest/curl-impersonate) when PHP's
+     * cURL extension is built against it; the numeric fallback matches the
+     * library's CURLOPTIMPERSONATE enum value.
      */
-    public const DEFAULT_USERAGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36';
+    private const IMPERSONATE_OPT = 10240; // CURLOPT_IMPERSONATE
+
+    /**
+     * Resolves the real CURLOPT_IMPERSONATE constant when available.
+     */
+    private static function impersonateOption(): int
+    {
+        return defined('CURLOPT_IMPERSONATE') === true
+            ? (int)constant('CURLOPT_IMPERSONATE')
+            : self::IMPERSONATE_OPT;
+    }
 
     /**
      * Returns the curl-impersonate target (e.g. "chrome150") that is in
@@ -87,14 +100,12 @@ final class CurlHttpClient implements HttpClient
      * fingerprint AND a base header list that includes the real Chrome
      * User-Agent and sec-ch-ua / Accept-* client-hint headers.
      *
-     * Consequence: if application code then calls CURLOPT_USERAGENT or
-     * overrides Accept/Accept-Language via CURLOPT_HTTPHEADER, it UNDOES
-     * part of the impersonation and the fingerprint becomes inconsistent
-     * (Chrome TLS/H2 fingerprint + mismatched UA/client-hints), which
-     * Cloudflare-class WAFs often answer by stalling the connection —
-     * exactly the "cURL error 28 ... 0 bytes received" symptom.
-     *
-     * When a profile is active we therefore leave those options untouched.
+     * Individual overrides from bridges (a custom User-Agent header, an
+     * extra Accept, forcing HTTP/1.1 for a specific site) are honoured as
+     *-is: curl merges app headers over the profile defaults one-by-one,
+     * so only the explicitly overridden element changes while the rest of
+     * the profile keeps working. This method only reports whether the
+     * global profile machinery is available at all.
      */
     public static function getImpersonateTarget(): ?string
     {
@@ -105,15 +116,60 @@ final class CurlHttpClient implements HttpClient
         return null;
     }
 
+    /**
+     * Detects whether the bridge explicitly opted out of impersonation for
+     * this request by passing CURLOPT_IMPERSONATE => '' (or 'none'), which
+     * the patched library honours at execution time (curl_easy_setopt with
+     * an empty target resets the handle to a vanilla curl configuration).
+     */
+    private static function isOptOut(array $curlOptions): bool
+    {
+        $opt = self::impersonateOption();
+        if (array_key_exists($opt, $curlOptions) === false) {
+            return false;
+        }
+        $explicit = strtolower(trim((string)$curlOptions[$opt]));
+        return $explicit === '' || $explicit === 'none';
+    }
+
     public function request(string $url, array $config = []): Response
     {
+        // An explicit per-request opt-out (CURLOPT_IMPERSONATE => '') also
+        // means "no global profile": strip the env var before curl_init()
+        // so the patched library does not auto-apply the profile to this
+        // handle, and restore it afterwards (putenv affects the whole
+        // process; php-fpm workers handle one request at a time).
+        $optOutRequested = self::isOptOut($config['curl_options'] ?? []);
+        $savedEnv = null;
+        if ($optOutRequested === true && getenv('CURL_IMPERSONATE') !== false) {
+            $savedEnv = (string)getenv('CURL_IMPERSONATE');
+            putenv('CURL_IMPERSONATE');
+        }
+
         $ch = curl_init($url);
         if ($ch === false) {
+            if ($savedEnv !== null) {
+                putenv('CURL_IMPERSONATE=' . $savedEnv);
+            }
             throw new HttpException('Failed to initialize cURL');
         }
 
+        // With an active global profile the patched library applies the
+        // browser fingerprint at handle-creation time (curl_easy_impersonate
+        // from curl_easy_init). On retry paths below we call curl_reset(),
+        // which re-reads CURL_IMPERSONATE; keep it unset for opted-out
+        // requests so retries stay opt-out as well. The env var is restored
+        // again right before the handle is released (see below).
+        if ($optOutRequested === true) {
+            // Belt and braces: also disable the profile directly on this
+            // handle. Per lexiforest/curl-impersonate, setting
+            // CURLOPT_IMPERSONATE to "" resets the handle to a vanilla curl
+            // configuration, overriding anything applied via the env var.
+            $config['curl_options'][self::impersonateOption()] = '';
+        }
+
         $defaultConfig = [
-            'useragent'             => self::DEFAULT_USERAGENT,
+            'useragent'             => null,
             'timeout'               => 5,
             'connect_timeout'       => null,
             'headers'               => [],
@@ -137,37 +193,19 @@ final class CurlHttpClient implements HttpClient
             $httpHeaders[] = sprintf('%s: %s', $name, $value);
         }
 
-        // curl-impersonate (see getImpersonateTarget()): when the library is
-        // the impersonate build and CURL_IMPERSONATE is set, every handle
-        // created by curl_init()/curl_reset() already carries the full Chrome
-        // fingerprint plus a "base header" list (User-Agent, sec-ch-ua,
-        // Accept, Sec-Fetch-*, Accept-Encoding, Accept-Language). libcurl's
-        // Curl_http_merge_headers() lets app headers override those one by
-        // one, so overriding only *some* of them (e.g. forcing HTTP/1.1 or a
-        // custom UA) produces an inconsistent fingerprint that modern WAFs
-        // answer by stalling the connection -> "cURL error 28 ... 0 bytes".
+        // curl-impersonate behaviour (see getImpersonateTarget()): when the
+        // library is the impersonate build and CURL_IMPERSONATE is set, every
+        // handle created by curl_init() already carries the full browser
+        // fingerprint plus the profile's default header list. libcurl merges
+        // CURLOPT_HTTPHEADER over those defaults one-by-one, so whatever a
+        // bridge passes through (a custom User-Agent, an extra Accept, a
+        // Referer — e.g. DanbooruBridge or RuStoreBridge) simply replaces the
+        // matching profile header while everything else about the spoofed
+        // profile stays exactly as curl-impersonate built it. No filtering,
+        // no rewriting: anonymization is entirely curl-impersonate's job.
+        // A bridge that wants full manual control opts out explicitly with
+        // CURLOPT_IMPERSONATE => '' (handled before curl_init above).
         $impersonate = self::getImpersonateTarget();
-        if ($impersonate !== null) {
-            // Keep the profile's own Accept/Accept-Language client hints.
-            $browserHeaders = ['accept', 'accept-language'];
-            $httpHeaders = array_values(array_filter(
-                $httpHeaders,
-                fn(string $h): bool => !in_array(
-                    strtolower(trim(explode(':', $h, 2)[0])),
-                    $browserHeaders,
-                    true
-                )
-            ));
-
-            // Never let a bridge downgrade HTTP/2 back to 1.x while keeping
-            // the Chrome TLS/H2 settings — unless it explicitly opts out via
-            // the impersonate extension option CURLOPT_IMPERSONATE(0).
-            $disableOpt = defined('CURLOPT_IMPERSONATE') === true ? (int)constant('CURLOPT_IMPERSONATE') : -1;
-            $keepHttpVersion = !array_key_exists($disableOpt, $config['curl_options']);
-            if ($keepHttpVersion === true) {
-                unset($config['curl_options'][CURLOPT_HTTP_VERSION]);
-            }
-        }
 
         $curlOptions = [
             CURLOPT_HEADER          => false,
@@ -183,19 +221,22 @@ final class CurlHttpClient implements HttpClient
             CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
         ];
 
-        // User-Agent handling:
-        // - With an active curl-impersonate profile and no explicit UA in the
-        //   config, send nothing: Curl_http_merge_headers() substitutes the
-        //   profile's own Chrome UA, keeping it consistent with sec-ch-ua
-        //   client hints and the TLS/H2 fingerprint. A mismatched pair
-        //   (Chrome fingerprint + "curl/8.x" or stale custom UA) is a common
-        //   trigger for WAF black-holing -> cURL error 28, 0 bytes received.
-        // - On plain libcurl (dev/tests), fall back to the configured UA or
-        //   DEFAULT_USERAGENT; never send an empty "User-Agent:" header.
-        if ($config['useragent'] !== null && $config['useragent'] !== '') {
-            $curlOptions[CURLOPT_USERAGENT] = $config['useragent'];
-        } elseif ($impersonate === null) {
-            $curlOptions[CURLOPT_USERAGENT] = self::DEFAULT_USERAGENT;
+        // User-Agent handling: CURLOPT_USERAGENT is a *global* override that
+        // would replace the profile UA on every single request, which is not
+        // a bridge-level block but deployment config. When an impersonate
+        // profile is active we leave it to curl-impersonate entirely; bridges
+        // that need their own UA set the 'User-Agent' header explicitly —
+        // libcurl merges that over the profile default one-by-one without
+        // touching the rest of the fingerprint. Only when no profile is in
+        // effect (plain libcurl, dev/tests) do we apply the configured UA,
+        // and only if one was actually configured — never send an empty or
+        // made-up User-Agent.
+        $configuredUa = $config['useragent'] ?? null;
+        if (
+            ($configuredUa !== null && $configuredUa !== '') === true
+            && ($impersonate === null || $optOutRequested === true)
+        ) {
+            $curlOptions[CURLOPT_USERAGENT] = $configuredUa;
         }
 
         if ($config['if_not_modified_since'] !== null) {
@@ -304,6 +345,13 @@ final class CurlHttpClient implements HttpClient
         }
 
         $statusCode = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+
+        // Restore the global profile env after an opted-out request so the
+        // next request in this worker impersonates again (see curl_init()).
+        if ($savedEnv !== null) {
+            putenv('CURL_IMPERSONATE=' . $savedEnv);
+            $savedEnv = null;
+        }
 
         // Release the connection back to curl's pool instead of hard-closing it.
         if (function_exists('curl_close') === true) {
