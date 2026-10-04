@@ -67,6 +67,15 @@ final class DisplayAction implements ActionInterface
 
         $bridge = $this->safeLoader->createSafely($bridgeClassName);
 
+        // Broken stubs cannot produce data. Fail fast with a plain error
+        // response and skip both cache layers entirely so the request is
+        // retried immediately after a deployment fix (no negative caching).
+        if ($this->safeLoader->isBridgeBroken($bridge)) {
+            $message = sprintf('The bridge "%s" failed to load: %s', $bridgeName, $bridge->getDescription());
+            $this->logger->error(sprintf('Broken bridge stub returned for "%s"', $bridgeName));
+            return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => $message]), 500);
+        }
+
         $response = $this->createResponse($request, $bridge, $format);
 
         if ($response->getCode() === 200) {
@@ -77,7 +86,11 @@ final class DisplayAction implements ActionInterface
             } else {
                 $ttl = $bridge->getCacheTimeout();
             }
-            $this->cache->set($cacheKey, $response, $ttl);
+            // Honour "do not cache" semantics: timeout 0 means the entry
+            // must never be persisted (also enforced inside the caches).
+            if ((int) $ttl > 0) {
+                $this->cache->set($cacheKey, $response, (int) $ttl);
+            }
         }
 
         return $response;

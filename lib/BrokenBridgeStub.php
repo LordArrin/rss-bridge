@@ -113,7 +113,11 @@ class BrokenBridgeStub extends BridgeAbstract
 
     /**
      * Returns a cache timeout of 0 so that broken stubs are never cached
-     * for long and can be automatically retried after a deployment fix.
+     * and can be automatically retried after a deployment fix.
+     *
+     * Note: DisplayAction short-circuits broken stubs before reaching the
+     * cache write, and CacheMiddleware skips persisting responses whose
+     * '_cache_timeout' request attribute is 0 (set by ExceptionMiddleware).
      */
     public function getCacheTimeout(): int
     {
