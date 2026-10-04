@@ -57,7 +57,11 @@ function getContents(
     // TODO: consider url validation at this point
 
     $config = [
-        'useragent'     => Configuration::getConfig('http', 'useragent'),
+        // No useragent configured -> keep curl's default (curl-impersonate
+        // spoofs a real Chrome UA). Sending null would override it with an
+        // empty "User-Agent:" header, which many WAFs silently black-hole
+        // (no response at all -> cURL error 28 with 0 bytes received).
+        'useragent'     => Configuration::getConfig('http', 'useragent') ?: null,
         'timeout'       => Configuration::getConfig('http', 'timeout'),
         'retries'       => Configuration::getConfig('http', 'retries'),
         'curl_options'  => $curlOptions + [CURLOPT_ENCODING => ''],
