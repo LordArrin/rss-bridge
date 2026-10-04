@@ -85,8 +85,7 @@ final class BasicAuthMiddleware implements Middleware
             return [$user, $password];
         }
 
-        $header = $request->server('HTTP_AUTHORIZATION')
-            ?? $request->server('REDIRECT_HTTP_AUTHORIZATION');
+        $header = $request->server('HTTP_AUTHORIZATION') ?? $request->server('REDIRECT_HTTP_AUTHORIZATION');
 
         if ($header === null || $header === '') {
             return [null, null];

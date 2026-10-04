@@ -104,7 +104,7 @@ final class CacheMiddleware implements Middleware
     private function isBrokenBridgeRequest(Request $request): bool
     {
         $bridgeName = $request->get('bridge');
-        if (!is_string($bridgeName) || $bridgeName === '') {
+        if (is_string($bridgeName) === false || $bridgeName === '') {
             return false;
         }
 

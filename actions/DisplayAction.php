@@ -70,7 +70,7 @@ final class DisplayAction implements ActionInterface
         // Broken stubs cannot produce data. Fail fast with a plain error
         // response and skip both cache layers entirely so the request is
         // retried immediately after a deployment fix (no negative caching).
-        if ($this->safeLoader->isBridgeBroken($bridge)) {
+        if ($this->safeLoader->isBridgeBroken($bridge) === true) {
             $message = sprintf('The bridge "%s" failed to load: %s', $bridgeName, $bridge->getDescription());
             $this->logger->error(sprintf('Broken bridge stub returned for "%s"', $bridgeName));
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => $message]), 500);
