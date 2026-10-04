@@ -457,7 +457,7 @@ RUN printf '#!/bin/sh\nexec env CURL_IMPERSONATE_BIN=chrome124 /usr/bin/curl "$@
     chmod +x /usr/local/bin/curl-healthcheck
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD ["/usr/local/bin/curl-healthcheck", "-fsS", "--compressed", "http://localhost/?action=health"] || exit 1
+  CMD ["/usr/local/bin/curl-healthcheck", "-fsS", "--compressed", "http://localhost/?action=health"]
 
 EXPOSE 80/tcp
 
