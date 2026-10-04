@@ -14,11 +14,10 @@ final class TheHackerNewsBridge extends BridgeAbstract
     public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
-    private const CSS = [
-        'img' => 'display: block; float: none; clear: both; max-width: 800px; width: auto; height: auto; margin: 16px 0; padding: 0;',
-        'ul' => 'list-style-type: disc; margin: 12px 0; padding-left: 24px;',
-        'li' => 'margin: 6px 0;',
-    ];
+    private const IMG_STYLE = 'display: block; float: none; clear: both; max-width: 800px; width: auto; height: auto; margin: 0; padding: 0;';
+    private const WRAPPER_STYLE = 'display: block; clear: both; margin: 16px 0; padding: 0; text-align: left;';
+    private const UL_STYLE = 'list-style-type: disc; margin: 12px 0; padding-left: 24px; clear: both;';
+    private const LI_STYLE = 'margin: 6px 0;';
 
     private const JUNK_SELECTORS = [
         '.lazyload',
@@ -27,16 +26,19 @@ final class TheHackerNewsBridge extends BridgeAbstract
         'style',
         'noscript',
         'iframe',
+        '.social-share',
+        '.related-posts',
+        '.ad-container',
     ];
 
-    protected const LIMIT = 5;
+    protected const LIMIT = 10;
 
     public function collectData(): void
     {
-        $html = getContents($this->getURI());
+        $html = getContents(self::URI);
 
         if (is_string($html) === false || $html === '') {
-            \throwServerException('Empty response from The Hacker News homepage');
+            throwServerException('Empty response from The Hacker News homepage');
         }
 
         libxml_use_internal_errors(true);
@@ -44,10 +46,10 @@ final class TheHackerNewsBridge extends BridgeAbstract
         libxml_use_internal_errors(false);
 
         $elements = $dom->querySelectorAll('div.body-post');
-        $limit = 0;
+        $count = 0;
 
         foreach ($elements as $element) {
-            if ($limit >= self::LIMIT) {
+            if ($count >= self::LIMIT) {
                 break;
             }
 
@@ -60,97 +62,208 @@ final class TheHackerNewsBridge extends BridgeAbstract
             $titleNode = $element->querySelector('h2.home-title');
             $articleTitle = ($titleNode !== null) ? trim((string) $titleNode->textContent) : '';
 
-            $articleTimestamp = time();
-            $calendar = $element->querySelector('i.icon-calendar');
-            if ($calendar !== null) {
-                $parent = $calendar->parentNode;
-                if ($parent instanceof \Dom\Element === true) {
-                    $parentHtml = (string) $parent->innerHTML;
-                    if (preg_match('/<\/i>(.*?)<\/span>/is', $parentHtml, $matches) === 1) {
-                        $dateText = trim(strip_tags((string) $matches[1]));
-                        if ($dateText !== '') {
-                            $ts = strtotime($dateText);
-                            if ($ts !== false) {
-                                $articleTimestamp = $ts;
-                            }
-                        }
-                    }
-                }
-            }
+            $articleTimestamp = $this->extractTimestamp($element);
 
             $articleThumbnail = '';
             $thumbnailNode = $element->querySelector('img');
             if ($thumbnailNode !== null) {
-                $articleThumbnail = (string) ($thumbnailNode->getAttribute('src') ?? '');
+                $src = $thumbnailNode->getAttribute('src');
+                if ($src !== null && $src !== '' && str_starts_with($src, 'data:image/svg+xml') === false) {
+                    $articleThumbnail = (string) $src;
+                }
             }
 
             $descNode = $element->querySelector('div.home-desc');
-            $articleContent = ($descNode !== null) ? trim((string) $descNode->textContent) : '';
+            $articleContentFallback = ($descNode !== null) ? trim((string) $descNode->textContent) : '';
 
             $linkNode = $element->querySelector('a.story-link');
             if ($linkNode === null) {
                 continue;
             }
 
-            $articleUrl = (string) ($linkNode->getAttribute('href') ?? '');
-            if ($articleUrl === '') {
+            $href = $linkNode->getAttribute('href');
+            if ($href === null || $href === '') {
                 continue;
             }
-            $articleUrl = $this->resolveUrl(self::URI, $articleUrl);
 
-            $articleHtml = getContents($articleUrl);
-            if (is_string($articleHtml) === true && $articleHtml !== '') {
-                libxml_use_internal_errors(true);
-                $articleDom = \Dom\HTMLDocument::createFromString($articleHtml);
-                libxml_use_internal_errors(false);
+            $articleUrl = urljoin(self::URI, (string) $href);
 
-                $articleBody = $articleDom->querySelector('div.articlebody');
-                if ($articleBody !== null) {
-                    $this->convertLazyLoading($articleBody);
-                    $this->resolveRelativeLinks($articleBody, $articleUrl);
-                    $this->removeSelectors($articleBody, self::JUNK_SELECTORS);
-                    $this->limitImageSize($articleBody);
-                    $this->styleLists($articleBody);
+            $articleContent = $this->fetchArticleContent($articleUrl, $articleAuthor);
 
-                    $headerImg = $articleBody->querySelector('img');
-                    if ($headerImg !== null) {
-                        $parentImg = $headerImg->parentNode;
-                        if ($parentImg instanceof \Dom\Element === true) {
-                            $parentImg->removeAttribute('style');
-                        }
-                    }
-
-                    $articleContent = (string) $articleBody->innerHTML;
-                }
-
-                $authorSpans = $articleDom->querySelectorAll('span.author');
-                if ($authorSpans->length > 0) {
-                    $lastAuthor = $authorSpans->item($authorSpans->length - 1);
-                    if ($lastAuthor !== null) {
-                        $articleAuthor = trim((string) $lastAuthor->textContent);
-                    }
-                }
+            if ($articleContent === '') {
+                $articleContent = $articleContentFallback;
             }
 
             $content = '';
             if ($articleThumbnail !== '') {
-                $fullThumbnailUrl = $this->resolveUrl($articleUrl, $articleThumbnail);
-                $content .= '<p><img src="' . htmlspecialchars($fullThumbnailUrl) . '" style="' . self::CSS['img'] . '" alt="" /></p>';
+                $fullThumbnailUrl = urljoin($articleUrl, $articleThumbnail);
+                $content .= sprintf(
+                    '<p style="%s"><img src="%s" style="%s" alt="%s" /></p>',
+                    self::WRAPPER_STYLE,
+                    e($fullThumbnailUrl),
+                    self::IMG_STYLE,
+                    e($articleTitle)
+                );
             }
             $content .= $articleContent;
 
-            $item = [];
-            $item['uri'] = $articleUrl;
-            $item['title'] = $articleTitle;
+            $item = [
+                'uri' => $articleUrl,
+                'title' => $articleTitle,
+                'timestamp' => $articleTimestamp,
+                'content' => trim($content),
+                'uid' => $articleUrl,
+            ];
+
             if (is_string($articleAuthor) === true && $articleAuthor !== '') {
                 $item['author'] = $articleAuthor;
             }
-            $item['timestamp'] = $articleTimestamp;
-            $item['content'] = trim($content);
-            $item['uid'] = $articleUrl;
 
             $this->items[] = $item;
-            $limit++;
+            $count++;
+        }
+
+        if ($this->items === []) {
+            throwServerException('No articles found. The site layout may have changed.');
+        }
+    }
+
+    private function extractTimestamp(\Dom\Element $element): int
+    {
+        $calendar = $element->querySelector('i.icon-calendar');
+        if ($calendar === null) {
+            return time();
+        }
+
+        $parent = $calendar->parentElement;
+        if ($parent instanceof \Dom\Element === false) {
+            return time();
+        }
+
+        $parentHtml = (string) $parent->innerHTML;
+        if (preg_match('/<\/i>(.*?)<\/span>/is', $parentHtml, $matches) === 1) {
+            $dateText = trim(strip_tags((string) $matches[1]));
+            if ($dateText !== '') {
+                $ts = strtotime($dateText);
+                if ($ts !== false) {
+                    return $ts;
+                }
+            }
+        }
+
+        return time();
+    }
+
+    private function fetchArticleContent(string $url, ?string &$author): string
+    {
+        $articleDom = getSimpleHTMLDOMCached($url, 86400);
+        if ($articleDom === null) {
+            return '';
+        }
+
+        $authorSpans = $articleDom->querySelectorAll('span.author');
+        if ($authorSpans->length > 0) {
+            $lastAuthor = $authorSpans->item($authorSpans->length - 1);
+            if ($lastAuthor !== null) {
+                $author = trim((string) $lastAuthor->textContent);
+            }
+        }
+
+        $articleBody = $articleDom->querySelector('div.articlebody');
+        if ($articleBody === null) {
+            return '';
+        }
+
+        $this->convertLazyLoading($articleBody);
+        $this->resolveRelativeLinks($articleBody, $url);
+        $this->removeSelectors($articleBody, self::JUNK_SELECTORS);
+        $this->removeSvgPlaceholders($articleBody);
+        $this->fixImages($articleBody);
+        $this->styleLists($articleBody);
+
+        $headerImg = $articleBody->querySelector('img');
+        if ($headerImg !== null) {
+            $parentImg = $headerImg->parentElement;
+            if ($parentImg instanceof \Dom\Element === true) {
+                $parentImg->removeAttribute('style');
+            }
+        }
+
+        $html = break_annoying_html_tags((string) $articleBody->innerHTML);
+
+        return $html;
+    }
+
+    private function removeSvgPlaceholders(\Dom\Node $node): void
+    {
+        if ($node instanceof \Dom\Element === false && $node instanceof \Dom\HTMLDocument === false) {
+            return;
+        }
+
+        $images = $node->querySelectorAll('img');
+
+        foreach ($images as $img) {
+            if ($img instanceof \Dom\Element === false) {
+                continue;
+            }
+
+            $src = $img->getAttribute('src');
+            if (is_string($src) === true && str_starts_with($src, 'data:image/svg+xml') === true) {
+                $parent = $img->parentElement;
+                if ($parent !== null) {
+                    $parent->removeChild($img);
+                }
+            }
+        }
+    }
+
+    private function fixImages(\Dom\Node $node): void
+    {
+        if ($node instanceof \Dom\Element === false && $node instanceof \Dom\HTMLDocument === false) {
+            return;
+        }
+
+        $images = $node->querySelectorAll('img');
+
+        foreach ($images as $img) {
+            if ($img instanceof \Dom\Element === false) {
+                continue;
+            }
+
+            $img->removeAttribute('width');
+            $img->removeAttribute('height');
+            $img->removeAttribute('align');
+            $img->removeAttribute('border');
+
+            $img->setAttribute('style', self::IMG_STYLE);
+
+            $current = $img->parentElement;
+            while ($current !== null && $current instanceof \Dom\Element === true) {
+                $tagName = strtolower($current->tagName);
+
+                if ($tagName === 'div' || $tagName === 'p' || $tagName === 'article' || $tagName === 'section') {
+                    break;
+                }
+
+                if ($tagName === 'a' || $tagName === 'span' || $tagName === 'figure') {
+                    $current->setAttribute('style', self::WRAPPER_STYLE);
+                }
+
+                $current = $current->parentElement;
+            }
+
+            $parent = $img->parentElement;
+            if ($parent instanceof \Dom\Element === true) {
+                $parentTag = strtolower($parent->tagName);
+                if ($parentTag !== 'p' && $parentTag !== 'div' && $parentTag !== 'figure') {
+                    $wrapper = $node->ownerDocument?->createElement('div');
+                    if ($wrapper !== null) {
+                        $wrapper->setAttribute('style', self::WRAPPER_STYLE);
+                        $parent->insertBefore($wrapper, $img);
+                        $wrapper->appendChild($img);
+                    }
+                }
+            }
         }
     }
 
@@ -162,13 +275,19 @@ final class TheHackerNewsBridge extends BridgeAbstract
 
         foreach ($node->querySelectorAll('ul') as $ul) {
             if ($ul instanceof \Dom\Element === true) {
-                $ul->setAttribute('style', self::CSS['ul']);
+                $ul->setAttribute('style', self::UL_STYLE);
+            }
+        }
+
+        foreach ($node->querySelectorAll('ol') as $ol) {
+            if ($ol instanceof \Dom\Element === true) {
+                $ol->setAttribute('style', self::UL_STYLE);
             }
         }
 
         foreach ($node->querySelectorAll('li') as $li) {
             if ($li instanceof \Dom\Element === true) {
-                $li->setAttribute('style', self::CSS['li']);
+                $li->setAttribute('style', self::LI_STYLE);
             }
         }
     }
@@ -184,7 +303,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
 
         foreach ($elements as $el) {
             if ($el instanceof \Dom\Element === true) {
-                $parent = $el->parentNode;
+                $parent = $el->parentElement;
                 if ($parent !== null) {
                     $parent->removeChild($el);
                 }
@@ -224,56 +343,19 @@ final class TheHackerNewsBridge extends BridgeAbstract
         }
 
         $selectors = ['a[href]', 'img[src]', 'link[href]', 'script[src]', 'source[src]', 'video[src]'];
+
         foreach ($selectors as $selector) {
             foreach ($node->querySelectorAll($selector) as $el) {
                 if ($el instanceof \Dom\Element === false) {
                     continue;
                 }
 
-                $attrName = 'src';
-                if (str_contains($selector, 'href') === true) {
-                    $attrName = 'href';
+                $attrName = str_contains($selector, 'href') === true ? 'href' : 'src';
+                $attr = $el->getAttribute($attrName);
+
+                if (is_string($attr) === true && $attr !== '') {
+                    $el->setAttribute($attrName, urljoin($baseUrl, $attr));
                 }
-                $attr = (string) ($el->getAttribute($attrName) ?? '');
-                if ($attr !== '') {
-                    $el->setAttribute($attrName, $this->resolveUrl($baseUrl, $attr));
-                }
-            }
-        }
-    }
-
-    private function resolveUrl(string $base, string $relative): string
-    {
-        if (str_starts_with($relative, 'http://') === true || str_starts_with($relative, 'https://') === true) {
-            return $relative;
-        }
-
-        if (str_starts_with($relative, '//') === true) {
-            return 'https:' . $relative;
-        }
-
-        if (str_starts_with($relative, '/') === true) {
-            $parsed = parse_url($base);
-            $scheme = (string) ($parsed['scheme'] ?? 'https');
-            $host = (string) ($parsed['host'] ?? '');
-            return $scheme . '://' . $host . $relative;
-        }
-
-        return rtrim($base, '/') . '/' . ltrim($relative, '/');
-    }
-
-    private function limitImageSize(\Dom\Node $node): void
-    {
-        if ($node instanceof \Dom\Element === false && $node instanceof \Dom\HTMLDocument === false) {
-            return;
-        }
-
-        foreach ($node->querySelectorAll('img') as $img) {
-            if ($img instanceof \Dom\Element === true) {
-                $img->removeAttribute('width');
-                $img->removeAttribute('height');
-                $img->removeAttribute('align');
-                $img->setAttribute('style', self::CSS['img']);
             }
         }
     }

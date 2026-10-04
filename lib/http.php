@@ -84,9 +84,7 @@ final class CurlHttpClient implements HttpClient
      */
     private static function impersonateOption(): int
     {
-        return defined('CURLOPT_IMPERSONATE') === true
-            ? (int)constant('CURLOPT_IMPERSONATE')
-            : self::IMPERSONATE_OPT;
+        return defined('CURLOPT_IMPERSONATE') === true ? (int)constant('CURLOPT_IMPERSONATE') : self::IMPERSONATE_OPT;
     }
 
     /**
