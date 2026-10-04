@@ -445,4 +445,6 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 
 EXPOSE 80/tcp
 
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh /app/bin/* /app/memcached-config.php
+
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
