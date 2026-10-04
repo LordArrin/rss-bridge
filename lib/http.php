@@ -130,8 +130,7 @@ final class CurlHttpClient implements HttpClient
         // hanging upstream (black-holed TCP connect, stalled TLS handshake)
         // blocks an fpm worker for timeout*(retries+1)+backoff seconds and
         // starves the worker pool, making unrelated feeds time out as well.
-        $deadline = microtime(true)
-            + ((int)$config['timeout'] * (1 + (int)$config['retries'])) * 1.35;
+        $deadline = microtime(true) + ((int)$config['timeout'] * (1 + (int)$config['retries'])) * 1.35;
 
         $httpHeaders = [];
         foreach ($config['headers'] as $name => $value) {
@@ -163,8 +162,7 @@ final class CurlHttpClient implements HttpClient
             // Never let a bridge downgrade HTTP/2 back to 1.x while keeping
             // the Chrome TLS/H2 settings — unless it explicitly opts out via
             // the impersonate extension option CURLOPT_IMPERSONATE(0).
-            $disableOpt = defined('CURLOPT_IMPERSONATE') === true
-                ? (int)constant('CURLOPT_IMPERSONATE') : -1;
+            $disableOpt = defined('CURLOPT_IMPERSONATE') === true ? (int)constant('CURLOPT_IMPERSONATE') : -1;
             $keepHttpVersion = !array_key_exists($disableOpt, $config['curl_options']);
             if ($keepHttpVersion === true) {
                 unset($config['curl_options'][CURLOPT_HTTP_VERSION]);
@@ -178,8 +176,7 @@ final class CurlHttpClient implements HttpClient
             CURLOPT_FOLLOWLOCATION  => true,
             CURLOPT_MAXREDIRS       => $config['max_redirections'],
             CURLOPT_TIMEOUT         => $config['timeout'],
-            CURLOPT_CONNECTTIMEOUT  => $config['connect_timeout']
-                ?? min(10, (int)($config['timeout'] / 2)),
+            CURLOPT_CONNECTTIMEOUT  => $config['connect_timeout'] ?? min(10, (int)($config['timeout'] / 2)),
             CURLOPT_NOSIGNAL        => true,
             CURLOPT_ENCODING        => '',
             CURLOPT_PROTOCOLS       => CURLPROTO_HTTP | CURLPROTO_HTTPS,
