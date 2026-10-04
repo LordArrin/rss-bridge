@@ -70,6 +70,41 @@ interface HttpClient
 
 final class CurlHttpClient implements HttpClient
 {
+    /**
+     * Fallback User-Agent used when none is configured and no
+     * impersonation profile is active.
+     */
+    public const DEFAULT_USERAGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36';
+
+    /**
+     * Returns the curl-impersonate target (e.g. "chrome150") that is in
+     * effect for this process, or null when running against plain libcurl.
+     *
+     * How this works (verified against lexiforest/curl-impersonate):
+     * the patched library calls curl_easy_impersonate() automatically from
+     * curl_easy_init()/curl_easy_reset() whenever the CURL_IMPERSONATE
+     * environment variable is set. That single call sets the full browser
+     * fingerprint AND a base header list that includes the real Chrome
+     * User-Agent and sec-ch-ua / Accept-* client-hint headers.
+     *
+     * Consequence: if application code then calls CURLOPT_USERAGENT or
+     * overrides Accept/Accept-Language via CURLOPT_HTTPHEADER, it UNDOES
+     * part of the impersonation and the fingerprint becomes inconsistent
+     * (Chrome TLS/H2 fingerprint + mismatched UA/client-hints), which
+     * Cloudflare-class WAFs often answer by stalling the connection —
+     * exactly the "cURL error 28 ... 0 bytes received" symptom.
+     *
+     * When a profile is active we therefore leave those options untouched.
+     */
+    public static function getImpersonateTarget(): ?string
+    {
+        $target = getenv('CURL_IMPERSONATE');
+        if (is_string($target) === true && $target !== '') {
+            return $target;
+        }
+        return null;
+    }
+
     public function request(string $url, array $config = []): Response
     {
         $ch = curl_init($url);
@@ -78,8 +113,9 @@ final class CurlHttpClient implements HttpClient
         }
 
         $defaultConfig = [
-            'useragent'             => null,
+            'useragent'             => self::DEFAULT_USERAGENT,
             'timeout'               => 5,
+            'connect_timeout'       => null,
             'headers'               => [],
             'curl_options'          => [],
             'if_not_modified_since' => null,
@@ -90,9 +126,49 @@ final class CurlHttpClient implements HttpClient
 
         $config = array_merge($defaultConfig, $config);
 
+        // Wall-clock budget for the whole attempt loop. Without it a single
+        // hanging upstream (black-holed TCP connect, stalled TLS handshake)
+        // blocks an fpm worker for timeout*(retries+1)+backoff seconds and
+        // starves the worker pool, making unrelated feeds time out as well.
+        $deadline = microtime(true)
+            + ((int)$config['timeout'] * (1 + (int)$config['retries'])) * 1.35;
+
         $httpHeaders = [];
         foreach ($config['headers'] as $name => $value) {
             $httpHeaders[] = sprintf('%s: %s', $name, $value);
+        }
+
+        // curl-impersonate (see getImpersonateTarget()): when the library is
+        // the impersonate build and CURL_IMPERSONATE is set, every handle
+        // created by curl_init()/curl_reset() already carries the full Chrome
+        // fingerprint plus a "base header" list (User-Agent, sec-ch-ua,
+        // Accept, Sec-Fetch-*, Accept-Encoding, Accept-Language). libcurl's
+        // Curl_http_merge_headers() lets app headers override those one by
+        // one, so overriding only *some* of them (e.g. forcing HTTP/1.1 or a
+        // custom UA) produces an inconsistent fingerprint that modern WAFs
+        // answer by stalling the connection -> "cURL error 28 ... 0 bytes".
+        $impersonate = self::getImpersonateTarget();
+        if ($impersonate !== null) {
+            // Keep the profile's own Accept/Accept-Language client hints.
+            $browserHeaders = ['accept', 'accept-language'];
+            $httpHeaders = array_values(array_filter(
+                $httpHeaders,
+                fn(string $h): bool => !in_array(
+                    strtolower(trim(explode(':', $h, 2)[0])),
+                    $browserHeaders,
+                    true
+                )
+            ));
+
+            // Never let a bridge downgrade HTTP/2 back to 1.x while keeping
+            // the Chrome TLS/H2 settings — unless it explicitly opts out via
+            // the impersonate extension option CURLOPT_IMPERSONATE(0).
+            $disableOpt = defined('CURLOPT_IMPERSONATE') === true
+                ? (int)constant('CURLOPT_IMPERSONATE') : -1;
+            $keepHttpVersion = !array_key_exists($disableOpt, $config['curl_options']);
+            if ($keepHttpVersion === true) {
+                unset($config['curl_options'][CURLOPT_HTTP_VERSION]);
+            }
         }
 
         $curlOptions = [
@@ -102,14 +178,27 @@ final class CurlHttpClient implements HttpClient
             CURLOPT_FOLLOWLOCATION  => true,
             CURLOPT_MAXREDIRS       => $config['max_redirections'],
             CURLOPT_TIMEOUT         => $config['timeout'],
-            CURLOPT_CONNECTTIMEOUT  => min(10, (int)($config['timeout'] / 2)),
+            CURLOPT_CONNECTTIMEOUT  => $config['connect_timeout']
+                ?? min(10, (int)($config['timeout'] / 2)),
+            CURLOPT_NOSIGNAL        => true,
             CURLOPT_ENCODING        => '',
             CURLOPT_PROTOCOLS       => CURLPROTO_HTTP | CURLPROTO_HTTPS,
             CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
         ];
 
-        if ($config['useragent'] !== null) {
+        // User-Agent handling:
+        // - With an active curl-impersonate profile and no explicit UA in the
+        //   config, send nothing: Curl_http_merge_headers() substitutes the
+        //   profile's own Chrome UA, keeping it consistent with sec-ch-ua
+        //   client hints and the TLS/H2 fingerprint. A mismatched pair
+        //   (Chrome fingerprint + "curl/8.x" or stale custom UA) is a common
+        //   trigger for WAF black-holing -> cURL error 28, 0 bytes received.
+        // - On plain libcurl (dev/tests), fall back to the configured UA or
+        //   DEFAULT_USERAGENT; never send an empty "User-Agent:" header.
+        if ($config['useragent'] !== null && $config['useragent'] !== '') {
             $curlOptions[CURLOPT_USERAGENT] = $config['useragent'];
+        } elseif ($impersonate === null) {
+            $curlOptions[CURLOPT_USERAGENT] = self::DEFAULT_USERAGENT;
         }
 
         if ($config['if_not_modified_since'] !== null) {
@@ -169,12 +258,21 @@ final class CurlHttpClient implements HttpClient
         $body = false;
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            // Never start an attempt we cannot finish within the budget.
+            if ($attempt > 1 && (microtime(true) + $config['timeout']) > $deadline) {
+                break;
+            }
+
             $body = curl_exec($ch);
             if ($body !== false) {
                 break;
             }
             $lastError = curl_error($ch);
             $lastErrno = curl_errno($ch);
+            // Do not retry on errors that will certainly repeat: TLS/config
+            // problems, malformed URLs, unresolvable hosts and operation
+            // timeouts (a dead upstream does not recover in 500ms — retrying
+            // only multiplies the time the fpm worker is blocked).
             if (
                 in_array($lastErrno, [
                 CURLE_SSL_CERTPROBLEM,
@@ -182,23 +280,40 @@ final class CurlHttpClient implements HttpClient
                 CURLE_BAD_CONTENT_ENCODING,
                 CURLE_URL_MALFORMAT,
                 CURLE_COULDNT_RESOLVE_HOST,
+                CURLE_OPERATION_TIMEDOUT,
                 ], true) === true
             ) {
                 break;
             }
 
             if ($attempt < $maxAttempts) {
+                // Exponential backoff with jitter, capped by the deadline.
+                $delayUs = min(
+                    (int)((2 ** ($attempt - 1)) * 300_000) + mt_rand(0, 200_000),
+                    max(0, (int)(($deadline - microtime(true)) * 1_000_000))
+                );
+                if ($delayUs <= 0) {
+                    break;
+                }
+                usleep($delayUs);
+
                 curl_reset($ch);
                 curl_setopt($ch, CURLOPT_URL, $url);
                 if (curl_setopt_array($ch, $curlOptions) === false) {
                     throw new HttpException('Failed to set cURL options: tried to set an illegal curl option');
                 }
                 curl_setopt($ch, CURLOPT_HEADERFUNCTION, $headerCallback);
-                usleep($attempt * 500_000);
             }
         }
 
         $statusCode = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+
+        // Release the connection back to curl's pool instead of hard-closing it.
+        if (function_exists('curl_close') === true) {
+            /** @phpstan-ignore-next-line deprecated in PHP 8.5, handle is freed on unset */
+            curl_close($ch);
+        }
+        unset($ch);
 
         if ($body === false) {
             throw new HttpException(sprintf(
