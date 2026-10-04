@@ -206,7 +206,12 @@ final class TgWSProxy extends ProxyAbstract
     private function discardHandle(): void
     {
         if ($this->handle !== null) {
-            curl_close($this->handle);
+            // curl_close() is deprecated in PHP 8.5 (handles free themselves
+            // on unset); keep it for older runtimes only.
+            if (PHP_VERSION_ID < 80500) {
+                curl_close($this->handle);
+            }
+            unset($this->handle);
             $this->handle = null;
         }
     }
@@ -222,7 +227,13 @@ final class TgWSProxy extends ProxyAbstract
     private function setupBaseOptions(\CurlHandle $ch): void
     {
         $baseOptions = [
-            CURLOPT_PROXYTYPE        => CURLPROXY_SOCKS5_HOSTNAME,
+            // CURLPROXY_SOCKS5_HOSTNAME makes curl ask the SOCKS server to do
+            // the hostname resolution via a SOCKS5 BIND-style handshake that
+            // many lightweight proxies (including tg-websockify variants)
+            // don't implement — they simply never answer, and the request
+            // dies with "cURL error 28 ... 0 bytes received". Plain SOCKS5
+            // resolves locally and connects by IP, which every proxy speaks.
+            CURLOPT_PROXYTYPE        => CURLPROXY_SOCKS5,
             CURLOPT_HTTP_VERSION     => CURL_HTTP_VERSION_1_1,
             CURLOPT_FRESH_CONNECT    => false,
             CURLOPT_FORBID_REUSE     => false,

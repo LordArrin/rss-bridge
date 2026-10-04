@@ -235,7 +235,12 @@ final class FlareSolverrProxy extends ProxyAbstract
             ]);
             throw new \RuntimeException('Invalid JSON response: ' . $e->getMessage());
         } finally {
-            curl_close($ch);
+            // curl_close() is deprecated in PHP 8.5 (handles free themselves
+            // on unset); keep it for older runtimes only.
+            if (PHP_VERSION_ID < 80500) {
+                curl_close($ch);
+            }
+            unset($ch);
         }
     }
 

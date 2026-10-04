@@ -98,12 +98,87 @@ final class CurlHttpClient implements HttpClient
      */
     public static function getImpersonateTarget(): ?string
     {
+        // Lexiforest's curl-impersonate reads the env var CURL_IMPERSONATE
+        // from inside libcurl on every curl_easy_init()/curl_easy_reset().
+        // IMPORTANT: it does NOT validate the target name there — an unknown
+        // profile is silently ignored and the handle keeps a plain curl
+        // fingerprint. The separate curl_easy_impersonate() API (used by the
+        // standalone binary via --impersonate / CURL_IMPERSONATE_BIN) DOES
+        // fail hard on typos. So we validate against our own known-good list
+        // before trusting the env var, otherwise a typo like "chrome150"
+        // would make us skip setting a User-Agent while the library also
+        // skips impersonation -> requests go out as "User-Agent: curl/8.x",
+        // which WAFs black-hole with exactly the "cURL error 28 ... 0 bytes
+        // received" symptom.
         $target = getenv('CURL_IMPERSONATE');
-        if (is_string($target) === true && $target !== '') {
+        if (is_string($target) === true && in_array($target, self::IMPERSONATE_TARGETS, true) === true) {
             return $target;
         }
         return null;
     }
+
+    /**
+     * Targets supported by the bundled lexiforest curl-impersonate build
+     * (see https://github.com/lexiforest/curl-impersonate, "Supported
+     * targets"). Keep in sync with the CURL_VERSION build arg in Dockerfile.
+     */
+    public const IMPERSONATE_TARGETS = [
+        'chrome',
+        'chrome-canary',
+        'chrome-dev',
+        'chrome-beta',
+        'chrome_100',
+        'chrome_101',
+        'chrome_102',
+        'chrome_103',
+        'chrome_104',
+        'chrome_105',
+        'chrome_106',
+        'chrome_107',
+        'chrome_108',
+        'chrome_109',
+        'chrome_110',
+        'chrome_116',
+        'chrome_119',
+        'chrome_120',
+        'chrome_121',
+        'chrome_123',
+        'chrome_124',
+        'chrome_126',
+        'chrome_127',
+        'chrome_128',
+        'chrome_129',
+        'chrome_130',
+        'chrome_131',
+        'chrome_132',
+        'chrome_133',
+        'chrome_134',
+        'chrome_135',
+        'chrome_136',
+        'chrome_137',
+        'chrome_142',
+        'edge',
+        'edge_101',
+        'edge_99',
+        'firefox',
+        'firefox_133',
+        'firefox_135',
+        'firefox_144',
+        'safari',
+        'safari_beta',
+        'safari_15_3',
+        'safari_15_5',
+        'safari_15_6_1',
+        'safari_16',
+        'safari_16_0_5',
+        'safari_17_0',
+        'safari_17_2_1',
+        'safari_18_0',
+        'safari_18_4',
+        'tor',
+        'okhttp4',
+        'okhttp5',
+    ];
 
     public function request(string $url, array $config = []): Response
     {
@@ -159,6 +234,16 @@ final class CurlHttpClient implements HttpClient
                     true
                 )
             ));
+
+            // Same for CURLOPT_USERAGENT: passing it (even the correct
+            // Chrome string) overrides the profile's UA *without* the
+            // accompanying sec-ch-ua / Sec-CH-* client hints that
+            // Curl_http_merge_headers() would have merged, producing a
+            // half-overridden, inconsistent header set. Drop it and let the
+            // profile supply its own UA.
+            if (($config['useragent'] ?? '') === self::DEFAULT_USERAGENT) {
+                $config['useragent'] = null;
+            }
 
             // Never let a bridge downgrade HTTP/2 back to 1.x while keeping
             // the Chrome TLS/H2 settings — unless it explicitly opts out via

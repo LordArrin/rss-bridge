@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
+use RSSBridge\Http\CurlHttpClient;
 use RSSBridge\Proxies\DirectProxy;
 use RSSBridge\Proxies\ProxyFactory;
 
@@ -57,11 +58,14 @@ function getContents(
     // TODO: consider url validation at this point
 
     $config = [
-        // No useragent configured -> keep curl's default (curl-impersonate
-        // spoofs a real Chrome UA). Sending null would override it with an
-        // empty "User-Agent:" header, which many WAFs silently black-hole
-        // (no response at all -> cURL error 28 with 0 bytes received).
-        'useragent'     => Configuration::getConfig('http', 'useragent') ?: null,
+        // No useragent configured -> use the client's DEFAULT_USERAGENT on
+        // plain libcurl. With an active curl-impersonate profile,
+        // CurlHttpClient detects this sentinel and drops it so the profile's
+        // own Chrome UA (consistent with its sec-ch-ua client hints) is sent.
+        // Sending null here would instead produce an empty "User-Agent:"
+        // header, which many WAFs silently black-hole (no response at all ->
+        // cURL error 28 with 0 bytes received).
+        'useragent'     => Configuration::getConfig('http', 'useragent') ?: CurlHttpClient::DEFAULT_USERAGENT,
         'timeout'       => Configuration::getConfig('http', 'timeout'),
         'retries'       => Configuration::getConfig('http', 'retries'),
         'curl_options'  => $curlOptions + [CURLOPT_ENCODING => ''],

@@ -438,11 +438,29 @@ RUN composer install --optimize-autoloader --no-interaction --ignore-platform-re
     sed -i "s/__RSSBRIDGE_IMAGE_VERSION__/${IMAGE_VERSION}/g" /app/index.html && \
     chmod +x /app/bin/* && \
     chmod +x /app/memcached-config.php && \
-    chmod +x /app/docker-entrypoint.sh
+    chmod +x /app/docker-entrypoint.sh && \
+    # Fail fast at build time if the entrypoint is not directly executable.
+    # A runtime "exec /app/docker-entrypoint.sh: no such file or directory"
+    # with the file present means a bad shebang/interpreter or CRLF line
+    # endings (git checkout with core.autocrlf / Windows builds), which this
+    # check catches before the image ships.
+    /bin/sh -c 'head -n1 /app/docker-entrypoint.sh | grep -q "^#!/bin/sh" && ! grep -q $"\r" /app/docker-entrypoint.sh && test -x /app/docker-entrypoint.sh && /bin/sh -c "$(head -n1 /app/docker-entrypoint.sh; echo true)"'
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-  CMD curl -fsS --compressed "http://localhost/?action=health" || exit 1
+# Keep-alive curl wrapper for the healthcheck. The curl-impersonate binary is
+# copied to /usr/bin/curl below; that build does NOT read CURL_IMPERSONATE in
+# the bare binary, so it sends a plain curl fingerprint. Some CDNs black-hole
+# that with a hang -> the healthcheck would hit its timeout and Docker would
+# mark the container unhealthy, and `restart: unless-stopped` turns each
+# restart into another "exec /app/docker-entrypoint.sh" log line. This wrapper
+# forces a browser profile via the dedicated env var of the impersonate build.
+RUN printf '#!/bin/sh\nexec env CURL_IMPERSONATE_BIN=chrome124 /usr/bin/curl "$@"\n' > /usr/local/bin/curl-healthcheck && \
+    chmod +x /usr/local/bin/curl-healthcheck
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD ["/usr/local/bin/curl-healthcheck", "-fsS", "--compressed", "http://localhost/?action=health"] || exit 1
 
 EXPOSE 80/tcp
 
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+# Invoke via the interpreter explicitly: immune to lost exec bit (volume
+# mounts over /app, non-git tarball builds) and to broken shebangs.
+ENTRYPOINT ["/bin/sh", "/app/docker-entrypoint.sh"]
