@@ -9,17 +9,16 @@ enable_maintenance_mode = false
 max_file_size = 20000000
 
 [http]
-; 30s matches upstream rss-bridge. Slow-but-alive sites (news portals, CDN
-; edge misses) regularly need >20s for the first byte; a too-low timeout
-; turns them into "cURL error 28 ... 0 bytes received".
-timeout = 30
+; 60s matches upstream rss-bridge. Slow-but-alive sites (news portals, CDN
+; edge misses) regularly need >20s for the first byte; 
+timeout = 60
 
 ; Transient errors only. Timeouts (errno 28) are NOT retried by the client
 ; (a dead upstream does not recover between attempts), so this value no
 ; longer multiplies worst-case worker blocking time.
 retries = 1
 
-max_filesize = 20
+max_filesize = 40
 
 [cache]
 
