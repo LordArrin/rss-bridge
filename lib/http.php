@@ -100,7 +100,7 @@ final class CurlHttpClient implements HttpClient
      *
      * Individual overrides from bridges (a custom User-Agent header, an
      * extra Accept, forcing HTTP/1.1 for a specific site) are honoured as
-     *-is: curl merges app headers over the profile defaults one-by-one,
+     * is: curl merges app headers over the profile defaults one-by-one,
      * so only the explicitly overridden element changes while the rest of
      * the profile keeps working. This method only reports whether the
      * global profile machinery is available at all.
