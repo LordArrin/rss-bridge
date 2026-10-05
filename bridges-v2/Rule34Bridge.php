@@ -63,6 +63,12 @@ final class Rule34Bridge extends GelbooruBase
                 'required' => false,
                 'defaultValue' => 'checked'
             ],
+            'hide_edited' => [
+                'name' => 'Hide edited content',
+                'type' => 'checkbox',
+                'required' => false,
+                'defaultValue' => 'checked'
+            ],
             'hide_details' => [
                 'name' => 'Hide tags and source',
                 'type' => 'checkbox',
@@ -120,6 +126,10 @@ final class Rule34Bridge extends GelbooruBase
 
         if ($this->getInput('exclude_ai') === true) {
             $query = trim($query . ' -ai_generated');
+        }
+
+        if ($this->getInput('hide_edited') === true) {
+            $query = trim($query . ' -edited -third-party_edit -edited_art');
         }
 
         $params = [
