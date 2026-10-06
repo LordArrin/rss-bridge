@@ -125,9 +125,15 @@ final class DisplayAction implements ActionInterface
                 $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
                 return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), 429);
             } elseif ($e instanceof HttpException) {
-                if (in_array($e->getCode(), [429, 503], true) === true) {
+                // Any upstream HTTP status (4xx/5xx) is a real, meaningful
+                // answer: pass it through instead of collapsing everything
+                // except 429/503 into a generic 500. RSS readers treat an
+                // honest 403/404/410 differently from a server crash and
+                // recover without aggressive backoff when the upstream heals.
+                $code = $e->getCode();
+                if ($code >= 400 && $code <= 599) {
                     $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
-                    return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $e->getCode());
+                    return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $code);
                 }
             } else {
                 $this->logger->error(sprintf('Exception in DisplayAction(%s)', $bridge->getShortName()), ['e' => $e]);
