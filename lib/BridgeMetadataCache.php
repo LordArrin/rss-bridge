@@ -21,10 +21,11 @@ final class BridgeMetadataCache
     private const DEFAULT_TTL = 2592000;
 
     /**
-     * Prefix under which the current content hash is stored, so that
-     * load() can distinguish "same hash" from "changed hash".
+     * Number of seconds a stale (TTL-expired) metadata snapshot may still be
+     * served while the hash-based invalidation below fails to match, e.g.
+     * when mtimes are preserved by rsync/deploy tooling.
      */
-    private const HASH_PREFIX = 'bridge_metadata_hash';
+    private const STALE_GRACE = 3600;
 
     private CacheInterface $cache;
     private array $bridgesDirs;
