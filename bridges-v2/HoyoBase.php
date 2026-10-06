@@ -115,6 +115,7 @@ abstract class HoyoBase extends BridgeAbstract
             }
 
             $this->processContentHtml($wrapper, $sContent);
+            $this->processYoutubeEmbeds($wrapper);
             $this->limitImageSize($wrapper);
 
             $articleHtml = (string) $wrapper->innerHTML;
@@ -205,47 +206,86 @@ abstract class HoyoBase extends BridgeAbstract
             return;
         }
 
+        $elementsToReplace = [];
+
         $youtubeFrames = $node->querySelectorAll('div.ttr-video-frame');
         foreach ($youtubeFrames as $frame) {
-            if ($frame instanceof \Dom\Element === false) {
+            if ($frame instanceof \Dom\Element === true) {
+                $elementsToReplace[] = $frame;
+            }
+        }
+
+        $iframes = $node->querySelectorAll('iframe');
+        foreach ($iframes as $iframe) {
+            if ($iframe instanceof \Dom\Element === false) {
                 continue;
             }
 
-            $html = $frame->ownerDocument->saveHTML($frame);
-            if (is_string($html) === false || $html === '') {
-                continue;
+            $parent = $iframe->parentNode;
+            $isInsideVideoFrame = false;
+            while ($parent !== null) {
+                if ($parent instanceof \Dom\Element === true && $parent->tagName === 'div') {
+                    $class = (string) ($parent->getAttribute('class') ?? '');
+                    if (strpos($class, 'ttr-video-frame') !== false) {
+                        $isInsideVideoFrame = true;
+                        break;
+                    }
+                }
+                $parent = $parent->parentNode;
             }
 
-            $replacement = handleYoutube($html);
-            if (is_string($replacement) === false || $replacement === '') {
-                continue;
-            }
-
-            $parent = $frame->parentNode;
-            if ($parent === null) {
-                continue;
-            }
-
-            $tempDoc = \Dom\HTMLDocument::createFromString('<div id="rss-bridge-temp-wrapper">' . $replacement . '</div>');
-
-            $tempWrapper = $tempDoc->querySelector('#rss-bridge-temp-wrapper');
-            if ($tempWrapper === null) {
-                continue;
-            }
-
-            $importedNodes = [];
-            foreach ($tempWrapper->childNodes as $child) {
-                $imported = $frame->ownerDocument->importNode($child, true);
-                if ($imported !== null) {
-                    $importedNodes[] = $imported;
+            if ($isInsideVideoFrame === false) {
+                $src = (string) ($iframe->getAttribute('src') ?? '');
+                if (preg_match('/youtube(-nocookie)?\.com\/embed\//i', $src) === 1 || preg_match('/youtu\.be\//i', $src) === 1) {
+                    $elementsToReplace[] = $iframe;
                 }
             }
-
-            foreach ($importedNodes as $importedNode) {
-                $parent->insertBefore($importedNode, $frame);
-            }
-
-            $parent->removeChild($frame);
         }
+
+        foreach ($elementsToReplace as $embed) {
+            $this->replaceYoutubeEmbed($embed);
+        }
+    }
+
+    protected function replaceYoutubeEmbed(\Dom\Element $embed): void
+    {
+        if (function_exists('handleYoutube') === false) {
+            return;
+        }
+
+        $html = $embed->ownerDocument->saveHTML($embed);
+        if (is_string($html) === false || $html === '') {
+            return;
+        }
+
+        $replacement = handleYoutube($html);
+        if (is_string($replacement) === false || $replacement === '') {
+            return;
+        }
+
+        $parent = $embed->parentNode;
+        if ($parent === null) {
+            return;
+        }
+
+        $tempDoc = \Dom\HTMLDocument::createFromString('<div id="rss-bridge-temp-wrapper">' . $replacement . '</div>');
+        $tempWrapper = $tempDoc->querySelector('#rss-bridge-temp-wrapper');
+        if ($tempWrapper === null) {
+            return;
+        }
+
+        $importedNodes = [];
+        foreach ($tempWrapper->childNodes as $child) {
+            $imported = $embed->ownerDocument->importNode($child, true);
+            if ($imported !== null) {
+                $importedNodes[] = $imported;
+            }
+        }
+
+        foreach ($importedNodes as $importedNode) {
+            $parent->insertBefore($importedNode, $embed);
+        }
+
+        $parent->removeChild($embed);
     }
 }

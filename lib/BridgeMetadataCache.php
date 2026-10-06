@@ -154,7 +154,7 @@ final class BridgeMetadataCache
                 }
 
                 $metadata[$className] = [
-                'name' => $className::NAME,
+                'name' => $bridge->getName(),
                 'uri' => $bridge->getURI(),
                 'description' => $bridge->getDescription(),
                 'parameters' => $bridge->getParameters(),

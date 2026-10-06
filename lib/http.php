@@ -351,13 +351,6 @@ final class CurlHttpClient implements HttpClient
             $savedEnv = null;
         }
 
-        // Release the connection back to curl's pool instead of hard-closing it.
-        if (function_exists('curl_close') === true) {
-            /** @phpstan-ignore-next-line deprecated in PHP 8.5, handle is freed on unset */
-            curl_close($ch);
-        }
-        unset($ch);
-
         if ($body === false) {
             throw new HttpException(sprintf(
                 'cURL error %d: %s (see https://curl.se/libcurl/c/libcurl-errors.html) for %s',

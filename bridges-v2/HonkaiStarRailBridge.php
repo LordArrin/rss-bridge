@@ -11,13 +11,13 @@ final class HonkaiStarRailBridge extends HoyoBase
     public const DESCRIPTION = 'Latest news from the Honkai: Star Rail website';
     public const MAINTAINER = 'LordArrin';
 
-    protected const API_URL = 'https://sg-public-api-static.hoyoverse.com/content_v2_user/app/113fe6d3b4514cdd/getContentList?iPage=1&iPageSize=%u&sLangKey=%s&isPreview=0&iChanId=248';
+    protected const API_URL_TEMPLATE = 'https://sg-public-api-static.hoyoverse.com/content_v2_user/app/113fe6d3b4514cdd/getContentList?iPage=1&iPageSize=%u&sLangKey=%s&isPreview=0&iChanId=248';
     protected const ARTICLE_URL_TEMPLATE = '/en-us/news/%u';
     protected const BANNER_KEY = 'news-poster';
 
     protected function getApiUrl(int $limit, string $language): string
     {
-        return sprintf(self::API_URL, $limit, $language);
+        return sprintf(self::API_URL_TEMPLATE, $limit, $language);
     }
 
     protected function getArticleUrl(int $infoId): string
@@ -33,6 +33,5 @@ final class HonkaiStarRailBridge extends HoyoBase
     protected function processContentHtml(\Dom\Element $wrapper, string $sContent): void
     {
         $this->alignTextLeft($wrapper);
-        $this->processYoutubeEmbeds($wrapper);
     }
 }
