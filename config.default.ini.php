@@ -35,9 +35,11 @@ type = "Direct"
 
 type = "TgWS"
 socks_url = ""
-connect_timeout = 30
-request_timeout = 120
-retries = 3
+; Keep within the timeout cascade (3.2): connect_timeout + request_timeout
+; (+1 retry) must stay below php-fpm request_terminate_timeout (90s).
+connect_timeout = 5
+request_timeout = 20
+retries = 1
 
 [admin]
 

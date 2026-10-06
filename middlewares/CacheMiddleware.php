@@ -69,12 +69,36 @@ final class CacheMiddleware implements Middleware
             return $response;
         }
 
+        // Graceful degradation: when regenerating a feed fails because the
+        // upstream is temporarily unavailable (cURL timeout errno 28 -> code
+        // 0, HTTP 5xx from upstream, 429 rate limit), serve the last known
+        // good response even if it is past its TTL. The reader sees slightly
+        // stale content instead of an error, and the transient failure does
+        // not get negatively cached on top of it.
+        if (
+            in_array($code, [0, 429, 500, 502, 503, 504], true) === true
+            || $this->isTimeoutResponse($response) === true
+        ) {
+            $stale = $this->serveStale($cacheKey, $response);
+            if ($stale !== null) {
+                return $stale;
+            }
+        }
+
         if (in_array($code, [400, 403, 404, 429, 500, 503], true) === true) {
             // Broken-bridge errors (displayed via the stub path in
             // DisplayAction) must never be negatively cached: retry after
             // deploy fix is the whole point of the stub design.
             if ($this->isBrokenBridgeRequest($request) === true) {
                 $this->cache->delete($cacheKey);
+                return $response;
+            }
+
+            // Transient transport failures (cURL timeouts, DNS/connect
+            // problems) carry no HTTP status (code 0). Caching them would
+            // turn one flaky upstream into a guaranteed error window for
+            // every reader — skip negative caching entirely.
+            if ($this->isTimeoutResponse($response) === true) {
                 return $response;
             }
 
@@ -90,6 +114,44 @@ final class CacheMiddleware implements Middleware
         }
 
         return $response;
+    }
+
+    /**
+     * Serves the last known good (expired) response from cache when a
+     * regeneration failed. Returns null when no stale success entry exists,
+     * in which case the caller falls through to normal error handling.
+     */
+    private function serveStale(string $cacheKey, Response $failed): ?Response
+    {
+        // Never resurrect an error page as "stale good data".
+        if ($failed->getCode() === 200) {
+            return null;
+        }
+
+        $cached = $this->cache->getWithStale($cacheKey);
+        $stale = $cached['stale'] ?? null;
+
+        if ($stale instanceof Response && $stale->getCode() === 200) {
+            // Tag the response so downstream consumers (and logs) can tell
+            // stale-on-error apart from a fresh hit. withHeader lowercases
+            // the name and returns an immutable clone.
+            return $stale->withHeader('x-feed-stale', '1');
+        }
+
+        return null;
+    }
+
+    /**
+     * Detects transport-level failures (cURL timeouts errno 28, DNS/connect
+     * errors) inside an error response body. CurlHttpClient throws
+     * HttpException with code 0 for these, and templates render the message.
+     */
+    private function isTimeoutResponse(Response $response): bool
+    {
+        if ($response->getCode() !== 0) {
+            return false;
+        }
+        return str_contains($response->getBody(), 'cURL error') === true;
     }
 
     /**
