@@ -6,7 +6,6 @@ env = "prod"
 enabled_bridges[] = *
 timezone = "UTC"
 enable_maintenance_mode = false
-max_file_size = 20000000
 
 [http]
 ; 60s matches upstream rss-bridge. Slow-but-alive sites (news portals, CDN
@@ -18,6 +17,9 @@ timeout = 60
 ; longer multiplies worst-case worker blocking time.
 retries = 1
 
+; Maximum size of a downloaded page, in MEGABYTES. getContents() converts
+; this value to bytes before handing it to CurlHttpClient (CURLOPT_MAXFILESIZE
+; plus the xferinfo progress callback). Set to 0 to disable the limit.
 max_filesize = 40
 
 [cache]

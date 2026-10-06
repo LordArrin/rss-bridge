@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use RSSBridge\Http\HttpException;
 
 final class GoComicsBridge extends BridgeAbstract
 {
@@ -135,7 +136,7 @@ final class GoComicsBridge extends BridgeAbstract
     {
         try {
             $html = getContents($url);
-        } catch (\HttpException $e) {
+        } catch (HttpException $e) {
             if ($e->getCode() === 403) {
                 $message = '403 Forbidden. GoComics uses Bunny Shield to block this bridge. Try reducing feed update frequency or hosting from a different IP.';
                 throw new \Exception($message, 403);

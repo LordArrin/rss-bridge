@@ -235,7 +235,9 @@ final class FlareSolverrProxy extends ProxyAbstract
             ]);
             throw new \RuntimeException('Invalid JSON response: ' . $e->getMessage());
         } finally {
-            curl_close($ch);
+            // PHP 8.5 removed curl_close(): the handle owned by the local
+            // $ch is released automatically when this method returns.
+            unset($ch);
         }
     }
 
