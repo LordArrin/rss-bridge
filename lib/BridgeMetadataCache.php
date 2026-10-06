@@ -20,6 +20,13 @@ final class BridgeMetadataCache
     private const CACHE_PREFIX = 'bridge_metadata_v2';
     private const DEFAULT_TTL = 2592000;
 
+    /**
+     * Number of seconds a stale (TTL-expired) metadata snapshot may still be
+     * served while the hash-based invalidation below fails to match, e.g.
+     * when mtimes are preserved by rsync/deploy tooling.
+     */
+    private const STALE_GRACE = 3600;
+
     private CacheInterface $cache;
     private array $bridgesDirs;
     private ?string $cachedHash = null;
@@ -39,21 +46,18 @@ final class BridgeMetadataCache
      */
     public function getAll(BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
-        $cacheKey = $this->buildCacheKey();
-        $cached = $this->cache->get($cacheKey);
+        $result = $this->load();
 
-        if ($cached !== null && is_array($cached) === true && isset($cached['metadata']) === true) {
+        if ($result !== null) {
             // Restore broken bridges list to the loader so FrontpageAction can access it
-            if (isset($cached['broken_bridges']) === true) {
-                foreach ($cached['broken_bridges'] as $bridgeName => $errorInfo) {
-                    $loader->restoreBrokenBridge($bridgeName, $errorInfo);
-                }
+            foreach ($result['broken_bridges'] as $bridgeName => $errorInfo) {
+                $loader->restoreBrokenBridge($bridgeName, $errorInfo);
             }
-            return $cached['metadata'];
+            return $result['metadata'];
         }
 
         $result = $this->buildMetadata($factory, $loader);
-        $this->cache->set($cacheKey, $result, self::DEFAULT_TTL);
+        $this->store($result);
 
         return $result['metadata'];
     }
