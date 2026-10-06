@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use RSSBridge\Http\HttpException;
 
 final class GettrBridge extends BridgeAbstract
 {
@@ -51,7 +52,7 @@ final class GettrBridge extends BridgeAbstract
 
         try {
             $json = getContents($api);
-        } catch (\HttpException $e) {
+        } catch (HttpException $e) {
             if ($e->getCode() === 400) {
                 $response = $e->response;
                 $body = ($response !== null) ? $response->getBody() : '';

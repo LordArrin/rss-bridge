@@ -102,9 +102,13 @@ function getContents(
     $config['headers'] = $httpHeadersNormalized;
 
     $maxFileSize = Configuration::getConfig('http', 'max_filesize');
-    if ($maxFileSize !== null && $maxFileSize !== false) {
-        // Convert from MB to B by multiplying with 2^20 (1M)
-        $config['max_filesize'] = $maxFileSize * 2 ** 20;
+    if ($maxFileSize !== null && $maxFileSize !== false && (int)$maxFileSize > 0) {
+        // Config value is expressed in megabytes; the HTTP client expects
+        // bytes (CURLOPT_MAXFILESIZE and the xferinfo progress callback).
+        // A zero/negative/absent value disables the limit: without this
+        // guard max_filesize = 0 would abort every request on its very
+        // first progress tick (downloaded(0+) > 0).
+        $config['max_filesize'] = (int)$maxFileSize * 2 ** 20;
     }
 
     $response = $httpClient->request($url, $config);

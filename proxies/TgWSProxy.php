@@ -205,10 +205,7 @@ final class TgWSProxy extends ProxyAbstract
 
     private function discardHandle(): void
     {
-        if ($this->handle !== null) {
-            curl_close($this->handle);
-            $this->handle = null;
-        }
+        $this->handle = null;
     }
 
     private function resetHandle(): \CurlHandle
