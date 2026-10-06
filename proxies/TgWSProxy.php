@@ -205,10 +205,6 @@ final class TgWSProxy extends ProxyAbstract
 
     private function discardHandle(): void
     {
-        // PHP 8.5 removed curl_close(): the handle is released as soon as
-        // the last reference goes away, so dropping the property is enough.
-        // (A function_exists() guard was used while targeting PHP 8.1-8.4;
-        // with a hard "php": ">=8.5" requirement it is dead code.)
         $this->handle = null;
     }
 
