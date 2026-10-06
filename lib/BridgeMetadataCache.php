@@ -20,6 +20,12 @@ final class BridgeMetadataCache
     private const CACHE_PREFIX = 'bridge_metadata_v2';
     private const DEFAULT_TTL = 2592000;
 
+    /**
+     * Prefix under which the current content hash is stored, so that
+     * load() can distinguish "same hash" from "changed hash".
+     */
+    private const HASH_PREFIX = 'bridge_metadata_hash';
+
     private CacheInterface $cache;
     private array $bridgesDirs;
     private ?string $cachedHash = null;
@@ -39,21 +45,18 @@ final class BridgeMetadataCache
      */
     public function getAll(BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
-        $cacheKey = $this->buildCacheKey();
-        $cached = $this->cache->get($cacheKey);
+        $result = $this->load();
 
-        if ($cached !== null && is_array($cached) === true && isset($cached['metadata']) === true) {
+        if ($result !== null) {
             // Restore broken bridges list to the loader so FrontpageAction can access it
-            if (isset($cached['broken_bridges']) === true) {
-                foreach ($cached['broken_bridges'] as $bridgeName => $errorInfo) {
-                    $loader->restoreBrokenBridge($bridgeName, $errorInfo);
-                }
+            foreach ($result['broken_bridges'] as $bridgeName => $errorInfo) {
+                $loader->restoreBrokenBridge($bridgeName, $errorInfo);
             }
-            return $cached['metadata'];
+            return $result['metadata'];
         }
 
         $result = $this->buildMetadata($factory, $loader);
-        $this->cache->set($cacheKey, $result, self::DEFAULT_TTL);
+        $this->store($result);
 
         return $result['metadata'];
     }
@@ -81,10 +84,56 @@ final class BridgeMetadataCache
      */
     public function rebuild(BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
-        $cacheKey = $this->buildCacheKey();
         $result = $this->buildMetadata($factory, $loader);
-        $this->cache->set($cacheKey, $result, self::DEFAULT_TTL);
+        $this->store($result);
         return $result['metadata'];
+    }
+
+    /**
+     * Loads the cached metadata snapshot, if it matches the current content hash.
+     *
+     * Invalidation strategy:
+     * 1. The cache key embeds a hash of the bridge files' contents (see
+     *    buildCacheKey()), so any file change produces a different key and
+     *    effectively invalidates the old entry.
+     * 2. Additionally, the hash recorded at store() time is compared against
+     *    the freshly computed one; a mismatch means the sources changed since
+     *    the snapshot was built, so we refuse to serve it and rebuild instead.
+     *
+     * @return array{metadata: array<string, array>, broken_bridges: array<string, array>}|null
+     */
+    private function load(): ?array
+    {
+        $cacheKey = $this->buildCacheKey();
+        $cached = $this->cache->get($cacheKey);
+
+        if (is_array($cached) === false || isset($cached['metadata']) === false) {
+            return null;
+        }
+
+        // Verify the snapshot was built for the exact same content hash.
+        $storedHash = $this->cache->get(self::HASH_PREFIX);
+        if (is_string($storedHash) === true && $storedHash !== ($this->cachedHash ?? '')) {
+            return null;
+        }
+
+        return [
+            'metadata' => $cached['metadata'],
+            'broken_bridges' => $cached['broken_bridges'] ?? [],
+        ];
+    }
+
+    /**
+     * Persists a freshly built metadata snapshot under the current hash key.
+     *
+     * @param array{metadata: array<string, array>, broken_bridges: array<string, array>} $result
+     */
+    private function store(array $result): void
+    {
+        $cacheKey = $this->buildCacheKey();
+        $this->cache->set($cacheKey, $result, self::DEFAULT_TTL);
+        // Record the hash this snapshot corresponds to (used by load()).
+        $this->cache->set(self::HASH_PREFIX, $this->cachedHash ?? '', self::DEFAULT_TTL);
     }
 
     /**
@@ -193,7 +242,12 @@ final class BridgeMetadataCache
     }
 
     /**
-     * Builds the cache key based on bridge directories and their modification times.
+     * Builds the cache key based on a content hash of all bridge files.
+     *
+     * Uses md5_file() instead of filemtime(): mtime is unreliable across
+     * Docker builds, rsync deploys and clock skew, which could serve stale
+     * metadata forever. Content hashing guarantees invalidation whenever any
+     * bridge file actually changes (or is added/removed).
      *
      * @return string Unique cache key
      */
@@ -203,15 +257,17 @@ final class BridgeMetadataCache
             $hashParts = [];
             foreach ($this->bridgesDirs as $dir) {
                 if (is_dir($dir) === true) {
-                    $hashParts[] = $dir;
                     foreach (scandir($dir) as $file) {
                         if ($file !== '.' && $file !== '..') {
                             $filepath = $dir . '/' . $file;
-                            $hashParts[] = filemtime($filepath);
+                            if (is_file($filepath) === true) {
+                                $hashParts[] = $file . ':' . (md5_file($filepath) ?: '0');
+                            }
                         }
                     }
                 }
             }
+            sort($hashParts);
             $this->cachedHash = md5(implode('|', $hashParts));
         }
 

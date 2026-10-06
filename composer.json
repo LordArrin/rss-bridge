@@ -24,9 +24,7 @@
             "lib/FeedParser.php",
             "lib/ParameterValidator.php",
             "lib/RssBridge.php",
-            "lib/SafeBridgeLoader.php",
-            "lib/WebDriverAbstract.php",
-            "lib/XPathAbstract.php"
+            "lib/SafeBridgeLoader.php"
         ],
         "files": [
             "lib/Json.php",
