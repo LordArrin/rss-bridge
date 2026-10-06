@@ -42,11 +42,6 @@ retries = 3
 email = ""
 telegram = ""
 
-[webdriver]
-
-selenium_server_url = "http://localhost:4444"
-headless = false
-
 [authentication]
 
 enable = false
