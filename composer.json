@@ -19,6 +19,7 @@
             "lib/BrokenBridgeStub.php",
             "lib/Configuration.php",
             "lib/Container.php",
+            "lib/GithubClient.php",
             "lib/FeedExpander.php",
             "lib/FeedItem.php",
             "lib/FeedParser.php",

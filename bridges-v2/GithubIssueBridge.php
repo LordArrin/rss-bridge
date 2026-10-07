@@ -5,21 +5,17 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use RSSBridge\GithubClient;
+
+use function RSSBridge\Exceptions\throwServerException;
 
 final class GithubIssueBridge extends BridgeAbstract
 {
     public const NAME = 'GitHub Issues';
     public const URI = 'https://github.com/';
-    public const API_URI = 'https://api.github.com/';
     public const DESCRIPTION = 'Returns the issues of a GitHub project';
     public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 600;
-
-    public const CONFIGURATION = [
-        'token' => [
-            'required' => false,
-        ],
-    ];
 
     public const PARAMETERS = [
         [
@@ -51,16 +47,7 @@ final class GithubIssueBridge extends BridgeAbstract
     ];
 
     private const SEARCH_TYPE_QUALIFIER = 'is:issue';
-
-    private function resolveToken(): string
-    {
-        $option = $this->getOption('token');
-        if ($option !== null && $option !== '') {
-            return (string) $option;
-        }
-
-        return '';
-    }
+    private const ALLOWED_TAGS = '<a><p><br><strong><em><code><pre><blockquote><ul><ol><li><table><thead><tbody><tr><th><td><img><h1><h2><h3><h4><h5><h6><hr><del><details><summary>';
 
     public function getName(): string
     {
@@ -86,58 +73,84 @@ final class GithubIssueBridge extends BridgeAbstract
         return parent::getURI();
     }
 
-    private function apiHeaders(): array
+    public function collectData(): void
     {
-        $token = $this->resolveToken();
-        $headers = [
-            'Accept: application/vnd.github+json',
-            'User-Agent: RSS-Bridge',
-            'X-GitHub-Api-Version: 2022-11-28',
-        ];
-
-        if ($token !== '') {
-            $headers[] = 'Authorization: Bearer ' . $token;
-        }
-
-        return $headers;
-    }
-
-    private function apiRequest(string $url): array
-    {
-        $json = getContents($url, $this->apiHeaders());
-        $data = \Json::decode($json);
-
-        if (isset($data['message']) === true && isset($data['html_url']) === false && array_key_exists('documentation_url', $data) === true) {
-            throw new \ServerException('GitHub API error for ' . $url . ': ' . $data['message']);
-        }
-
-        return $data;
-    }
-
-    private function buildGitHubIssueUri(int $issueNumber): string
-    {
+        $parsed = $this->parseSearchQuery((string) $this->getInput('q'));
         $owner = (string) $this->getInput('owner');
         $repo = (string) $this->getInput('repo');
+        $limit = max(1, (int) ($this->getInput('limit') ?? 10));
 
-        return self::URI . $owner . '/' . $repo . '/issues/' . $issueNumber;
-    }
+        $repoQualifier = 'repo:' . $owner . '/' . $repo;
+        $q = trim($parsed['q'] . ' ' . self::SEARCH_TYPE_QUALIFIER . ' ' . $repoQualifier);
 
-    private function markdownToHtml(string $text): string
-    {
-        if ($text === '') {
-            return '';
+        $params = [
+            'q' => $q,
+            'per_page' => min(50, $limit),
+        ];
+
+        if ($parsed['sort'] !== null) {
+            $params['sort'] = $parsed['sort'];
+        }
+        if ($parsed['order'] !== null) {
+            $params['order'] = $parsed['order'];
         }
 
-        $parsedown = new \Parsedown();
-        return $parsedown->text($text);
+        $client = new GithubClient($this->cache, $this->logger);
+
+        try {
+            $result = $client->searchIssues($params);
+        } catch (\Exception $e) {
+            throwServerException('GitHub API error: ' . $e->getMessage());
+        }
+
+        $count = 0;
+        foreach ($result['items'] as $issue) {
+            if ($count >= $limit) {
+                break;
+            }
+
+            $this->items[] = $this->buildIssueItem($issue, $owner, $repo);
+            $count++;
+        }
     }
 
+    /**
+     * @param array<string, mixed> $issue
+     */
+    private function buildIssueItem(array $issue, string $owner, string $repo): array
+    {
+        $labels = array_map(function ($label) {
+            return is_array($label) === true ? ($label['name'] ?? '') : (string) $label;
+        }, $issue['labels'] ?? []);
+
+        $content = GithubClient::renderGitHubMarkdown((string) ($issue['body'] ?? ''), $owner, $repo);
+
+        if (count($labels) > 0) {
+            $labelsHtml = '<p><strong>Labels:</strong> ' . htmlspecialchars(implode(', ', $labels)) . '</p>';
+            $content = $labelsHtml . $content;
+        }
+
+        $timestamp = strtotime((string) $issue['created_at']);
+
+        return [
+            'uri' => (string) $issue['html_url'],
+            'title' => (string) $issue['title'],
+            'author' => (string) ($issue['user']['login'] ?? ''),
+            'timestamp' => $timestamp !== false ? $timestamp : time(),
+            'content' => strip_tags($content, self::ALLOWED_TAGS),
+            'uid' => (string) $issue['id'],
+        ];
+    }
+
+    /**
+     * @return array{q: string, sort: ?string, order: ?string}
+     */
     private function parseSearchQuery(string $query): array
     {
         $sort = null;
         $order = null;
 
-        $query = preg_replace_callback(
+        $query = (string) preg_replace_callback(
             '/\bsort:([a-zA-Z\-]+)\b/',
             function ($m) use (&$sort, &$order) {
                 $value = $m[1];
@@ -156,64 +169,9 @@ final class GithubIssueBridge extends BridgeAbstract
         );
 
         return [
-            'q' => trim(preg_replace('/\s+/', ' ', $query)),
+            'q' => trim((string) preg_replace('/\s+/', ' ', $query)),
             'sort' => $sort,
             'order' => $order,
         ];
-    }
-
-    private function buildIssueItem(array $issue): array
-    {
-        $item = [];
-        $item['uri'] = $issue['html_url'];
-        $item['title'] = $issue['title'];
-        $item['author'] = $issue['user']['login'] ?? '';
-        $item['timestamp'] = strtotime($issue['created_at']);
-
-        $labels = array_map(function ($label) {
-            return is_array($label) === true ? ($label['name'] ?? '') : $label;
-        }, $issue['labels'] ?? []);
-
-        $content = $this->markdownToHtml($issue['body'] ?? '');
-        if (count($labels) > 0) {
-            $content = '<p><strong>Labels:</strong> ' . implode(', ', $labels) . '</p>' . $content;
-        }
-
-        $item['content'] = $content;
-        $item['uid'] = (string) $issue['id'];
-        return $item;
-    }
-
-    public function collectData(): void
-    {
-        $parsed = $this->parseSearchQuery((string) $this->getInput('q'));
-        $owner = (string) $this->getInput('owner');
-        $repo = (string) $this->getInput('repo');
-        $limit = (int) ($this->getInput('limit') ?? 10);
-
-        $repoQualifier = 'repo:' . $owner . '/' . $repo;
-        $q = trim($parsed['q'] . ' ' . self::SEARCH_TYPE_QUALIFIER . ' ' . $repoQualifier);
-
-        $params = ['q' => $q, 'per_page' => '50'];
-        if ($parsed['sort'] !== null) {
-            $params['sort'] = $parsed['sort'];
-        }
-        if ($parsed['order'] !== null) {
-            $params['order'] = $parsed['order'];
-        }
-
-        $searchUrl = self::API_URI . 'search/issues?' . http_build_query($params);
-        $result = $this->apiRequest($searchUrl);
-        $issues = $result['items'] ?? [];
-
-        $count = 0;
-        foreach ($issues as $issue) {
-            if ($count >= $limit) {
-                break;
-            }
-
-            $this->items[] = $this->buildIssueItem($issue);
-            $count++;
-        }
     }
 }

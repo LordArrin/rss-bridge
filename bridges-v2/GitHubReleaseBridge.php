@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use RSSBridge\GithubClient;
+
+use function RSSBridge\Exceptions\throwServerException;
 
 final class GitHubReleaseBridge extends BridgeAbstract
 {
@@ -14,52 +17,40 @@ final class GitHubReleaseBridge extends BridgeAbstract
     public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 3600;
 
-    public const CONFIGURATION = ['token' => ['required' => false]];
-
     public const PARAMETERS = [[
         'owner' => [
             'name' => 'Owner',
             'type' => 'text',
             'required' => true,
             'exampleValue' => 'immich-app',
-            'title' => 'The name of the repo owner (e.g. immich-app from https://github.com/immich-app/immich)'
         ],
         'repo' => [
             'name' => 'Repository',
             'type' => 'text',
             'required' => true,
             'exampleValue' => 'immich',
-            'title' => 'Repo name (e.g. immich from https://github.com/immich-app/immich)'
         ],
         'pre_release' => [
             'name' => 'Include pre-releases',
             'type' => 'checkbox',
             'defaultValue' => false,
-            'title' => 'Check this box to include pre-releases in the feed'
         ],
         'hide_assets' => [
             'name' => 'Hide attachments',
             'type' => 'checkbox',
             'defaultValue' => false,
-            'title' => 'Check this box to hide attachments from feed items.'
         ],
         'limit' => [
             'name' => 'Posts limit',
             'type' => 'number',
-            'defaultValue' => 10
+            'defaultValue' => 10,
         ],
     ]];
 
     private const ALLOWED_TAGS = [
         'div', 'a', 'p', 'ul', 'ol', 'li', 'strong', 'em', 'code', 'pre', 'blockquote', 'span',
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'br', 'hr', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-        'picture', 'source', 'figure', 'figcaption', 'del', 'details', 'summary'
-    ];
-
-    private const ERROR_MESSAGES = [
-        401 => 'Auth failed',
-        403 => 'Rate limit exceeded',
-        404 => 'Repo not found',
+        'picture', 'source', 'figure', 'figcaption', 'del', 'details', 'summary',
     ];
 
     private const CSS = [
@@ -78,18 +69,23 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
     private const FILE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
     private const MAX_LIMIT = 100;
-    private const DEFAULT_LIMIT = 10;
 
     public function collectData(): void
     {
-        $owner = (string)$this->getInput('owner');
-        $repo = (string)$this->getInput('repo');
-        $includePrereleases = (bool)$this->getInput('pre_release');
-        $hideAssets = (bool)$this->getInput('hide_assets');
+        $owner = (string) $this->getInput('owner');
+        $repo = (string) $this->getInput('repo');
+        $includePrereleases = (bool) $this->getInput('pre_release');
+        $hideAssets = (bool) $this->getInput('hide_assets');
         $limitInput = $this->getInput('limit');
-        $limit = max(1, min(self::MAX_LIMIT, (int)($limitInput !== null ? $limitInput : self::DEFAULT_LIMIT)));
+        $limit = max(1, min(self::MAX_LIMIT, (int) ($limitInput !== null ? $limitInput : 10)));
 
-        $releases = $this->fetchReleases($owner, $repo);
+        $client = new GithubClient($this->cache, $this->logger);
+
+        try {
+            $releases = $client->fetchReleases($owner, $repo);
+        } catch (\Exception $e) {
+            throwServerException($e->getMessage());
+        }
 
         foreach ($releases as $release) {
             if (count($this->items) >= $limit) {
@@ -100,7 +96,11 @@ final class GitHubReleaseBridge extends BridgeAbstract
                 continue;
             }
 
-            $this->items[] = $this->buildFeedItem($release, $owner, $repo, $hideAssets);
+            $this->items[] = $this->buildReleaseItem($release, $owner, $repo, $hideAssets);
+        }
+
+        if ($this->items === []) {
+            throwServerException('No releases found.');
         }
     }
 
@@ -128,12 +128,8 @@ final class GitHubReleaseBridge extends BridgeAbstract
         return parent::getURI();
     }
 
-    public function detectParameters($url): ?array
+    public function detectParameters(string $url): ?array
     {
-        if (is_string($url) === false) {
-            return null;
-        }
-
         $parsed = parse_url($url);
         $host = $parsed['host'] ?? '';
         $path = $parsed['path'] ?? '';
@@ -150,59 +146,9 @@ final class GitHubReleaseBridge extends BridgeAbstract
         return null;
     }
 
-    private function fetchReleases(string $owner, string $repo): array
-    {
-        $url = sprintf('https://api.%s/repos/%s/%s/releases?per_page=100', parse_url(self::URI, PHP_URL_HOST), $owner, $repo);
-        $headers = ['Accept: application/vnd.github+json'];
-
-        $token = $this->getOption('token');
-        if ($token !== null && $token !== '') {
-            $headers[] = 'Authorization: Bearer ' . $token;
-        }
-
-        try {
-            $response = json_decode(getContents($url, $headers), true, 512, JSON_THROW_ON_ERROR);
-        } catch (\Exception $e) {
-            $code = (int)$e->getCode();
-            $message = self::ERROR_MESSAGES[$code] ?? 'GitHub API error: ' . $e->getMessage();
-            throwServerException($message);
-        }
-
-        if (is_array($response) === false) {
-            throwServerException('Invalid response from GitHub API');
-        }
-
-        if ($response !== [] && isset($response[0]) === false) {
-            $errorMsg = $response['message'] ?? 'Unknown API error';
-            throwServerException('GitHub API error: ' . $errorMsg);
-        }
-
-        return $response;
-    }
-
-    private function fetchTagCommitMessage(string $owner, string $repo, string $tagName): string
-    {
-        $url = sprintf('https://api.%s/repos/%s/%s/commits/%s', parse_url(self::URI, PHP_URL_HOST), $owner, $repo, rawurlencode($tagName));
-        $headers = ['Accept: application/vnd.github+json'];
-
-        $token = $this->getOption('token');
-        if ($token !== null && $token !== '') {
-            $headers[] = 'Authorization: Bearer ' . $token;
-        }
-
-        try {
-            $response = json_decode(getContents($url, $headers), true, 512, JSON_THROW_ON_ERROR);
-        } catch (\Exception $e) {
-            return '';
-        }
-
-        if (isset($response['commit']['message']) === true) {
-            return (string)$response['commit']['message'];
-        }
-
-        return '';
-    }
-
+    /**
+     * @param array<string, mixed> $release
+     */
     private function shouldSkipRelease(array $release, bool $includePrereleases): bool
     {
         if (($release['draft'] ?? false) === true) {
@@ -216,20 +162,30 @@ final class GitHubReleaseBridge extends BridgeAbstract
         return false;
     }
 
-    private function buildFeedItem(array $release, string $owner, string $repo, bool $hideAssets): array
+    /**
+     * @param array<string, mixed> $release
+     * @return array{
+     *     title: string,
+     *     uri: string,
+     *     content: string,
+     *     timestamp: int,
+     *     author: string,
+     *     uid: string,
+     *     categories: array<string>
+     * }
+     */
+    private function buildReleaseItem(array $release, string $owner, string $repo, bool $hideAssets): array
     {
         $name = $release['name'] ?? '';
         $tagName = $release['tag_name'] ?? '';
         $title = $name !== '' ? $name : ($tagName !== '' ? $tagName : 'Untitled');
 
         $body = $release['body'] ?? '';
-        // Если тело релиза пустое, GitHub на сайте показывает сообщение коммита тега.
-        // Повторяем эту логику, чтобы не пропускать текст.
         if ($body === '' && $tagName !== '') {
             $body = $this->fetchTagCommitMessage($owner, $repo, $tagName);
         }
 
-        $content = $body !== '' ? $this->processMarkdown((string)$body, $owner, $repo) : '';
+        $content = $body !== '' ? $this->processMarkdown((string) $body, $owner, $repo) : '';
 
         if ($hideAssets === false && isset($release['assets']) === true && is_array($release['assets']) === true) {
             $assetsHtml = $this->buildAssetsBlock($release['assets']);
@@ -250,12 +206,14 @@ final class GitHubReleaseBridge extends BridgeAbstract
             'content' => $content,
             'timestamp' => $timestamp,
             'author' => $release['author']['login'] ?? '',
-            'uid' => $tagName !== '' ? $tagName : (string)($release['id'] ?? uniqid()),
-            'enclosures' => [],
+            'uid' => $tagName !== '' ? $tagName : (string) ($release['id'] ?? uniqid()),
             'categories' => [$tagName !== '' ? $tagName : ''],
         ];
     }
 
+    /**
+     * @param array<int, array<string, mixed>> $assets
+     */
     private function buildAssetsBlock(array $assets): string
     {
         $links = [];
@@ -270,7 +228,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
             $url = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
             $name = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
-            $size = $this->formatFileSize((int)($asset['size'] ?? 0));
+            $size = $this->formatFileSize((int) ($asset['size'] ?? 0));
             $label = $size !== '' ? "{$name} ({$size})" : $name;
 
             $links[] = "<li><a href=\"{$url}\">{$label}</a></li>";
@@ -290,7 +248,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
         }
 
         $index = 0;
-        $size = (float)$bytes;
+        $size = (float) $bytes;
 
         while ($size >= 1024 && $index < count(self::FILE_UNITS) - 1) {
             $size /= 1024;
@@ -298,6 +256,12 @@ final class GitHubReleaseBridge extends BridgeAbstract
         }
 
         return round($size, 2) . ' ' . self::FILE_UNITS[$index];
+    }
+
+    private function fetchTagCommitMessage(string $owner, string $repo, string $tagName): string
+    {
+        $client = new GithubClient($this->cache, $this->logger);
+        return $client->fetchTagCommitMessage($owner, $repo, $tagName);
     }
 
     private function processMarkdown(string $markdown, string $owner, string $repo): string
@@ -353,7 +317,6 @@ final class GitHubReleaseBridge extends BridgeAbstract
         }
 
         $content = $dom->saveHTML($wrapper);
-        // Защита от TypeError в strict_types, если preg_replace вернет null
         $c1 = preg_replace('#^\s*<div[^>]*>#', '', $content);
         $content = $c1 !== null ? $c1 : $content;
         $c2 = preg_replace('#</div>\s*$#', '', $content);
