@@ -1,0 +1,106 @@
+<!-- meta:uri:https://github.com/ -->
+<p>These bridges use the <a href="https://docs.github.com/en/rest" target="_blank" rel="noopener">GitHub REST API</a> to fetch data from GitHub repositories. They cover issues, pull requests, releases, comments, and repository search. Compared to HTML scraping, this approach has several advantages:</p>
+
+<ul>
+    <li>
+        <strong>Stability.</strong>
+        The bridges use the official API and do not depend on GitHub's HTML structure, which can change at any moment. API endpoints are versioned and documented.
+    </li>
+    <li>
+        <strong>Smart rate limit handling.</strong>
+        All GitHub bridges share a single <code>GithubClient</code> that tracks rate limits, caches rate limit states, and gracefully handles <code>403</code> / <code>429</code> responses without crashing the entire application.
+    </li>
+    <li>
+        <strong>Efficient requests.</strong>
+        Where possible, bridges use the <a href="https://docs.github.com/en/rest/activity/events" target="_blank" rel="noopener">Events API</a> to fetch recent PR comments in a single request instead of <code>N</code> separate calls per pull request.
+    </li>
+    <li>
+        <strong>Requires a Personal Access Token for heavy use.</strong>
+        Anonymous requests are limited to <strong>60 per hour</strong>. With a token, the limit increases to <strong>5,000 per hour</strong> — see the "Configuration" section.
+    </li>
+</ul>
+
+<h4>Available bridges</h4>
+<ul>
+    <li><strong>GitHub Pull Request</strong> — pull requests of a repository, or comments on a single PR, or recent PR comments across the whole project (via Events API).</li>
+    <li><strong>GitHub Releases</strong> — releases of a repository with full markdown rendering, including tables, @mentions, #issue links, and embedded attachments.</li>
+    <li><strong>GitHub Issues</strong> — issues via the Search API with custom query qualifiers (<code>is:open</code>, <code>label:bug</code>, <code>sort:updated-desc</code>, etc.).</li>
+    <li><strong>Github Repositories Search</strong> — repository search results with descriptions, topics and languages. Uses HTML scraping, not the API.</li>
+</ul>
+
+<h4>Configuration</h4>
+<ol>
+    <li>
+        <span>Sign in to GitHub and open <a href="https://github.com/settings/tokens" target="_blank" rel="noopener">Personal access tokens</a> in your account settings.</span>
+    </li>
+    <li>
+        <span>Click <strong>Generate new token</strong> and choose <strong>classic</strong> (fine-grained tokens also work, but classic tokens are simpler for read-only access).</span>
+    </li>
+    <li>
+        <span>Give the token a name (e.g. <code>rss-bridge</code>), set an expiration date, and leave all scopes <strong>unchecked</strong>. A token with no scopes has read-only access to public repositories — this is enough for all GitHub bridges and is the safest option.</span>
+    </li>
+    <li>
+        <span>Click <strong>Generate token</strong> and copy the resulting <code>ghp_...</code> string. It is shown only once.</span>
+    </li>
+    <li>
+        <span>Add the token to your <code>config.ini.php</code> under the <code>[GitHub]</code> section — this single token is shared by <em>all</em> GitHub bridges automatically:</span>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>[GitHub]
+token = "ghp_YourTokenHere"</code></pre>
+        </div>
+    </li>
+</ol>
+
+<div class="note info">
+    💡 <strong>Note:</strong> A token with no scopes is sufficient for reading public repositories and gives you 5,000 requests per hour — almost 84× more than anonymous access. Only add scopes (e.g. <code>repo</code>) if you need to read <em>private</em> repositories, which also requires the token to belong to a user with access to those repos.
+</div>
+
+<div class="note warning">
+    ⚠️ <strong>Security:</strong> Never commit your <code>config.ini.php</code> to git or share it publicly. The token grants read access to everything your GitHub account can see.
+</div>
+
+<h4>Rate limits</h4>
+<p>GitHub enforces the following <a href="https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api" target="_blank" rel="noopener">rate limits</a> on the REST API:</p>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border:1px solid #d0d7de;margin:12px 0">
+    <thead>
+        <tr>
+            <th style="background-color:#f6f8fa;padding:6px 13px;border:1px solid #d0d7de;text-align:left;font-weight:bold">Mode</th>
+            <th style="background-color:#f6f8fa;padding:6px 13px;border:1px solid #d0d7de;text-align:left;font-weight:bold">Primary limit</th>
+            <th style="background-color:#f6f8fa;padding:6px 13px;border:1px solid #d0d7de;text-align:left;font-weight:bold">Search API</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td style="padding:6px 13px;border:1px solid #d0d7de">Anonymous (no token)</td>
+            <td style="padding:6px 13px;border:1px solid #d0d7de">60 requests / hour</td>
+            <td style="padding:6px 13px;border:1px solid #d0d7de">10 requests / minute</td>
+        </tr>
+        <tr>
+            <td style="padding:6px 13px;border:1px solid #d0d7de">Authenticated</td>
+            <td style="padding:6px 13px;border:1px solid #d0d7de">5,000 requests / hour</td>
+            <td style="padding:6px 13px;border:1px solid #d0d7de">30 requests / minute</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>When a limit is reached, the <code>GithubClient</code> blocks further requests for one hour and throws a <code>RateLimitException</code>. The bridge will display a friendly error in the feed instead of crashing, and will automatically resume once the window resets.</p>
+
+<h4>Troubleshooting</h4>
+<ul>
+    <li>
+        <strong><code>Auth failed</code></strong> — the token in <code>config.ini.php</code> is invalid or expired. Generate a new one.
+    </li>
+    <li>
+        <strong><code>Repo not found</code></strong> — the repository does not exist, the owner/repo names are misspelled, or the repository is private and the token has no access to it.
+    </li>
+    <li>
+        <strong><code>Rate limit exceeded</code></strong> — the hourly quota is exhausted. Wait for the window to reset (up to 1 hour), or add a token to jump from 60 to 5,000 requests/hour.
+    </li>
+</ul>
