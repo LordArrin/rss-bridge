@@ -1,0 +1,140 @@
+[
+	{
+		"_comment": "A file in the same directory",
+		"cases": [
+			["http://example.com/foo/bar", "test.jpg", "http://example.com/foo/test.jpg"]
+		]
+	},
+	{
+		"_comment": "A file in a subdirectory",
+		"cases": [
+			["http://example.com/foo/bar", "images/test.jpg", "http://example.com/foo/images/test.jpg"],
+			["http://example.com/foo/bar", "./images/test.jpg", "http://example.com/foo/images/test.jpg"],
+			["http://example.com/foo/bar/", "images/test.jpg", "http://example.com/foo/bar/images/test.jpg"],
+			["http://example.com/foo/bar/", "./images/test.jpg", "http://example.com/foo/bar/images/test.jpg"]
+		]
+	},
+	{
+		"_comment": "A file in the root directory",
+		"cases": [
+			["http://example.com/foo/bar", "/test.jpg", "http://example.com/test.jpg"]
+		]
+	},
+	{
+		"_comment": "A file in the parent directory",
+		"cases": [
+			["http://example.com/foo/bar/baz", "../test.jpg", "http://example.com/foo/test.jpg"]
+		]
+	},
+	{
+		"_comment": "A file more directories up than there are directories to escape",
+		"cases": [
+			["http://example.com/foo/bar/baz/quux", "../../../../../test.jpg", "http://example.com/../../test.jpg"]
+		]
+	},
+	{
+		"_comment": "The current directory itself",
+		"cases": [
+			["http://example.com/foo/", ".", "http://example.com/foo/"],
+			["http://example.com/foo/", "./", "http://example.com/foo/"],
+			["http://example.com/foo", ".", "http://example.com/"],
+			["http://example.com/foo", "./", "http://example.com/"]
+		]
+	},
+	{
+		"_comment": "Different server, same scheme",
+		"cases": [
+			["http://example.com/foo/bar", "//other.example/test.jpg", "http://other.example/test.jpg"],
+			["https://example.com/foo/bar", "//other.example/test.jpg", "https://other.example/test.jpg"]
+		]
+	},
+	{
+		"_comment": "Ensure queries work right",
+		"cases": [
+			["https://example.com/foo/bar.cgi?hello=goodbye", "moo.cgi?yes=no", "https://example.com/foo/moo.cgi?yes=no"],
+			["http://example.com/foo/?qwer=poiu", "bar", "http://example.com/foo/bar"],
+			["http://example.com/foo/", "bar?qwer=poiu", "http://example.com/foo/bar?qwer=poiu"],
+			["http://example.com/foo/", "?qwer=poiu", "http://example.com/foo/?qwer=poiu"]
+		]
+	},
+	{
+		"_comment": "Users and passwords should transfer for relative links",
+		"cases": [
+			["http://alicebob:password123@example.com/foo/bar", ".", "http://alicebob:password123@example.com/foo/"],
+			["http://alicebob:password123@example.com/foo/bar", "/test/url", "http://alicebob:password123@example.com/test/url"],
+			["http://spambot@example.com/foo/bar", "/test/url", "http://spambot@example.com/test/url"]
+		]
+	},
+	{
+		"_comment": "But shouldn't transfer to other servers",
+		"cases": [
+			["https://alicebob:password123@example.com/foo/bar", "//other.example/test/url", "https://other.example/test/url"]
+		]
+	},
+	{
+		"_comment": "Port specifiers",
+		"cases": [
+			["https://example.com:8000/foo/bar", "//other.example/test/url", "https://other.example/test/url"],
+			["https://example.com:8000/foo/bar", "/test/url", "https://example.com:8000/test/url"]
+		]
+	},
+	{
+		"_comment": "File paths are fiddly",
+		"cases": [
+			["file:///path/to/file", "other-file", "file:///path/to/other-file"],
+			["/path/to/file", "other-file", "/path/to/other-file"]
+		]
+	},
+	{
+		"_comment": "Anchors are too",
+		"cases": [
+			["http://example.com/test/foo#anchor", "bar", "http://example.com/test/bar"],
+			["http://example.com/test/foo", "bar#anchor", "http://example.com/test/bar#anchor"],
+			["http://example.com", "#anchor", "http://example.com#anchor"]
+		]
+	},
+	{
+		"_comment": "Mixing non-relative and relative url",
+		"cases": [
+			["http://example.com/foo/bar", "javascript:void(0)", "javascript:void(0)"]
+		]
+	},
+	{
+		"_comment": "Sanity checks",
+		"cases": [
+			["http://example.com/foo/bar", false, "http://example.com/foo/bar"],
+			[false, "http://example.com/foo/bar", "http://example.com/foo/bar"]
+		]
+	},
+	{
+		"_comment": "URL already valid (various kinds), base may vary",
+		"cases": [
+			["https://example.com", "https://example.com", "https://example.com"],
+			["https://example.com/", "https://example.com", "https://example.com"],
+			["https://example.com/", "https://example.com/", "https://example.com/"],
+			["https://example.com/", "https://example.com/#test", "https://example.com/#test"]
+		]
+	},
+	{
+		"_comment": "Same server, different scheme, URL already valid",
+		"cases": [
+			["http://example.com", "https://example.com", "https://example.com"],
+			["https://example.com", "http://example.com", "http://example.com"]
+		]
+	},
+	{
+		"_comment": "Colons in path",
+		"cases": [
+			["https://example.com", "/user/posts/1907564412639039:0", "https://example.com/user/posts/1907564412639039:0"],
+			["https://example.com", "/user/posts/1907564412639039:123", "https://example.com/user/posts/1907564412639039:123"],
+			["https://example.com", "/user/posts/1907564412639039:8", "https://example.com/user/posts/1907564412639039:8"],
+			["https://example.com", "/user/posts/1907564412639039:abc", "https://example.com/user/posts/1907564412639039:abc"],
+			["https://example.com/user/", "posts/1907564412639039:0", "https://example.com/user/posts/1907564412639039:0"],
+			["https://example.com/user/", "posts/1907564412639039:456", "https://example.com/user/posts/1907564412639039:456"],
+			["https://example.com/user/", "posts/1907564412639039:7", "https://example.com/user/posts/1907564412639039:7"],
+			["https://example.com/user/", "posts/1907564412639039:def", "https://example.com/user/posts/1907564412639039:def"],
+			["https://example.com/user/", "http://example.com/posts/1907564412639039:456", "http://example.com/posts/1907564412639039:456"],
+			["https://example.com/user/", "http://example.com:9090/posts/1907564412639039:456", "http://example.com:9090/posts/1907564412639039:456"]
+		]
+	}
+]
