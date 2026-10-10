@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class Formula1Bridge extends BridgeAbstract
 {
     public const NAME = 'Formula1';
@@ -62,23 +64,23 @@ final class Formula1Bridge extends BridgeAbstract
         $raw = getContents($url, $headers);
 
         if (is_string($raw) === false || $raw === '') {
-            \throwServerException('Empty response from Formula 1 API');
+            throwServerException('Empty response from Formula 1 API');
         }
 
         $json = json_decode($raw, false);
 
         if (is_object($json) === false) {
-            \throwServerException('Invalid JSON response from Formula 1 API');
+            throwServerException('Invalid JSON response from Formula 1 API');
         }
 
         if (property_exists($json, 'error') === true) {
             $errorMessage = (string) ($json->message ?? 'Unknown error');
-            \throwServerException($errorMessage);
+            throwServerException($errorMessage);
         }
 
         $list = $json->items ?? null;
         if (is_array($list) === false) {
-            \throwServerException('No items found in API response');
+            throwServerException('No items found in API response');
         }
 
         foreach ($list as $article) {

@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class SkyArteBridge extends BridgeAbstract
 {
     public const NAME = 'Sky Arte | Mostre ed eventi';
@@ -25,7 +27,7 @@ final class SkyArteBridge extends BridgeAbstract
         $urls = get_sitemap('https://arte.sky.it/sitemap-mostre-eventi.xml');
 
         if (is_array($urls) === false) {
-            \throwServerException('Invalid sitemap format');
+            throwServerException('Invalid sitemap format');
         }
 
         $count = 0;

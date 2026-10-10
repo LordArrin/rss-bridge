@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class ComicsKingdomBridge extends BridgeAbstract
 {
     public const NAME = 'Comics Kingdom Unofficial RSS';
@@ -41,7 +43,7 @@ final class ComicsKingdomBridge extends BridgeAbstract
         $data = json_decode($json, false);
 
         if (is_array($data) === false) {
-            \throwServerException('Invalid API response format');
+            throwServerException('Invalid API response format');
         }
 
         if (isset($data[0]->_embedded->{'wp:term'}[0][0]) === true) {

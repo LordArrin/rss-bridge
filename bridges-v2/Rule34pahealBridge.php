@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class Rule34pahealBridge extends BridgeAbstract
 {
     public const NAME = 'Rule34paheal';

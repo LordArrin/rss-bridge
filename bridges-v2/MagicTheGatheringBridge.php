@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class MagicTheGatheringBridge extends BridgeAbstract
 {
     public const NAME = 'Magic: The Gathering';
@@ -51,7 +53,7 @@ final class MagicTheGatheringBridge extends BridgeAbstract
         $html = getContents($url);
 
         if (is_string($html) === false || $html === '') {
-            \throwServerException('Empty response from Magic: The Gathering page');
+            throwServerException('Empty response from Magic: The Gathering page');
         }
 
         libxml_use_internal_errors(true);

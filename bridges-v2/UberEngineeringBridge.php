@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class UberEngineeringBridge extends BridgeAbstract
 {
     public const NAME = 'Uber Engineering';
@@ -27,7 +29,7 @@ final class UberEngineeringBridge extends BridgeAbstract
         $html = getContents(self::URI);
 
         if (is_string($html) === false || $html === '') {
-            \throwServerException('Empty response from Uber Engineering page');
+            throwServerException('Empty response from Uber Engineering page');
         }
 
         $articles = self::extractArticleFeedFromHtml($html, self::ARTICLE_FEED_PATH);
@@ -71,20 +73,20 @@ final class UberEngineeringBridge extends BridgeAbstract
         $pattern = '#<script type="application/json" id="' . preg_quote($scriptId, '#') . '">\s*(.*?)\s*</script>#s';
 
         if (preg_match($pattern, $html, $matches) !== 1) {
-            \throwServerException('Unable to find article feed data');
+            throwServerException('Unable to find article feed data');
         }
 
         $payload = rawurldecode(self::decode((string) $matches[1]));
         $data = \Json::decode($payload);
 
         if (is_array($data) === false) {
-            \throwServerException('Unable to parse article feed data');
+            throwServerException('Unable to parse article feed data');
         }
 
         $articles = $data['relatedPages']['relatedPages'] ?? null;
 
         if (is_array($articles) === false) {
-            \throwServerException('Unable to parse article feed data');
+            throwServerException('Unable to parse article feed data');
         }
 
         return $articles;

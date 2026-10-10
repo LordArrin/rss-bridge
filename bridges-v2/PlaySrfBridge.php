@@ -6,6 +6,9 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwClientException;
+use function RSSBridge\Exceptions\throwServerException;
+
 final class PlaySrfBridge extends BridgeAbstract
 {
     public const NAME = 'Play SRF / RTS / RSI / RTR';
@@ -33,10 +36,10 @@ final class PlaySrfBridge extends BridgeAbstract
         $showIdInput = (string) ($this->getInput('showId') ?? '');
 
         if (preg_match('/[a-z0-9]{8}\-[a-z0-9]{4}\-[a-z0-9]{4}\-[a-z0-9]{4}\-[a-z0-9]{12}$|[0-9]{5,10}$/s', $showIdInput, $matchShowId) !== 1) {
-            \throwClientException('Invalid show URL format');
+            throwClientException('Invalid show URL format');
         }
         if (preg_match('/(?<=https:\/{2}w{3}\.)[first]{3}/', $showIdInput, $matchRegion) !== 1) {
-            \throwClientException('Invalid region in show URL');
+            throwClientException('Invalid region in show URL');
         }
 
         $showId = (string) $matchShowId[0];
@@ -49,18 +52,18 @@ final class PlaySrfBridge extends BridgeAbstract
         $raw = getContents($apiUrl);
 
         if (is_string($raw) === false || $raw === '') {
-            \throwServerException('Empty response from SRF API');
+            throwServerException('Empty response from SRF API');
         }
 
         $jsonShowVideos = json_decode($raw, true);
 
         if (is_array($jsonShowVideos) === false) {
-            \throwServerException('Invalid JSON response from SRF API');
+            throwServerException('Invalid JSON response from SRF API');
         }
 
         $data = $jsonShowVideos['data']['data'] ?? null;
         if (is_array($data) === false || count($data) === 0) {
-            \throwServerException('No videos found for this show');
+            throwServerException('No videos found for this show');
         }
 
         $this->title = (string) ($data[0]['show']['title'] ?? 'Play SRF');

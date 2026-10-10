@@ -6,6 +6,9 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwClientException;
+use function RSSBridge\Exceptions\throwServerException;
+
 final class NOSBridge extends BridgeAbstract
 {
     public const NAME = 'NOS Nieuws & Sport';
@@ -45,14 +48,14 @@ final class NOSBridge extends BridgeAbstract
     {
         $topicInput = $this->getInput('topic');
         if (is_string($topicInput) === false || $topicInput === '') {
-            \throwClientException('Topic is required');
+            throwClientException('Topic is required');
         }
 
         $url = sprintf('https://www.nos.nl/%s', $topicInput);
         $html = getContents($url);
 
         if (is_string($html) === false || $html === '') {
-            \throwServerException('Empty response from NOS page');
+            throwServerException('Empty response from NOS page');
         }
 
         libxml_use_internal_errors(true);
@@ -61,7 +64,7 @@ final class NOSBridge extends BridgeAbstract
 
         $mainContent = $dom->querySelector('main#content > div > section > ul');
         if ($mainContent === null) {
-            \throwServerException(sprintf('Unable to find css selector on `%s`', $url));
+            throwServerException(sprintf('Unable to find css selector on `%s`', $url));
         }
 
         $this->resolveRelativeLinks($mainContent, self::URI);

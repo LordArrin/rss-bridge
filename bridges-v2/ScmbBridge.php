@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class ScmbBridge extends BridgeAbstract
 {
     public const NAME = 'Se Coucher Moins Bete';

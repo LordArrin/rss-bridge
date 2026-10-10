@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class NasaApodBridge extends BridgeAbstract
 {
     public const NAME = 'NASA Picture of the Day';

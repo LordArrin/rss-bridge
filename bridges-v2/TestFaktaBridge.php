@@ -6,6 +6,7 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
 use function urljoin;
 
 final class TestFaktaBridge extends BridgeAbstract
@@ -41,7 +42,7 @@ final class TestFaktaBridge extends BridgeAbstract
         $html = getContents($newsUrl);
 
         if (is_string($html) === false || $html === '') {
-            \throwServerException('Empty response from Testfakta homepage');
+            throwServerException('Empty response from Testfakta homepage');
         }
 
         libxml_use_internal_errors(true);

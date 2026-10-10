@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class FirefoxAddonsBridge extends BridgeAbstract
 {
     public const NAME = 'Firefox Add-ons';
@@ -45,7 +47,7 @@ final class FirefoxAddonsBridge extends BridgeAbstract
         $html = getContents($this->getURI());
 
         if (is_string($html) === false || $html === '') {
-            \throwServerException('Empty response from add-on page');
+            throwServerException('Empty response from add-on page');
         }
 
         libxml_use_internal_errors(true);

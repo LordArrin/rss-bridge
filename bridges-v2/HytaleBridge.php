@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class HytaleBridge extends BridgeAbstract
 {
     public const NAME = 'Hytale';
@@ -27,7 +29,7 @@ final class HytaleBridge extends BridgeAbstract
         $html = getContents(self::URI);
 
         if (is_string($html) === false || $html === '') {
-            \throwServerException('Empty response from Hytale news page');
+            throwServerException('Empty response from Hytale news page');
         }
 
         libxml_use_internal_errors(true);

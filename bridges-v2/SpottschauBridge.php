@@ -6,6 +6,7 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
 use function urljoin;
 
 final class SpottschauBridge extends BridgeAbstract

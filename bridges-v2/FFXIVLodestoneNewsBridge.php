@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class FFXIVLodestoneNewsBridge extends BridgeAbstract
 {
     public const NAME = 'FFXIV Lodestone News';
@@ -71,13 +73,13 @@ final class FFXIVLodestoneNewsBridge extends BridgeAbstract
         $raw = getContents($url);
 
         if (is_string($raw) === false || $raw === '') {
-            \throwServerException('Empty response from Lodestone News API');
+            throwServerException('Empty response from Lodestone News API');
         }
 
         $articles = json_decode($raw, false);
 
         if (is_array($articles) === false) {
-            \throwServerException('Failed to decode JSON content');
+            throwServerException('Failed to decode JSON content');
         }
 
         foreach ($articles as $article) {

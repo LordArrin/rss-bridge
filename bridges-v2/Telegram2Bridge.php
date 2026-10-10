@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwClientException;
+
 final class Telegram2Bridge extends BridgeAbstract
 {
     public const NAME = 'Telegram';

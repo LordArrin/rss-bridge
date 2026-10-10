@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class KilledbyMicrosoftBridge extends BridgeAbstract
 {
     public const NAME = 'Killed by Microsoft';
@@ -23,13 +25,13 @@ final class KilledbyMicrosoftBridge extends BridgeAbstract
         $json = getContents('https://killedbymicrosoft.info/graveyard.json');
 
         if (is_string($json) === false || $json === '') {
-            \throwServerException('Empty response from Killed by Microsoft API');
+            throwServerException('Empty response from Killed by Microsoft API');
         }
 
         $discontinuedServices = \Json::decode($json);
 
         if (is_array($discontinuedServices) === false) {
-            \throwServerException('Invalid JSON response from Killed by Microsoft API');
+            throwServerException('Invalid JSON response from Killed by Microsoft API');
         }
 
         usort($discontinuedServices, function (array $a, array $b): int {

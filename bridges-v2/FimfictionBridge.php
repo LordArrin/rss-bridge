@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwClientException;
+
 final class FimfictionBridge extends BridgeAbstract
 {
     public const MAINTAINER = 'LordArrin';

@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class MinecraftBridge extends BridgeAbstract
 {
     public const NAME = 'Minecraft';
@@ -41,18 +43,18 @@ final class MinecraftBridge extends BridgeAbstract
         $raw = getContents($url);
 
         if (is_string($raw) === false || $raw === '') {
-            \throwServerException('Empty response from Minecraft API');
+            throwServerException('Empty response from Minecraft API');
         }
 
         $data = json_decode($raw, false);
 
         if (is_object($data) === false) {
-            \throwServerException('Invalid JSON response from Minecraft API');
+            throwServerException('Invalid JSON response from Minecraft API');
         }
 
         $results = $data->result->results ?? null;
         if (is_array($results) === false) {
-            \throwServerException('Invalid or empty content');
+            throwServerException('Invalid or empty content');
         }
 
         $categoryInput = $this->getInput('category');

@@ -6,6 +6,9 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwClientException;
+use function RSSBridge\Exceptions\throwServerException;
+
 final class KitsuBridge extends BridgeAbstract
 {
     public const NAME = 'Kitsu Episode Updates';

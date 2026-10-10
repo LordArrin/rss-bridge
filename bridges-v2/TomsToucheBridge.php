@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class TomsToucheBridge extends BridgeAbstract
 {
     public const NAME = 'Toms Touche';

@@ -8,6 +8,10 @@ use RSSBridge\BridgeAbstract;
 use RSSBridge\Http\HttpException;
 use Json;
 
+use function RSSBridge\Exceptions\throwClientException;
+use function RSSBridge\Exceptions\throwServerException;
+use function RSSBridge\Exceptions\throwRateLimitException;
+
 final class LiveTennisApiBridge extends BridgeAbstract
 {
     public const NAME = 'Live Tennis API';

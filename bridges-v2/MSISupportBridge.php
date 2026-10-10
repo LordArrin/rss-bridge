@@ -7,6 +7,8 @@ namespace RSSBridge\Bridges;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\FeedItem;
 
+use function RSSBridge\Exceptions\throwClientException;
+
 final class MSISupportBridge extends BridgeAbstract
 {
     public const NAME = 'MSI Support';

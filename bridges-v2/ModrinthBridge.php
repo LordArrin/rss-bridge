@@ -6,6 +6,9 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwClientException;
+use function RSSBridge\Exceptions\throwServerException;
+
 final class ModrinthBridge extends BridgeAbstract
 {
     public const NAME = 'Modrinth';
@@ -100,7 +103,7 @@ final class ModrinthBridge extends BridgeAbstract
         $projectName = (string) ($this->getInput('name') ?? '');
 
         if ($projectName === '') {
-            \throwClientException('Project name is required');
+            throwClientException('Project name is required');
         }
 
         $url = sprintf('%s/%s/version', $apiUrl, $projectName);
@@ -124,7 +127,7 @@ final class ModrinthBridge extends BridgeAbstract
         $data = json_decode($json, false);
 
         if (is_array($data) === false) {
-            \throwServerException('Invalid API response format');
+            throwServerException('Invalid API response format');
         }
 
         foreach ($data as $entry) {

@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class NotAlwaysBridge extends BridgeAbstract
 {
     public const NAME = 'Not Always family';
@@ -45,7 +47,7 @@ final class NotAlwaysBridge extends BridgeAbstract
         $html = getContents($this->getURI());
 
         if (is_string($html) === false || $html === '') {
-            \throwServerException('Empty response from NotAlways page');
+            throwServerException('Empty response from NotAlways page');
         }
 
         libxml_use_internal_errors(true);

@@ -6,6 +6,7 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwClientException;
 use function urljoin;
 
 final class FirefoxReleaseNotesBridge extends BridgeAbstract

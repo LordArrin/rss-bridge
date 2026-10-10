@@ -7,6 +7,9 @@ namespace RSSBridge\Bridges;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\Http\HttpException;
 
+use function RSSBridge\Exceptions\throwClientException;
+use function RSSBridge\Exceptions\throwServerException;
+
 final class GettrBridge extends BridgeAbstract
 {
     public const NAME = 'Gettr.com';
@@ -38,7 +41,7 @@ final class GettrBridge extends BridgeAbstract
         $user = (string) ($this->getInput('user') ?? '');
 
         if ($user === '') {
-            \throwClientException('User is required');
+            throwClientException('User is required');
         }
 
         $limit = (int) ($this->getInput('limit') ?? 5);
@@ -57,16 +60,16 @@ final class GettrBridge extends BridgeAbstract
                 $response = $e->response;
                 $body = ($response !== null) ? $response->getBody() : '';
                 if (str_contains($body, 'E_USER_NOTFOUND') === true) {
-                    \throwClientException('User not found: ' . $user);
+                    throwClientException('User not found: ' . $user);
                 }
             }
-            \throwServerException('Failed to fetch posts: ' . $e->getMessage());
+            throwServerException('Failed to fetch posts: ' . $e->getMessage());
         }
 
         $data = json_decode($json, false);
 
         if (is_object($data) === false) {
-            \throwServerException('Invalid API response format');
+            throwServerException('Invalid API response format');
         }
 
         if (isset($data->result) === false || is_object($data->result) === false) {
