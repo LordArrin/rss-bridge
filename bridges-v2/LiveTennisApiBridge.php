@@ -6,7 +6,7 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 use RSSBridge\Http\HttpException;
-use Json;
+use RSSBridge\Utils\Json;
 
 use function RSSBridge\Exceptions\throwClientException;
 use function RSSBridge\Exceptions\throwServerException;

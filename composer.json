@@ -28,7 +28,7 @@
             "lib/SafeBridgeLoader.php"
         ],
         "files": [
-            "lib/Json.php",
+            "lib/json.php",
             "lib/exceptions.php",
             "lib/utils.php",
             "lib/utils-functions.php",

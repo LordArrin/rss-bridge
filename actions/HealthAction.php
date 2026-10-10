@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Actions;
 
-use Json;
+use RSSBridge\Utils\Json;
 use Request;
 use Response;
 use RSSBridge\Caches\CacheInterface;

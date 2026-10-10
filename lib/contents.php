@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
+use RSSBridge\Utils\Json;
 use RSSBridge\Proxies\DirectProxy;
 use RSSBridge\Proxies\ProxyFactory;
 use function RSSBridge\Exceptions\throwClientException;

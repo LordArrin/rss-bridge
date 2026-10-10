@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Actions;
 
 use HttpException;
-use Json;
+use RSSBridge\Utils\Json;
 use Logger;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\BridgeFactory;
