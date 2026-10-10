@@ -7,6 +7,7 @@ namespace RSSBridge\Middlewares;
 use RSSBridge\Logger\Logger;
 use RSSBridge\Exceptions\ClientException;
 use RSSBridge\Exceptions\RateLimitException;
+use RSSBridge\Http\HttpException;
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
 

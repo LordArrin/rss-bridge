@@ -156,7 +156,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
                     'drop-empty-elements' => false,
                 ], 'utf8');
                 $tidy->cleanRepair();
-                $html = (string)$tidy;
+                $html = (string)$tidy->value;
             }
 
             $this->pageDom = \Dom\HTMLDocument::createFromString($html);

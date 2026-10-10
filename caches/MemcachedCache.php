@@ -336,7 +336,7 @@ final class MemcachedCache implements CacheInterface
      */
     private function readChunked(array $chunkKeys): ?string
     {
-        $values = $this->conn->getMulti($chunkKeys, \Memcached::GET_PRESERVE_KEYS);
+        $values = $this->conn->getMulti($chunkKeys, 1024);
         $resultCode = $this->conn->getResultCode();
 
         // Partial hits come back with RES_NOTFOUND while fully successful

@@ -8,16 +8,18 @@ final class TgWSProxy extends ProxyAbstract
 {
     private const MAX_BUDGET_SECONDS = 45;
 
+    private const CURL_MAX_ERRNO = 98;
+
     private const CONNECTION_ERRNOS = [
-        \CURLE_COULDNT_CONNECT,      // 7
-        \CURLE_OPERATION_TIMEDOUT,   // 28
-        \CURLE_SSL_CONNECT_ERROR,    // 35
-        \CURLE_RECV_ERROR,           // 56
-        \CURLE_SEND_ERROR,           // 55
-        \CURLE_GOT_NOTHING,          // 52
-        \CURLE_PARTIAL_FILE,         // 18
-        \CURLE_COULDNT_RESOLVE_PROXY, // 5
-        \CURLE_COULDNT_RESOLVE_HOST,  // 6
+        \CURLE_COULDNT_CONNECT,
+        \CURLE_OPERATION_TIMEDOUT,
+        \CURLE_SSL_CONNECT_ERROR,
+        \CURLE_RECV_ERROR,
+        \CURLE_SEND_ERROR,
+        \CURLE_GOT_NOTHING,
+        \CURLE_PARTIAL_FILE,
+        \CURLE_COULDNT_RESOLVE_PROXY,
+        \CURLE_COULDNT_RESOLVE_HOST,
     ];
 
     private const RETRYABLE_HTTP_CODES = [429, 500, 502, 503, 504];
@@ -55,9 +57,6 @@ final class TgWSProxy extends ProxyAbstract
     {
         $this->proxyUrl = $this->config['socks_url'] ?? null;
 
-        // Sensible defaults for a web request context: fail fast, retry cheap.
-        // The old defaults (30s/120s x 3 retries = ~7 min worst case) exceeded
-        // any realistic fpm request_terminate_timeout / nginx proxy_read_timeout.
         if (isset($this->config['connect_timeout']) === false) {
             $this->config['connect_timeout'] = 5;
         }
@@ -234,7 +233,6 @@ final class TgWSProxy extends ProxyAbstract
             CURLOPT_SSL_VERIFYPEER   => true,
             CURLOPT_SSL_VERIFYHOST   => 2,
             CURLOPT_NOSIGNAL         => true,
-            CURLOPT_USERAGENT        => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
             CURLOPT_DNS_CACHE_TIMEOUT => 120,
         ];
 
@@ -268,6 +266,12 @@ final class TgWSProxy extends ProxyAbstract
         curl_setopt_array($ch, $options);
     }
 
+    private function directFallback(string $url, array $options): string
+    {
+        $fallbackOptions = array_merge($options, ['use_cache' => false]);
+        return (new DirectProxy($this->config))->getHtml($url, $fallbackOptions);
+    }
+
     protected function fetchHtml(string $url, array $options): string
     {
         $url = $this->normalizeUrl($url);
@@ -278,7 +282,7 @@ final class TgWSProxy extends ProxyAbstract
             $this->log('warning', $e->getMessage());
             if (($this->config['fallback_direct'] ?? false) === true) {
                 $this->log('info', sprintf('Falling back to direct connection for %s', $url));
-                return parent::fetchHtml($url, $options);
+                return $this->directFallback($url, $options);
             }
             throw $e;
         }
@@ -295,7 +299,6 @@ final class TgWSProxy extends ProxyAbstract
         $lastException = null;
 
         for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
-            // Never start an attempt we cannot finish within the budget.
             $remaining = $deadline - microtime(true);
             if ($remaining <= 1.0) {
                 $this->log('warning', sprintf(
@@ -315,7 +318,6 @@ final class TgWSProxy extends ProxyAbstract
                     $jitter = mt_rand(-100000, 100000);
                     $delayUs = max(200000, $baseDelay + $jitter);
 
-                    // Cap the delay so it cannot eat the whole remaining budget.
                     $delayUs = min($delayUs, (int) (($remaining - 1.0) * 1000000));
 
                     $this->log('warning', sprintf(
@@ -329,7 +331,6 @@ final class TgWSProxy extends ProxyAbstract
                     $remaining = $deadline - microtime(true);
                 }
 
-                // Shrink per-attempt timeouts to what the budget still allows.
                 $effConnect = max(1, min($connectTimeout, (int) floor($remaining)));
                 $effRequest = max(1, min($requestTimeout, (int) floor($remaining)));
 
@@ -385,7 +386,6 @@ final class TgWSProxy extends ProxyAbstract
                     break;
                 }
 
-                // Connection-level errors poison the handle/socket: drop it.
                 if ($this->isConnectionThrowable($e) === true) {
                     $this->discardHandle();
                 }
@@ -398,7 +398,7 @@ final class TgWSProxy extends ProxyAbstract
                 $url
             ));
             try {
-                return parent::fetchHtml($url, $options);
+                return $this->directFallback($url, $options);
             } catch (\Throwable $e) {
                 $this->log('error', sprintf('Direct fallback also failed: %s', $e->getMessage()));
             }
@@ -475,7 +475,6 @@ final class TgWSProxy extends ProxyAbstract
     private function doFetchBinaryInternal(string $url, array $options): array
     {
         $connectTimeout = (int) ($this->config['connect_timeout'] ?? 5);
-        // Binaries may be large; allow a bit more time than for HTML pages.
         $requestTimeout = min(
             (int) ($options['timeout'] ?? ($this->config['binary_request_timeout'] ?? 30)),
             60
@@ -502,8 +501,6 @@ final class TgWSProxy extends ProxyAbstract
             }
 
             try {
-                // curl_reset first: guarantees no HEADERFUNCTION / stale options
-                // survive from a previous binary or html call on this handle.
                 $ch = $this->resetHandle();
 
                 $responseHeaders = '';
@@ -640,19 +637,15 @@ final class TgWSProxy extends ProxyAbstract
             }
         }
 
-        // 1. Real curl errno when we raised the exception ourselves.
         $errno = $e->getCode();
-        if ($errno > 0 && $errno <= \CURLE_LAST_CODE) {
+        if ($errno > 0 && $errno <= self::CURL_MAX_ERRNO) {
             return in_array($errno, self::CONNECTION_ERRNOS, true) === true;
         }
 
-        // 2. Transient HTTP statuses extracted from "HTTP %d ..." messages.
         if (preg_match('/http (\d{3})/', $errorMsg, $m) === 1) {
             return in_array((int) $m[1], self::RETRYABLE_HTTP_CODES, true);
         }
 
-        // 3. Substring fallback for non-curl exceptions (DOM parse, timeouts
-        // thrown by parent classes etc.).
         foreach (self::RETRYABLE_ERROR_PATTERNS as $pattern) {
             if (str_contains($errorMsg, $pattern) === true) {
                 return true;
@@ -665,7 +658,7 @@ final class TgWSProxy extends ProxyAbstract
     private function isConnectionThrowable(\Throwable $e): bool
     {
         $errno = $e->getCode();
-        if ($errno > 0 && $errno <= \CURLE_LAST_CODE) {
+        if ($errno > 0 && $errno <= self::CURL_MAX_ERRNO) {
             return in_array($errno, self::CONNECTION_ERRNOS, true);
         }
 

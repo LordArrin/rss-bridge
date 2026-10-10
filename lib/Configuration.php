@@ -11,6 +11,8 @@ namespace RSSBridge;
  */
 final class Configuration
 {
+    public const VERSION = '1.0.0'; // fallback
+
     /**
      * @var array<string, array<string, mixed>>
      */

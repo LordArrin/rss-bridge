@@ -157,7 +157,7 @@ final class AO3Bridge extends BridgeAbstract
 
             $childrenHtml = '';
             foreach ($elementDom->documentElement->childNodes as $child) {
-                $childrenHtml .= $elementDom->saveHTML($child);
+                $childrenHtml .= $elementDom->saveHtml($child);
             }
             $item['content'] = $childrenHtml;
 
@@ -214,7 +214,7 @@ final class AO3Bridge extends BridgeAbstract
 
                     $workskin = $workDom->querySelector('#workskin');
                     if ($workskin !== null) {
-                        $item['content'] .= $workDom->saveHTML($workskin);
+                        $item['content'] .= $workDom->saveHtml($workskin);
                     }
                 }
             }
@@ -279,7 +279,7 @@ final class AO3Bridge extends BridgeAbstract
             $item['uri'] = $link->getAttribute('href') ?? '';
 
             $chapterEl = $workDom->querySelector('#chapter-' . ($i + 1));
-            $item['content'] = $chapterEl !== null ? $workDom->saveHTML($chapterEl) : '';
+            $item['content'] = $chapterEl !== null ? $workDom->saveHtml($chapterEl) : '';
 
             $datetimeEl = $element->querySelector('span.datetime');
             $strdate = $datetimeEl !== null ? trim($datetimeEl->textContent ?? '') : '';
@@ -309,7 +309,7 @@ final class AO3Bridge extends BridgeAbstract
         if ($ownerDoc === null) {
             return null;
         }
-        $html = $ownerDoc->saveHTML($element);
+        $html = $ownerDoc->saveHtml($element);
         if ($html === false || $html === '') {
             return null;
         }

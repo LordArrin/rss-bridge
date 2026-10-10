@@ -255,7 +255,7 @@ abstract class HoyoBase extends BridgeAbstract
             return;
         }
 
-        $html = $embed->ownerDocument->saveHTML($embed);
+        $html = $embed->ownerDocument->saveHtml($embed);
         if (is_string($html) === false || $html === '') {
             return;
         }

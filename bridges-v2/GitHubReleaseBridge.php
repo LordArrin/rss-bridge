@@ -50,12 +50,13 @@ final class GitHubReleaseBridge extends BridgeAbstract
     private const ALLOWED_TAGS = [
         'div', 'a', 'p', 'ul', 'ol', 'li', 'strong', 'em', 'code', 'pre', 'blockquote', 'span',
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'br', 'hr', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-        'picture', 'source', 'figure', 'figcaption', 'del', 'details', 'summary',
+        'picture', 'source', 'figure', 'figcaption', 'del', 'details', 'summary', 'svg', 'path',
     ];
 
     private const CSS = [
         'wrapper' => 'font-size:14px; line-height:1.6; word-wrap:break-word;',
-        'alert_base' => 'padding-left:12px; margin:8px 0;',
+        'alert_base' => 'padding:8px 16px; margin:16px 0; border-radius:6px;',
+        'alert_title' => 'font-weight:600; margin-bottom:4px; display:flex; align-items:center; gap:8px;',
         'ul' => 'list-style-type:disc; padding-left:24px;',
         'ol' => 'list-style-type:decimal; padding-left:24px;',
         'alerts' => [
@@ -146,9 +147,6 @@ final class GitHubReleaseBridge extends BridgeAbstract
         return null;
     }
 
-    /**
-     * @param array<string, mixed> $release
-     */
     private function shouldSkipRelease(array $release, bool $includePrereleases): bool
     {
         if (($release['draft'] ?? false) === true) {
@@ -162,18 +160,6 @@ final class GitHubReleaseBridge extends BridgeAbstract
         return false;
     }
 
-    /**
-     * @param array<string, mixed> $release
-     * @return array{
-     *     title: string,
-     *     uri: string,
-     *     content: string,
-     *     timestamp: int,
-     *     author: string,
-     *     uid: string,
-     *     categories: array<string>
-     * }
-     */
     private function buildReleaseItem(array $release, string $owner, string $repo, bool $hideAssets): array
     {
         $name = $release['name'] ?? '';
@@ -211,9 +197,6 @@ final class GitHubReleaseBridge extends BridgeAbstract
         ];
     }
 
-    /**
-     * @param array<int, array<string, mixed>> $assets
-     */
     private function buildAssetsBlock(array $assets): string
     {
         $links = [];
@@ -299,12 +282,12 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
     private function processHtml(string $html, string $owner, string $repo): string
     {
-        $dom = new \DOMDocument('1.0', 'UTF-8');
         libxml_use_internal_errors(true);
-        $dom->loadHTML('<?xml encoding="UTF-8"><div id="w">' . $html . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        $dom = \Dom\HTMLDocument::createFromString('<div id="w">' . $html . '</div>');
         libxml_clear_errors();
+        libxml_use_internal_errors(false);
 
-        $xpath = new \DOMXPath($dom);
+        $xpath = new \Dom\XPath($dom);
 
         $this->transformAlerts($xpath);
         $this->shortenAutoLinks($xpath, $owner, $repo);
@@ -316,7 +299,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
             return '';
         }
 
-        $content = $dom->saveHTML($wrapper);
+        $content = $dom->saveHtml($wrapper);
         $c1 = preg_replace('#^\s*<div[^>]*>#', '', $content);
         $content = $c1 !== null ? $c1 : $content;
         $c2 = preg_replace('#</div>\s*$#', '', $content);
@@ -328,7 +311,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
         return sprintf('<div style="%s">%s</div>', self::CSS['wrapper'], $content);
     }
 
-    private function sanitizeHtml(\DOMXPath $xpath): void
+    private function sanitizeHtml(\Dom\XPath $xpath): void
     {
         $nodes = $xpath->query('//*');
         if ($nodes === false) {
@@ -336,31 +319,37 @@ final class GitHubReleaseBridge extends BridgeAbstract
         }
 
         foreach ($nodes as $node) {
+            if ($node instanceof \Dom\Element === false) {
+                continue;
+            }
+
             $attrsToRemove = [];
 
             foreach ($node->attributes as $attr) {
-                $name = strtolower($attr->nodeName);
-                $value = strtolower(trim($attr->nodeValue));
+                $name = strtolower($attr->name ?? '');
+                $value = strtolower(trim($attr->value ?? ''));
 
                 if (str_starts_with($name, 'on') === true) {
-                    $attrsToRemove[] = $attr->nodeName;
+                    $attrsToRemove[] = $attr->name ?? '';
                     continue;
                 }
 
                 if (in_array($name, ['href', 'src', 'action', 'formaction', 'xlink:href'], true) === true) {
                     if (preg_match('/^\s*(javascript|vbscript|data(?!:image\/))/i', $value) === 1) {
-                        $attrsToRemove[] = $attr->nodeName;
+                        $attrsToRemove[] = $attr->name ?? '';
                     }
                 }
             }
 
             foreach ($attrsToRemove as $attrName) {
-                $node->removeAttribute($attrName);
+                if ($attrName !== '') {
+                    $node->removeAttribute($attrName);
+                }
             }
 
             foreach (['src', 'href'] as $attr) {
                 if ($node->hasAttribute($attr) === true) {
-                    $value = $node->getAttribute($attr);
+                    $value = $node->getAttribute($attr) ?? '';
                     if (str_starts_with($value, '/') === true) {
                         $node->setAttribute($attr, self::URI . $value);
                     }
@@ -368,7 +357,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
             }
 
             if ($node->hasAttribute('srcset') === true) {
-                $srcset = $node->getAttribute('srcset');
+                $srcset = $node->getAttribute('srcset') ?? '';
                 $result = preg_replace('#(^|[\s,])(/[^,\s]+)#', '$1' . self::URI . '$2', $srcset);
                 if ($result !== null) {
                     $node->setAttribute('srcset', $result);
@@ -377,81 +366,59 @@ final class GitHubReleaseBridge extends BridgeAbstract
         }
     }
 
-    private function transformAlerts(\DOMXPath $xpath): void
+    private function transformAlerts(\Dom\XPath $xpath): void
     {
-        $types = array_keys(self::CSS['alerts']);
-        $pattern = '/\[!(' . implode('|', $types) . ')\]\s*/i';
-
-        $blockquotes = $xpath->query('//blockquote');
-        if ($blockquotes === false) {
+        $alerts = $xpath->query('//div[contains(@class, "markdown-alert")]');
+        if ($alerts === false) {
             return;
         }
 
-        foreach ($blockquotes as $bq) {
-            $found = $this->detectAlertType($xpath, $bq, $pattern);
-
-            if ($found === null) {
+        foreach ($alerts as $alert) {
+            if ($alert instanceof \Dom\Element === false) {
                 continue;
             }
 
-            $this->removeAlertMarkers($xpath, $bq, $pattern);
+            $alertType = $this->extractAlertType($alert);
+            if ($alertType === null) {
+                continue;
+            }
 
-            $color = self::CSS['alerts'][strtoupper($found)];
+            $color = self::CSS['alerts'][$alertType] ?? '#666';
 
-            $existing = $bq->getAttribute('style');
-            $borderStyle = sprintf('border-left:4px solid %s;', $color);
-            $style = trim(($existing !== '' ? $existing . ' ' : '') . $borderStyle . ' ' . self::CSS['alert_base']);
-            $bq->setAttribute('style', $style);
+            $existing = $alert->getAttribute('style') ?? '';
+            $alertStyle = sprintf(
+                'border-left:4px solid %s; background-color:%s1a; %s',
+                $color,
+                $color,
+                self::CSS['alert_base']
+            );
+            $style = trim(($existing !== '' ? $existing . ' ' : '') . $alertStyle);
+            $alert->setAttribute('style', $style);
+
+            $titleNode = $alert->querySelector('p.markdown-alert-title');
+            if ($titleNode !== null && $titleNode instanceof \Dom\Element) {
+                $titleExisting = $titleNode->getAttribute('style') ?? '';
+                $titleStyle = sprintf('color:%s; %s', $color, self::CSS['alert_title']);
+                $titleFull = trim(($titleExisting !== '' ? $titleExisting . ' ' : '') . $titleStyle);
+                $titleNode->setAttribute('style', $titleFull);
+            }
         }
     }
 
-    private function detectAlertType(\DOMXPath $xpath, \DOMElement $bq, string $pattern): ?string
+    private function extractAlertType(\Dom\Element $alert): ?string
     {
-        $textNodes = $xpath->query('.//text()', $bq);
-        if ($textNodes !== false) {
-            foreach ($textNodes as $node) {
-                if (preg_match($pattern, $node->nodeValue, $matches) === 1) {
-                    return strtoupper($matches[1]);
-                }
-            }
-        }
+        $className = $alert->getAttribute('class') ?? '';
 
-        $strongs = $xpath->query('.//strong', $bq);
-        if ($strongs !== false) {
-            foreach ($strongs as $strong) {
-                $text = strtolower(trim($strong->textContent));
-                $types = array_map('strtolower', array_keys(self::CSS['alerts']));
-
-                if (in_array($text, $types, true) === true) {
-                    if ($strong->parentNode !== null) {
-                        $strong->parentNode->removeChild($strong);
-                    }
-                    return strtoupper($text);
-                }
+        foreach (array_keys(self::CSS['alerts']) as $type) {
+            if (str_contains($className, 'markdown-alert-' . strtolower($type)) === true) {
+                return $type;
             }
         }
 
         return null;
     }
 
-    private function removeAlertMarkers(\DOMXPath $xpath, \DOMElement $bq, string $pattern): void
-    {
-        $textNodes = $xpath->query('.//text()', $bq);
-        if ($textNodes === false) {
-            return;
-        }
-
-        foreach ($textNodes as $node) {
-            if (preg_match($pattern, $node->nodeValue) === 1) {
-                $result = preg_replace($pattern, '', $node->nodeValue);
-                if ($result !== null) {
-                    $node->nodeValue = $result;
-                }
-            }
-        }
-    }
-
-    private function shortenAutoLinks(\DOMXPath $xpath, string $owner, string $repo): void
+    private function shortenAutoLinks(\Dom\XPath $xpath, string $owner, string $repo): void
     {
         $ownerQuoted = preg_quote($owner, '~');
         $repoQuoted = preg_quote($repo, '~');
@@ -462,24 +429,42 @@ final class GitHubReleaseBridge extends BridgeAbstract
         }
 
         foreach ($links as $link) {
-            $href = $link->getAttribute('href');
-            $text = trim($link->textContent);
+            if ($link instanceof \Dom\Element === false) {
+                continue;
+            }
+
+            $href = $link->getAttribute('href') ?? '';
+            $text = trim($link->textContent ?? '');
 
             if ($text !== $href) {
                 continue;
             }
 
+            $replacement = null;
+
             if (preg_match('~^' . preg_quote(self::URI, '~') . '/' . $ownerQuoted . '/' . $repoQuoted . '/(?:issues|pull)/(\d+)(?:[/?#].*)?$~i', $href, $matches) === 1) {
-                $link->nodeValue = '#' . $matches[1];
+                $replacement = '#' . $matches[1];
             } elseif (preg_match('~^' . preg_quote(self::URI, '~') . '/([^/]+)/([^/]+)/(?:issues|pull)/(\d+)(?:[/?#].*)?$~i', $href, $matches) === 1) {
-                $link->nodeValue = $matches[1] . '/' . $matches[2] . '#' . $matches[3];
+                $replacement = $matches[1] . '/' . $matches[2] . '#' . $matches[3];
             } elseif (preg_match('~^' . preg_quote(self::URI, '~') . '/([a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38})$~', $href, $matches) === 1) {
-                $link->nodeValue = '@' . $matches[1];
+                $replacement = '@' . $matches[1];
+            }
+
+            if ($replacement !== null) {
+                $this->replaceElementText($link, $replacement);
             }
         }
     }
 
-    private function applyListStyles(\DOMXPath $xpath): void
+    private function replaceElementText(\Dom\Element $element, string $text): void
+    {
+        while ($element->firstChild !== null) {
+            $element->removeChild($element->firstChild);
+        }
+        $element->appendChild($element->ownerDocument->createTextNode($text));
+    }
+
+    private function applyListStyles(\Dom\XPath $xpath): void
     {
         $lists = $xpath->query('//ul | //ol');
         if ($lists === false) {
@@ -487,8 +472,12 @@ final class GitHubReleaseBridge extends BridgeAbstract
         }
 
         foreach ($lists as $list) {
-            $existing = $list->getAttribute('style');
-            $newStyle = $list->nodeName === 'ul' ? self::CSS['ul'] : self::CSS['ol'];
+            if ($list instanceof \Dom\Element === false) {
+                continue;
+            }
+
+            $existing = $list->getAttribute('style') ?? '';
+            $newStyle = $list->localName === 'ul' ? self::CSS['ul'] : self::CSS['ol'];
             $list->setAttribute('style', trim(($existing !== '' ? $existing . ' ' : '') . $newStyle));
         }
     }

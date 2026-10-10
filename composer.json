@@ -10,7 +10,8 @@
             "RSSBridge\\Actions\\": "actions/",
             "RSSBridge\\Formats\\": "formats/",
             "RSSBridge\\Middlewares\\": "middlewares/",
-            "RSSBridge\\Proxies\\": "proxies/"
+            "RSSBridge\\Proxies\\": "proxies/",
+            "RSSBridge\\PHPStan\\Rules\\": "rules/"
         },
         "classmap": [
             "lib/BridgeAbstract.php",

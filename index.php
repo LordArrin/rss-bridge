@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use RSSBridge\Configuration;
+use RSSBridge\Http\Request;
+use RSSBridge\Http\Response;
 use RSSBridge\RssBridge;
 
 require __DIR__ . '/vendor/autoload.php';

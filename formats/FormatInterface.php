@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Formats;
 
+use RSSBridge\FeedItem;
+
 /**
  * Interface for all feed formats.
  *

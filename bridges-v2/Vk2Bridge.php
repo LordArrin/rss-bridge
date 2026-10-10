@@ -811,7 +811,7 @@ final class Vk2Bridge extends BridgeAbstract
         ], 'utf8');
         $tidy->cleanRepair();
 
-        $dom = \Dom\HTMLDocument::createFromString((string) $tidy);
+        $dom = \Dom\HTMLDocument::createFromString((string) $tidy->value);
 
         $articleBlock = $dom->querySelector('[id^="article_view_"]');
         if ($articleBlock === null) {

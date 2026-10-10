@@ -264,7 +264,7 @@ final class AuthorTodayBridge extends BridgeAbstract
     {
         $innerHtml = '';
         foreach ($node->childNodes as $child) {
-            $innerHtml .= $node->ownerDocument->saveHTML($child);
+            $innerHtml .= $node->ownerDocument->saveHtml($child);
         }
 
         $text = html_entity_decode(strip_tags($innerHtml), ENT_QUOTES, 'UTF-8');
@@ -341,7 +341,7 @@ final class AuthorTodayBridge extends BridgeAbstract
 
     private function likeCount(\Dom\HTMLDocument $html): string
     {
-        $source = $html->saveHTML();
+        $source = $html->saveHtml();
 
         if (preg_match(pattern: '/likeCount["\']?\s*:\s*["\']?(\d+)/i', subject: $source, matches: $matches) === 1) {
             return $matches[1];

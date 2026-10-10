@@ -16,12 +16,12 @@ final class LWNprevBridge extends BridgeAbstract
 
     private ?int $editionTimeStamp = null;
 
-    public function getURI()
+    public function getURI(): string
     {
         return self::URI . 'free/bigpage';
     }
 
-    private function jumpToNextTag(?\DOMNode $node): ?\DOMNode
+    private function jumpToNextTag(?\Dom\Node $node): ?\Dom\Node
     {
         while ($node !== null && $node->nodeType === XML_TEXT_NODE) {
             $nextNode = $node->nextSibling;
@@ -33,7 +33,7 @@ final class LWNprevBridge extends BridgeAbstract
         return $node;
     }
 
-    private function jumpToPreviousTag(?\DOMNode $node): ?\DOMNode
+    private function jumpToPreviousTag(?\Dom\Node $node): ?\Dom\Node
     {
         while ($node !== null && $node->nodeType === XML_TEXT_NODE) {
             $previousNode = $node->previousSibling;
@@ -45,9 +45,13 @@ final class LWNprevBridge extends BridgeAbstract
         return $node;
     }
 
-    public function collectData()
+    public function collectData(): void
     {
         $content = getContents($this->getURI());
+        if ($content === '') {
+            throwServerException('Failed to fetch LWN content');
+        }
+
         $contents = explode('<b>Page editor</b>', $content);
 
         foreach ($contents as $contentPart) {
@@ -61,13 +65,14 @@ EOD;
             }
 
             libxml_use_internal_errors(true);
-            $html = new \DOMDocument();
-            $html->loadHTML($contentPart);
+            $html = \Dom\HTMLDocument::createFromString($contentPart);
             libxml_clear_errors();
+            libxml_use_internal_errors(false);
 
             $edition = $html->getElementsByTagName('h1');
             if ($edition->length !== 0) {
-                $text = $edition->item(0)->textContent ?? '';
+                $firstH1 = $edition->item(0);
+                $text = $firstH1 !== null ? ($firstH1->textContent ?? '') : '';
                 $forPos = strpos($text, 'for ');
                 if ($forPos !== false) {
                     $dateString = trim(substr($text, $forPos + strlen('for ')));
@@ -94,7 +99,7 @@ EOD;
         }
     }
 
-    private function extractAuthorAndDate(\DOMNode $title): array
+    private function extractAuthorAndDate(\Dom\Element $title): array
     {
         $author = null;
         $timestamp = $this->editionTimeStamp ?? time();
@@ -102,17 +107,19 @@ EOD;
         $node = $title->nextSibling;
         $node = $this->jumpToNextTag($node);
 
-        if ($node === null || ($node instanceof \DOMElement) === false) {
+        if ($node === null || ($node instanceof \Dom\Element) === false) {
             return ['author' => $author, 'timestamp' => $timestamp];
         }
 
+        /** @var \Dom\Element $node */
         if ($node->getAttribute('class') !== 'FeatureByline') {
             return ['author' => $author, 'timestamp' => $timestamp];
         }
 
         $boldTags = $node->getElementsByTagName('b');
         if ($boldTags->length > 0) {
-            $authorText = trim($boldTags->item(0)->textContent ?? '');
+            $firstBold = $boldTags->item(0);
+            $authorText = $firstBold !== null ? trim($firstBold->textContent ?? '') : '';
             if ($authorText !== '') {
                 $author = $authorText;
             }
@@ -134,7 +141,7 @@ EOD;
         return ['author' => $author, 'timestamp' => $timestamp];
     }
 
-    private function getArticleContent(\DOMNode $title, ?int $timestamp = null): array
+    private function getArticleContent(\Dom\Element $title, ?int $timestamp = null): array
     {
         $link = $title->firstChild;
         $link = $this->jumpToNextTag($link);
@@ -142,8 +149,8 @@ EOD;
         $item = [];
         $item['uri'] = self::URI;
 
-        if ($link !== null && $link->nodeName === 'a') {
-            $href = $link->getAttribute('href');
+        if ($link !== null && $link instanceof \Dom\Element && $link->localName === 'a') {
+            $href = $link->getAttribute('href') ?? '';
             if ($href !== '') {
                 $item['uri'] .= $href;
             }
@@ -155,6 +162,8 @@ EOD;
         $content = '';
         $contentEnd = false;
 
+        $ownerDocument = $title->ownerDocument;
+
         while ($contentEnd === false) {
             $node = $node->nextSibling;
 
@@ -162,21 +171,20 @@ EOD;
                 $contentEnd = true;
             } else {
                 $isTextNode = $node->nodeType === XML_TEXT_NODE;
-                $isH3 = $node->nodeName === 'h3';
+                $isH3 = ($node instanceof \Dom\Element) && $node->localName === 'h3';
                 $hasClass = false;
 
-                if ($isTextNode === false && $node->attributes !== null) {
-                    $class = $node->attributes->getNamedItem('class');
-                    if ($class !== null) {
-                        $classValue = $class->nodeValue;
-                        if ($classValue === 'Cat1HL' || $classValue === 'Cat2HL') {
-                            $hasClass = true;
-                        }
+                if ($isTextNode === false && $node instanceof \Dom\Element) {
+                    $classValue = $node->getAttribute('class') ?? '';
+                    if ($classValue === 'Cat1HL' || $classValue === 'Cat2HL') {
+                        $hasClass = true;
                     }
                 }
 
                 if ($isTextNode === false && ($isH3 === true || $hasClass === true)) {
                     $contentEnd = true;
+                } elseif ($ownerDocument instanceof \Dom\HTMLDocument) {
+                    $content .= $ownerDocument->saveHtml($node);
                 } else {
                     $content .= $node->C14N();
                 }
@@ -192,30 +200,30 @@ EOD;
     private function cleanArticleContent(string $content): string
     {
         libxml_use_internal_errors(true);
-        $doc = new \DOMDocument();
-        $doc->loadHTML(
-            '<!DOCTYPE html><html><body>' . $content . '</body></html>',
-            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
+        $doc = \Dom\HTMLDocument::createFromString(
+            '<!DOCTYPE html><html><body>' . $content . '</body></html>'
         );
         libxml_clear_errors();
+        libxml_use_internal_errors(false);
 
         $this->fixImages($doc);
         $this->removeCommentsBlock($doc);
 
-        $body = $doc->getElementsByTagName('body')->item(0);
+        $bodies = $doc->getElementsByTagName('body');
+        $body = $bodies->item(0);
         if ($body === null) {
             return $content;
         }
 
         $result = '';
         foreach ($body->childNodes as $child) {
-            $result .= $doc->saveHTML($child);
+            $result .= $doc->saveHtml($child);
         }
 
         return $result;
     }
 
-    private function fixImages(\DOMDocument $doc): void
+    private function fixImages(\Dom\HTMLDocument $doc): void
     {
         $images = $doc->getElementsByTagName('img');
         $imageList = [];
@@ -225,7 +233,11 @@ EOD;
         }
 
         foreach ($imageList as $img) {
-            $existingStyle = $img->getAttribute('style');
+            if ($img instanceof \Dom\Element === false) {
+                continue;
+            }
+
+            $existingStyle = $img->getAttribute('style') ?? '';
             $newStyle = 'float: left; margin: 0 15px 10px 0; max-width: 300px;';
 
             if ($existingStyle !== '') {
@@ -252,27 +264,31 @@ EOD;
         }
     }
 
-    private function removeCommentsBlock(\DOMDocument $doc): void
+    private function removeCommentsBlock(\Dom\HTMLDocument $doc): void
     {
         $toRemove = [];
 
         $links = $doc->getElementsByTagName('a');
         foreach ($links as $link) {
+            if ($link instanceof \Dom\Element === false) {
+                continue;
+            }
+
             $href = $link->getAttribute('href') ?? '';
             if (str_contains($href, '#Comments') === false) {
                 continue;
             }
 
             $parent = $link->parentNode;
-            while ($parent !== null && $parent->nodeName !== 'body') {
-                if ($parent->nodeName === 'p' || $parent->nodeName === 'div') {
+            while ($parent !== null && ($parent instanceof \Dom\Element === false || $parent->localName !== 'body')) {
+                if ($parent instanceof \Dom\Element && ($parent->localName === 'p' || $parent->localName === 'div')) {
                     $toRemove[] = $parent;
                     break;
                 }
                 $parent = $parent->parentNode;
             }
 
-            if ($parent === null || $parent->nodeName === 'body') {
+            if ($parent === null || ($parent instanceof \Dom\Element && $parent->localName === 'body')) {
                 $toRemove[] = $link;
             }
         }
@@ -284,11 +300,15 @@ EOD;
         }
     }
 
-    private function getFeatureContents(\DOMDocument $html): array
+    private function getFeatureContents(\Dom\HTMLDocument $html): array
     {
         $items = [];
 
         foreach ($html->getElementsByTagName('h3') as $title) {
+            if ($title instanceof \Dom\Element === false) {
+                continue;
+            }
+
             if ($title->getAttribute('class') !== 'SummaryHL') {
                 continue;
             }
@@ -313,13 +333,17 @@ EOD;
         return $items;
     }
 
-    private function getItemPrefix(\DOMNode $cat, array &$cats): string
+    private function getItemPrefix(\Dom\Node $cat, array &$cats): string
     {
         $cat1 = '';
         $cat2 = '';
         $cat3 = '';
 
-        $catClass = $cat->getAttribute('class');
+        if ($cat instanceof \Dom\Element) {
+            $catClass = $cat->getAttribute('class') ?? '';
+        } else {
+            $catClass = '';
+        }
 
         if ($catClass === 'Cat3HL') {
             $cat3 = $cat->textContent ?? '';
@@ -327,7 +351,7 @@ EOD;
             $cat = $this->jumpToPreviousTag($cat);
             $cats[2] = $cat3;
 
-            if ($cat !== null && $cat->getAttribute('class') === 'Cat2HL') {
+            if ($cat !== null && $cat instanceof \Dom\Element && ($cat->getAttribute('class') ?? '') === 'Cat2HL') {
                 $cat2 = $cat->textContent ?? '';
                 $cat = $cat->previousSibling;
                 $cat = $this->jumpToPreviousTag($cat);
@@ -337,7 +361,7 @@ EOD;
                     $cats[2] = '';
                 }
 
-                if ($cat !== null && $cat->getAttribute('class') === 'Cat1HL') {
+                if ($cat !== null && $cat instanceof \Dom\Element && ($cat->getAttribute('class') ?? '') === 'Cat1HL') {
                     $cat1 = $cat->textContent ?? '';
                     $cats[0] = $cat1;
 
@@ -359,7 +383,7 @@ EOD;
                 $cats[2] = '';
             }
 
-            if ($cat !== null && $cat->getAttribute('class') === 'Cat1HL') {
+            if ($cat !== null && $cat instanceof \Dom\Element && ($cat->getAttribute('class') ?? '') === 'Cat1HL') {
                 $cat1 = $cat->textContent ?? '';
                 $cats[0] = $cat1;
 
@@ -394,12 +418,16 @@ EOD;
         return $prefix;
     }
 
-    private function getAnnouncements(\DOMDocument $html): array
+    private function getAnnouncements(\Dom\HTMLDocument $html): array
     {
         $items = [];
         $cats = ['', '', ''];
 
         foreach ($html->getElementsByTagName('p') as $newsletters) {
+            if ($newsletters instanceof \Dom\Element === false) {
+                continue;
+            }
+
             if ($newsletters->getAttribute('class') !== 'Cat3HL') {
                 continue;
             }
@@ -423,6 +451,8 @@ EOD;
             $content = '';
             $contentEnd = false;
 
+            $ownerDocument = $newsletters->ownerDocument;
+
             while ($contentEnd === false) {
                 $node = $node->nextSibling;
 
@@ -432,18 +462,17 @@ EOD;
                     $isTextNode = $node->nodeType === XML_TEXT_NODE;
                     $hasClass = false;
 
-                    if ($isTextNode === false && $node->attributes !== null) {
-                        $class = $node->attributes->getNamedItem('class');
-                        if ($class !== null) {
-                            $classValue = $class->nodeValue;
-                            if ($classValue === 'Cat1HL' || $classValue === 'Cat2HL' || $classValue === 'Cat3HL') {
-                                $hasClass = true;
-                            }
+                    if ($isTextNode === false && $node instanceof \Dom\Element) {
+                        $classValue = $node->getAttribute('class') ?? '';
+                        if ($classValue === 'Cat1HL' || $classValue === 'Cat2HL' || $classValue === 'Cat3HL') {
+                            $hasClass = true;
                         }
                     }
 
                     if ($isTextNode === false && $hasClass === true) {
                         $contentEnd = true;
+                    } elseif ($ownerDocument instanceof \Dom\HTMLDocument) {
+                        $content .= $ownerDocument->saveHtml($node);
                     } else {
                         $content .= $node->C14N();
                     }
@@ -455,6 +484,10 @@ EOD;
         }
 
         foreach ($html->getElementsByTagName('h2') as $title) {
+            if ($title instanceof \Dom\Element === false) {
+                continue;
+            }
+
             if ($title->getAttribute('class') !== 'SummaryHL') {
                 continue;
             }
@@ -484,12 +517,16 @@ EOD;
         return $items;
     }
 
-    private function getBriefItems(\DOMDocument $html): array
+    private function getBriefItems(\Dom\HTMLDocument $html): array
     {
         $items = [];
         $cats = ['', '', ''];
 
         foreach ($html->getElementsByTagName('h2') as $title) {
+            if ($title instanceof \Dom\Element === false) {
+                continue;
+            }
+
             if ($title->getAttribute('class') !== 'SummaryHL') {
                 continue;
             }

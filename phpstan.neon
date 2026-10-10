@@ -1,0 +1,36 @@
+parameters:
+    level: 2
+    paths:
+        - lib
+        - actions
+        - caches
+        - formats
+        - middlewares
+        - proxies
+        - bridges-v2
+        - quirks
+        - index.php
+    
+    scanFiles:
+        - lib/exceptions.php
+        - lib/http.php
+        - lib/logger.php
+        - lib/json.php
+        - lib/utils.php
+        - lib/utils-functions.php
+        - lib/contents.php
+        - quirks/template.php
+        - quirks/html.php
+        - quirks/srcset.php
+        - quirks/extract.php
+        - quirks/media.php
+        - quirks/media_embed.php
+        - quirks/seo.php
+    
+    ignoreErrors:
+        - '#Variable \$\w+ on left side of \?\? always exists#'
+    
+    reportUnmatchedIgnoredErrors: false
+
+rules:
+    - RSSBridge\PHPStan\Rules\ForbidOldDomApiRule

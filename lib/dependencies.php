@@ -11,6 +11,7 @@ use RSSBridge\Http\CurlHttpClient;
 use RSSBridge\Logger\ErrorLogHandler;
 use RSSBridge\Logger\Logger;
 use RSSBridge\Logger\SimpleLogger;
+use RSSBridge\Logger\StreamHandler;
 use RSSBridge\SafeBridgeLoader;
 use RSSBridge\BridgeMetadataCache;
 use RSSBridge\Actions\ConnectivityAction;
