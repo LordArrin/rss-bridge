@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Actions;
 
-use Request;
-use Response;
+use RSSBridge\Http\Request;
+use RSSBridge\Http\Response;
 
 /**
  * Interface for all HTTP actions in RSS-Bridge.

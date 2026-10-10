@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge;
 
+use RSSBridge\Logger\Logger;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
 
@@ -21,7 +22,7 @@ use RSSBridge\Configuration;
 final class BridgeFactory
 {
     private CacheInterface $cache;
-    private \Logger $logger;
+    private Logger $logger;
 
     /**
      * Array of all available bridge class names (FQCN).
@@ -53,7 +54,7 @@ final class BridgeFactory
      */
     private array $missingEnabledBridges = [];
 
-    public function __construct(CacheInterface $cache, \Logger $logger)
+    public function __construct(CacheInterface $cache, Logger $logger)
     {
         $this->cache = $cache;
         $this->logger = $logger;

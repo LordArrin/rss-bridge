@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Middlewares;
 
-use Request;
-use Response;
+use RSSBridge\Http\Request;
+use RSSBridge\Http\Response;
 use RSSBridge\Configuration;
 
 final class TokenAuthenticationMiddleware implements Middleware

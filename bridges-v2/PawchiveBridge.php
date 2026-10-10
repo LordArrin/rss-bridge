@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
+use RSSBridge\Utils\Json;
 use RSSBridge\BridgeAbstract;
 
 use function RSSBridge\Exceptions\throwServerException;
@@ -631,7 +632,7 @@ final class PawchiveBridge extends BridgeAbstract
                     continue;
                 }
 
-                $data = \Json::decode($apiResponse);
+                $data = Json::decode($apiResponse);
 
                 if (is_array($data) === false) {
                     $lastException = new \Exception(

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
+use RSSBridge\Utils\Json;
 use RSSBridge\BridgeAbstract;
 
 abstract class GelbooruBase extends BridgeAbstract
@@ -77,7 +78,7 @@ abstract class GelbooruBase extends BridgeAbstract
 
     protected function processResponse(string $content): void
     {
-        $data = \Json::decode($content, false);
+        $data = Json::decode($content, false);
         $posts = $this->extractPosts($data);
 
         if (is_iterable($posts) === false) {

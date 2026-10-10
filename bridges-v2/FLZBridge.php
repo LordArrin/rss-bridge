@@ -9,7 +9,7 @@ use RSSBridge\Configuration;
 use RSSBridge\FeedParser;
 use RSSBridge\Http\HttpException;
 use RSSBridge\Http\Response;
-use RSSBridge\Json;
+use RSSBridge\Utils\Json;
 
 use function RSSBridge\Exceptions\throwServerException;
 

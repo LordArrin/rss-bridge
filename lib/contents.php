@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
+use RSSBridge\Http\HttpException;
+use RSSBridge\Http\Response;
 use RSSBridge\Utils\Json;
 use RSSBridge\Proxies\DirectProxy;
 use RSSBridge\Proxies\ProxyFactory;
@@ -50,7 +52,7 @@ function getContents(
 ) {
     global $container;
 
-    /** @var HttpClient $httpClient */
+    /** @var \RSSBridge\Http\HttpClient $httpClient */
     $httpClient = $container['http_client'];
 
     /** @var CacheInterface $cache */

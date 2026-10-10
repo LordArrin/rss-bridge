@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
+use RSSBridge\Exceptions\ClientException;
 use RSSBridge\BridgeAbstract;
 
 final class MatreshkaBridge extends BridgeAbstract
@@ -71,7 +72,7 @@ final class MatreshkaBridge extends BridgeAbstract
             return $input;
         }
 
-        throw new \ClientException('Invalid channel input. Provide either a full Matreshka.tv channel URL or a channel ID.');
+        throw new ClientException('Invalid channel input. Provide either a full Matreshka.tv channel URL or a channel ID.');
     }
 
     private function extractPlaylistId(string $input): string
@@ -84,7 +85,7 @@ final class MatreshkaBridge extends BridgeAbstract
             return $input;
         }
 
-        throw new \ClientException('Invalid playlist input. Provide either a full Matreshka.tv playlist URL or a playlist ID.');
+        throw new ClientException('Invalid playlist input. Provide either a full Matreshka.tv playlist URL or a playlist ID.');
     }
 
     private function formatDuration(int $milliseconds): string

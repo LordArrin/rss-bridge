@@ -11,6 +11,8 @@ use RSSBridge\Actions\FrontpageAction;
 use RSSBridge\Actions\HealthAction;
 use RSSBridge\Actions\ListAction;
 use RSSBridge\Container;
+use RSSBridge\Http\Request;
+use RSSBridge\Http\Response;
 use RSSBridge\Middlewares\BasicAuthMiddleware;
 use RSSBridge\Middlewares\CacheMiddleware;
 use RSSBridge\Middlewares\ExceptionMiddleware;
@@ -27,7 +29,7 @@ final class RssBridge
         $this->container = $container;
     }
 
-    public function main(\Request $request): \Response
+    public function main(Request $request): Response
     {
         $action = $request->get('action', 'frontpage');
 
@@ -59,15 +61,15 @@ final class RssBridge
 
     private function processMiddlewares(
         array $middlewareClasses,
-        \Request $request,
+        Request $request,
         callable $handler
-    ): \Response {
+    ): Response {
         $stack = $handler;
 
         // Build middleware stack in reverse order (last middleware executes first)
         foreach (array_reverse($middlewareClasses) as $middlewareClass) {
             $middleware = $this->container[$middlewareClass];
-            $stack = function (\Request $request) use ($middleware, $stack): \Response {
+            $stack = function (Request $request) use ($middleware, $stack): Response {
                 return $middleware($request, $stack);
             };
         }

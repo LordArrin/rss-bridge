@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Caches;
 
+use RSSBridge\Logger\Logger;
 use RSSBridge\Configuration;
 
 /**
@@ -25,11 +26,11 @@ final class SQLiteCache implements CacheInterface
      */
     private const DEFAULT_STALE_TTL = 604800;
 
-    private readonly \Logger $logger;
+    private readonly Logger $logger;
     private readonly bool $enablePurge;
     private readonly \SQLite3 $db;
 
-    public function __construct(\Logger $logger, array $config)
+    public function __construct(Logger $logger, array $config)
     {
         $this->logger = $logger;
 

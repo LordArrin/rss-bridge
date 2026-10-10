@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge;
 
+use RSSBridge\Logger\Logger;
 use RSSBridge\Caches\CacheInterface;
 
 /**
@@ -30,9 +31,9 @@ class BrokenBridgeStub extends BridgeAbstract
      * @param string $originalName Short name of the bridge that failed to load
      * @param string $errorMessage Error message describing the failure
      * @param CacheInterface|null $cache Optional cache instance passed to the parent constructor
-     * @param \Logger|null $logger Optional logger instance passed to the parent constructor
+     * @param Logger|null $logger Optional logger instance passed to the parent constructor
      */
-    public function __construct(string $originalName, string $errorMessage, ?CacheInterface $cache = null, ?\Logger $logger = null)
+    public function __construct(string $originalName, string $errorMessage, ?CacheInterface $cache = null, ?Logger $logger = null)
     {
         parent::__construct($cache, $logger);
         $this->originalName = $originalName;

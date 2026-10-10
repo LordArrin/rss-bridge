@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
+use RSSBridge\Utils\Json;
 use RSSBridge\BridgeAbstract;
 
 use function RSSBridge\Exceptions\throwServerException;
@@ -28,7 +29,7 @@ final class KilledbyMicrosoftBridge extends BridgeAbstract
             throwServerException('Empty response from Killed by Microsoft API');
         }
 
-        $discontinuedServices = \Json::decode($json);
+        $discontinuedServices = Json::decode($json);
 
         if (is_array($discontinuedServices) === false) {
             throwServerException('Invalid JSON response from Killed by Microsoft API');
