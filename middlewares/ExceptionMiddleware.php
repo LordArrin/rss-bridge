@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace RSSBridge\Middlewares;
 
-use ClientException;
 use Logger;
-use RateLimitException;
+use RSSBridge\Exceptions\ClientException;
+use RSSBridge\Exceptions\RateLimitException;
 use Request;
 use Response;
 

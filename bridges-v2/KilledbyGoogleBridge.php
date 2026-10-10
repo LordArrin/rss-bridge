@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use function RSSBridge\Exceptions\throwServerException;
 
 final class KilledbyGoogleBridge extends BridgeAbstract
 {
@@ -27,7 +28,7 @@ final class KilledbyGoogleBridge extends BridgeAbstract
         $json = getContents(self::URI . '/graveyard.json');
 
         if (is_string($json) === false || $json === '') {
-            \throwServerException('Empty response from Killed by Google API');
+            throwServerException('Empty response from Killed by Google API');
         }
 
         $this->handleJson($json);
@@ -39,7 +40,7 @@ final class KilledbyGoogleBridge extends BridgeAbstract
         $graveyard = \Json::decode($json);
 
         if (is_array($graveyard) === false) {
-            \throwServerException('Invalid JSON response from Killed by Google API');
+            throwServerException('Invalid JSON response from Killed by Google API');
         }
 
         $currentDate = new \DateTime();

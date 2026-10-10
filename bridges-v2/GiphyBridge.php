@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use function RSSBridge\Exceptions\throwClientException;
 
 final class GiphyBridge extends BridgeAbstract
 {
@@ -135,7 +136,7 @@ final class GiphyBridge extends BridgeAbstract
 
         $searchInput = (string) ($this->getInput('s') ?? '');
         if ($searchInput === '') {
-            \throwClientException('Search tag is required');
+            throwClientException('Search tag is required');
         }
 
         foreach ($endpoints as $endpoint) {

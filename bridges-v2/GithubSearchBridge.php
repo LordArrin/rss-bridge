@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use function RSSBridge\Exceptions\throwClientException;
+use function RSSBridge\Exceptions\throwServerException;
 
 final class GithubSearchBridge extends BridgeAbstract
 {
@@ -30,13 +32,13 @@ final class GithubSearchBridge extends BridgeAbstract
     {
         $searchValue = $this->getInput('s');
         if (is_string($searchValue) === false || $searchValue === '') {
-            \throwClientException('Search query is required');
+            throwClientException('Search query is required');
         }
 
         $html = getContents($this->getURI());
 
         if (is_string($html) === false || $html === '') {
-            \throwServerException('Empty response from GitHub search');
+            throwServerException('Empty response from GitHub search');
         }
 
         libxml_use_internal_errors(true);

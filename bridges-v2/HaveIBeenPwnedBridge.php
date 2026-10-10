@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use function RSSBridge\Exceptions\throwServerException;
 
 final class HaveIBeenPwnedBridge extends BridgeAbstract
 {
@@ -64,7 +65,7 @@ final class HaveIBeenPwnedBridge extends BridgeAbstract
         $data = json_decode($json, true);
 
         if (is_array($data) === false) {
-            \throwServerException('Invalid API response format');
+            throwServerException('Invalid API response format');
         }
 
         foreach ($data as $breach) {

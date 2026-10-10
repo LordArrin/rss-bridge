@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use function RSSBridge\Exceptions\throwServerException;
 
 final class EpicGamesFreeBridge extends BridgeAbstract
 {
@@ -79,13 +80,13 @@ final class EpicGamesFreeBridge extends BridgeAbstract
 
         $raw = getContents($url);
         if (is_string($raw) === false || $raw === '') {
-            \throwServerException('Empty response from Epic Games API');
+            throwServerException('Empty response from Epic Games API');
         }
 
         $json = \Json::decode($raw);
 
         if (is_array($json) === false) {
-            \throwServerException('Invalid JSON response from Epic Games API');
+            throwServerException('Invalid JSON response from Epic Games API');
         }
 
         $elements = $json['data']['Catalog']['searchStore']['elements'] ?? null;

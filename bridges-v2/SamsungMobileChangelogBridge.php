@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use function RSSBridge\Exceptions\throwServerException;
 
 use function urljoin;
 
@@ -46,7 +47,7 @@ final class SamsungMobileChangelogBridge extends BridgeAbstract
         $html = getContents($url);
 
         if (is_string($html) === false || $html === '') {
-            \throwServerException('Could not request changelog page: ' . $url);
+            throwServerException('Could not request changelog page: ' . $url);
         }
 
         libxml_use_internal_errors(true);
@@ -59,7 +60,7 @@ final class SamsungMobileChangelogBridge extends BridgeAbstract
             if ($dfltPageValue !== '') {
                 $urlLanguage = urljoin($url, $dfltPageValue);
             } else {
-                \throwServerException('Unable to find English version (empty dflt_page value)');
+                throwServerException('Unable to find English version (empty dflt_page value)');
             }
         } else {
             $enOption = $dom->querySelector('option[value*="eng.html"]');
@@ -68,16 +69,16 @@ final class SamsungMobileChangelogBridge extends BridgeAbstract
                 if ($enOptionValue !== '') {
                     $urlLanguage = urljoin($url, $enOptionValue);
                 } else {
-                    \throwServerException('Unable to find English version');
+                    throwServerException('Unable to find English version');
                 }
             } else {
-                \throwServerException('Unable to find English version');
+                throwServerException('Unable to find English version');
             }
         }
 
         $html = getContents($urlLanguage);
         if (is_string($html) === false || $html === '') {
-            \throwServerException('Could not request changelog: ' . $urlLanguage);
+            throwServerException('Could not request changelog: ' . $urlLanguage);
         }
 
         libxml_use_internal_errors(true);
@@ -86,7 +87,7 @@ final class SamsungMobileChangelogBridge extends BridgeAbstract
 
         $container = $dom->querySelector('div.container');
         if ($container === null) {
-            \throwServerException('Unable to find container element');
+            throwServerException('Unable to find container element');
         }
 
         $h1 = $dom->querySelector('h1');

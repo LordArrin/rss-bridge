@@ -6,7 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 use RSSBridge\GithubClient;
-
 use function RSSBridge\Exceptions\throwClientException;
 use function RSSBridge\Exceptions\throwServerException;
 

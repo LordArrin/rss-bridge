@@ -6,6 +6,7 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 use RSSBridge\FeedParser;
+use function RSSBridge\Exceptions\throwServerException;
 
 final class NyaaTorrentsBridge extends BridgeAbstract
 {
@@ -83,7 +84,7 @@ final class NyaaTorrentsBridge extends BridgeAbstract
         $feed = $feedParser->parseFeed(getContents($this->getURI()));
 
         if (isset($feed['items']) === false || is_array($feed['items']) === false) {
-            \throwServerException('Invalid feed format');
+            throwServerException('Invalid feed format');
         }
 
         $parsedown = new \Parsedown();

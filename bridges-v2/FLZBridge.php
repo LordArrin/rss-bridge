@@ -10,6 +10,7 @@ use RSSBridge\FeedParser;
 use RSSBridge\Http\HttpException;
 use RSSBridge\Http\Response;
 use RSSBridge\Json;
+use function RSSBridge\Exceptions\throwServerException;
 
 final class FLZBridge extends BridgeAbstract
 {
