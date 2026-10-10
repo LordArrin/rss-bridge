@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Caches;
 
+use RSSBridge\Logger\Logger;
+
 /**
  * Memcached-based distributed cache with performance optimizations.
  * Uses persistent connections to avoid TCP handshake on every request.

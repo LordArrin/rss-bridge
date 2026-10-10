@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Proxies;
 
-use Logger;
 use RSSBridge\Caches\CacheInterface;
+use RSSBridge\Logger\Logger;
 
 /**
  * Base class for all proxy implementations.

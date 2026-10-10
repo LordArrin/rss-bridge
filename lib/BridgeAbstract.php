@@ -7,6 +7,7 @@ namespace RSSBridge;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
 use RSSBridge\ParameterValidator;
+
 use function RSSBridge\Exceptions\throwClientException;
 
 abstract class BridgeAbstract

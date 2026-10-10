@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Caches;
 
+use RSSBridge\Logger\Logger;
+
 /**
  * File-based cache storage with security hardening.
  * Each cache entry is stored as a separate file with serialized data.

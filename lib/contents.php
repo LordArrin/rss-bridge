@@ -9,6 +9,7 @@ use RSSBridge\Http\Response;
 use RSSBridge\Utils\Json;
 use RSSBridge\Proxies\DirectProxy;
 use RSSBridge\Proxies\ProxyFactory;
+
 use function RSSBridge\Exceptions\throwClientException;
 
 function get_sitemap(string $url): array
