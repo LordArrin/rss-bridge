@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge;
 
-use Json;
+use RSSBridge\Utils\Json;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
 use RSSBridge\Exceptions\RateLimitException;

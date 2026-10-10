@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace RSSBridge\Actions;
 
-use Json;
-use Request;
-use Response;
+use RSSBridge\Utils\Json;
+use RSSBridge\Http\Request;
+use RSSBridge\Http\Response;
 use RSSBridge\BridgeFactory;
 use RSSBridge\Configuration;
 use RSSBridge\SafeBridgeLoader;

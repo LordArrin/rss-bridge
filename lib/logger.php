@@ -19,6 +19,7 @@ declare(strict_types=1);
 namespace RSSBridge\Logger;
 
 use RSSBridge\Exceptions\RateLimitException;
+use RSSBridge\Utils\Json;
 use RSSBridge\Utils\Url;
 
 interface Logger
@@ -66,10 +67,10 @@ trait FormatsLogRecords
             return '';
         }
         try {
-            return \Json::encode($record['context']);
+            return Json::encode($record['context']);
         } catch (\JsonException $e) {
             $record['context']['message'] = null;
-            return \Json::encode($record['context']);
+            return Json::encode($record['context']);
         }
     }
 }

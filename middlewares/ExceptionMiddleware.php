@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace RSSBridge\Middlewares;
 
-use Logger;
+use RSSBridge\Logger\Logger;
 use RSSBridge\Exceptions\ClientException;
 use RSSBridge\Exceptions\RateLimitException;
-use Request;
-use Response;
+use RSSBridge\Http\Request;
+use RSSBridge\Http\Response;
 
 final class ExceptionMiddleware implements Middleware
 {

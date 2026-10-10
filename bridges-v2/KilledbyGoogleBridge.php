@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
+use RSSBridge\Utils\Json;
 use RSSBridge\BridgeAbstract;
 
 use function RSSBridge\Exceptions\throwServerException;
@@ -38,7 +39,7 @@ final class KilledbyGoogleBridge extends BridgeAbstract
 
     private function handleJson(string $json): void
     {
-        $graveyard = \Json::decode($json);
+        $graveyard = Json::decode($json);
 
         if (is_array($graveyard) === false) {
             throwServerException('Invalid JSON response from Killed by Google API');

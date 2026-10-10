@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace RSSBridge\Utils;
+
 /**
  * JSON encoder/decoder with sane defaults.
  * Based on https://github.com/nette/utils/blob/master/src/Utils/Json.php

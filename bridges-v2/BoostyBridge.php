@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
+use RSSBridge\Utils\Json;
 use RSSBridge\BridgeAbstract;
 
 final class BoostyBridge extends BridgeAbstract
@@ -74,7 +75,7 @@ final class BoostyBridge extends BridgeAbstract
         $limitInput = (int) $this->getInput('limit');
         $limit = min($limitInput !== 0 ? $limitInput : 20, 100);
         $url = 'https://api.boosty.to/v1/blog/' . urlencode($this->blogName) . '/post/?limit=' . $limit;
-        $data = \Json::decode(getContents($url));
+        $data = Json::decode(getContents($url));
 
         if (isset($data['data']) === false || is_array($data['data']) === false) {
             throw new \Exception('Failed to fetch data from Boosty API');

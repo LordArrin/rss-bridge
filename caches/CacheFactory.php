@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Caches;
 
+use RSSBridge\Logger\Logger;
 use RSSBridge\Configuration;
 
 /**
@@ -11,7 +12,7 @@ use RSSBridge\Configuration;
  */
 final class CacheFactory
 {
-    private \Logger $logger;
+    private Logger $logger;
 
     /**
      * Map cache names to PSR-4 classes.
@@ -26,7 +27,7 @@ final class CacheFactory
         'sqlite'    => SQLiteCache::class,
     ];
 
-    public function __construct(\Logger $logger)
+    public function __construct(Logger $logger)
     {
         $this->logger = $logger;
     }

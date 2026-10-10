@@ -14,7 +14,7 @@ namespace RSSBridge\Caches;
  */
 final class MemcachedCache implements CacheInterface
 {
-    private readonly \Logger $logger;
+    private readonly Logger $logger;
     private readonly \Memcached $conn;
     private readonly string $cachePrefix;
 
@@ -74,7 +74,7 @@ final class MemcachedCache implements CacheInterface
     }
 
     public function __construct(
-        \Logger $logger,
+        Logger $logger,
         string $host,
         int $port,
         string $socketPath = '',

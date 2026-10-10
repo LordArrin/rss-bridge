@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
+use RSSBridge\Utils\Json;
 use RSSBridge\BridgeAbstract;
 
 use function RSSBridge\Exceptions\throwServerException;
@@ -38,7 +39,7 @@ final class RainbowSixSiegeBridge extends BridgeAbstract
             throwServerException('Empty response from Ubisoft API');
         }
 
-        $json = \Json::decode($jsonString);
+        $json = Json::decode($jsonString);
 
         if (is_array($json) === false) {
             throwServerException('Invalid JSON response from Ubisoft API');

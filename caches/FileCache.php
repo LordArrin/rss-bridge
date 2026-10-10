@@ -23,9 +23,9 @@ final class FileCache implements CacheInterface
 
     private readonly string $path;
     private readonly bool $enablePurge;
-    private readonly \Logger $logger;
+    private readonly Logger $logger;
 
-    public function __construct(\Logger $logger, array $config = [])
+    public function __construct(Logger $logger, array $config = [])
     {
         $this->logger = $logger;
 

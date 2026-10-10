@@ -8,8 +8,8 @@ use RSSBridge\BridgeFactory;
 use RSSBridge\BridgeMetadataCache;
 use RSSBridge\Configuration;
 use RSSBridge\SafeBridgeLoader;
-use Request;
-use Response;
+use RSSBridge\Http\Request;
+use RSSBridge\Http\Response;
 
 final class FrontpageAction implements ActionInterface
 {

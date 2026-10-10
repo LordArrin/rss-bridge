@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
+use RSSBridge\Utils\Json;
 use RSSBridge\BridgeAbstract;
 
 use function RSSBridge\Exceptions\throwServerException;
@@ -77,7 +78,7 @@ final class UberEngineeringBridge extends BridgeAbstract
         }
 
         $payload = rawurldecode(self::decode((string) $matches[1]));
-        $data = \Json::decode($payload);
+        $data = Json::decode($payload);
 
         if (is_array($data) === false) {
             throwServerException('Unable to parse article feed data');

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
+use RSSBridge\Exceptions\ClientException;
 use RSSBridge\BridgeAbstract;
 
 final class ItchBridge extends BridgeAbstract
@@ -169,7 +170,7 @@ final class ItchBridge extends BridgeAbstract
         $token = $this->resolveToken();
 
         if (preg_match('/^https?:\/\/([a-z0-9-]+)\.itch\.io(?:\/([a-z0-9-]+))?/', $url, $matches) === 0) {
-            throw new \ClientException('Invalid Itch.io URL. Please provide a valid developer or game URL.');
+            throw new ClientException('Invalid Itch.io URL. Please provide a valid developer or game URL.');
         }
 
         $developer = $matches[1];
