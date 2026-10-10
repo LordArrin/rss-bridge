@@ -85,9 +85,11 @@ function getContents(
     }
     $cacheKey = implode('_', ['server',  $url, $requestBodyHash]);
 
-    /** @var Response|false|null $cachedResponse */
     $cachedResponse = $cache->get($cacheKey);
-    if ($cachedResponse !== false && $cachedResponse !== null) {
+    if (!$cachedResponse instanceof Response) {
+        $cachedResponse = null;
+    }
+    if ($cachedResponse !== null) {
         $lastModified = $cachedResponse->getHeader('last-modified');
         if ($lastModified !== null && $lastModified !== '') {
             try {
@@ -143,7 +145,9 @@ function getContents(
             break;
         case 304:
             // Not Modified
-            $response = $response->withBody($cachedResponse->getBody());
+            if ($cachedResponse instanceof Response) {
+                $response = $response->withBody($cachedResponse->getBody());
+            }
             break;
         default:
             $e = HttpException::fromResponse($response, $url);
