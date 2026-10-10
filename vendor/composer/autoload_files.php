@@ -10,7 +10,7 @@ return array(
     'b44de396fa12c0e6ddc15c0bfa06b0ff' => $vendorDir . '/busybee/urljoin/src/urljoin.php',
     '9b38cf48e83f5d8f60375221cd213eee' => $vendorDir . '/phpstan/phpstan/bootstrap.php',
     'ec07570ca5a812141189b1fa81503674' => $vendorDir . '/phpunit/phpunit/src/Framework/Assert/Functions.php',
-    '5e06fbad89bcfc1a59ed26bd1dc579e4' => $baseDir . '/lib/Json.php',
+    '052cae897b00ad64f8fbf7b01556e5e7' => $baseDir . '/lib/json.php',
     'e612e3932edf8f5b086d57033aa3ba10' => $baseDir . '/lib/exceptions.php',
     'da29a7b32369c639cb1cd13f39472182' => $baseDir . '/lib/utils.php',
     'd4a7a3f088cd3ba11be2dcb4738f0d74' => $baseDir . '/lib/utils-functions.php',

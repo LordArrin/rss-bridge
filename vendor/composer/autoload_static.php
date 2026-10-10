@@ -11,7 +11,7 @@ class ComposerStaticInitcc270c7e0340d39ae7f375de82fba508
         'b44de396fa12c0e6ddc15c0bfa06b0ff' => __DIR__ . '/..' . '/busybee/urljoin/src/urljoin.php',
         '9b38cf48e83f5d8f60375221cd213eee' => __DIR__ . '/..' . '/phpstan/phpstan/bootstrap.php',
         'ec07570ca5a812141189b1fa81503674' => __DIR__ . '/..' . '/phpunit/phpunit/src/Framework/Assert/Functions.php',
-        '5e06fbad89bcfc1a59ed26bd1dc579e4' => __DIR__ . '/../..' . '/lib/Json.php',
+        '052cae897b00ad64f8fbf7b01556e5e7' => __DIR__ . '/../..' . '/lib/json.php',
         'e612e3932edf8f5b086d57033aa3ba10' => __DIR__ . '/../..' . '/lib/exceptions.php',
         'da29a7b32369c639cb1cd13f39472182' => __DIR__ . '/../..' . '/lib/utils.php',
         'd4a7a3f088cd3ba11be2dcb4738f0d74' => __DIR__ . '/../..' . '/lib/utils-functions.php',
