@@ -39,14 +39,14 @@ interface FormatInterface
     /**
      * Set the feed items.
      *
-     * @param \FeedItem[]|array[] $items
+     * @param FeedItem[]|array[] $items
      */
     public function setItems(array $items): void;
 
     /**
      * Get the feed items.
      *
-     * @return \FeedItem[]
+     * @return FeedItem[]
      */
     public function getItems(): array;
 

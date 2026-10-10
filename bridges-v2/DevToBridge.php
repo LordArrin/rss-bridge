@@ -64,9 +64,6 @@ final class DevToBridge extends BridgeAbstract
         }
 
         $dom = \Dom\HTMLDocument::createFromString($html);
-        if ($dom === null) {
-            return $html;
-        }
 
         foreach ($dom->querySelectorAll('img[src]') as $img) {
             $src = $img->getAttribute('src');
@@ -110,12 +107,12 @@ final class DevToBridge extends BridgeAbstract
 
         $body = $dom->querySelector('body');
         if ($body !== null) {
-            $savedHtml = $dom->saveHTML($body);
+            $savedHtml = $dom->saveHtml($body);
         } else {
-            $savedHtml = $dom->saveHTML($dom->documentElement);
+            $savedHtml = $dom->saveHtml($dom->documentElement);
         }
 
-        $cleanedHtml = $savedHtml !== false ? $savedHtml : '';
+        $cleanedHtml = $savedHtml;
 
         if (str_starts_with($cleanedHtml, '<body>') === true) {
             $replaced = preg_replace('/^<body>|<\/body>$/', '', $cleanedHtml);
@@ -190,19 +187,13 @@ final class DevToBridge extends BridgeAbstract
                 continue;
             }
 
-            if ($articleUrl === '') {
-                continue;
-            }
-
             $articleDom = getSimpleHTMLDOMCached($articleUrl, 86400);
-            if ($articleDom === null) {
-                continue;
-            }
 
-            $content = $articleDom->querySelector('.crayons-article__body')?->innerHTML ?? '';
+            $bodyEl = $articleDom->querySelector('.crayons-article__body');
+            $content = $bodyEl !== null ? $bodyEl->innerHTML : '';
             $content = $this->cleanArticleContent($content, $articleUrl);
 
-            $metadata = html_find_seo_metadata($articleDom->saveHTML());
+            $metadata = html_find_seo_metadata($articleDom->saveHtml());
 
             $publishedAtInt = isset($item['published_at_int']) === true ? (int)$item['published_at_int'] : time();
 
@@ -224,9 +215,6 @@ final class DevToBridge extends BridgeAbstract
         $limit = $limitInput !== null && $limitInput !== '' ? (int)$limitInput : 10;
 
         $dom = getSimpleHTMLDOM(self::URI);
-        if ($dom === null) {
-            throwServerException('Failed to fetch DEV.to homepage');
-        }
 
         $guideLinks = $dom->querySelectorAll('.widget-link-list .crayons-link--contentful');
 
@@ -253,14 +241,13 @@ final class DevToBridge extends BridgeAbstract
             }
 
             $guideDom = getSimpleHTMLDOMCached($guideUrl, 86400);
-            if ($guideDom === null) {
-                continue;
-            }
 
-            $content = $guideDom->querySelector('.crayons-article__body')?->innerHTML ?? '';
+            $bodyEl = $guideDom->querySelector('.crayons-article__body');
+            $content = $bodyEl !== null ? $bodyEl->innerHTML : '';
             $content = $this->cleanArticleContent($content, $guideUrl);
 
-            $authorName = $guideDom->querySelector('.crayons-article__header__meta .fw-bold')?->textContent ?? null;
+            $authorEl = $guideDom->querySelector('.crayons-article__header__meta .fw-bold');
+            $authorName = $authorEl !== null ? trim($authorEl->textContent) : null;
 
             $tags = [];
             foreach ($guideDom->querySelectorAll('.spec__tags .crayons-tag') as $tag) {
@@ -270,12 +257,15 @@ final class DevToBridge extends BridgeAbstract
                 }
             }
 
-            $dateStr = $guideDom->querySelector('time[datetime]')?->getAttribute('datetime');
+            $timeEl = $guideDom->querySelector('time[datetime]');
             $timestamp = null;
-            if ($dateStr !== null) {
-                $parsedTime = strtotime($dateStr);
-                if ($parsedTime !== false) {
-                    $timestamp = $parsedTime;
+            if ($timeEl !== null) {
+                $dateStr = $timeEl->getAttribute('datetime');
+                if ($dateStr !== null) {
+                    $parsedTime = strtotime($dateStr);
+                    if ($parsedTime !== false) {
+                        $timestamp = $parsedTime;
+                    }
                 }
             }
 
@@ -289,7 +279,7 @@ final class DevToBridge extends BridgeAbstract
                 'uri' => $guideUrl,
                 'content' => $content,
                 'timestamp' => $finalTimestamp,
-                'author' => $authorName !== null ? trim($authorName) : null,
+                'author' => $authorName,
                 'categories' => $tags,
                 'uid' => $guideUrl,
             ];

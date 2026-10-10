@@ -110,6 +110,10 @@ final class AO3Bridge extends BridgeAbstract
 
         $elements = $dom->querySelectorAll('.index.group > li');
         foreach ($elements as $element) {
+            if ($element instanceof \Dom\Element === false) {
+                continue;
+            }
+
             $titleLink = $element->querySelector('div h4 a');
             if ($titleLink === null) {
                 continue;
@@ -125,13 +129,14 @@ final class AO3Bridge extends BridgeAbstract
             $item['timestamp'] = $parsed !== false ? $parsed : null;
 
             $elementDom = $this->reparseElement($element);
-            if ($elementDom === null) {
+            if ($elementDom === null || $elementDom->documentElement === null) {
                 continue;
             }
 
+            $docElement = $elementDom->documentElement;
             $categories = [];
 
-            $requiredTags = $elementDom->documentElement->querySelector('ul.required-tags');
+            $requiredTags = $docElement->querySelector('ul.required-tags');
             if ($requiredTags !== null) {
                 foreach ($requiredTags->childNodes as $tag) {
                     if ($tag instanceof \Dom\Element) {
@@ -141,7 +146,7 @@ final class AO3Bridge extends BridgeAbstract
                 $requiredTags->remove();
             }
 
-            $tags = $elementDom->documentElement->querySelector('ul.tags');
+            $tags = $docElement->querySelector('ul.tags');
             if ($tags !== null) {
                 foreach ($tags->childNodes as $tag) {
                     if ($tag instanceof \Dom\Element) {
@@ -156,12 +161,12 @@ final class AO3Bridge extends BridgeAbstract
             }
 
             $childrenHtml = '';
-            foreach ($elementDom->documentElement->childNodes as $child) {
+            foreach ($docElement->childNodes as $child) {
                 $childrenHtml .= $elementDom->saveHtml($child);
             }
             $item['content'] = $childrenHtml;
 
-            $chaptersEl = $elementDom->documentElement->querySelector('dl dd.chapters');
+            $chaptersEl = $docElement->querySelector('dl dd.chapters');
             $chapters = $chaptersEl !== null ? trim($chaptersEl->textContent ?? '') : '0';
 
             if ($this->getInput('unique') === true) {
@@ -191,9 +196,11 @@ final class AO3Bridge extends BridgeAbstract
                             $linksArray = iterator_to_array($links);
                             if ($linksArray !== []) {
                                 $lastLink = end($linksArray);
-                                $href = $lastLink->getAttribute('href');
-                                if ($href !== null) {
-                                    $workUrl = $href;
+                                if ($lastLink instanceof \Dom\Element) {
+                                    $href = $lastLink->getAttribute('href');
+                                    if ($href !== null) {
+                                        $workUrl = $href;
+                                    }
                                 }
                             }
                         }
@@ -269,6 +276,10 @@ final class AO3Bridge extends BridgeAbstract
 
         for ($i = 0; $i < $total; $i++) {
             $element = $navItems[$i];
+            if ($element instanceof \Dom\Element === false) {
+                continue;
+            }
+
             $link = $element->querySelector('a');
             if ($link === null) {
                 continue;
@@ -306,9 +317,10 @@ final class AO3Bridge extends BridgeAbstract
     private function reparseElement(\Dom\Element $element): ?\Dom\HTMLDocument
     {
         $ownerDoc = $element->ownerDocument;
-        if ($ownerDoc === null) {
+        if ($ownerDoc instanceof \Dom\HTMLDocument === false) {
             return null;
         }
+
         $html = $ownerDoc->saveHtml($element);
         if ($html === false || $html === '') {
             return null;
@@ -330,6 +342,10 @@ final class AO3Bridge extends BridgeAbstract
         $base = rtrim(self::URI, '/');
         $elements = $container->querySelectorAll('[src], [href]');
         foreach ($elements as $el) {
+            if ($el instanceof \Dom\Element === false) {
+                continue;
+            }
+
             foreach (['src', 'href'] as $attr) {
                 $value = $el->getAttribute($attr);
                 if ($value === null) {

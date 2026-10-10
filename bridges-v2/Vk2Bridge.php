@@ -1021,6 +1021,10 @@ final class Vk2Bridge extends BridgeAbstract
         }
 
         foreach ($articleBlock->querySelectorAll('ol, ul') as $list) {
+            if ($list instanceof \Dom\Element === false) {
+                continue;
+            }
+
             $list->removeAttribute('class');
 
             $isOrdered = $list->tagName === 'ol';
@@ -1044,10 +1048,14 @@ final class Vk2Bridge extends BridgeAbstract
         }
 
         foreach ($articleBlock->querySelectorAll('ol > li, ul > li') as $li) {
+            if ($li instanceof \Dom\Element === false) {
+                continue;
+            }
+
             $li->removeAttribute('class');
 
             $parentList = $li->parentNode;
-            $isOrdered = $parentList !== null && $parentList->tagName === 'ol';
+            $isOrdered = $parentList instanceof \Dom\Element && $parentList->tagName === 'ol';
 
             $style = 'display: list-item !important; margin: 0.5em 0 !important; ';
             if ($isOrdered === true) {

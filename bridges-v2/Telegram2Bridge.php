@@ -116,7 +116,6 @@ TXT,
 
     private const MAX_TITLE_LENGTH = 60;
     private const MIN_TITLE_SPACE_POS = 30;
-    private const MIN_REMAINDER_LENGTH = 12;
     private const SHORT_POST_MAX_LENGTH = 100;
 
     private const ALLOWED_TAGS = '<div><a><p><br><hr><b><i><u><s><strong><em><code><pre><blockquote><span><img><video><source><ul><ol><li>';
@@ -266,10 +265,9 @@ CSS,
         $limit = max(1, (int) $limitInput);
 
         $pages = 0;
-        $done = false;
         $seen = [];
 
-        while ($pages < self::MAX_PAGES && $done === false) {
+        while ($pages < self::MAX_PAGES) {
             $pages++;
 
             if ($pages > 1) {
@@ -300,8 +298,7 @@ CSS,
 
             foreach (array_reverse(iterator_to_array($messages)) as $message) {
                 if (count($this->items) >= $limit) {
-                    $done = true;
-                    break;
+                    break 2;
                 }
 
                 if ($this->isAd($message) === true) {
@@ -333,10 +330,6 @@ CSS,
                 }
 
                 $this->items[] = $item;
-            }
-
-            if ($done === true) {
-                break;
             }
 
             $more = $dom->querySelector(self::SELECTORS['LOAD_MORE_LINK']);
@@ -483,15 +476,10 @@ CSS,
                 return $this->withRetry(
                     function () use ($url): \Dom\HTMLDocument {
                         $html = getProtectedSimpleHTMLDOM($url, self::PROXY_PROFILE);
+                        $htmlString = $html->saveHtml();
 
-                        if ($html === null) {
-                            throw new \RuntimeException('getProtectedSimpleHTMLDOM returned null');
-                        }
-
-                        $htmlString = $html->saveHTML();
-
-                        if ($htmlString === false || $htmlString === '') {
-                            throw new \RuntimeException('saveHTML returned empty result');
+                        if ($htmlString === '') {
+                            throw new \RuntimeException('saveHtml returned empty result');
                         }
 
                         return \Dom\HTMLDocument::createFromString(
@@ -520,15 +508,10 @@ CSS,
             return $this->withRetry(
                 function () use ($url): \Dom\HTMLDocument {
                     $html = getSimpleHTMLDOM($url);
+                    $htmlString = $html->saveHtml();
 
-                    if ($html === null) {
-                        throw new \RuntimeException('getSimpleHTMLDOM returned null');
-                    }
-
-                    $htmlString = $html->saveHTML();
-
-                    if ($htmlString === false || $htmlString === '') {
-                        throw new \RuntimeException('saveHTML returned empty result');
+                    if ($htmlString === '') {
+                        throw new \RuntimeException('saveHtml returned empty result');
                     }
 
                     return \Dom\HTMLDocument::createFromString(
@@ -1221,11 +1204,13 @@ CSS,
         $stubLabel = match ($type) {
             self::UNSUPPORTED_TYPE_VIDEO => $mediaLabel,
             self::UNSUPPORTED_TYPE_GENERIC => 'Please open Telegram to view this post',
+            default => 'Unsupported content',
         };
 
         $title = match ($type) {
             self::UNSUPPORTED_TYPE_VIDEO => 'Unsupported media',
             self::UNSUPPORTED_TYPE_GENERIC => 'Unsupported content',
+            default => 'Unsupported content',
         };
 
         if ($hasContent === false) {

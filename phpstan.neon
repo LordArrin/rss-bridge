@@ -1,5 +1,5 @@
 parameters:
-    level: 2
+    level: 3
     paths:
         - lib
         - actions
@@ -26,6 +26,8 @@ parameters:
         - quirks/media.php
         - quirks/media_embed.php
         - quirks/seo.php
+
+    treatPhpDocTypesAsCertain: false
     
     ignoreErrors:
         - '#Variable \$\w+ on left side of \?\? always exists#'

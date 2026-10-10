@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Proxies;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class FlareSolverrProxy extends ProxyAbstract
 {
     private ?string $apiUrl = null;
@@ -83,18 +85,19 @@ final class FlareSolverrProxy extends ProxyAbstract
         }
 
         $maxRetries = 2;
-        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+        $attempt = 0;
+        while (++$attempt <= $maxRetries) {
             try {
                 $response = $this->request('POST', $this->apiUrl, $payload);
 
                 if (isset($response['solution']['response']) === false) {
-                    throw new \RuntimeException('FlareSolverr did not return HTML content');
+                    throwServerException('FlareSolverr did not return HTML content');
                 }
 
                 return (string)$response['solution']['response'];
-            } catch (\RuntimeException $e) {
+            } catch (\Exception $e) {
                 if ($attempt === $maxRetries) {
-                    throw $e;
+                    throwServerException($e->getMessage());
                 }
 
                 if (str_contains($e->getMessage(), 'session') === true || str_contains($e->getMessage(), 'Session') === true) {
@@ -105,12 +108,12 @@ final class FlareSolverrProxy extends ProxyAbstract
                     }
                     $this->ensureSession($domain, $cookies);
                 } else {
-                    throw $e;
+                    throwServerException($e->getMessage());
                 }
             }
         }
 
-        throw new \RuntimeException('Failed to fetch HTML after retries');
+        throwServerException('Failed to fetch HTML after retries');
     }
 
     private function calculateWaitTime(string $url, array $options): int
@@ -182,7 +185,7 @@ final class FlareSolverrProxy extends ProxyAbstract
     {
         $ch = curl_init($url);
         if ($ch === false) {
-            throw new \RuntimeException('Failed to initialize cURL');
+            throwServerException('Failed to initialize cURL');
         }
 
         $curlHeaders = array_merge(['Content-Type: application/json'], $headers);
@@ -197,6 +200,7 @@ final class FlareSolverrProxy extends ProxyAbstract
             CURLOPT_CONNECTTIMEOUT => 10,
         ]);
 
+        $response = '';
         try {
             $response = curl_exec($ch);
             $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -208,7 +212,7 @@ final class FlareSolverrProxy extends ProxyAbstract
                     'http_code' => $httpCode,
                     'error' => $error
                 ]);
-                throw new \RuntimeException("HTTP {$httpCode}: {$error}");
+                throwServerException("HTTP {$httpCode}: {$error}");
             }
 
             $result = json_decode((string)$response, true, 512, JSON_THROW_ON_ERROR);
@@ -224,26 +228,19 @@ final class FlareSolverrProxy extends ProxyAbstract
                     $this->log('warning', 'FlareSolverr session cache invalidated due to API error');
                 }
 
-                throw new \RuntimeException('API error: ' . ($result['message'] ?? 'Unknown'));
+                throwServerException('API error: ' . ($result['message'] ?? 'Unknown'));
             }
 
             return $result;
         } catch (\JsonException $e) {
             $this->log('error', 'Invalid JSON response from FlareSolverr', [
                 'error' => $e->getMessage(),
-                'response' => substr((string)$response ?? '', 0, 500)
+                'response' => is_string($response) === true ? substr($response, 0, 500) : ''
             ]);
-            throw new \RuntimeException('Invalid JSON response: ' . $e->getMessage());
-        } finally {
-            unset($ch);
+            throwServerException('Invalid JSON response: ' . $e->getMessage());
         }
     }
 
-    /**
-     * Fetches binary content via FlareSolverr.
-     *
-     * @return array{body: string, type: string}
-     */
     public function getBinary(string $url, array $options = []): array
     {
         $this->log('info', "Fetching binary {$url} via FlareSolverr");
@@ -262,12 +259,13 @@ final class FlareSolverrProxy extends ProxyAbstract
         }
 
         $maxRetries = 2;
-        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+        $attempt = 0;
+        while (++$attempt <= $maxRetries) {
             try {
                 $response = $this->request('POST', $this->apiUrl, $payload);
 
                 if (isset($response['solution']['response']) === false) {
-                    throw new \RuntimeException('FlareSolverr did not return content');
+                    throwServerException('FlareSolverr did not return content');
                 }
 
                 $body = (string)$response['solution']['response'];
@@ -293,9 +291,9 @@ final class FlareSolverrProxy extends ProxyAbstract
                 }
 
                 return ['body' => $body, 'type' => $type];
-            } catch (\RuntimeException $e) {
+            } catch (\Exception $e) {
                 if ($attempt === $maxRetries) {
-                    throw $e;
+                    throwServerException($e->getMessage());
                 }
 
                 if (str_contains($e->getMessage(), 'session') === true || str_contains($e->getMessage(), 'Session') === true) {
@@ -308,11 +306,11 @@ final class FlareSolverrProxy extends ProxyAbstract
                     $domain = is_string($parsedHost) === true ? $parsedHost : 'localhost';
                     $this->ensureSession($domain, $cookies);
                 } else {
-                    throw $e;
+                    throwServerException($e->getMessage());
                 }
             }
         }
 
-        throw new \RuntimeException('Failed to fetch binary after retries');
+        throwServerException('Failed to fetch binary after retries');
     }
 }

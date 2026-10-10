@@ -86,7 +86,7 @@ function getContents(
     $cacheKey = implode('_', ['server',  $url, $requestBodyHash]);
 
     $cachedResponse = $cache->get($cacheKey);
-    if (!$cachedResponse instanceof Response) {
+    if (($cachedResponse instanceof Response) === false) {
         $cachedResponse = null;
     }
     if ($cachedResponse !== null) {

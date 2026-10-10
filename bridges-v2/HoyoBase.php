@@ -255,7 +255,12 @@ abstract class HoyoBase extends BridgeAbstract
             return;
         }
 
-        $html = $embed->ownerDocument->saveHtml($embed);
+        $doc = $embed->ownerDocument;
+        if ($doc instanceof \Dom\HTMLDocument === false) {
+            return;
+        }
+
+        $html = $doc->saveHtml($embed);
         if (is_string($html) === false || $html === '') {
             return;
         }
@@ -278,7 +283,7 @@ abstract class HoyoBase extends BridgeAbstract
 
         $importedNodes = [];
         foreach ($tempWrapper->childNodes as $child) {
-            $imported = $embed->ownerDocument->importNode($child, true);
+            $imported = $doc->importNode($child, true);
             if ($imported !== null) {
                 $importedNodes[] = $imported;
             }

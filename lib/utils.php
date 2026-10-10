@@ -131,7 +131,7 @@ final class Url
         return self::sanitizePathName($filePath, $root);
     }
 
-    private static function sanitizePathName(string $s, string $pathName): string
+    public static function sanitizePathName(string $s, string $pathName): string
     {
         return str_replace([$pathName . '/', $pathName], '', $s);
     }

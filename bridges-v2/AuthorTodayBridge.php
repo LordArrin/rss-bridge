@@ -139,6 +139,9 @@ final class AuthorTodayBridge extends BridgeAbstract
         $chaptersArray = iterator_to_array($chapters);
 
         foreach (array_reverse($chaptersArray) as $position => $chapter) {
+            if ($chapter instanceof \Dom\Element === false) {
+                continue;
+            }
             $item = $this->buildChapterItem($chapter, $position, $statusHtml, $coverUrl, $author, $tags);
 
             if ($item !== null) {
@@ -263,8 +266,16 @@ final class AuthorTodayBridge extends BridgeAbstract
     private function plainText(\Dom\Node $node): string
     {
         $innerHtml = '';
+        $doc = $node->ownerDocument;
+
         foreach ($node->childNodes as $child) {
-            $innerHtml .= $node->ownerDocument->saveHtml($child);
+            if ($doc instanceof \Dom\HTMLDocument) {
+                $innerHtml .= $doc->saveHtml($child);
+            } elseif ($child instanceof \Dom\Element) {
+                $innerHtml .= $child->outerHTML;
+            } else {
+                $innerHtml .= $child->textContent ?? '';
+            }
         }
 
         $text = html_entity_decode(strip_tags($innerHtml), ENT_QUOTES, 'UTF-8');
@@ -277,6 +288,9 @@ final class AuthorTodayBridge extends BridgeAbstract
         $tags = [];
 
         foreach ($html->querySelectorAll('.mb-v-lg .tags a') as $node) {
+            if ($node instanceof \Dom\Element === false) {
+                continue;
+            }
             $tag = $this->plainText($node);
 
             if ($tag !== '') {
@@ -325,6 +339,9 @@ final class AuthorTodayBridge extends BridgeAbstract
     private function adultText(\Dom\HTMLDocument $html): string
     {
         foreach ($html->querySelectorAll('.label-adult-only') as $node) {
+            if ($node instanceof \Dom\Element === false) {
+                continue;
+            }
             if ($this->isInsideFooter($node) === true) {
                 continue;
             }
