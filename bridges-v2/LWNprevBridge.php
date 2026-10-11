@@ -111,7 +111,6 @@ EOD;
             return ['author' => $author, 'timestamp' => $timestamp];
         }
 
-        /** @var \Dom\Element $node */
         if ($node->getAttribute('class') !== 'FeatureByline') {
             return ['author' => $author, 'timestamp' => $timestamp];
         }
@@ -161,7 +160,6 @@ EOD;
         $node = $title;
         $content = '';
         $contentEnd = false;
-
         $ownerDocument = $title->ownerDocument;
 
         while ($contentEnd === false) {
@@ -171,17 +169,20 @@ EOD;
                 $contentEnd = true;
             } else {
                 $isTextNode = $node->nodeType === XML_TEXT_NODE;
-                $isH3 = ($node instanceof \Dom\Element) && $node->localName === 'h3';
-                $hasClass = false;
+                $isEndTag = false;
 
                 if ($isTextNode === false && $node instanceof \Dom\Element) {
-                    $classValue = $node->getAttribute('class') ?? '';
-                    if ($classValue === 'Cat1HL' || $classValue === 'Cat2HL') {
-                        $hasClass = true;
+                    if ($node->localName === 'h3') {
+                        $isEndTag = true;
+                    } else {
+                        $classValue = $node->getAttribute('class') ?? '';
+                        if ($classValue === 'Cat1HL' || $classValue === 'Cat2HL') {
+                            $isEndTag = true;
+                        }
                     }
                 }
 
-                if ($isTextNode === false && ($isH3 === true || $hasClass === true)) {
+                if ($isEndTag === true) {
                     $contentEnd = true;
                 } elseif ($ownerDocument instanceof \Dom\HTMLDocument) {
                     $content .= $ownerDocument->saveHtml($node);
@@ -233,10 +234,6 @@ EOD;
         }
 
         foreach ($imageList as $img) {
-            if ($img instanceof \Dom\Element === false) {
-                continue;
-            }
-
             $existingStyle = $img->getAttribute('style') ?? '';
             $newStyle = 'float: left; margin: 0 15px 10px 0; max-width: 300px;';
 
@@ -270,20 +267,21 @@ EOD;
 
         $links = $doc->getElementsByTagName('a');
         foreach ($links as $link) {
-            if ($link instanceof \Dom\Element === false) {
-                continue;
-            }
-
             $href = $link->getAttribute('href') ?? '';
             if (str_contains($href, '#Comments') === false) {
                 continue;
             }
 
             $parent = $link->parentNode;
-            while ($parent !== null && ($parent instanceof \Dom\Element === false || $parent->localName !== 'body')) {
-                if ($parent instanceof \Dom\Element && ($parent->localName === 'p' || $parent->localName === 'div')) {
-                    $toRemove[] = $parent;
-                    break;
+            while ($parent !== null) {
+                if ($parent instanceof \Dom\Element) {
+                    if ($parent->localName === 'body') {
+                        break;
+                    }
+                    if ($parent->localName === 'p' || $parent->localName === 'div') {
+                        $toRemove[] = $parent;
+                        break;
+                    }
                 }
                 $parent = $parent->parentNode;
             }
@@ -305,10 +303,6 @@ EOD;
         $items = [];
 
         foreach ($html->getElementsByTagName('h3') as $title) {
-            if ($title instanceof \Dom\Element === false) {
-                continue;
-            }
-
             if ($title->getAttribute('class') !== 'SummaryHL') {
                 continue;
             }
@@ -319,7 +313,6 @@ EOD;
             }
 
             $item = [];
-
             $metadata = $this->extractAuthorAndDate($title);
 
             if ($metadata['author'] !== null) {
@@ -339,11 +332,7 @@ EOD;
         $cat2 = '';
         $cat3 = '';
 
-        if ($cat instanceof \Dom\Element) {
-            $catClass = $cat->getAttribute('class') ?? '';
-        } else {
-            $catClass = '';
-        }
+        $catClass = $cat instanceof \Dom\Element ? ($cat->getAttribute('class') ?? '') : '';
 
         if ($catClass === 'Cat3HL') {
             $cat3 = $cat->textContent ?? '';
@@ -357,20 +346,9 @@ EOD;
                 $cat = $this->jumpToPreviousTag($cat);
                 $cats[1] = $cat2;
 
-                if ($cat3 === '') {
-                    $cats[2] = '';
-                }
-
                 if ($cat !== null && $cat instanceof \Dom\Element && ($cat->getAttribute('class') ?? '') === 'Cat1HL') {
                     $cat1 = $cat->textContent ?? '';
                     $cats[0] = $cat1;
-
-                    if ($cat3 === '') {
-                        $cats[2] = '';
-                    }
-                    if ($cat2 === '') {
-                        $cats[1] = '';
-                    }
                 }
             }
         } elseif ($catClass === 'Cat2HL') {
@@ -378,32 +356,17 @@ EOD;
             $cat = $cat->previousSibling;
             $cat = $this->jumpToPreviousTag($cat);
             $cats[1] = $cat2;
-
-            if ($cat3 === '') {
-                $cats[2] = '';
-            }
+            $cats[2] = '';
 
             if ($cat !== null && $cat instanceof \Dom\Element && ($cat->getAttribute('class') ?? '') === 'Cat1HL') {
                 $cat1 = $cat->textContent ?? '';
                 $cats[0] = $cat1;
-
-                if ($cat3 === '') {
-                    $cats[2] = '';
-                }
-                if ($cat2 === '') {
-                    $cats[1] = '';
-                }
             }
         } elseif ($catClass === 'Cat1HL') {
             $cat1 = $cat->textContent ?? '';
             $cats[0] = $cat1;
-
-            if ($cat3 === '') {
-                $cats[2] = '';
-            }
-            if ($cat2 === '') {
-                $cats[1] = '';
-            }
+            $cats[2] = '';
+            $cats[1] = '';
         }
 
         $prefix = '';
@@ -424,10 +387,6 @@ EOD;
         $cats = ['', '', ''];
 
         foreach ($html->getElementsByTagName('p') as $newsletters) {
-            if ($newsletters instanceof \Dom\Element === false) {
-                continue;
-            }
-
             if ($newsletters->getAttribute('class') !== 'Cat3HL') {
                 continue;
             }
@@ -450,7 +409,6 @@ EOD;
             $node = $newsletters;
             $content = '';
             $contentEnd = false;
-
             $ownerDocument = $newsletters->ownerDocument;
 
             while ($contentEnd === false) {
@@ -460,16 +418,16 @@ EOD;
                     $contentEnd = true;
                 } else {
                     $isTextNode = $node->nodeType === XML_TEXT_NODE;
-                    $hasClass = false;
+                    $isEndTag = false;
 
                     if ($isTextNode === false && $node instanceof \Dom\Element) {
                         $classValue = $node->getAttribute('class') ?? '';
                         if ($classValue === 'Cat1HL' || $classValue === 'Cat2HL' || $classValue === 'Cat3HL') {
-                            $hasClass = true;
+                            $isEndTag = true;
                         }
                     }
 
-                    if ($isTextNode === false && $hasClass === true) {
+                    if ($isEndTag === true) {
                         $contentEnd = true;
                     } elseif ($ownerDocument instanceof \Dom\HTMLDocument) {
                         $content .= $ownerDocument->saveHtml($node);
@@ -484,16 +442,11 @@ EOD;
         }
 
         foreach ($html->getElementsByTagName('h2') as $title) {
-            if ($title instanceof \Dom\Element === false) {
-                continue;
-            }
-
             if ($title->getAttribute('class') !== 'SummaryHL') {
                 continue;
             }
 
             $item = [];
-
             $cat = $title->previousSibling;
             $cat = $this->jumpToPreviousTag($cat);
 
@@ -523,16 +476,11 @@ EOD;
         $cats = ['', '', ''];
 
         foreach ($html->getElementsByTagName('h2') as $title) {
-            if ($title instanceof \Dom\Element === false) {
-                continue;
-            }
-
             if ($title->getAttribute('class') !== 'SummaryHL') {
                 continue;
             }
 
             $item = [];
-
             $cat = $title->previousSibling;
             $cat = $this->jumpToPreviousTag($cat);
 

@@ -85,8 +85,7 @@ final class FlareSolverrProxy extends ProxyAbstract
         }
 
         $maxRetries = 2;
-        $attempt = 0;
-        while (++$attempt <= $maxRetries) {
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
             try {
                 $response = $this->request('POST', $this->apiUrl, $payload);
 
@@ -112,8 +111,6 @@ final class FlareSolverrProxy extends ProxyAbstract
                 }
             }
         }
-
-        throwServerException('Failed to fetch HTML after retries');
     }
 
     private function calculateWaitTime(string $url, array $options): int
@@ -259,8 +256,7 @@ final class FlareSolverrProxy extends ProxyAbstract
         }
 
         $maxRetries = 2;
-        $attempt = 0;
-        while (++$attempt <= $maxRetries) {
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
             try {
                 $response = $this->request('POST', $this->apiUrl, $payload);
 
@@ -310,7 +306,5 @@ final class FlareSolverrProxy extends ProxyAbstract
                 }
             }
         }
-
-        throwServerException('Failed to fetch binary after retries');
     }
 }
