@@ -39,6 +39,9 @@
             <?php endforeach; ?>
         <?php endif; ?>
 
+        <?php /* Unified notification system v2 (lib/notifications.php) — parallel to legacy messages above */ ?>
+        <?= raw(render_notifications()) ?>
+
         <?= raw($page) ?>
     </div>
 </body>

@@ -36,6 +36,7 @@
             "lib/contents.php",
             "lib/http.php",
             "lib/logger.php",
+            "lib/notifications.php",
             "quirks/template.php",
             "quirks/html.php",
             "quirks/srcset.php",
