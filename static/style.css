@@ -28,6 +28,12 @@
     --md-warning-container: #FFE9A6;
     --md-on-warning-container: #3D2200;
 
+    /* Info (blue) — used by the unified notification system */
+    --md-info: #1976D2;
+    --md-on-info: #FFFFFF;
+    --md-info-container: #D6E4FF;
+    --md-on-info-container: #002A5C;
+
     --md-surface: #FFF8F5;
     --md-surface-dim: #E8DDD8;
     --md-surface-bright: #FFF8F5;
@@ -95,6 +101,11 @@
         --md-on-warning: #3F2800;
         --md-warning-container: #453000;
         --md-on-warning-container: #FFE1A0;
+
+        --md-info: #64B5F6;
+        --md-on-info: #00305F;
+        --md-info-container: #00457A;
+        --md-on-info-container: #CFE4FF;
 
         --md-surface: #120D0B;
         --md-surface-dim: #120D0B;
@@ -314,6 +325,159 @@ header img:hover {
     border-radius: var(--md-shape-md);
     text-align: center;
     transition: all var(--md-motion-duration-medium) var(--md-motion-easing-standard);
+}
+
+/* ==========================================================================
+   Unified notification system (lib/notifications.php) — v2, parallel to the
+   legacy .alert-* classes above. Do not remove the legacy rules until the
+   migration is complete.
+   ========================================================================== */
+
+.notifications {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.notification {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+    border-radius: var(--md-shape-md);
+    border-left: 4px solid transparent;
+    text-align: left;
+    box-shadow: var(--md-elevation-1);
+    transition: all var(--md-motion-duration-medium) var(--md-motion-easing-standard);
+}
+
+.notification-icon {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--md-shape-full);
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.notification-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.notification-title {
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.notification-body {
+    font-weight: 500;
+}
+
+.notification-body a,
+.notification a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.notification-author {
+    font-size: 0.8rem;
+    font-weight: 400;
+    opacity: 0.75;
+    font-style: italic;
+}
+
+.notification-author::before {
+    content: "— ";
+}
+
+.notification-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+.notification-button {
+    display: inline-block;
+    padding: 8px 16px;
+    border: none;
+    border-radius: var(--md-shape-full);
+    font-family: inherit;
+    font-size: var(--md-typescale-label-size);
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: box-shadow var(--md-motion-duration-short) var(--md-motion-easing-standard);
+}
+
+.notification-button:hover {
+    box-shadow: var(--md-elevation-2);
+}
+
+.notification-form {
+    display: inline;
+    margin: 0;
+}
+
+/* Info — blue */
+.notification-info {
+    background-color: var(--md-info-container);
+    color: var(--md-on-info-container);
+    border-left-color: var(--md-info);
+}
+
+.notification-info .notification-icon {
+    background-color: var(--md-info);
+    color: var(--md-on-info);
+}
+
+.notification-info .notification-button {
+    background-color: var(--md-info);
+    color: var(--md-on-info);
+}
+
+/* Warning — yellow */
+.notification-warning {
+    background-color: var(--md-warning-container);
+    color: var(--md-on-warning-container);
+    border-left-color: var(--md-warning);
+}
+
+.notification-warning .notification-icon {
+    background-color: var(--md-warning);
+    color: var(--md-on-warning);
+}
+
+.notification-warning .notification-button {
+    background-color: var(--md-warning);
+    color: var(--md-on-warning);
+}
+
+/* Error — red */
+.notification-error {
+    background-color: var(--md-error-container);
+    color: var(--md-on-error-container);
+    border-left-color: var(--md-error);
+}
+
+.notification-error .notification-icon {
+    background-color: var(--md-error);
+    color: var(--md-on-error);
+}
+
+.notification-error .notification-button {
+    background-color: var(--md-error);
+    color: var(--md-on-error);
 }
 
 section:not(.footer):not(.feeditem) {
