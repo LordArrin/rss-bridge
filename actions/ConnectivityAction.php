@@ -31,12 +31,12 @@ final class ConnectivityAction implements ActionInterface
         }
 
         $bridgeName = $request->get('bridge');
-        if ($bridgeName === false) {
+        if ($bridgeName === null || $bridgeName === '') {
             return new Response(render_template('connectivity.html.php'));
         }
 
         $bridgeClassName = $this->bridgeFactory->createBridgeClassName($bridgeName);
-        if ($bridgeClassName === false) {
+        if ($bridgeClassName === null) {
             return new Response('Bridge not found', 404);
         }
 

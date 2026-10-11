@@ -17,8 +17,6 @@ final class BookMyShowBridge extends BridgeAbstract
     public const CACHE_TIMEOUT = 10800;
 
     private const TIMEZONE = 'Asia/Kolkata';
-    private const PLAYS = 'PL';
-    private const EVENTS = 'CT';
     private const MOVIES = 'MT';
 
     private const MOVIES_IMAGE_BASE_FORMAT = 'https://in.bmscdn.com/iedb/movies/images/mobile/thumbnail/large/%s.jpg';
@@ -386,7 +384,12 @@ final class BookMyShowBridge extends BridgeAbstract
         $headers = ['EventLanguage', 'EventDimension'];
         $booleanHeaders = ['EventIsAtmosEnabled', 'IsMovieClubEnabled'];
 
-        $items = [];
+        $items = [
+            'EventLanguage' => [],
+            'EventDimension' => [],
+            'EventIsAtmosEnabled' => [],
+            'IsMovieClubEnabled' => [],
+        ];
 
         foreach ($data as $row) {
             if (is_array($row) === false) {
@@ -402,7 +405,7 @@ final class BookMyShowBridge extends BridgeAbstract
         }
 
         foreach ($headers as $header) {
-            $items[$header] = array_values(array_unique($items[$header] ?? []));
+            $items[$header] = array_values(array_unique($items[$header]));
 
             if ($header === 'EventLanguage') {
                 $this->languages = $items[$header];
@@ -412,20 +415,16 @@ final class BookMyShowBridge extends BridgeAbstract
         $html = '';
 
         foreach ($headers as $header) {
-            if (isset(self::INNER_MOVIE_HEADERS[$header]) === true) {
-                $values = implode(', ', $items[$header] ?? []);
-                $label = htmlspecialchars(self::INNER_MOVIE_HEADERS[$header], ENT_QUOTES, 'UTF-8');
-                $html .= '<strong>' . $label . ':</strong> ' . htmlspecialchars($values, ENT_QUOTES, 'UTF-8') . '<br>';
-            }
+            $values = implode(', ', $items[$header]);
+            $label = htmlspecialchars(self::INNER_MOVIE_HEADERS[$header], ENT_QUOTES, 'UTF-8');
+            $html .= '<strong>' . $label . ':</strong> ' . htmlspecialchars($values, ENT_QUOTES, 'UTF-8') . '<br>';
         }
 
         foreach ($booleanHeaders as $header) {
-            if (isset(self::INNER_MOVIE_HEADERS[$header]) === true) {
-                $hasYes = in_array('Y', $items[$header] ?? [], true);
-                if ($hasYes === true) {
-                    $label = htmlspecialchars(self::INNER_MOVIE_HEADERS[$header], ENT_QUOTES, 'UTF-8');
-                    $html .= '<strong>' . $label . ':</strong> Yes<br>';
-                }
+            $hasYes = in_array('Y', $items[$header], true);
+            if ($hasYes === true) {
+                $label = htmlspecialchars(self::INNER_MOVIE_HEADERS[$header], ENT_QUOTES, 'UTF-8');
+                $html .= '<strong>' . $label . ':</strong> Yes<br>';
             }
         }
 

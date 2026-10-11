@@ -186,7 +186,7 @@ function media_embed_fetch_binary(
         }
     }
 
-    if ($logger !== null && $lastException !== null) {
+    if ($logger !== null) {
         $logger->warning(sprintf(
             'media_embed_fetch_binary exhausted retries for %s: %s',
             $url,

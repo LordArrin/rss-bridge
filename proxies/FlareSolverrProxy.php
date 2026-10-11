@@ -85,7 +85,11 @@ final class FlareSolverrProxy extends ProxyAbstract
         }
 
         $maxRetries = 2;
-        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+        $attempt = 0;
+
+        while (true) {
+            $attempt++;
+
             try {
                 $response = $this->request('POST', $this->apiUrl, $payload);
 
@@ -95,7 +99,7 @@ final class FlareSolverrProxy extends ProxyAbstract
 
                 return (string)$response['solution']['response'];
             } catch (\Exception $e) {
-                if ($attempt === $maxRetries) {
+                if ($attempt >= $maxRetries) {
                     throwServerException($e->getMessage());
                 }
 
@@ -256,7 +260,11 @@ final class FlareSolverrProxy extends ProxyAbstract
         }
 
         $maxRetries = 2;
-        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+        $attempt = 0;
+
+        while (true) {
+            $attempt++;
+
             try {
                 $response = $this->request('POST', $this->apiUrl, $payload);
 
@@ -288,7 +296,7 @@ final class FlareSolverrProxy extends ProxyAbstract
 
                 return ['body' => $body, 'type' => $type];
             } catch (\Exception $e) {
-                if ($attempt === $maxRetries) {
+                if ($attempt >= $maxRetries) {
                     throwServerException($e->getMessage());
                 }
 

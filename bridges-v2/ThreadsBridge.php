@@ -32,13 +32,12 @@ final class ThreadsBridge extends BridgeAbstract
         ],
     ];
 
-    private const POST_CACHE_TIMEOUT = 15778800;
     private const THREAD_CODE_LENGTH = 11;
     private const USERNAME_REGEX = '/^(https?:\/\/)?(www\.)?threads\.net\/(@)?([^\/?\n]+)/';
 
     private ?string $feedName = null;
 
-    public function getName()
+    public function getName(): string
     {
         if ($this->feedName !== null && $this->feedName !== '') {
             return $this->feedName;
@@ -54,18 +53,16 @@ final class ThreadsBridge extends BridgeAbstract
         }
 
         if (preg_match(self::USERNAME_REGEX, $url, $matches) === 1) {
-            if (isset($matches[4]) === true && $matches[4] !== '') {
-                return [
-                    'context' => 'By username',
-                    'u' => urldecode($matches[4]),
-                ];
-            }
+            return [
+                'context' => 'By username',
+                'u' => urldecode($matches[4]),
+            ];
         }
 
         return null;
     }
 
-    public function getURI()
+    public function getURI(): string
     {
         $username = $this->getInput('u');
         if ($username !== null && $username !== '') {
@@ -75,7 +72,7 @@ final class ThreadsBridge extends BridgeAbstract
         return parent::getURI();
     }
 
-    public function collectData()
+    public function collectData(): void
     {
         $html = getContents($this->getURI());
 
@@ -199,7 +196,7 @@ final class ThreadsBridge extends BridgeAbstract
                 }
             }
 
-            if (isset($postData['taken_at']) === true && $postData['taken_at'] !== null) {
+            if (isset($postData['taken_at']) === true) {
                 $item['timestamp'] = (int)$postData['taken_at'];
             }
 

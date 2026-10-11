@@ -116,13 +116,13 @@ EOD;
             throwServerException('Invalid GraphQL response: missing data field');
         }
 
-        if (isset($data->data->user) === false || $data->data->user === null) {
+        if (isset($data->data->user) === false) {
             throwClientException(sprintf('Unable to find channel `%s`', e($channel)));
         }
 
         $user = $data->data->user;
 
-        if (isset($user->videos) === false || $user->videos === null) {
+        if (isset($user->videos) === false) {
             return;
         }
 
@@ -169,7 +169,7 @@ EOD;
             }
         }
 
-        if (isset($video->game) === true && $video->game !== null) {
+        if (isset($video->game) === true) {
             if (isset($video->game->displayName) === true) {
                 $categories[] = (string)$video->game->displayName;
             }
@@ -239,7 +239,7 @@ EOD;
         $html = '<p><b>Played games:</b><ul>';
 
         $momentEdges = [];
-        if (isset($video->moments) === true && $video->moments !== null) {
+        if (isset($video->moments) === true) {
             if (isset($video->moments->edges) === true && is_array($video->moments->edges) === true) {
                 $momentEdges = $video->moments->edges;
             }
@@ -268,7 +268,7 @@ EOD;
             }
         } else {
             $gameName = 'No Game';
-            if (isset($video->game) === true && $video->game !== null) {
+            if (isset($video->game) === true) {
                 if (isset($video->game->displayName) === true) {
                     $gameName = (string)$video->game->displayName;
                 }

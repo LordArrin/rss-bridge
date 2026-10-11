@@ -101,9 +101,7 @@ final class Configuration
 
         $timezone = self::getConfig('system', 'timezone');
         $timezoneList = timezone_identifiers_list(\DateTimeZone::ALL_WITH_BC);
-        if ($timezoneList === false) {
-            $timezoneList = [];
-        }
+
         if (is_string($timezone) === false || in_array($timezone, $timezoneList, true) === false) {
             self::throwConfigError('system', 'timezone', 'Is not a valid timezone');
         }

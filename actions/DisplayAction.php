@@ -43,16 +43,16 @@ final class DisplayAction implements ActionInterface
         $bridgeName = $request->get('bridge');
         $format = $request->get('format');
 
-        if ($bridgeName === false || $bridgeName === null || $bridgeName === '') {
+        if ($bridgeName === null || $bridgeName === '') {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Missing bridge name parameter']), 400);
         }
 
         $bridgeClassName = $this->bridgeFactory->createBridgeClassName($bridgeName);
-        if ($bridgeClassName === false || $bridgeClassName === null || $bridgeClassName === '') {
+        if ($bridgeClassName === null) {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Bridge not found']), 404);
         }
 
-        if ($format === false || $format === null || $format === '') {
+        if ($format === null || $format === '') {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'You must specify a format']), 400);
         }
 
@@ -67,9 +67,6 @@ final class DisplayAction implements ActionInterface
 
         $bridge = $this->safeLoader->createSafely($bridgeClassName);
 
-        // Broken stubs cannot produce data. Fail fast with a plain error
-        // response and skip both cache layers entirely so the request is
-        // retried immediately after a deployment fix (no negative caching).
         if ($this->safeLoader->isBridgeBroken($bridge) === true) {
             $message = sprintf('The bridge "%s" failed to load: %s', $bridgeName, $bridge->getDescription());
             $this->logger->error(sprintf('Broken bridge stub returned for "%s"', $bridgeName));
@@ -86,8 +83,6 @@ final class DisplayAction implements ActionInterface
             } else {
                 $ttl = $bridge->getCacheTimeout();
             }
-            // Honour "do not cache" semantics: timeout 0 means the entry
-            // must never be persisted (also enforced inside the caches).
             if ((int) $ttl > 0) {
                 $this->cache->set($cacheKey, $response, (int) $ttl);
             }
@@ -125,11 +120,6 @@ final class DisplayAction implements ActionInterface
                 $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
                 return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), 429);
             } elseif ($e instanceof HttpException) {
-                // Any upstream HTTP status (4xx/5xx) is a real, meaningful
-                // answer: pass it through instead of collapsing everything
-                // except 429/503 into a generic 500. RSS readers treat an
-                // honest 403/404/410 differently from a server crash and
-                // recover without aggressive backoff when the upstream heals.
                 $code = $e->getCode();
                 if ($code >= 400 && $code <= 599) {
                     $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
@@ -250,7 +240,7 @@ final class DisplayAction implements ActionInterface
                 implode(', @', $maintainers),
             ),
             'labels' => 'Bridge-Broken',
-            'assignee' => $maintainer[0],
+            'assignee' => $maintainers[0] ?? 'unknown',
         ];
 
         return 'https://github.com/LordArrin/rss-bridge/issues/new?' . http_build_query($query);

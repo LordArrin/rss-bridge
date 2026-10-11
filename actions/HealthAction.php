@@ -73,9 +73,7 @@ final class HealthAction implements ActionInterface
             $retrieved = $this->cache->get($testKey);
             $getLatency = round((microtime(true) - $startGet) * 1000, 2);
 
-            if (method_exists($this->cache, 'delete') === true) {
-                $this->cache->delete($testKey);
-            }
+            $this->cache->delete($testKey);
 
             $result = [
                 'status' => 'ok',

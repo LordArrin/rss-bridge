@@ -41,11 +41,7 @@ final class YouTubeCommunityTabBridge extends BridgeAbstract
     private const URL_REGEX = '/youtube\.com\/(channel|user|c)\/([\w]+)\/posts/';
     private const JSON_REGEX = '/var ytInitialData = ([^<]*);<\/script>/';
 
-    /**
-     * @param string $url
-     * @return array|null
-     */
-    public function detectParameters($url)
+    public function detectParameters($url): ?array
     {
         if (is_string($url) === false) {
             return null;
@@ -58,7 +54,7 @@ final class YouTubeCommunityTabBridge extends BridgeAbstract
                     'channel' => $matches[2],
                 ];
             }
-            if ($matches[1] === 'user' || $matches[1] === 'c') {
+            if (in_array($matches[1], ['user', 'c'], true) === true) {
                 return [
                     'context' => 'By username',
                     'username' => $matches[2],
@@ -68,7 +64,7 @@ final class YouTubeCommunityTabBridge extends BridgeAbstract
         return null;
     }
 
-    public function collectData()
+    public function collectData(): void
     {
         $username = $this->getInput('username');
         $channel = $this->getInput('channel');
@@ -147,7 +143,7 @@ final class YouTubeCommunityTabBridge extends BridgeAbstract
         }
     }
 
-    public function getURI()
+    public function getURI(): string
     {
         if ($this->feedUrl !== '') {
             return $this->feedUrl;
@@ -155,7 +151,7 @@ final class YouTubeCommunityTabBridge extends BridgeAbstract
         return parent::getURI();
     }
 
-    public function getName()
+    public function getName(): string
     {
         if ($this->feedName !== '') {
             return $this->feedName . ' - YouTube Posts Tab';
@@ -186,7 +182,7 @@ final class YouTubeCommunityTabBridge extends BridgeAbstract
     {
         $tabs = $json->contents->twoColumnBrowseResultsRenderer->tabs ?? [];
         foreach ($tabs as $tab) {
-            $url = $tab->tabRenderer?->endpoint?->commandMetadata?->webCommandMetadata?->url ?? '';
+            $url = $tab->tabRenderer?->endpoint?->commandMetadata?->webCommandMetadata->url ?? '';
             if (is_string($url) === true && str_ends_with($url, 'posts') === true) {
                 return true;
             }
@@ -198,7 +194,7 @@ final class YouTubeCommunityTabBridge extends BridgeAbstract
     {
         $tabs = $json->contents->twoColumnBrowseResultsRenderer->tabs ?? [];
         foreach ($tabs as $tab) {
-            $url = $tab->tabRenderer?->endpoint?->commandMetadata?->webCommandMetadata?->url ?? '';
+            $url = $tab->tabRenderer?->endpoint?->commandMetadata?->webCommandMetadata->url ?? '';
             if (is_string($url) === true && str_ends_with($url, 'posts') === true) {
                 return $tab->tabRenderer->content->sectionListRenderer->contents[0]->itemSectionRenderer->contents ?? null;
             }
@@ -210,7 +206,7 @@ final class YouTubeCommunityTabBridge extends BridgeAbstract
     {
         $text = '';
         foreach ($runs as $part) {
-            $url = $part->navigationEndpoint->browseEndpoint->canonicalBaseUrl ?? $part->navigationEndpoint->urlEndpoint->url ?? $part->navigationEndpoint->commandMetadata?->webCommandMetadata?->url ?? null;
+            $url = $part->navigationEndpoint->browseEndpoint->canonicalBaseUrl ?? $part->navigationEndpoint->urlEndpoint->url ?? $part->navigationEndpoint->commandMetadata?->webCommandMetadata->url ?? null;
 
             $text .= $this->formatUrls((string)($part->text ?? ''), $url);
         }

@@ -226,30 +226,19 @@ final class MemcachedCache implements CacheInterface
         $cacheKey = $this->createCacheKey($key);
         $now = time();
 
-        // Calculate fresh period
         $freshUntil = $ttl === null ? 0 : $now + $ttl;
 
-        // Absolute expiry timestamp for the memcached server. The server only
-        // understands absolute unix timestamps, which keeps long-lived entries
-        // (e.g. bridge metadata with a 30-day TTL) from being re-interpreted as
-        // a relative TTL of ~1970 when it exceeds the 30-day boundary.
         $serverExpiresAt = match (true) {
-            $ttl === null => 0, // 0 means "never expire" in memcached
-            $freshUntil <= $now => 1, // expired immediately: store for 1 second
+            $ttl === null => 0,
+            $freshUntil <= $now => 1,
             default => $freshUntil + self::DEFAULT_STALE_TTL,
         };
 
         $storeValue = $value;
         $chunkKeys = [];
 
-        // The memcached protocol caps a single item at 1 MB regardless of the
-        // server's -I setting. Values larger than the effective limit are
-        // serialized and split into chunks stored under secondary keys.
-        // Chunks are stored as raw strings with compression disabled:
-        // zlib on arbitrary byte slices can inflate instead of deflate, and
-        // the payload is already compressed once at the metadata level.
-        $encoded = @serialize($value);
-        if ($encoded !== false && strlen($encoded) > $this->chunkSize) {
+        $encoded = serialize($value);
+        if (strlen($encoded) > $this->chunkSize) {
             $parts = str_split($encoded, $this->chunkSize);
 
             if (count($parts) > $this->maxChunks) {
@@ -282,17 +271,12 @@ final class MemcachedCache implements CacheInterface
                 return;
             }
 
-            // Metadata holds only the chunk key list, never the payload itself.
             $storeValue = [
                 'value'  => null,
                 'chunks' => $chunkKeys,
             ];
         }
 
-        // Wrap value with metadata for Stale-while-revalidate.
-        // 'expires_at' is informational only: reads decide freshness via
-        // 'fresh_until', and actual removal is handled by memcached itself
-        // using $serverExpiresAt above.
         $item = [
             'value'       => $storeValue,
             'fresh_until' => $freshUntil,
@@ -300,13 +284,12 @@ final class MemcachedCache implements CacheInterface
         ];
 
         if ($this->conn->set($cacheKey, $item, $serverExpiresAt) === false) {
-            // Clean up orphaned chunks if the metadata write failed
             if ($chunkKeys !== []) {
                 foreach ($chunkKeys as $chunkKey) {
                     $this->conn->delete($chunkKey);
                 }
             }
-            $this->logStoreFailure($cacheKey, strlen((string) @serialize($item)));
+            $this->logStoreFailure($cacheKey, strlen(serialize($item)));
         }
     }
 
@@ -350,7 +333,7 @@ final class MemcachedCache implements CacheInterface
             return null;
         }
 
-        if ($values === false || count($values) !== count($chunkKeys)) {
+        if (is_array($values) === false || count($values) !== count($chunkKeys)) {
             // At least one chunk was evicted before the metadata expired
             return null;
         }

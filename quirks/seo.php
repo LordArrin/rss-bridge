@@ -114,7 +114,6 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
     foreach ($meta_mappings as $property => $field_list) {
         foreach ($field_list as $field) {
             // Look for HTML meta tag
-            $elements = null;
             if ($field === 'canonical') {
                 $elements = $html->querySelectorAll('link[rel="canonical"]');
             } elseif ($field === 'time') {
@@ -124,7 +123,7 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
             }
 
             // Found something? Extract the value and populate Entry field
-            if ($elements !== null && $elements->length > 0) {
+            if ($elements->length > 0) {
                 $element = $elements->item(0);
                 $field_value = '';
                 if ($field === 'canonical') {
