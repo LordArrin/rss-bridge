@@ -1,21 +1,19 @@
 <?php
 
-declare(strict_types=1);
-
 /**
  * Unified notification system (v2).
  *
  * A standalone, self-contained API for producing styled notifications in the
  * web interface. It is designed to run *in parallel* with the legacy
  * "messages" mechanism (templates/base.html.php + alert-info/warning/error),
- * so existing code keeps working untouched until the migration happens.
+ * so existing code keeps working untouched until the migration is complete.
  *
  * Types:
  *   - info    -> blue
  *   - warning -> yellow
  *   - error   -> red
  *
- * Each notification supports: title, body text (with hyperlinks), author and
+ * Each notification supports: title, body text (with hyperlinks), author, and
  * a list of buttons (rendered as links or forms).
  *
  * Usage from other code:
@@ -23,7 +21,7 @@ declare(strict_types=1);
  *      body, title, author, buttons, links):
  *        notify_info('Feed updated', 'Status', null, [], [
  *            ['label' => 'docs', 'url' => 'https://example.org'],
- *        ]); // body may contain {0} -> replaced with the first link
+ *        ]);
  *        notify_warning('Slow down', 'Rate limit', 'system', [
  *            ['label' => 'Retry', 'url' => './'],
  *        ]);
@@ -36,10 +34,12 @@ declare(strict_types=1);
  *        echo render_notification($items[0]);
  *
  * Loading mechanism: registered in composer.json "files" autoload, so the
- * functions are available globally without any require.
+ * functions are available globally without any explicit require.
  */
 
-/** @var array<int, array<string, mixed>> Internal storage for pending notifications. */
+declare(strict_types=1);
+
+// Internal storage for pending notifications.
 $GLOBALS['__notifications'] = $GLOBALS['__notifications'] ?? [];
 
 /**
@@ -85,7 +85,7 @@ function build_notification(
     array $links = []
 ): array {
     $type = strtolower($type);
-    if (!array_key_exists($type, notification_types())) {
+    if (array_key_exists($type, notification_types()) === false) {
         // Unknown types degrade gracefully to "info" instead of throwing.
         $type = 'info';
     }
@@ -179,28 +179,27 @@ function notification_safe_url(string $url): ?string
  */
 function notification_body_html(string $body, array $links): string
 {
-    // Escape everything first, then replace escaped placeholders "&#123;0&#125;"? No:
     // htmlspecialchars does not escape curly braces, so placeholders survive escaping.
     $escaped = htmlspecialchars($body, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
-    return preg_replace_callback('/\{(\d+)\}/', function (array $m) use ($escaped, $links): string {
-        $index = (int) $m[1];
-        if (!isset($links[$index]) || !is_array($links[$index])) {
-            return $m[0]; // leave unknown placeholder as-is
-        }
-        $link = $links[$index];
-        $url = notification_safe_url((string) ($link['url'] ?? ''));
-        $label = htmlspecialchars((string) ($link['label'] ?? $url ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        if ($url === null) {
-            return $label; // unsafe URL: render label as plain text
-        }
-        $safeUrl = htmlspecialchars($url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        return sprintf(
-            '<a href="%s" target="_blank" rel="noopener noreferrer nofollow">%s</a>',
-            $safeUrl,
-            $label
-        );
-    }, $escaped) ?? $escaped;
+        return preg_replace_callback('/\{(\d+)\}/', function (array $m) use ($links): string {
+            $index = (int) $m[1];
+            if (isset($links[$index]) === false || is_array($links[$index]) === false) {
+                return $m[0]; // leave unknown placeholder as-is
+            }
+            $link = $links[$index];
+            $url = notification_safe_url((string) ($link['url'] ?? ''));
+            $label = htmlspecialchars((string) ($link['label'] ?? $url ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            if ($url === null) {
+                return $label; // unsafe URL: render label as plain text
+            }
+            $safeUrl = htmlspecialchars($url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            return sprintf(
+                '<a href="%s" target="_blank" rel="noopener noreferrer nofollow">%s</a>',
+                $safeUrl,
+                $label
+            );
+        }, $escaped) ?? $escaped;
 }
 
 /**
@@ -226,7 +225,7 @@ function render_notification(array $n): string
 
     $html .= '<div class="notification-content">';
 
-    if (!empty($n['title'])) {
+    if (empty($n['title']) === false) {
         $html .= sprintf('<strong class="notification-title">%s</strong>', e((string) $n['title']));
     }
 
@@ -235,17 +234,19 @@ function render_notification(array $n): string
         notification_body_html((string) ($n['body'] ?? ''), (array) ($n['links'] ?? []))
     );
 
-    if (!empty($n['author'])) {
+    if (empty($n['author']) === false) {
         $html .= sprintf('<span class="notification-author">%s</span>', e((string) $n['author']));
     }
 
     $html .= '</div>'; // .notification-content
 
     $buttons = (array) ($n['buttons'] ?? []);
-    if ($buttons !== []) {
+    if ($buttons === []) {
+        // No buttons to render.
+    } else {
         $html .= '<div class="notification-actions">';
         foreach ($buttons as $button) {
-            if (!is_array($button)) {
+            if (is_array($button) === false) {
                 continue;
             }
             $label = htmlspecialchars((string) ($button['label'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -275,12 +276,12 @@ function render_notification(array $n): string
                 $html .= sprintf(
                     '<a href="%s" class="notification-button"%s>%s</a>',
                     $safeUrl,
-                    str_starts_with($safeUrl, 'http') ? ' target="_blank" rel="noopener noreferrer"' : '',
+                    str_starts_with($safeUrl, 'http') === true ? ' target="_blank" rel="noopener noreferrer"' : '',
                     $label
                 );
             }
         }
-        $html .= '</div>';
+        $html .= '</div>'; // .notification-actions
     }
 
     $html .= '</div>'; // .notification
@@ -300,7 +301,7 @@ function render_notifications(bool $clear = true): string
     if ($items === []) {
         return '';
     }
-    if ($clear) {
+    if ($clear === true) {
         clear_notifications();
     }
 

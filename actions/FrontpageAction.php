@@ -38,7 +38,7 @@ final class FrontpageAction implements ActionInterface
         // Notifications from SafeBridgeLoader / BridgeFactory (unified system v2)
         foreach ($this->bridgeFactory->getMissingEnabledBridges() as $missingEnabledBridge) {
             notify_warning(
-                sprintf('Bridge "{0}" is enabled in configuration but was not found and cannot be used.', $missingEnabledBridge),
+                sprintf('Bridge "%s" is enabled in configuration but was not found and cannot be used.', $missingEnabledBridge),
                 'Bridge not found',
                 'SafeBridgeLoader',
                 [],
@@ -72,19 +72,19 @@ final class FrontpageAction implements ActionInterface
         foreach ($this->safeLoader->getBrokenBridges() as $brokenName => $brokenInfo) {
             notify_error(
                 sprintf(
-                    'Bridge "{0}" failed to load and has been disabled. Reason: %s',
+                    'Bridge "%s" failed to load and has been disabled. Reason: %s',
+                    (string) $brokenName,
                     $brokenInfo['message'] ?? 'Unknown error'
                 ),
                 'Broken bridge',
                 'SafeBridgeLoader',
                 [],
                 [[
-                    'label' => $this->bridgeFactory->getShortClassName((string) $brokenName),
-                    'url'   => './?action=list',
+                'label' => $this->bridgeFactory->getShortClassName((string) $brokenName),
+                'url'   => './?action=list',
                 ]]
             );
         }
-
         $response = new Response(render(__DIR__ . '/../templates/frontpage.html.php', [
         'admin_email'       => Configuration::getConfig('admin', 'email'),
         'admin_telegram'    => Configuration::getConfig('admin', 'telegram'),

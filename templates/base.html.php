@@ -12,6 +12,7 @@
     <link rel="icon" type="image/png" href="static/favicon.png?<?= filemtime(__DIR__ . '/../static/favicon.png') ?>">
     <script src="static/rss-bridge.js?<?= filemtime(__DIR__ . '/../static/rss-bridge.js') ?>" defer></script>
     <script>
+        // Check for saved favorites to prevent layout shift during JS initialization
         (function() {
             try {
                 var favorites = JSON.parse(localStorage.getItem('rssbridge_favorites') || '[]');
@@ -31,6 +32,7 @@
             </a>
         </header>
 
+        <!-- Legacy notification system (to be deprecated after full migration) -->
         <?php if (!empty($messages)): ?>
             <?php foreach ($messages as $message): ?>
                 <div class="alert-<?= raw($message['level'] ?? 'info') ?>" role="alert">
@@ -39,9 +41,10 @@
             <?php endforeach; ?>
         <?php endif; ?>
 
-        <?php /* Unified notification system v2 (lib/notifications.php) — parallel to legacy messages above */ ?>
+        <!-- Unified notification system v2 (lib/notifications.php) -->
         <?= raw(render_notifications()) ?>
 
+        <!-- Main page content (e.g., frontpage.html.php with bridge cards) -->
         <?= raw($page) ?>
     </div>
 </body>
