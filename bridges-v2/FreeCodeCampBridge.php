@@ -19,7 +19,7 @@ final class FreeCodeCampBridge extends FeedExpander
         $this->collectExpandableDatas('https://www.freecodecamp.org/news/rss/', 15);
     }
 
-    protected function parseItem(array $item): array|false
+    protected function parseItem(array $item): array
     {
         $html = getContents($item['uri']);
         if ($html === '') {

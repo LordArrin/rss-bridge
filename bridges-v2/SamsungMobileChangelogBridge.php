@@ -104,10 +104,6 @@ final class SamsungMobileChangelogBridge extends BridgeAbstract
         $item = [];
 
         foreach ($container->children as $element) {
-            if ($element instanceof \Dom\Element === false) {
-                continue;
-            }
-
             $nodeName = strtolower($element->nodeName);
 
             if ($nodeName === 'hr') {

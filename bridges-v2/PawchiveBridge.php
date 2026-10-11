@@ -52,18 +52,6 @@ final class PawchiveBridge extends BridgeAbstract
         ],
     ]];
 
-    private const array ALL_SERVICES = [
-        'Pixiv Fanbox' => 'fanbox',
-        'Patreon' => 'patreon',
-        'Fantia' => 'fantia',
-        'Boosty' => 'boosty',
-        'Gumroad' => 'gumroad',
-        'SubscribeStar' => 'subscribestar',
-        'OnlyFans' => 'onlyfans',
-        'Discord' => 'discord',
-        'Fansly' => 'fansly',
-    ];
-
     private const array ACTIVE_SERVICES = [
         'Pixiv Fanbox' => 'fanbox',
         'Patreon' => 'patreon',
@@ -665,7 +653,7 @@ final class PawchiveBridge extends BridgeAbstract
 
         throwServerException(sprintf(
             'All Pawchive mirrors failed. Last error: %s',
-            ($lastException !== null) === true ? $lastException->getMessage() : 'unknown'
+            $lastException->getMessage()
         ));
     }
 

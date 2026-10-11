@@ -17,7 +17,6 @@ final class IXBTGamesBridge extends BridgeAbstract
     private const CSS_IMG = 'display: block; margin: 16px 0; max-width: 1600px; height: auto;';
     private const CSS_UL = 'list-style-type: disc; margin: 16px 0 16px 24px; padding: 0;';
     private const CSS_LI = 'margin: 8px 0;';
-    private const CSS_TEXT = 'text-align: left;';
 
     public const PARAMETERS = [
         [

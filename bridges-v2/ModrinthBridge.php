@@ -18,15 +18,15 @@ final class ModrinthBridge extends BridgeAbstract
     public const CACHE_TIMEOUT = 3600;
 
     private const CSS = [
-    'block_wrap' => 'margin: 16px 0; padding: 12px 16px; font-family: Arial, sans-serif; font-size: 13px;',
-    'compat_border' => 'border-left: 4px solid #d4a574;',
-    'changes_border' => 'border-left: 4px solid #c9b96e;',
-    'block_title' => 'margin: 0 0 10px 0; font-size: 15px; font-weight: bold;',
-    'compat_item' => 'margin: 4px 0;',
-    'compat_label' => 'font-weight: bold;',
-    'compat_link' => 'color: #c9956b; text-decoration: none;',
-    'buttons_wrap' => 'margin: 16px 0;',
-    'button' => 'display:inline-block;margin-right:8px;padding:8px 18px;border-radius:4px;color:#fff;text-decoration:none;font-size:13px;font-weight:700;background-color:#d4a574;',
+        'block_wrap' => 'margin: 16px 0; padding: 12px 16px; font-family: Arial, sans-serif; font-size: 13px;',
+        'compat_border' => 'border-left: 4px solid #d4a574;',
+        'changes_border' => 'border-left: 4px solid #c9b96e;',
+        'block_title' => 'margin: 0 0 10px 0; font-size: 15px; font-weight: bold;',
+        'compat_item' => 'margin: 4px 0;',
+        'compat_label' => 'font-weight: bold;',
+        'compat_link' => 'color: #c9956b; text-decoration: none;',
+        'buttons_wrap' => 'margin: 16px 0;',
+        'button' => 'display:inline-block;margin-right:8px;padding:8px 18px;border-radius:4px;color:#fff;text-decoration:none;font-size:13px;font-weight:700;background-color:#d4a574;',
     ];
 
     public const PARAMETERS = [
@@ -309,7 +309,7 @@ final class ModrinthBridge extends BridgeAbstract
 
         if (count($items) > 0) {
             $encoded = json_encode($items);
-            return is_string($encoded) === true ? $encoded : null;
+            return $encoded !== false ? $encoded : null;
         }
 
         return null;

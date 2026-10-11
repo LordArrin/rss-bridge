@@ -74,7 +74,7 @@ final class RutubeBridge extends BridgeAbstract
 
     private ?string $title = null;
 
-    public function getURI()
+    public function getURI(): string
     {
         $c = $this->getInput('c');
         $p = $this->getInput('p');
@@ -95,7 +95,7 @@ final class RutubeBridge extends BridgeAbstract
         return parent::getURI();
     }
 
-    public function getName()
+    public function getName(): string
     {
         if ($this->title !== null && $this->title !== '') {
             return $this->title . ' - ' . parent::getName();
@@ -104,7 +104,7 @@ final class RutubeBridge extends BridgeAbstract
         return parent::getName();
     }
 
-    public function collectData()
+    public function collectData(): void
     {
         $c = $this->getInput('c');
         $p = $this->getInput('p');
@@ -116,10 +116,6 @@ final class RutubeBridge extends BridgeAbstract
             $videos = $this->getVideosFromSearchAPI();
         } else {
             $videos = [];
-        }
-
-        if (is_array($videos) === false) {
-            return;
         }
 
         $hideDescription = $this->getInput('hide_description') === true;
@@ -169,10 +165,6 @@ final class RutubeBridge extends BridgeAbstract
         $html = getContents($this->getURI());
         $reduxState = $this->getJSONData($html);
 
-        if (is_object($reduxState) === false) {
-            return [];
-        }
-
         $c = $this->getInput('c');
         $p = $this->getInput('p');
         $s = $this->getInput('s');
@@ -210,10 +202,7 @@ final class RutubeBridge extends BridgeAbstract
             $this->title = 'Поиск ' . (string)$s;
         }
 
-        if (is_array($videos) === true) {
-            return $videos;
-        }
-        return [];
+        return $videos;
     }
 
     private function getVideosFromSearchAPI(): array
@@ -236,7 +225,7 @@ final class RutubeBridge extends BridgeAbstract
         return $json->results;
     }
 
-    private function getJSONData(string $html): ?object
+    private function getJSONData(string $html): object
     {
         if (preg_match(self::REDUX_REGEX, $html, $matches) !== 1) {
             throwServerException('Could not find reduxState');

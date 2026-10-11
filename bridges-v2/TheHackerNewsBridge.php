@@ -159,9 +159,6 @@ final class TheHackerNewsBridge extends BridgeAbstract
     private function fetchArticleContent(string $url, ?string &$author): string
     {
         $articleDom = getSimpleHTMLDOMCached($url, 86400);
-        if ($articleDom === null) {
-            return '';
-        }
 
         $authorSpans = $articleDom->querySelectorAll('span.author');
         if ($authorSpans->length > 0) {
@@ -186,7 +183,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
         $headerImg = $articleBody->querySelector('img');
         if ($headerImg !== null) {
             $parentImg = $headerImg->parentElement;
-            if ($parentImg instanceof \Dom\Element === true) {
+            if ($parentImg !== null) {
                 $parentImg->removeAttribute('style');
             }
         }
@@ -240,7 +237,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
             $img->setAttribute('style', self::IMG_STYLE);
 
             $current = $img->parentElement;
-            while ($current !== null && $current instanceof \Dom\Element === true) {
+            while ($current !== null) {
                 $tagName = strtolower($current->tagName);
 
                 if ($tagName === 'div' || $tagName === 'p' || $tagName === 'article' || $tagName === 'section') {
@@ -255,7 +252,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
             }
 
             $parent = $img->parentElement;
-            if ($parent instanceof \Dom\Element === true) {
+            if ($parent !== null) {
                 $parentTag = strtolower($parent->tagName);
                 if ($parentTag !== 'p' && $parentTag !== 'div' && $parentTag !== 'figure') {
                     $wrapper = $node->ownerDocument?->createElement('div');

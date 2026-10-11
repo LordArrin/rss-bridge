@@ -51,7 +51,7 @@ final class TheGuardianBridge extends FeedExpander
         $this->collectExpandableDatas($url, 10);
     }
 
-    protected function parseItem(array $item): array|false
+    protected function parseItem(array $item): array
     {
         $html = getContents($item['uri']);
         if ($html === '') {

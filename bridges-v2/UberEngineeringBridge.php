@@ -136,21 +136,13 @@ final class UberEngineeringBridge extends BridgeAbstract
 
     private function fetchArticleDescription(string $uri): string
     {
-        try {
-            $html = getContents($uri);
-        } catch (\Exception $e) {
-            return '';
-        }
+        $html = getContents($uri);
 
         if (is_string($html) === false || $html === '') {
             return '';
         }
 
-        try {
-            $dom = \Dom\HTMLDocument::createFromString($html);
-        } catch (\Exception $e) {
-            return '';
-        }
+        $dom = \Dom\HTMLDocument::createFromString($html);
 
         $description = $dom->querySelector('meta[name="description"], meta[property="og:description"]');
         if ($description === null) {

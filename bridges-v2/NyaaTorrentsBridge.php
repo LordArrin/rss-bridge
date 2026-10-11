@@ -113,7 +113,7 @@ final class NyaaTorrentsBridge extends BridgeAbstract
                     $dom = \Dom\HTMLDocument::createFromString($html);
 
                     $descriptionNode = $dom->querySelector('#torrent-description');
-                    $description = $descriptionNode?->innerHTML ?? '';
+                    $description = $descriptionNode !== null ? $descriptionNode->innerHTML : '';
 
                     $decodedDescription = html_entity_decode((string) $description);
                     if (function_exists('markdownToHtml') === true) {
@@ -223,9 +223,7 @@ final class NyaaTorrentsBridge extends BridgeAbstract
             'u' => (string) ($this->getInput('u') ?? ''),
         ];
         $queryString = http_build_query($params);
-        if (is_string($queryString) === false) {
-            $queryString = '';
-        }
+
         return self::URI . '?page=rss&s=id&o=desc&' . $queryString;
     }
 }

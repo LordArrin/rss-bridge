@@ -350,11 +350,6 @@ final class SearchFloorBridge extends BridgeAbstract
         $origW = imagesx($source);
         $origH = imagesy($source);
 
-        if ($origW < 1 || $origH < 1) {
-            imagedestroy($source);
-            return $this->fallbackDataUri($data);
-        }
-
         [$newW, $newH] = $this->calculateDimensions($origW, $origH);
         $resized = imagecreatetruecolor($newW, $newH);
 

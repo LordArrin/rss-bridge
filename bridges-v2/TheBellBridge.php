@@ -20,10 +20,6 @@ final class TheBellBridge extends BridgeAbstract
     private const TIMESTAMP_DIVISOR = 1000;
     private const STORAGE_PATH = '/storage_v';
 
-    private const CSS = [
-        'image' => 'display: block; max-width: 500px; height: auto; margin: 10px 0;',
-    ];
-
     public const PARAMETERS = [[
         'category' => [
             'name' => 'Category',
@@ -54,7 +50,7 @@ final class TheBellBridge extends BridgeAbstract
         'https://thebell.io/' => [],
     ];
 
-    public function getName()
+    public function getName(): string
     {
         $category = $this->getInput('category');
         if ($category !== null && $category !== '') {
@@ -66,7 +62,7 @@ final class TheBellBridge extends BridgeAbstract
         return self::NAME;
     }
 
-    public function collectData()
+    public function collectData(): void
     {
         $limit = (int)$this->getInput('limit');
         $category = $this->getInput('category');
@@ -191,9 +187,7 @@ GQL;
         }
 
         if (preg_match('/^https?:\/\/thebell\.io\/category\/([\w-]+)/i', $url, $m) === 1) {
-            if (isset($m[1]) === true && $m[1] !== '') {
-                return ['category' => $m[1]];
-            }
+            return ['category' => $m[1]];
         }
 
         if (preg_match('/^https?:\/\/thebell\.io(\/|$)/i', $url) === 1) {
@@ -249,7 +243,6 @@ GQL;
             return '';
         }
 
-        // Handle relative URLs in srcset
         $processed = str_replace(self::STORAGE_PATH, self::URI . self::STORAGE_PATH, $content);
 
         return $processed;

@@ -16,19 +16,6 @@ final class WarThunderBridge extends BridgeAbstract
     public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
 
-    private const LANGUAGES = [
-        'English' => 'en',
-        'Deutsch' => 'de',
-        'Русский' => 'ru',
-        'Français' => 'fr',
-        'Español' => 'es',
-        'Português' => 'pt',
-        'Polski' => 'pl',
-        'Čeština' => 'cs',
-        '한국어' => 'ko',
-        '中文' => 'zh',
-    ];
-
     private const IMG_STYLE = 'display: block; float: none; clear: both; max-width: 1600px; width: auto; height: auto; margin: 16px 0 16px 0; padding: 0;';
     private const LIST_STYLE = 'display: block; list-style-type: disc; margin: 16px 0 16px 24px; padding: 0; text-align: left;';
     private const LI_STYLE = 'display: list-item; margin: 4px 0; text-align: left;';

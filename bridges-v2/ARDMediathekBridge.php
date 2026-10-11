@@ -42,15 +42,11 @@ final class ARDMediathekBridge extends BridgeAbstract
 
     private ?string $title = null;
 
-    public function collectData()
+    public function collectData(): void
     {
         $path = (string)$this->getInput('path');
 
         if (preg_match(self::SHOW_ID_PATTERN, $path, $matches) !== 1) {
-            throwClientException('Could not extract show ID');
-        }
-
-        if (isset($matches[1]) === false || $matches[1] === '') {
             throwClientException('Could not extract show ID');
         }
 
@@ -108,7 +104,7 @@ final class ARDMediathekBridge extends BridgeAbstract
         }
     }
 
-    public function getName()
+    public function getName(): string
     {
         if ($this->title !== null && $this->title !== '') {
             return $this->title;

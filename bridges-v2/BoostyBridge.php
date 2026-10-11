@@ -530,19 +530,6 @@ final class BoostyBridge extends BridgeAbstract
         return $total > 0 ? ($counter / $total) * 100.0 : 0.0;
     }
 
-    private function pollVisible(array $poll, int $total): bool
-    {
-        if (empty($poll['isFinished']) === false || empty($poll['showResults']) === false || empty($poll['isResultVisible']) === false) {
-            return true;
-        }
-        foreach ($poll['options'] ?? [] as $o) {
-            if (array_key_exists('fraction', $o) === true || (isset($o['counter']) === true && $o['counter'] > 0)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private function draft(string $content): string
     {
         if ($content === '') {

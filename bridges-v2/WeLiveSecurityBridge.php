@@ -20,7 +20,7 @@ final class WeLiveSecurityBridge extends FeedExpander
         ],
     ];
 
-    protected function parseItem(array $item): array|false
+    protected function parseItem(array $item): array
     {
         try {
             $dom = getSimpleHTMLDOMCached($item['uri']);
@@ -41,7 +41,6 @@ final class WeLiveSecurityBridge extends FeedExpander
             return $item;
         }
 
-        // Remove promotional blockquotes
         foreach ($contentHtml->querySelectorAll('blockquote') as $blockquote) {
             $text = trim($blockquote->textContent ?? '');
             if (str_starts_with($text, 'Connect with us on') === true) {

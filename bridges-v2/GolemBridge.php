@@ -74,7 +74,7 @@ final class GolemBridge extends FeedExpander
         );
     }
 
-    protected function parseItem(array $item): array|false
+    protected function parseItem(array $item): array
     {
         $item['content'] ??= '';
         $uri = $item['uri'];
@@ -260,12 +260,8 @@ final class GolemBridge extends FeedExpander
         return $item;
     }
 
-    /**
-     * Convert relative URLs to absolute URLs for img src and a href attributes
-     */
     private function convertRelativeToAbsoluteLinks(\Dom\HTMLDocument $dom, string $baseUrl): void
     {
-        // Process images
         foreach ($dom->querySelectorAll('img') as $image) {
             $src = $image->getAttribute('src');
             if ($src !== null && $src !== '') {
@@ -273,7 +269,6 @@ final class GolemBridge extends FeedExpander
             }
         }
 
-        // Process anchors
         foreach ($dom->querySelectorAll('a') as $anchor) {
             $href = $anchor->getAttribute('href');
             if ($href !== null && $href !== '') {

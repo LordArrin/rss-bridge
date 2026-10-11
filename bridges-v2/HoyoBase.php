@@ -187,8 +187,8 @@ abstract class HoyoBase extends BridgeAbstract
 
             $style = (string) ($element->getAttribute('style') ?? '');
             if ($style !== '') {
-                $newStyle = preg_replace('/text-align\s*:\s*center\s*;?/i', '', $style);
-                if (is_string($newStyle) === true && $newStyle !== $style) {
+                $newStyle = (string) preg_replace('/text-align\s*:\s*center\s*;?/i', '', $style);
+                if ($newStyle !== $style) {
                     $newStyle = trim($newStyle);
                     if ($newStyle === '') {
                         $element->removeAttribute('style');
@@ -261,7 +261,7 @@ abstract class HoyoBase extends BridgeAbstract
         }
 
         $html = $doc->saveHtml($embed);
-        if (is_string($html) === false || $html === '') {
+        if ($html === '') {
             return;
         }
 
@@ -284,9 +284,7 @@ abstract class HoyoBase extends BridgeAbstract
         $importedNodes = [];
         foreach ($tempWrapper->childNodes as $child) {
             $imported = $doc->importNode($child, true);
-            if ($imported !== null) {
-                $importedNodes[] = $imported;
-            }
+            $importedNodes[] = $imported;
         }
 
         foreach ($importedNodes as $importedNode) {

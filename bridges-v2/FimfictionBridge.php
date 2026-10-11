@@ -171,10 +171,10 @@ final class FimfictionBridge extends BridgeAbstract
             'cache_ttl' => 900,
         ];
 
-        $sessionToken = $this->getOption('session_token');
-        $signingKey = $this->getOption('signing_key');
+        $sessionToken = (string) $this->getOption('session_token');
+        $signingKey = (string) $this->getOption('signing_key');
 
-        if ($sessionToken !== null && $sessionToken !== '' && $signingKey !== null && $signingKey !== '') {
+        if ($sessionToken !== '' && $signingKey !== '') {
             $options['cookies'][] = ['name' => 'session_token', 'value' => $sessionToken, 'domain' => 'www.fimfiction.net'];
             $options['cookies'][] = ['name' => 'signing_key', 'value' => $signingKey, 'domain' => 'www.fimfiction.net'];
         }
@@ -192,7 +192,7 @@ final class FimfictionBridge extends BridgeAbstract
 
     private function detectStoryError(\Dom\HTMLDocument $dom): ?string
     {
-        $text = $dom->documentElement?->textContent ?? '';
+        $text = $dom->documentElement->textContent;
 
         return match (true) {
             stripos($text, 'Story not found') !== false => 'This story has been deleted or does not exist.',
@@ -240,7 +240,7 @@ final class FimfictionBridge extends BridgeAbstract
         }
 
         $img = $container->querySelector('img');
-        return $img?->getAttribute('src');
+        return $img !== null ? $img->getAttribute('src') : null;
     }
 
     private function extractChaptersList(\Dom\HTMLDocument $dom, int $limit): array

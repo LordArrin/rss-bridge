@@ -10,9 +10,6 @@ use RSSBridge\Utils\Json;
 use function RSSBridge\Exceptions\throwClientException;
 use function RSSBridge\Exceptions\throwServerException;
 
-/**
- * Base class for Moebooru-based imageboards (yande.re, konachan.com, etc.)
- */
 abstract class MoebooruBase extends BridgeAbstract
 {
     public const CACHE_TIMEOUT = 1800;
@@ -90,15 +87,12 @@ abstract class MoebooruBase extends BridgeAbstract
 
         $embedImages = (bool)$this->getInput('embed_images');
 
-        // Enforce API hard limits
         $limit = max(1, min(100, $limit));
 
-        // Force sample size when embedding to avoid huge data URIs
         if ($embedImages === true) {
             $imageSize = 'sample';
         }
 
-        // Build API URL - always fetch first page
         $params = [
             'limit' => $limit,
             'page' => 1,
@@ -110,7 +104,6 @@ abstract class MoebooruBase extends BridgeAbstract
 
         $apiUrl = static::getBaseApiUrl() . '?' . http_build_query($params);
 
-        // Fetch JSON response with proper Accept header
         try {
             $response = getContents($apiUrl, ['Accept: application/json']);
         } catch (\Exception $e) {
@@ -137,13 +130,11 @@ abstract class MoebooruBase extends BridgeAbstract
                 continue;
             }
 
-            // Apply score filter
             $score = (int)($post['score'] ?? 0);
             if ($score < $minScore) {
                 continue;
             }
 
-            // Skip deleted/flagged posts
             $status = (string)($post['status'] ?? '');
             if ($status === 'deleted' || $status === 'flagged') {
                 continue;
@@ -166,32 +157,25 @@ abstract class MoebooruBase extends BridgeAbstract
         $rating = (string)($post['rating'] ?? 's');
         $createdAt = (int)($post['created_at'] ?? time());
 
-        // Build title
         $title = "Post #{$id} by {$author}";
         if ($includeTags === true && $tags !== '') {
             $topTags = implode(', ', array_slice(explode(' ', $tags), 0, 5));
             $title .= " [{$topTags}]";
         }
 
-        // Get image URL based on selected size
         $imageUrl = $this->getImageUrl($post, $imageSize);
 
-        // Build content HTML (tags are NOT duplicated in body - they live in categories)
         $content = $this->buildContent($post, $imageUrl, $embedImages);
 
-        // Map rating code to human-readable
         $ratingText = $this->mapRating($rating);
 
-        // Build categories - include base category, rating, and all clean tags
         $categories = [static::getBaseCategory(), $ratingText];
         if ($tags !== '') {
             $tagArray = explode(' ', $tags);
-            // Filter out meta-tags (containing ':') and add clean tags
             $cleanTags = array_values(array_filter($tagArray, fn($tag) => str_contains($tag, ':') === false));
             $categories = array_merge($categories, $cleanTags);
         }
 
-        // Use md5 as uid fallback for guaranteed uniqueness
         $md5 = (string)($post['md5'] ?? '');
         $uid = $md5 !== '' ? $md5 : (string)$id;
 
@@ -213,7 +197,6 @@ abstract class MoebooruBase extends BridgeAbstract
             default => (string)($post['sample_url'] ?? ''),
         };
 
-        // Fallback chain: if selected size is empty, try the other option
         if ($url === '' && $size === 'sample') {
             $url = (string)($post['file_url'] ?? '');
         } elseif ($url === '' && $size === 'original') {
@@ -248,26 +231,22 @@ abstract class MoebooruBase extends BridgeAbstract
 
         $parts = [];
 
-        // Image embed (clickable, links to post)
         if ($imageUrl !== '') {
             $displayUrl = $imageUrl;
 
-            // If embed_images is enabled, download and convert to data URI
             if ($embedImages === true) {
                 try {
                     $dataUri = media_embed_url_to_data_uri($imageUrl);
-                    if ($dataUri !== null && $dataUri !== '') {
+                    if ($dataUri !== '') {
                         $displayUrl = $dataUri;
                     }
                 } catch (\Exception $e) {
-                    // Fall back to direct URL if embedding fails
                     $displayUrl = $imageUrl;
                 }
             }
 
             $imgTag = '<img src="' . e($displayUrl) . '" alt="Post #' . e((string)$id) . '"';
             if ($width > 0 && $height > 0) {
-                // Scale down large images in feed for readability
                 $displayWidth = min($width, 800);
                 $imgTag .= ' width="' . e((string)$displayWidth) . '"';
             }
@@ -276,7 +255,6 @@ abstract class MoebooruBase extends BridgeAbstract
             $parts[] = '<p><a href="' . e(static::getPostUrlTemplate() . $id) . '">' . $imgTag . '</a></p>';
         }
 
-        // Metadata table
         $meta = [];
         $meta[] = '<strong>Rating:</strong> ' . e($ratingText);
         $meta[] = '<strong>Score:</strong> ' . e((string)$score);
@@ -318,7 +296,6 @@ abstract class MoebooruBase extends BridgeAbstract
 
     private function truncateUrl(string $url): string
     {
-        // Show domain + path, truncated for readability
         $parsed = parse_url($url);
         if ($parsed === false) {
             return $url;

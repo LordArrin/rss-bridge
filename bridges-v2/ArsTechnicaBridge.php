@@ -79,12 +79,8 @@ final class ArsTechnicaBridge extends BridgeAbstract
         $parser = new FeedParser();
         $feed = $parser->parseFeed($feedContent);
 
-        if ($feed === null) {
-            throwServerException('Failed to parse Ars Technica RSS feed');
-        }
-
         $count = 0;
-        foreach ($feed['items'] as $item) {
+        foreach ($feed['items'] ?? [] as $item) {
             if ($count >= $limit) {
                 break;
             }

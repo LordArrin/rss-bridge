@@ -140,8 +140,8 @@ final class Rule34Bridge extends GelbooruBase
             'pid' => 0,
             'limit' => (int) ($this->getInput('l') ?? 10),
             'tags' => $query,
-            'api_key' => $this->apiKey ?? '',
-            'user_id' => $this->userId ?? '',
+            'api_key' => $this->apiKey,
+            'user_id' => $this->userId,
         ];
 
         return $this->getURI() . 'index.php?' . http_build_query($params);

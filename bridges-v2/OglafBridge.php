@@ -35,7 +35,7 @@ final class OglafBridge extends FeedExpander
         $this->collectExpandableDatas($url, $limit);
     }
 
-    protected function parseItem(array $item): array|false
+    protected function parseItem(array $item): array
     {
         $uri = $item['uri'] ?? '';
         if ($uri === '') {

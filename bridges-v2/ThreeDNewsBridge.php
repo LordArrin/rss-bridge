@@ -262,7 +262,7 @@ final class ThreeDNewsBridge extends BridgeAbstract
                 }
             }
 
-            if ($fullImageUrl === '' && count($images) > 0) {
+            if ($fullImageUrl === '') {
                 $firstImg = $images[0];
                 if ($firstImg instanceof \Dom\Element === true) {
                     $fullImageUrl = $this->extractImageUrl($firstImg);

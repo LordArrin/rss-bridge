@@ -269,37 +269,6 @@ final class ThePirateBayBridge extends BridgeAbstract
         return sprintf('%s &gt; %s', $mainCategory, $subCategory);
     }
 
-    private function renderStatusImage(string $status): string
-    {
-        return match ($status) {
-            'trusted' => sprintf(
-                '<img src="%s/images/trusted.png" title="Trusted"/>',
-                self::STATIC_SERVER
-            ),
-            'vip' => sprintf(
-                '<img src="%s/images/vip.gif" title="VIP"/>',
-                self::STATIC_SERVER
-            ),
-            'helper' => sprintf(
-                '<img src="%s/images/helper.png" title="Helper"/>',
-                self::STATIC_SERVER
-            ),
-            'moderator' => sprintf(
-                '<img src="%s/images/moderator.gif" title="Moderator"/>',
-                self::STATIC_SERVER
-            ),
-            'supermod' => sprintf(
-                '<img src="%s/images/supermod.png" title="Super Mod"/>',
-                self::STATIC_SERVER
-            ),
-            'admin' => sprintf(
-                '<img src="%s/images/admin.gif" title="Admin"/>',
-                self::STATIC_SERVER
-            ),
-            default => '',
-        };
-    }
-
     private function renderImdbLink(string $imdb): string
     {
         $url = 'https://www.imdb.com/title/' . $imdb;

@@ -35,12 +35,8 @@ final class ScarletComicBridge extends FeedExpander
         $this->collectExpandableDatas($url, $limit);
     }
 
-    protected function parseItem(array $item): array|false
+    protected function parseItem(array $item): array
     {
-        if (is_array($item) === false) {
-            return $item;
-        }
-
         $uri = $item['uri'] ?? '';
         if ($uri === '') {
             return $item;

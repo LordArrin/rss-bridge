@@ -242,28 +242,27 @@ final class AlpinePackagesBridge extends BridgeAbstract
 
         foreach ($classesWithLink as $class) {
             $td = $tr->querySelector('td.' . $class);
-            $a = $td?->querySelector('a');
-            $data[$class] = trim($a?->textContent ?? '');
-            $href = $a?->getAttribute('href');
+            $a = $td !== null ? $td->querySelector('a') : null;
+            $data[$class] = $a !== null ? trim($a->textContent) : '';
+            $href = $a !== null ? $a->getAttribute('href') : null;
             $isHrefString = is_string($href);
             $data[$class . '_href'] = ($isHrefString === true) ? urljoin(self::URI, $href) : '';
         }
 
         foreach ($classesWithoutLink as $class) {
             $td = $tr->querySelector('td.' . $class);
-            $data[$class] = trim($td?->textContent ?? '');
+            $data[$class] = $td !== null ? trim($td->textContent) : '';
         }
 
         $tdVersion = $tr->querySelector('td.version');
-        $strong = $tdVersion?->querySelector('strong[class*="hint--right"]');
-        $isStrongNull = ($strong === null);
-        if ($isStrongNull === true) {
-            $strong = $tdVersion?->querySelector('strong');
+        $strong = $tdVersion !== null ? $tdVersion->querySelector('strong[class*="hint--right"]') : null;
+        if ($strong === null && $tdVersion !== null) {
+            $strong = $tdVersion->querySelector('strong');
         }
 
-        $strongText = $strong?->textContent;
-        $tdVersionText = $tdVersion?->textContent;
-        $versionText = $strongText ?? $tdVersionText ?? '';
+        $strongText = $strong !== null ? $strong->textContent : '';
+        $tdVersionText = $tdVersion !== null ? $tdVersion->textContent : '';
+        $versionText = $strongText !== '' ? $strongText : $tdVersionText;
         $data['version'] = trim($versionText);
 
         return $data;

@@ -74,7 +74,7 @@ final class GoComicsBridge extends BridgeAbstract
 
             $author = 'GoComics';
             if (preg_match(self::AUTHOR_REGEX, $ogTitleContent, $authorMatches) === 1) {
-                if (isset($authorMatches[1]) === true && $authorMatches[1] !== '') {
+                if ($authorMatches[1] !== '') {
                     $author = $authorMatches[1];
                 }
             }

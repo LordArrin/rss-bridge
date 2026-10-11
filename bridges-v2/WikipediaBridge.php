@@ -10,7 +10,7 @@ use function RSSBridge\Exceptions\throwServerException;
 
 final class WikipediaBridge extends BridgeAbstract
 {
-    public const NAME = 'Wikipedia bridge for many languages';
+    public const NAME = 'Wikipedia today';
     public const URI = 'https://www.wikipedia.org/';
     public const DESCRIPTION = 'Returns articles for a language of your choice';
     public const MAINTAINER = 'No maintainer';
@@ -122,7 +122,7 @@ final class WikipediaBridge extends BridgeAbstract
     private function isInComplexStructure(\Dom\Element $element): bool
     {
         $current = $element;
-        while ($current !== null && $current instanceof \Dom\Element) {
+        while ($current !== null) {
             $class = $current->getAttribute('class') ?? '';
             if (
                 str_contains($class, 'infobox') === true ||
@@ -331,10 +331,6 @@ final class WikipediaBridge extends BridgeAbstract
     private function loadFullArticle(string $uri): string
     {
         $contentHtml = getSimpleHTMLDOMCached($uri);
-
-        if ($contentHtml === null) {
-            throwServerException('Could not load site: ' . $uri . '!');
-        }
 
         $content = $contentHtml->querySelector('#mw-content-text .mw-parser-output');
 

@@ -94,8 +94,8 @@ final class SponsrBridge extends BridgeAbstract
             }
 
             if ($postDuration > 0) {
-                $hours = floor($postDuration / 3600);
-                $minutes = floor(($postDuration % 3600) / 60);
+                $hours = (int) floor($postDuration / 3600);
+                $minutes = (int) floor(($postDuration % 3600) / 60);
                 $durationText = '';
                 if ($hours > 0) {
                     $durationText .= $hours . ' hour' . ($hours > 1 ? 's' : '') . ' ';

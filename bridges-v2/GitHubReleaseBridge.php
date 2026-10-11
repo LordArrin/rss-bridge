@@ -314,9 +314,6 @@ final class GitHubReleaseBridge extends BridgeAbstract
     private function sanitizeHtml(\Dom\XPath $xpath): void
     {
         $nodes = $xpath->query('//*');
-        if ($nodes === false) {
-            return;
-        }
 
         foreach ($nodes as $node) {
             if ($node instanceof \Dom\Element === false) {
@@ -369,9 +366,6 @@ final class GitHubReleaseBridge extends BridgeAbstract
     private function transformAlerts(\Dom\XPath $xpath): void
     {
         $alerts = $xpath->query('//div[contains(@class, "markdown-alert")]');
-        if ($alerts === false) {
-            return;
-        }
 
         foreach ($alerts as $alert) {
             if ($alert instanceof \Dom\Element === false) {
@@ -396,7 +390,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
             $alert->setAttribute('style', $style);
 
             $titleNode = $alert->querySelector('p.markdown-alert-title');
-            if ($titleNode !== null && $titleNode instanceof \Dom\Element) {
+            if ($titleNode !== null) {
                 $titleExisting = $titleNode->getAttribute('style') ?? '';
                 $titleStyle = sprintf('color:%s; %s', $color, self::CSS['alert_title']);
                 $titleFull = trim(($titleExisting !== '' ? $titleExisting . ' ' : '') . $titleStyle);
@@ -424,9 +418,6 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $repoQuoted = preg_quote($repo, '~');
 
         $links = $xpath->query('//a[@href]');
-        if ($links === false) {
-            return;
-        }
 
         foreach ($links as $link) {
             if ($link instanceof \Dom\Element === false) {
@@ -467,9 +458,6 @@ final class GitHubReleaseBridge extends BridgeAbstract
     private function applyListStyles(\Dom\XPath $xpath): void
     {
         $lists = $xpath->query('//ul | //ol');
-        if ($lists === false) {
-            return;
-        }
 
         foreach ($lists as $list) {
             if ($list instanceof \Dom\Element === false) {

@@ -26,10 +26,6 @@ final class SkyArteBridge extends BridgeAbstract
     {
         $urls = get_sitemap('https://arte.sky.it/sitemap-mostre-eventi.xml');
 
-        if (is_array($urls) === false) {
-            throwServerException('Invalid sitemap format');
-        }
-
         $count = 0;
         foreach ($urls as $url) {
             if (is_array($url) === false) {

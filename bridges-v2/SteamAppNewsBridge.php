@@ -125,7 +125,7 @@ final class SteamAppNewsBridge extends BridgeAbstract
             '/\\\\?\[(\/?)([a-z0-9*]+)([^\]]*?)\\\\?\]/i',
             function ($matches) {
                 $isClosing = $matches[1];
-                $tagName = strtolower($matches[2] ?? '');
+                $tagName = strtolower($matches[2]);
 
                 if (in_array($tagName, self::KNOWN_TAGS, true) === false) {
                     return $matches[0];
@@ -204,7 +204,7 @@ final class SteamAppNewsBridge extends BridgeAbstract
             '/\[h3\](.*?)\[\/h3\]/is' => '<h3>$1</h3>',
 
             '/\[p(?:\s+align="([^"]*)")?\](.*?)\[\/p\]/is' => function ($matches) {
-                $align = $matches[1] ?? '';
+                $align = $matches[1];
                 $content = $matches[2];
                 $style = $align !== '' ? ' style="text-align: ' . htmlspecialchars($align, ENT_QUOTES, 'UTF-8') . ';"' : '';
                 return '<p' . $style . '>' . $content . '</p>';
@@ -236,7 +236,7 @@ final class SteamAppNewsBridge extends BridgeAbstract
 
             '/\[url="([^"]*)"(?:\s+style="([^"]*)")?\](.*?)\[\/url\]/is' => function ($matches) {
                 $href = $matches[1];
-                $style = $matches[2] ?? '';
+                $style = $matches[2];
                 $text = $matches[3];
                 $class = $style === 'button' ? ' class="steam-button"' : '';
                 return '<a href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '"' . $class . '>' . $text . '</a>';

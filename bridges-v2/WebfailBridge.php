@@ -204,7 +204,7 @@ final class WebfailBridge extends BridgeAbstract
             return '';
         }
         $id = substr($onclick, 21, 11);
-        if ($id === false) {
+        if ($id === '') {
             return '';
         }
         return $id;
@@ -220,7 +220,7 @@ final class WebfailBridge extends BridgeAbstract
         }
 
         $id = substr($url, $lastSlashPos + 1, $lastQuestionPos - $lastSlashPos - 1);
-        if ($id === false || $id === '') {
+        if ($id === '') {
             return '';
         }
 

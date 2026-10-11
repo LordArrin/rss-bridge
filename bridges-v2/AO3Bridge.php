@@ -322,7 +322,7 @@ final class AO3Bridge extends BridgeAbstract
         }
 
         $html = $ownerDoc->saveHtml($element);
-        if ($html === false || $html === '') {
+        if ($html === '') {
             return null;
         }
 

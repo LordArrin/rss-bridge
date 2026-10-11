@@ -42,15 +42,6 @@ final class MiyousheBridge extends BridgeAbstract
         '8' => 'zzz',
     ];
 
-    private const OFFICIAL_PAGE_MAP = [
-        '1' => '6',
-        '2' => '28',
-        '3' => '31',
-        '4' => '33',
-        '6' => '53',
-        '8' => '58',
-    ];
-
     public const PARAMETERS = [
         '' => [
             'gids' => [

@@ -347,8 +347,8 @@ final class GigabyteSupportBridge extends BridgeAbstract
                     'description' => $this->normalize($descriptionNode->innerHTML ?? '', true),
                     'version' => $this->normalize($versionNode->textContent ?? ''),
                     'os' => $osNode !== null ? $this->normalize($osNode->textContent ?? '') : '',
-                    'size' => $this->normalize($sizeNode?->textContent ?? ''),
-                    'date' => $this->normalize($dateNode?->textContent ?? ''),
+                    'size' => $this->normalize($sizeNode->textContent),
+                    'date' => $this->normalize($dateNode->textContent),
                     'download' => $downloadUrl
                 ];
             }
