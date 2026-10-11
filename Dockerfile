@@ -263,7 +263,7 @@ RUN apk del .build-deps
 # ============================================================
 FROM alpine:${ALPINE_VERSION} AS runtime
 
-ARG IMAGE_VERSION=1.2.4
+ARG IMAGE_VERSION=1.2.5
 ENV RSSBRIDGE_SYSTEM_VERSION=${IMAGE_VERSION}
 ARG VERSION_PLACEHOLDER=__RSSBRIDGE_IMAGE_VERSION__
 ENV CURL_IMPERSONATE=chrome150
