@@ -276,7 +276,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
 
     private function cleanHtml(string $html): string
     {
-        if ($html === '' || $html === null) {
+        if ($html === '') {
             return '';
         }
 

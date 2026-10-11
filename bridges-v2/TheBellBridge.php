@@ -54,7 +54,9 @@ final class TheBellBridge extends BridgeAbstract
     {
         $category = $this->getInput('category');
         if ($category !== null && $category !== '') {
-            $labels = array_flip(self::PARAMETERS[0]['category']['values']);
+            // ИСПРАВЛЕНИЕ: Фильтруем null значения, так как array_flip требует int|string
+            $values = array_filter(self::PARAMETERS[0]['category']['values'], fn($v) => $v !== null);
+            $labels = array_flip($values);
             $label = $labels[$category] ?? $category;
             return self::NAME . ' - ' . $label;
         }

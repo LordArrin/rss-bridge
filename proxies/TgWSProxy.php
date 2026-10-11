@@ -260,7 +260,7 @@ final class TgWSProxy extends ProxyAbstract
             CURLOPT_HEADER         => $includeHeaders,
             CURLOPT_HTTPGET        => true,
             CURLOPT_HTTPHEADER     => [],
-            CURLOPT_POSTFIELDS     => null,
+            // Удалено: CURLOPT_POSTFIELDS => null, так как это GET-запрос, а null не допускается строгой типизацией
         ];
 
         curl_setopt_array($ch, $options);
@@ -343,12 +343,13 @@ final class TgWSProxy extends ProxyAbstract
                 $curlErrno = (int) curl_errno($ch);
 
                 if ($html === false || $curlErrno !== 0) {
+                    // ИСПРАВЛЕНИЕ: $curlErrno передается как второй параметр ($code), третий ($previous) опущен (null)
                     throw new \RuntimeException(sprintf(
                         'cURL error %d: %s (HTTP %d)',
                         $curlErrno,
                         $curlError,
                         $httpCode
-                    ), 0, $curlErrno);
+                    ), $curlErrno);
                 }
 
                 if ($httpCode >= 400) {
@@ -512,6 +513,7 @@ final class TgWSProxy extends ProxyAbstract
                 $effConnect = max(1, min($connectTimeout, (int) floor($remaining)));
                 $effRequest = max(1, min($requestTimeout, (int) floor($remaining)));
 
+                // Удалено: CURLOPT_POSTFIELDS => null
                 curl_setopt_array($ch, [
                     CURLOPT_URL            => $url,
                     CURLOPT_CONNECTTIMEOUT => $effConnect,
@@ -521,7 +523,6 @@ final class TgWSProxy extends ProxyAbstract
                     CURLOPT_HEADERFUNCTION => $headerCallback,
                     CURLOPT_HTTPGET        => true,
                     CURLOPT_HTTPHEADER     => [],
-                    CURLOPT_POSTFIELDS     => null,
                 ]);
 
                 if ($attempt > 1) {
@@ -547,12 +548,13 @@ final class TgWSProxy extends ProxyAbstract
                 $curlErrno = (int) curl_errno($ch);
 
                 if ($body === false || $curlErrno !== 0) {
+                    // ИСПРАВЛЕНИЕ: $curlErrno передается как второй параметр ($code), третий ($previous) опущен (null)
                     throw new \RuntimeException(sprintf(
                         'cURL error %d: %s (HTTP %d)',
                         $curlErrno,
                         $curlError,
                         $httpCode
-                    ), 0, $curlErrno);
+                    ), $curlErrno);
                 }
 
                 if ($httpCode >= 400) {

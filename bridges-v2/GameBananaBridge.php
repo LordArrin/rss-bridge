@@ -58,7 +58,7 @@ final class GameBananaBridge extends BridgeAbstract
 
     private ?string $title = null;
 
-    public function collectData()
+    public function collectData(): void
     {
         $gid = (string)$this->getInput('gid');
         if ($gid === '') {
@@ -88,7 +88,8 @@ final class GameBananaBridge extends BridgeAbstract
                 continue;
             }
 
-            if (isset($element[self::IDX_NAME]) === false || $element[self::IDX_NAME] === null) {
+            // ИСПРАВЛЕНИЕ: Удалена избыточная проверка на null, так как isset() уже это гарантирует
+            if (isset($element[self::IDX_NAME]) === false) {
                 continue;
             }
 
@@ -99,7 +100,7 @@ final class GameBananaBridge extends BridgeAbstract
         }
     }
 
-    public function getName()
+    public function getName(): string
     {
         if ($this->title !== null && $this->title !== '') {
             return parent::getName() . ' - ' . $this->title;
@@ -108,7 +109,7 @@ final class GameBananaBridge extends BridgeAbstract
         return parent::getName();
     }
 
-    public function getURI()
+    public function getURI(): string
     {
         $gid = $this->getInput('gid');
         if ($gid !== null && $gid !== '') {
@@ -261,7 +262,7 @@ final class GameBananaBridge extends BridgeAbstract
                 continue;
             }
             $imgUrl = self::IMAGES_BASE_URL . rawurlencode((string)$imgElement['_sFile']);
-            $content .= '<img src="' . e($imgUrl) . '" style="' . self::CSS['image'] . '" />';
+            $content .= '<img src="' . htmlspecialchars($imgUrl, ENT_QUOTES, 'UTF-8') . '" style="' . self::CSS['image'] . '" />';
         }
 
         return $content;
@@ -282,7 +283,7 @@ final class GameBananaBridge extends BridgeAbstract
         $updateText = (string)($update['_sText'] ?? '');
         $changeLog = $update['_aChangeLog'] ?? [];
 
-        $content = '<br><strong>Update:</strong> ' . e($updateTitle);
+        $content = '<br><strong>Update:</strong> ' . htmlspecialchars($updateTitle, ENT_QUOTES, 'UTF-8');
 
         if ($updateText !== '') {
             $content .= '<br>' . nl2br($updateText);
@@ -300,7 +301,7 @@ final class GameBananaBridge extends BridgeAbstract
                     $cat = 'Change';
                 }
 
-                $content .= '<br><em>' . e($cat) . '</em>: ' . e($changeText);
+                $content .= '<br><em>' . htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') . '</em>: ' . htmlspecialchars($changeText, ENT_QUOTES, 'UTF-8');
             }
         }
 

@@ -91,7 +91,7 @@ final class FlickrBridge extends BridgeAbstract
 
     private string $username = '';
 
-    public function collectData()
+    public function collectData(): void
     {
         switch ($this->queriedContext) {
             case 'Explore':
@@ -164,15 +164,15 @@ final class FlickrBridge extends BridgeAbstract
 
     private function buildItemContent(string $uri, string $imageSrc, string $description): string
     {
-        $html = '<a href="' . e($uri) . '">';
-        $html .= '<img src="' . e($imageSrc) . '" style="max-width: 640px; max-height: 480px;"/>';
+        $html = '<a href="' . htmlspecialchars($uri, ENT_QUOTES, 'UTF-8') . '">';
+        $html .= '<img src="' . htmlspecialchars($imageSrc, ENT_QUOTES, 'UTF-8') . '" style="max-width: 640px; max-height: 480px;"/>';
         $html .= '</a><br><p>';
         $html .= $description; // description уже содержит HTML с ссылками, НЕ экранируем
         $html .= '</p>';
         return $html;
     }
 
-    public function getURI()
+    public function getURI(): string
     {
         switch ($this->queriedContext) {
             case 'Explore':
@@ -197,7 +197,7 @@ final class FlickrBridge extends BridgeAbstract
         }
     }
 
-    public function getName()
+    public function getName(): string
     {
         switch ($this->queriedContext) {
             case 'Explore':
@@ -274,33 +274,6 @@ final class FlickrBridge extends BridgeAbstract
         }
 
         return $photoModels;
-    }
-
-    private function extractEnclosures(array $model): array
-    {
-        $areas = [];
-
-        if (isset($model['sizes']['data']) === false || is_array($model['sizes']['data']) === false) {
-            return [];
-        }
-
-        foreach ($model['sizes']['data'] as $size) {
-            if (is_array($size) === false || isset($size['data']) === false) {
-                continue;
-            }
-            $sizeData = $size['data'];
-            if (isset($sizeData['width'], $sizeData['height'], $sizeData['url']) === true) {
-                $area = (int)$sizeData['width'] * (int)$sizeData['height'];
-                $areas[$area] = (string)$sizeData['url'];
-            }
-        }
-
-        if (count($areas) === 0) {
-            return [];
-        }
-
-        $maxKey = max(array_keys($areas));
-        return [$this->fixUrl($areas[$maxKey])];
     }
 
     private function extractContentImage(array $model): string

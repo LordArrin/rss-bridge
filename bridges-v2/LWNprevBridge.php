@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 final class LWNprevBridge extends BridgeAbstract
 {
     public const NAME = 'LWN Free Weekly Edition';
@@ -286,7 +288,7 @@ EOD;
                 $parent = $parent->parentNode;
             }
 
-            if ($parent === null || ($parent instanceof \Dom\Element && $parent->localName === 'body')) {
+            if ($parent === null || $parent->localName === 'body') {
                 $toRemove[] = $link;
             }
         }

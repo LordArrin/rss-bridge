@@ -142,9 +142,7 @@ final class MinecraftBridge extends BridgeAbstract
         $index = strpos($tag, '/');
         if ($index !== false) {
             $tag = substr($tag, $index + 1);
-            if ($tag === false) {
-                $tag = '';
-            }
+            // В PHP 8+ substr() всегда возвращает string, проверка на false удалена
         }
 
         $tag = str_replace('-', ' ', $tag);

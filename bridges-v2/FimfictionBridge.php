@@ -60,8 +60,8 @@ final class FimfictionBridge extends BridgeAbstract
 
     public function getURI(): string
     {
-        $id = $this->getInput('story_id');
-        return $id === '' ? self::URI : self::URI . 'story/' . $id . '/';
+        $id = (string) $this->getInput('story_id');
+        return self::URI . 'story/' . $id . '/';
     }
 
     public function getIcon(): string
@@ -71,10 +71,7 @@ final class FimfictionBridge extends BridgeAbstract
 
     public function collectData(): void
     {
-        $storyId = $this->getInput('story_id');
-        if ($storyId === '' || $storyId === null) {
-            throwClientException('Story ID is required');
-        }
+        $storyId = (string) $this->getInput('story_id');
 
         $storyUrl = self::URI . 'story/' . $storyId . '/';
         $options = $this->buildProxyOptions();
@@ -121,7 +118,7 @@ final class FimfictionBridge extends BridgeAbstract
             try {
                 $html = getProtectedContents($url, self::PROXY_PROFILE, $options);
 
-                if ($html === '' || $html === null) {
+                if ($html === '') {
                     throw new \Exception('Received empty HTML response');
                 }
 

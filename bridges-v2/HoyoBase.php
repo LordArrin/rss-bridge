@@ -266,7 +266,7 @@ abstract class HoyoBase extends BridgeAbstract
         }
 
         $replacement = handleYoutube($html);
-        if (is_string($replacement) === false || $replacement === '') {
+        if ($replacement === '') {
             return;
         }
 

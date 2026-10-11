@@ -323,9 +323,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
                 $sizeNode = $cells->item($hasOs === true ? 3 : 2);
                 $dateNode = $cells->item($hasOs === true ? 4 : 3);
 
-                if ($descriptionNode === null || $versionNode === null) {
-                    continue;
-                }
+                // Удалена избыточная проверка, так как $cells->length >= 4 гарантирует наличие элементов 0 и 1
 
                 $downloadUrl = '';
                 $links = $row->querySelectorAll('a');
@@ -369,11 +367,11 @@ final class GigabyteSupportBridge extends BridgeAbstract
         $position = 0;
         $current = $node;
 
-        while ($current !== null && $current->parentElement !== null) {
+        while ($current->parentElement !== null) {
             $parent = $current->parentElement;
             $children = $parent->children;
 
-            foreach ($children as $index => $child) {
+            foreach ($children as $child) {
                 if ($child === $current) {
                     break;
                 }

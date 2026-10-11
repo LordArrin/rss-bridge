@@ -124,7 +124,9 @@ final class VkVideoBridge extends BridgeAbstract
             return $tsB <=> $tsA;
         });
 
-        return array_values($items);
+        // ИСПРАВЛЕНИЕ: usort уже перестраивает ключи в последовательный список (0, 1, 2...),
+        // поэтому array_values здесь избыточен.
+        return $items;
     }
 
     private function collectPlaylistItems(array $gallery, string $html): array
@@ -188,9 +190,9 @@ final class VkVideoBridge extends BridgeAbstract
             $imgStyle = sprintf('max-width: %dpx; width: auto;', self::MAX_IMAGE_WIDTH);
             $content .= sprintf(
                 '<p><a href="%s"><img src="%s" style="%s"></a></p>',
-                e($uri),
-                e($thumbnail),
-                e($imgStyle)
+                htmlspecialchars($uri, ENT_QUOTES, 'UTF-8'),
+                htmlspecialchars($thumbnail, ENT_QUOTES, 'UTF-8'),
+                htmlspecialchars($imgStyle, ENT_QUOTES, 'UTF-8')
             );
         }
 
@@ -212,7 +214,7 @@ final class VkVideoBridge extends BridgeAbstract
             'uri' => $uri,
             'title' => $title,
             'timestamp' => $timestamp,
-            'content' => $content !== '' ? $content : e($title),
+            'content' => $content !== '' ? $content : htmlspecialchars($title, ENT_QUOTES, 'UTF-8'),
             'categories' => $categories,
         ];
     }
@@ -223,7 +225,7 @@ final class VkVideoBridge extends BridgeAbstract
 
         $result = preg_replace_callback($pattern, function (array $matches): string {
             $url = $matches[1];
-            return '<a href="' . e($url) . '">' . e($url) . '</a>';
+            return '<a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '</a>';
         }, $text);
 
         if ($result === null) {
@@ -238,7 +240,7 @@ final class VkVideoBridge extends BridgeAbstract
         $parts = preg_split('/(<a[^>]*>.*?<\/a>)/is', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
 
         if ($parts === false) {
-            return e($text);
+            return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
         }
 
         $result = '';
@@ -246,7 +248,7 @@ final class VkVideoBridge extends BridgeAbstract
             if (preg_match('/^<a[^>]*>.*<\/a>$/i', $part) === 1) {
                 $result .= $part;
             } else {
-                $escaped = e($part);
+                $escaped = htmlspecialchars($part, ENT_QUOTES, 'UTF-8');
                 $result .= nl2br($escaped, false);
             }
         }

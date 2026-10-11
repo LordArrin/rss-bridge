@@ -118,7 +118,7 @@ final class ModrinthBridge extends BridgeAbstract
         ];
 
         $query = http_build_query($queryTable);
-        if (is_string($query) === true && $query !== '') {
+        if ($query !== '') {
             $url .= '?' . $query;
         }
 
@@ -308,8 +308,7 @@ final class ModrinthBridge extends BridgeAbstract
         $items = array_filter(array_map('trim', explode(',', $input)));
 
         if (count($items) > 0) {
-            $encoded = json_encode($items);
-            return $encoded !== false ? $encoded : null;
+            return json_encode($items);
         }
 
         return null;
