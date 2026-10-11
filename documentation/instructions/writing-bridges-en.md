@@ -18,6 +18,23 @@ This guide covers bridge development for this fork. It assumes familiarity with 
 
 Legacy `bridges/` directory is not supported. All bridges live in `bridges-v2/`.
 
+## Code Quality and Standards
+
+All bridges in this fork **must** strictly adhere to the project's code quality standards. This is enforced automatically in CI/CD pipelines and is mandatory for both human contributors and AI agents.
+
+Before submitting or generating any bridge code, ensure it passes the following checks from the project root:
+
+1. **PHP_CodeSniffer (PHPCS)**: Enforces PSR-12 coding standards, strict typing, and modern PHP practices.
+   - Configuration: [`phpcs.xml`](https://github.com/LordArrin/rss-bridge/blob/master/phpcs.xml)
+   - Command: `vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php`
+   - Auto-fix: `vendor/bin/phpcbf --standard=phpcs.xml bridges-v2/YourBridge.php`
+
+2. **PHPStan**: Performs static analysis to catch type errors, dead code, and potential bugs. **Level 5 is the minimum required standard.**
+   - Configuration: [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon)
+   - Command: `vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=5`
+
+> **⚠️ Note for AI Agents:** When generating or modifying bridge code, you must proactively ensure the output complies with `phpcs.xml` rules (e.g., `declare(strict_types=1)`, proper namespaces, no unused variables) and passes PHPStan Level 5 (e.g., no redundant null checks, correct type hints, proper handling of `\Dom\Element` vs `\Dom\Node`). Do not output code that will fail these checks.
+
 ## Available PHP Extensions
 
 This fork also includes modern PHP extensions that enable advanced features:
@@ -628,7 +645,7 @@ vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php
 # Auto-fix style issues
 vendor/bin/phpcbf --standard=phpcs.xml bridges-v2/YourBridge.php
 
-# Static analysis
+# Static analysis (Level 5 is mandatory)
 vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=5
 ```
 
@@ -702,7 +719,8 @@ When fetching multiple items, use parallel requests or batch endpoints when avai
 - [ ] Null-safe operator `?->` used for optional elements
 - [ ] Exception helpers imported via `use function RSSBridge\Exceptions\...`
 - [ ] Relative URLs handled via `urljoin()` or manual DOM processing
-- [ ] `phpcs` passes with no errors
+- [ ] Code passes `phpcs` checks (see [`phpcs.xml`](https://github.com/LordArrin/rss-bridge/blob/master/phpcs.xml))
+- [ ] Code passes `phpstan` analysis at Level 5 (see [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon))
 - [ ] Bridge tested with real data in Docker
 - [ ] Malformed HTML sites use `tidy` cleanup
 - [ ] Large cached objects use `igbinary` or `zstd` compression
