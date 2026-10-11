@@ -31,16 +31,19 @@ final class FrontpageAction implements ActionInterface
     {
         $token = $request->getAttribute('token');
 
-        $messages = [];
         $activeBridges = 0;
 
         $bridgeClassNames = $this->bridgeFactory->getBridgeClassNames();
 
+        // Notifications from SafeBridgeLoader / BridgeFactory (unified system v2)
         foreach ($this->bridgeFactory->getMissingEnabledBridges() as $missingEnabledBridge) {
-            $messages[] = [
-            'body' => sprintf('Warning: Bridge "%s" not found', $missingEnabledBridge),
-            'level' => 'warning'
-            ];
+            notify_warning(
+                sprintf('Bridge "{0}" is enabled in configuration but was not found and cannot be used.', $missingEnabledBridge),
+                'Bridge not found',
+                'SafeBridgeLoader',
+                [],
+                [['label' => $missingEnabledBridge, 'url' => './?action=list']]
+            );
         }
 
         $allMetadata = $this->metadataCache->getAll($this->bridgeFactory, $this->safeLoader);
@@ -65,23 +68,24 @@ final class FrontpageAction implements ActionInterface
             $activeBridges++;
         }
 
-        $brokenBridges = $this->safeLoader->getBrokenBridges();
-        $brokenCount = count($brokenBridges);
-
-        if ($brokenCount > 0) {
-            $messages[] = [
-            'body' => sprintf(
-                'Warning: %d bridge%s failed to load and %s been disabled. Check logs for details.',
-                $brokenCount,
-                $brokenCount === 1 ? '' : 's',
-                $brokenCount === 1 ? 'has' : 'have'
-            ),
-                'level' => 'warning'
-            ];
+        // Report every bridge that SafeBridgeLoader had to disable (unified system v2)
+        foreach ($this->safeLoader->getBrokenBridges() as $brokenName => $brokenInfo) {
+            notify_error(
+                sprintf(
+                    'Bridge "{0}" failed to load and has been disabled. Reason: %s',
+                    $brokenInfo['message'] ?? 'Unknown error'
+                ),
+                'Broken bridge',
+                'SafeBridgeLoader',
+                [],
+                [[
+                    'label' => $this->bridgeFactory->getShortClassName((string) $brokenName),
+                    'url'   => './?action=list',
+                ]]
+            );
         }
 
         $response = new Response(render(__DIR__ . '/../templates/frontpage.html.php', [
-        'messages'          => $messages,
         'admin_email'       => Configuration::getConfig('admin', 'email'),
         'admin_telegram'    => Configuration::getConfig('admin', 'telegram'),
         'bridges'           => $body,
