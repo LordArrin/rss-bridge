@@ -1,4 +1,13 @@
+<?php
 
+/**
+ * @var string $error
+ * @var string $searchUrl
+ * @var string $issueUrl
+ * @var string $maintainer
+ */
+
+?>
 <?= raw($error) ?>
 
 <a href="<?= raw($searchUrl) ?>" title="Opens GitHub to search for similar issues">

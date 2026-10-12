@@ -1,3 +1,11 @@
+<?php
+
+/**
+ * @var string $page
+ * @var array<int, array{level: string, body: string}> $messages
+ */
+
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>

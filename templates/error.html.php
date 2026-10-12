@@ -1,6 +1,9 @@
 <?php
 /**
  * This template is for rendering error messages (not exceptions)
+ *
+ * @var string $message
+ * @var string|null $title
  */
 ?>
 

@@ -1,16 +1,12 @@
 parameters:
     level: 5
     paths:
-        - lib
-        - actions
-        - caches
-        - formats
-        - middlewares
-        - proxies
-        - bridges-v2
-        - quirks
-        - index.php
-    
+        - .
+
+    excludePaths:
+        analyse:
+            - vendor/*
+
     scanFiles:
         - lib/exceptions.php
         - lib/http.php
@@ -28,10 +24,10 @@ parameters:
         - quirks/seo.php
 
     treatPhpDocTypesAsCertain: false
-    
+
     ignoreErrors:
         - '#Variable \$\w+ on left side of \?\? always exists#'
-    
+
     reportUnmatchedIgnoredErrors: false
 
 rules:

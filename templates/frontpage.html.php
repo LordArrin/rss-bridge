@@ -1,3 +1,14 @@
+<?php
+
+/**
+ * @var string $bridges
+ * @var int $active_bridges
+ * @var int $total_bridges
+ * @var string|null $admin_email
+ * @var string|null $admin_telegram
+ */
+
+?>
 <section class="searchbar">
     <h3>Search</h3>
     <input
