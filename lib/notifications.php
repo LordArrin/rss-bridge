@@ -1,12 +1,13 @@
 <?php
 
 /**
- * Unified notification system (v2).
+ * Unified notification system.
  *
  * A standalone, self-contained API for producing styled notifications in the
- * web interface. It is designed to run *in parallel* with the legacy
- * "messages" mechanism (templates/base.html.php + alert-info/warning/error),
- * so existing code keeps working untouched until the migration is complete.
+ * web interface. This is now the single notification mechanism used by the
+ * templates: the legacy "messages" array (alert-info/warning/error markup in
+ * base.html.php) has been removed; any code that still passes a 'messages'
+ * key to render() is transparently converted to these notifications.
  *
  * Types:
  *   - info    -> blue
