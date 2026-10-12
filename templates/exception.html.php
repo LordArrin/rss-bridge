@@ -2,6 +2,8 @@
 
 /**
  * This template is used for rendering exceptions
+ *
+ * @var \Throwable $e
  */
 ?>
 <div class="error">
@@ -66,8 +68,8 @@
             </p>
         <?php else: ?>
             <p>
-                <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/<?= e($e->getCode()) ?>">
-                    https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/<?= e($e->getCode()) ?>
+                <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/<?= e((string) $e->getCode()) ?>">
+                    https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/<?= e((string) $e->getCode()) ?>
                 </a>
             </p>
         <?php endif; ?>
@@ -97,7 +99,7 @@
         </div>
 
         <div>
-            <strong>Code:</strong> <?= e($e->getCode()) ?>
+            <strong>Code:</strong> <?= e((string) $e->getCode()) ?>
         </div>
 
         <div class="error-message">
@@ -109,7 +111,7 @@
         </div>
 
         <div>
-            <strong>Line:</strong> <?= e($e->getLine()) ?>
+            <strong>Line:</strong> <?= e((string) $e->getLine()) ?>
         </div>
     </div>
 
@@ -139,7 +141,7 @@
     </div>
 
     <div>
-        <strong>PHP:</strong> <?= e(PHP_VERSION ?: 'Unknown') ?>
+        <strong>PHP:</strong> <?= e(PHP_VERSION) ?>
     </div>
 
     <br>

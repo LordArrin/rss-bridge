@@ -15,6 +15,7 @@ use PHPStan\Rules\RuleErrorBuilder;
  * and enforces migration to new \Dom\HTMLDocument, \Dom\Element, etc.
  * 
  * @implements Rule<Name>
+ *
  */
 final class ForbidOldDomApiRule implements Rule
 {
@@ -65,19 +66,14 @@ final class ForbidOldDomApiRule implements Rule
     public function processNode(Node $node, Scope $scope): array
     {
         $className = $this->resolveClassName($node, $scope);
-        
-        if ($className === null) {
-            return [];
-        }
-        
         $shortName = $this->getShortClassName($className);
-        
+
         if (in_array($shortName, self::FORBIDDEN_CLASSES, true) === false) {
             return [];
         }
-        
+
         $replacement = self::REPLACEMENTS[$shortName] ?? 'new \\Dom\\* API';
-        
+
         return [
             RuleErrorBuilder::message(sprintf(
                 'Legacy DOM API "%s" is forbidden. Use: %s',
@@ -89,19 +85,13 @@ final class ForbidOldDomApiRule implements Rule
         ];
     }
 
-    private function resolveClassName(Name $node, Scope $scope): ?string
+    private function resolveClassName(Name $node, Scope $scope): string
     {
         if ($node instanceof Node\Name\FullyQualified) {
             return $node->toString();
         }
-        
-        $resolved = $scope->resolveName($node);
-        
-        if ($resolved === null) {
-            return null;
-        }
-        
-        return $resolved;
+
+        return $scope->resolveName($node);
     }
 
     private function getShortClassName(string $className): string

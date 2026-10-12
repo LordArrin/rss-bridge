@@ -1,3 +1,14 @@
+<?php
+
+/**
+ * @var string $title
+ * @var string $uri
+ * @var string $bridge_name
+ * @var array<int, array{url: string, name: string, type: string}> $formats
+ * @var array<int, array{url: string, title: string, timestamp?: int, author?: string, content: string, enclosures?: array<int, string>, categories?: array<int, string>}> $items
+ */
+
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -37,7 +48,7 @@
 
         <div class="buttons">
             <a href="./#bridge-<?= e($bridge_name) ?>" class="button backbutton">
-                < back to rss-bridge
+                &larr; back to rss-bridge
             </a>
 
             <?php foreach ($formats as $format): ?>
@@ -57,7 +68,7 @@
                 </h2>
 
                 <div class="item-meta">
-                    <?php if ($item['timestamp']): ?>
+                    <?php if (!empty($item['timestamp'])): ?>
                         <p>
                             <time datetime="<?= date('c', $item['timestamp']) ?>">
                                 <?= date('Y-m-d H:i:s', $item['timestamp']) ?>

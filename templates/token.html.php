@@ -1,3 +1,11 @@
+<?php
+
+/**
+ * @var string $message
+ * @var string $token
+ */
+
+?>
 <section class="token-page">
     <h1>Authentication Required</h1>
     

@@ -1,3 +1,10 @@
+<?php
+
+/**
+ * @var string $page
+ */
+
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,6 +19,7 @@
     <link rel="icon" type="image/png" href="static/favicon.png?<?= filemtime(__DIR__ . '/../static/favicon.png') ?>">
     <script src="static/rss-bridge.js?<?= filemtime(__DIR__ . '/../static/rss-bridge.js') ?>" defer></script>
     <script>
+        // Check for saved favorites to prevent layout shift during JS initialization
         (function() {
             try {
                 var favorites = JSON.parse(localStorage.getItem('rssbridge_favorites') || '[]');
@@ -31,14 +39,10 @@
             </a>
         </header>
 
-        <?php if (!empty($messages)): ?>
-            <?php foreach ($messages as $message): ?>
-                <div class="alert-<?= raw($message['level'] ?? 'info') ?>" role="alert">
-                    <?= raw($message['body']) ?>
-                </div>
-            <?php endforeach; ?>
-        <?php endif; ?>
+        <!-- Unified notification system (lib/notifications.php) -->
+        <?= raw(render_notifications()) ?>
 
+        <!-- Main page content (e.g., frontpage.html.php with bridge cards) -->
         <?= raw($page) ?>
     </div>
 </body>
