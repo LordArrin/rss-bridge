@@ -161,11 +161,15 @@ function get_admin_system_messages(): array
                 if ($text === '') {
                     continue;
                 }
+
+                $title = trim((string) ($entry['title'] ?? ''));
+                $level = trim((string) ($entry['level'] ?? ''));
+
                 $raw[] = [
                     'text'  => $text,
                     'url'   => trim((string) ($entry['url'] ?? '')),
-                    'title' => trim((string) ($entry['title'] ?? '')) ?: 'System message',
-                    'level' => trim((string) ($entry['level'] ?? '')) ?: 'info',
+                    'title' => $title === '' ? 'System message' : $title,
+                    'level' => $level === '' ? 'info' : $level,
                 ];
             } elseif (is_int($key) === false) {
                 // Skipped: unexpected scalar under an integer key.

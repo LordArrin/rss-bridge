@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Extract the first part of a string matching the specified start and end delimiters.
  */
-function extractFromDelimiters($string, $start, $end)
+function extractFromDelimiters(string $string, string $start, string $end): string|false
 {
     if (strpos($string, $start) !== false) {
         $section_retrieved = substr($string, strpos($string, $start) + strlen($start));
@@ -18,7 +18,7 @@ function extractFromDelimiters($string, $start, $end)
 /**
  * Remove one or more part(s) of a string using start and end delimiters.
  */
-function stripWithDelimiters($string, $start, $end)
+function stripWithDelimiters(string $string, string $start, string $end): string
 {
     while (strpos($string, $start) !== false) {
         $section_to_remove = substr($string, strpos($string, $start));
@@ -31,7 +31,7 @@ function stripWithDelimiters($string, $start, $end)
 /**
  * Remove HTML sections containing nested elements of the same tag.
  */
-function stripRecursiveHTMLSection($string, $tag_name, $tag_start)
+function stripRecursiveHTMLSection(string $string, string $tag_name, string $tag_start): string
 {
     $open_tag = '<' . $tag_name;
     $close_tag = '</' . $tag_name . '>';
