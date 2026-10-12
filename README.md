@@ -103,6 +103,34 @@ username = "alice"
 password = "cat"
 ```
 
+### Admin notifications (unified system)
+
+All interface notifications — including the legacy admin messages — go through
+the unified notification system in `lib/notifications.php` (`notify_info`,
+`notify_warning`, `notify_error`, rendered once by `render_notifications()` in
+`templates/base.html.php`). The old manual `alert-*` markup is gone.
+
+Admin-defined system message (shown on every page):
+
+```ini
+[system]
+message = "Scheduled maintenance tonight"
+message_url = "https://example.org/status"   ; optional, rendered as safe link
+message_title = "System message"             ; optional heading
+message_level = "warning"                    ; info | warning | error
+```
+
+Multiple messages are supported as well:
+
+```ini
+[system]
+messages[] = { text = "Second notice", title = "Alert", level = "error" }
+messages[] = "Plain info message"
+```
+
+Message text is treated as **plain text**: HTML from config is stripped and all
+output is escaped; URLs are validated (only http(s)/mailto/relative allowed).
+
 ### Enabling Bridges
 
 Enable all discovered bridges:

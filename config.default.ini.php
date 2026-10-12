@@ -7,6 +7,19 @@ enabled_bridges[] = *
 timezone = "UTC"
 enable_maintenance_mode = false
 
+; Admin-defined system message, shown on every page as a unified notification
+; (lib/notifications.php). Leave empty to disable. Rendered as plain text:
+; HTML is stripped; the URL (if set) becomes a safe hyperlink in the body.
+message = ""
+message_url = ""
+message_title = "System message"
+; One of: info, warning, error
+message_level = "info"
+
+; Multiple messages are supported too (in addition to the single message above):
+; messages[] = { text = "Second notice", title = "Alert", level = "error" }
+; messages[] = "Plain info message"
+
 [http]
 ; 60s matches upstream rss-bridge. Slow-but-alive sites (news portals, CDN
 ; edge misses) regularly need >20s for the first byte; 
