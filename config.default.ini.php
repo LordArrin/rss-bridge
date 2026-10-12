@@ -12,7 +12,7 @@ enable_maintenance_mode = false
 ; HTML is stripped; the URL (if set) becomes a safe hyperlink in the body.
 message = ""
 message_url = ""
-message_title = "System message"
+message_title = ""
 ; One of: info, warning, error
 message_level = "info"
 
@@ -24,6 +24,15 @@ message_level = "info"
 ; 60s matches upstream rss-bridge. Slow-but-alive sites (news portals, CDN
 ; edge misses) regularly need >20s for the first byte; 
 timeout = 60
+
+[error]
+
+; Defines how error messages are returned by RSS-Bridge
+;
+; "feed" = As part of the feed (default)
+; "http" = As HTTP error message
+; "none" = No errors are reported
+output = "http"
 
 ; Transient errors only. Timeouts (errno 28) are NOT retried by the client
 ; (a dead upstream does not recover between attempts), so this value no
@@ -103,4 +112,4 @@ socket_path = "/var/run/memcached/memcached.sock"
 ;port = 11211
 
 [Telegram2Bridge]
-embed_max_size = 28m
+embed_max_size = 32m
