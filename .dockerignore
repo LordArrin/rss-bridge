@@ -1,0 +1,9 @@
+.git/*
+.gitattributes
+.github/*
+cache/*
+docker-compose.yml
+Dockerfile
+docs/*
+pictures/*
+documentation/*
