@@ -2,7 +2,6 @@
 
 /**
  * @var string $page
- * @var array<int, array{level: string, body: string}> $messages
  */
 
 ?>
@@ -40,16 +39,7 @@
             </a>
         </header>
 
-        <!-- Legacy notification system (to be deprecated after full migration) -->
-        <?php if (!empty($messages)): ?>
-            <?php foreach ($messages as $message): ?>
-                <div class="alert-<?= raw($message['level'] ?? 'info') ?>" role="alert">
-                    <?= raw($message['body']) ?>
-                </div>
-            <?php endforeach; ?>
-        <?php endif; ?>
-
-        <!-- Unified notification system v2 (lib/notifications.php) -->
+        <!-- Unified notification system (lib/notifications.php) -->
         <?= raw(render_notifications()) ?>
 
         <!-- Main page content (e.g., frontpage.html.php with bridge cards) -->
