@@ -42,7 +42,11 @@ final class AO3Bridge extends BridgeAbstract
                 'title' => 'Make separate entries for new fic chapters',
                 'defaultValue' => 'checked',
             ],
-            'limit' => self::LIMIT,
+            'limit' => [
+                'name' => 'Item limit',
+                'type' => 'number',
+                'defaultValue' => 3,
+            ],
         ],
         'Bookmarks' => [
             'user' => [
@@ -64,17 +68,56 @@ final class AO3Bridge extends BridgeAbstract
 
     public function collectData(): void
     {
-        switch ($this->queriedContext) {
-            case 'Bookmarks':
-                $this->collectList($this->getURI());
-                break;
-            case 'List':
-                $this->collectList($this->getURI());
-                break;
-            case 'Work':
-                $this->collectWork($this->getURI());
-                break;
+        $queriedContext = $this->queriedContext;
+        if ($queriedContext === 'Bookmarks' || $queriedContext === 'List') {
+            $this->collectList($this->getURI());
+        } elseif ($queriedContext === 'Work') {
+            $this->collectWork($this->getURI());
         }
+    }
+
+    private function getContentsWithFallback(string $url, array $headers): string
+    {
+        $mirrors = [
+            'https://insecure.archiveofourown.org/',
+            'https://staging.archiveofourown.org/',
+            'https://archive.transformativeworks.org',
+            'https://archiveofourown.gay',
+            'https://secure.ao3.org/',
+            'https://ao3-mirror.cc/',
+            'https://dry-water-e911.ao365.workers.dev/',
+            'https://mute-disk-cf7e.ao33.workers.dev/',
+        ];
+
+        $urlsToTry = [$url];
+        foreach ($mirrors as $mirror) {
+            $replaced = preg_replace(
+                '#^https?://archiveofourown\.org#i',
+                rtrim($mirror, '/'),
+                $url
+            );
+            if (is_string($replaced) === true) {
+                $urlsToTry[] = $replaced;
+            }
+        }
+
+        $lastException = null;
+        foreach ($urlsToTry as $tryUrl) {
+            try {
+                $response = getContents($tryUrl, $headers);
+                if ($response !== '') {
+                    return $response;
+                }
+            } catch (\Throwable $e) {
+                $lastException = $e;
+            }
+        }
+
+        if ($lastException !== null) {
+            throwServerException('Failed to fetch URL after trying all mirrors: ' . $lastException->getMessage());
+        }
+
+        throwServerException('Failed to fetch URL');
     }
 
     private function collectList(string $url): void
@@ -83,7 +126,8 @@ final class AO3Bridge extends BridgeAbstract
         $headers = [
             'useragent: rss-bridge ' . $version . ' (https://github.com/LordArrin/rss-bridge)'
         ];
-        $response = getContents($url, $headers);
+
+        $response = $this->getContentsWithFallback($url, $headers);
         if ($response === '') {
             throwServerException(sprintf('Failed to fetch %s', $url));
         }
@@ -105,7 +149,8 @@ final class AO3Bridge extends BridgeAbstract
         }
         $this->title = trim($heading->textContent ?? '');
 
-        $limit = (int)($this->getInput('limit') ?? 3);
+        $limitInput = $this->getInput('limit');
+        $limit = is_numeric($limitInput) === true ? (int) $limitInput : 3;
         $count = 0;
 
         $elements = $dom->querySelectorAll('.index.group > li');
@@ -169,24 +214,22 @@ final class AO3Bridge extends BridgeAbstract
             $chaptersEl = $docElement->querySelector('dl dd.chapters');
             $chapters = $chaptersEl !== null ? trim($chaptersEl->textContent ?? '') : '0';
 
-            if ($this->getInput('unique') === true) {
+            $uniqueInput = $this->getInput('unique');
+            if (is_bool($uniqueInput) === true && $uniqueInput === true) {
                 $item['uid'] = $item['uri'] . '/' . $strdate . '/' . $chapters;
             } else {
                 $item['uid'] = $item['uri'];
             }
 
             $range = $this->getInput('range');
-            if ($range !== null && ($limit === 0 || $count++ < $limit)) {
+            if ($range !== null && ($limit === 0 || $count < $limit)) {
                 $workUrl = $item['uri'];
-                switch ($range) {
-                    case 'all':
+                if (is_string($range) === true) {
+                    if ($range === 'all') {
                         $workUrl .= '?view_full_work=true';
-                        break;
-                    case 'first':
-                        break;
-                    case 'last':
+                    } elseif ($range === 'last') {
                         $workUrl .= '/navigate';
-                        $navResponse = getContents($workUrl, $headers);
+                        $navResponse = $this->getContentsWithFallback($workUrl, $headers);
                         if ($navResponse !== '') {
                             libxml_use_internal_errors(true);
                             $navDom = \Dom\HTMLDocument::createFromString($navResponse);
@@ -204,10 +247,10 @@ final class AO3Bridge extends BridgeAbstract
                                 }
                             }
                         }
-                        break;
+                    }
                 }
 
-                $workResponse = getContents($workUrl, $headers);
+                $workResponse = $this->getContentsWithFallback($workUrl, $headers);
                 if ($workResponse !== '') {
                     libxml_use_internal_errors(true);
                     $workDom = \Dom\HTMLDocument::createFromString($workResponse);
@@ -224,6 +267,7 @@ final class AO3Bridge extends BridgeAbstract
                         $item['content'] .= $workDom->saveHtml($workskin);
                     }
                 }
+                $count++;
             }
 
             $wid = $this->extractWorkId($item['uri']);
@@ -246,7 +290,7 @@ final class AO3Bridge extends BridgeAbstract
             'useragent: rss-bridge ' . $version . ' (https://github.com/LordArrin/rss-bridge)'
         ];
 
-        $navResponse = getContents($url . '/navigate', $headers);
+        $navResponse = $this->getContentsWithFallback($url . '/navigate', $headers);
         if ($navResponse === '') {
             throwServerException(sprintf('Failed to fetch %s', $url . '/navigate'));
         }
@@ -256,7 +300,7 @@ final class AO3Bridge extends BridgeAbstract
         libxml_use_internal_errors(false);
         $this->resolveRelativeUrls($navDom->documentElement);
 
-        $workResponse = getContents($url . '?view_full_work=true', $headers);
+        $workResponse = $this->getContentsWithFallback($url . '?view_full_work=true', $headers);
         if ($workResponse === '') {
             throwServerException(sprintf('Failed to fetch %s', $url . '?view_full_work=true'));
         }
@@ -309,7 +353,7 @@ final class AO3Bridge extends BridgeAbstract
     private function extractWorkId(string $uri): string
     {
         if (preg_match('#/works/(\d+)#', $uri, $matches) === 1) {
-            return $matches[1];
+            return (string) $matches[1];
         }
         return '';
     }
@@ -360,7 +404,7 @@ final class AO3Bridge extends BridgeAbstract
 
     public function getName(): string
     {
-        $name = parent::getName() . ' ' . (string)$this->queriedContext;
+        $name = parent::getName() . ' ' . (string) $this->queriedContext;
         if ($this->title !== null && $this->title !== '') {
             $name .= ' - ' . $this->title;
         }
@@ -375,24 +419,21 @@ final class AO3Bridge extends BridgeAbstract
     public function getURI(): string
     {
         $url = parent::getURI();
-        switch ($this->queriedContext) {
-            case 'Bookmarks':
-                $user = (string)($this->getInput('user') ?? '');
-                $url = self::URI
-                    . 'users/' . $user
-                    . '/bookmarks?bookmark_search[sort_column]=bookmarkable_date';
-                break;
-            case 'List':
-                $inputUrl = $this->getInput('url');
-                if ($inputUrl !== null && $inputUrl !== '') {
-                    $url = (string)$inputUrl;
-                }
-                break;
-            case 'Work':
-                $id = (string)($this->getInput('id') ?? '');
-                $url = self::URI . 'works/' . $id;
-                break;
+        $queriedContext = $this->queriedContext;
+
+        if ($queriedContext === 'Bookmarks') {
+            $user = (string) ($this->getInput('user') ?? '');
+            $url = self::URI . 'users/' . $user . '/bookmarks?bookmark_search[sort_column]=bookmarkable_date';
+        } elseif ($queriedContext === 'List') {
+            $inputUrl = $this->getInput('url');
+            if (is_string($inputUrl) === true && $inputUrl !== '') {
+                $url = $inputUrl;
+            }
+        } elseif ($queriedContext === 'Work') {
+            $id = (string) ($this->getInput('id') ?? '');
+            $url = self::URI . 'works/' . $id;
         }
+
         return $url;
     }
 }
