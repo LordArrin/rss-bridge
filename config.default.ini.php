@@ -25,6 +25,29 @@ message_level = "info"
 ; edge misses) regularly need >20s for the first byte; 
 timeout = 60
 
+; SSRF protection. Before every outbound request the target hostname is
+; resolved and each returned IP is checked against the blocked ranges below
+; (private 10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12 and reserved ranges such
+; as loopback 127.0.0.0/8 or link-local 169.254.0.0/16 incl. cloud metadata
+; endpoints). Requests to forbidden addresses are refused outright. The vetted
+; IP is then pinned for libcurl via CURLOPT_RESOLVE so a DNS rebind between
+; the check and the actual connect cannot swap the destination. Redirects are
+; re-screened hop by hop. Set to false only if you deliberately host bridges
+; against internal services.
+ssrf_check = true
+
+; CIDR list (IPv4 and IPv6) that requests must never reach. Leave commented
+; out to use the built-in secure default (RFC1918 + loopback + link-local +
+; CGNAT + multicast/reserved + IPv6 ULA/loopback/link-local). Override with
+; your own set, e.g.:
+; blocked_ip_ranges[] = "127.0.0.0/8"
+; blocked_ip_ranges[] = "10.0.0.0/8"
+; blocked_ip_ranges[] = "192.168.0.0/16"
+; blocked_ip_ranges[] = "169.254.0.0/16"
+; blocked_ip_ranges[] = "::1/128"
+; blocked_ip_ranges[] = "fc00::/7"
+; blocked_ip_ranges[] = "fe80::/10"
+
 [error]
 
 ; Defines how error messages are returned by RSS-Bridge
