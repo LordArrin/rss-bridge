@@ -187,7 +187,7 @@ With `by_bridge = true`, each bridge form shows a "Disable proxy" checkbox, allo
 
 ## Proxy Profiles
 
-For more complex scenarios â€” bypassing Cloudflare, using residential IPs, and similar â€” use named proxy profiles. Bridges call them via `getProtectedContents()`, `getProtectedSimpleHTMLDOM()`, or `getProtectedBinary()`.
+For more complex scenarios - bypassing Cloudflare, using residential IPs, and similar - use named proxy profiles. Bridges call them via `getProtectedContents()`, `getProtectedSimpleHTMLDOM()`, or `getProtectedBinary()`.
 
 ### Direct
 
@@ -282,7 +282,7 @@ final class MyCustomBridge extends BridgeAbstract
 }
 ```
 
-The legacy `/config/bridges/` directory is no longer supported â€” the container will emit a warning in the logs on startup. Migrate any such bridges to `bridges-v2/` with a proper namespace.
+The legacy `/config/bridges/` directory is no longer supported the container will emit a warning in the logs on startup. Migrate any such bridges to `bridges-v2/` with a proper namespace.
 
 For a detailed guide on bridge development, see the separate `BRIDGES.md` document.
 
