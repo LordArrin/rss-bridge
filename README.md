@@ -25,7 +25,7 @@ A fork of [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge), rewritten for 
 ```yaml
 services:
   rss-bridge:
-    image: ghcr.io/lordarrin/rss-bridge:latest
+    image: lordarrin/rss-bridge:latest
     container_name: rss-bridge
     ports:
       - "3000:80"
