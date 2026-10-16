@@ -312,10 +312,9 @@ final class CurlHttpClient implements HttpClient
     }
 
     /**
-     * Detects whether the bridge explicitly opted out of impersonation for
-     * this request by passing CURLOPT_IMPERSONATE => '' (or 'none'), which
-     * the patched library honours at execution time (curl_easy_setopt with
-     * an empty target resets the handle to a vanilla curl configuration).
+     * Detects whether the bridge opted out of impersonation for this request
+     * by passing CURLOPT_IMPERSONATE => '' (or 'none'), which resets the
+     * handle to a vanilla curl configuration.
      */
     private static function isOptOut(array $curlOptions): bool
     {
@@ -494,29 +493,90 @@ final class CurlHttpClient implements HttpClient
             $savedEnv = (string)getenv('CURL_IMPERSONATE');
             putenv('CURL_IMPERSONATE');
         }
+        return self::$ipResolver;
+    }
 
-        $ch = curl_init($url);
-        if ($ch === false) {
-            if ($savedEnv !== null) {
-                putenv('CURL_IMPERSONATE=' . $savedEnv);
+    /**
+     * Splits an absolute URL into a lowercase host, or returns null when the
+     * URL is not http(s).
+     */
+    private static function parseHttpHost(string $url): ?string
+    {
+        $parts = parse_url($url);
+        if ($parts === false || isset($parts['host']) === false || isset($parts['scheme']) === false) {
+            return null;
+        }
+        if (in_array(strtolower($parts['scheme']), ['http', 'https'], true) === false) {
+            return null;
+        }
+        $host = strtolower($parts['host']);
+        // Strip the surrounding brackets of IPv6 literals ([::1]).
+        if (str_starts_with($host, '[') === true && str_ends_with($host, ']') === true) {
+            $host = substr($host, 1, -1);
+        }
+        return $host;
+    }
+
+    /**
+     * Screens a host or literal IP against the blocked ranges. An unresolved
+     * hostname passes so libcurl performs its own lookup and reports the
+     * proper error; the connect callback below still screens the real IP.
+     */
+    private static function isHostAllowed(string $host): bool
+    {
+        $resolver = self::ipResolver();
+        if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+            return $resolver->isAllowed($host);
+        }
+        $ips = $resolver->resolve($host);
+        if ($ips === []) {
+            return true;
+        }
+        foreach ($ips as $ip) {
+            if ($resolver->isAllowed($ip) === true) {
+                return true;
             }
-            throw new HttpException('Failed to initialize cURL');
         }
+        return false;
+    }
 
-        // With an active global profile the patched library applies the
-        // browser fingerprint at handle-creation time (curl_easy_impersonate
-        // from curl_easy_init). On retry paths below we call curl_reset(),
-        // which re-reads CURL_IMPERSONATE; keep it unset for opted-out
-        // requests so retries stay opt-out as well. The env var is restored
-        // again right before the handle is released (see below).
-        if ($optOutRequested === true) {
-            // Belt and braces: also disable the profile directly on this
-            // handle. Per lexiforest/curl-impersonate, setting
-            // CURLOPT_IMPERSONATE to "" resets the handle to a vanilla curl
-            // configuration, overriding anything applied via the env var.
-            $config['curl_options'][self::impersonateOption()] = '';
+    /**
+     * CURLOPT_OPENSOCKETFUNCTION callback: screens the exact IP that libcurl
+     * is about to connect to (every redirect hop included), which closes the
+     * DNS-rebinding window without extra lookups. Returning null lets
+     * libcurl create the socket itself; blocked addresses abort the connect.
+     *
+     * @param \CurlHandle $handle
+     * @param int $socketType
+     * @param array{address: string, port: int, ...} $addressInfo
+     */
+    private static function guardSocket($handle, int $socketType, array $addressInfo)
+    {
+        if (self::isSsrfCheckEnabled() === false) {
+            return null;
         }
+        $address = $addressInfo['address'] ?? '';
+        if (self::isHostAllowed($address) === false) {
+            throw new HttpException(sprintf(
+                'Access to %s (%s) is blocked: the address falls into a private or reserved range (SSRF protection)',
+                $address,
+                $addressInfo['hostname'] ?? '?'
+            ));
+        }
+        return null;
+    }
 
+    /** Whether SSRF screening is enabled (config [http] ssrf_check, default on). */
+    private static function isSsrfCheckEnabled(): bool
+    {
+        if (class_exists(\RSSBridge\Configuration::class) === false) {
+            return true;
+        }
+        return \RSSBridge\Configuration::getConfig('http', 'ssrf_check') !== false;
+    }
+
+    public function request(string $url, array $config = []): Response
+    {
         $defaultConfig = [
             'useragent'             => null,
             'timeout'               => 5,
@@ -533,6 +593,48 @@ final class CurlHttpClient implements HttpClient
 
         $config = array_merge($defaultConfig, $config);
 
+        // SSRF protection: refuse upfront when the host only points at
+        // blocked ranges; every connect is screened again in guardSocket.
+        $ssrfCheck = $config['ssrf_check'];
+        if ($ssrfCheck === null) {
+            $ssrfCheck = self::isSsrfCheckEnabled();
+        }
+        if ($ssrfCheck === true) {
+            $host = self::parseHttpHost($url);
+            if ($host !== null && self::isHostAllowed($host) === false) {
+                throw new HttpException(sprintf(
+                    'Access to %s is blocked: the host resolves to a private or reserved IP range (SSRF protection)',
+                    $host
+                ));
+            }
+        }
+
+        // A per-request opt-out (CURLOPT_IMPERSONATE => '') also means "no
+        // global profile": unset the env var before curl_init() so the
+        // patched library does not apply the profile to this handle, and
+        // restore it right before the handle is released (see below).
+        $optOutRequested = self::isOptOut($config['curl_options']);
+        $savedEnv = null;
+        if ($optOutRequested === true && getenv('CURL_IMPERSONATE') !== false) {
+            $savedEnv = (string)getenv('CURL_IMPERSONATE');
+            putenv('CURL_IMPERSONATE');
+        }
+
+        $ch = curl_init($url);
+        if ($ch === false) {
+            if ($savedEnv !== null) {
+                putenv('CURL_IMPERSONATE=' . $savedEnv);
+            }
+            throw new HttpException('Failed to initialize cURL');
+        }
+
+        // Also disable the profile directly on the handle: an empty
+        // CURLOPT_IMPERSONATE resets it to a vanilla curl configuration,
+        // which keeps opted-out requests vanilla after curl_reset() too.
+        if ($optOutRequested === true) {
+            $config['curl_options'][self::impersonateOption()] = '';
+        }
+
         // Wall-clock budget for the whole attempt loop. Without it a single
         // hanging upstream (black-holed TCP connect, stalled TLS handshake)
         // blocks an fpm worker for timeout*(retries+1)+backoff seconds and
@@ -544,18 +646,11 @@ final class CurlHttpClient implements HttpClient
             $httpHeaders[] = sprintf('%s: %s', $name, $value);
         }
 
-        // curl-impersonate behaviour (see getImpersonateTarget()): when the
-        // library is the impersonate build and CURL_IMPERSONATE is set, every
-        // handle created by curl_init() already carries the full browser
-        // fingerprint plus the profile's default header list. libcurl merges
-        // CURLOPT_HTTPHEADER over those defaults one-by-one, so whatever a
-        // bridge passes through (a custom User-Agent, an extra Accept, a
-        // Referer — e.g. DanbooruBridge or RuStoreBridge) simply replaces the
-        // matching profile header while everything else about the spoofed
-        // profile stays exactly as curl-impersonate built it. No filtering,
-        // no rewriting: anonymization is entirely curl-impersonate's job.
-        // A bridge that wants full manual control opts out explicitly with
-        // CURLOPT_IMPERSONATE => '' (handled before curl_init above).
+        // With an active impersonate profile the patched library already
+        // applies the browser fingerprint and default headers; libcurl
+        // merges bridge headers over them one-by-one, so no filtering is
+        // needed here. Only apply the configured deployment User-Agent
+        // when no profile is in effect (plain libcurl) and it is non-empty.
         $impersonate = self::getImpersonateTarget();
 
         $curlOptions = [
