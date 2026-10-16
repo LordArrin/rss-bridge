@@ -68,14 +68,8 @@ interface HttpClient
     public function request(string $url, array $config = []): Response;
 }
 
-/**
- * Screens hostnames/IPs against private and reserved ranges (SSRF protection).
- * Resolution results are cached per-process; the vetted IP is pinned via
- * CURLOPT_RESOLVE afterwards to close the DNS-rebinding window.
- */
 final class IpResolver
 {
-    /** Loopback, RFC 1918, link-local (cloud metadata), CGNAT, reserved + IPv6 equivalents. */
     public const DEFAULT_BLOCKED_CIDRS = [
         '0.0.0.0/8',
         '10.0.0.0/8',
@@ -102,35 +96,76 @@ final class IpResolver
     /** @var string[] */
     private array $blockedCidrs;
 
+    /** @var string[] */
+    private array $allowedCidrs;
+
     /** @var array<string, array{time: int, ips: string[]}> */
     private static array $cache = [];
 
     private const CACHE_TTL = 60;
 
-    /** @param string[]|string|null $blockedCidrs */
-    public function __construct(array|string|null $blockedCidrs = null)
+    /**
+     * @param string[]|string|null $blockedCidrs
+     * @param string[]|string|null $allowedCidrs
+     */
+    public function __construct(array|string|null $blockedCidrs = null, array|string|null $allowedCidrs = null)
     {
-        if ($blockedCidrs === null) {
-            $this->blockedCidrs = self::DEFAULT_BLOCKED_CIDRS;
-            return;
-        }
-        if (is_string($blockedCidrs) === true) {
-            $blockedCidrs = explode(',', $blockedCidrs);
-        }
-        $normalized = [];
-        foreach ($blockedCidrs as $cidr) {
-            $cidr = trim((string)$cidr);
-            if ($cidr !== '' && self::isValidCidr($cidr) === true) {
-                $normalized[] = $cidr;
+        $mergedBlocked = self::DEFAULT_BLOCKED_CIDRS;
+
+        if ($blockedCidrs !== null) {
+            if (is_string($blockedCidrs) === true) {
+                $blockedCidrs = explode(',', $blockedCidrs);
+            }
+            foreach ($blockedCidrs as $cidr) {
+                $cidr = trim((string)$cidr);
+                $normalizedCidr = self::normalizeToCidr($cidr);
+                if ($normalizedCidr !== '' && self::isValidCidr($normalizedCidr) === true) {
+                    $mergedBlocked[] = $normalizedCidr;
+                }
             }
         }
-        $this->blockedCidrs = $normalized;
+
+        $this->blockedCidrs = array_values(array_unique($mergedBlocked));
+
+        $mergedAllowed = [];
+        if ($allowedCidrs !== null) {
+            if (is_string($allowedCidrs) === true) {
+                $allowedCidrs = explode(',', $allowedCidrs);
+            }
+            foreach ($allowedCidrs as $cidr) {
+                $cidr = trim((string)$cidr);
+                $normalizedCidr = self::normalizeToCidr($cidr);
+                if ($normalizedCidr !== '' && self::isValidCidr($normalizedCidr) === true) {
+                    $mergedAllowed[] = $normalizedCidr;
+                }
+            }
+        }
+
+        $this->allowedCidrs = array_values(array_unique($mergedAllowed));
     }
 
     /**
-     * Resolves a hostname to its IP addresses (A + AAAA records). Literal IPs
-     * pass through unchanged; empty list when the name does not resolve.
-     *
+     * Converts a single IP address to a CIDR notation (/32 for IPv4, /128 for IPv6).
+     * If the input is already a CIDR, returns it unchanged.
+     */
+    private static function normalizeToCidr(string $input): string
+    {
+        if ($input === '') {
+            return '';
+        }
+        if (str_contains($input, '/') === true) {
+            return $input;
+        }
+        if (filter_var($input, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
+            return $input . '/128';
+        }
+        if (filter_var($input, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+            return $input . '/32';
+        }
+        return '';
+    }
+
+    /**
      * @return string[]
      */
     public function resolve(string $host): array
@@ -176,6 +211,11 @@ final class IpResolver
         if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
             return true;
         }
+
+        if ($this->isWhitelisted($ip) === true) {
+            return false;
+        }
+
         foreach ($this->blockedCidrs as $cidr) {
             if (self::matches($ip, $cidr) === true) {
                 return true;
@@ -184,10 +224,16 @@ final class IpResolver
         return false;
     }
 
-    /**
-     * Bitwise CIDR match. Handles IPv4/IPv6 and unwraps IPv4-mapped IPv6
-     * (::ffff:a.b.c.d) so the IPv4 policy applies to those as well.
-     */
+    public function isWhitelisted(string $ip): bool
+    {
+        foreach ($this->allowedCidrs as $cidr) {
+            if (self::matches($ip, $cidr) === true) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static function matches(string $ip, string $cidr): bool
     {
         [$block, $bitsStr] = str_contains($cidr, '/') === true ? explode('/', $cidr, 2) : [$cidr, null];
@@ -285,10 +331,12 @@ final class CurlHttpClient implements HttpClient
     {
         if (self::$ipResolver instanceof IpResolver === false) {
             $blocked = null;
+            $allowed = null;
             if (class_exists(\RSSBridge\Configuration::class) === true) {
                 $blocked = \RSSBridge\Configuration::getConfig('http', 'blocked_ip_ranges');
+                $allowed = \RSSBridge\Configuration::getConfig('http', 'allowed_ip_ranges');
             }
-            self::$ipResolver = new IpResolver($blocked);
+            self::$ipResolver = new IpResolver($blocked, $allowed);
         }
         return self::$ipResolver;
     }
@@ -747,7 +795,6 @@ final class Response
     }
 }
 
-// backward compatibility
 class_alias(\RSSBridge\Http\HttpException::class, 'HttpException');
 class_alias(\RSSBridge\Http\CloudFlareException::class, 'CloudFlareException');
 class_alias(\RSSBridge\Http\HttpClient::class, 'HttpClient');

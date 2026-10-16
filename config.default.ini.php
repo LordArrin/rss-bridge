@@ -26,27 +26,29 @@ message_level = "info"
 timeout = 60
 
 ; SSRF protection. Before every outbound request the target hostname is
-; resolved and each returned IP is checked against the blocked ranges below
-; (private 10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12 and reserved ranges such
-; as loopback 127.0.0.0/8 or link-local 169.254.0.0/16 incl. cloud metadata
-; endpoints). Requests to forbidden addresses are refused outright. The vetted
-; IP is then pinned for libcurl via CURLOPT_RESOLVE so a DNS rebind between
-; the check and the actual connect cannot swap the destination. Redirects are
-; re-screened hop by hop. Set to false only if you deliberately host bridges
-; against internal services.
+; resolved and each returned IP is screened against the blocked CIDR ranges.
+; The vetted IP is pinned via CURLOPT_RESOLVE to prevent DNS-rebinding attacks
+; between the check and the actual connect. Redirects are refused to prevent
+; bypasses via Location headers pointing at internal addresses.
+; Set to false only if you deliberately need bridges to reach internal services.
 ssrf_check = true
 
-; CIDR list (IPv4 and IPv6) that requests must never reach. Leave commented
-; out to use the built-in secure default (RFC1918 + loopback + link-local +
-; CGNAT + multicast/reserved + IPv6 ULA/loopback/link-local). Override with
-; your own set, e.g.:
-; blocked_ip_ranges[] = "127.0.0.0/8"
-; blocked_ip_ranges[] = "10.0.0.0/8"
-; blocked_ip_ranges[] = "192.168.0.0/16"
-; blocked_ip_ranges[] = "169.254.0.0/16"
-; blocked_ip_ranges[] = "::1/128"
-; blocked_ip_ranges[] = "fc00::/7"
-; blocked_ip_ranges[] = "fe80::/10"
+; Blocked CIDR ranges (IPv4 and IPv6). The built-in secure defaults are ALWAYS
+; active and cannot be disabled. Entries below are ADDITIONAL ranges appended
+; to the defaults. Single IPs are accepted and converted to /32 or /128.
+; Defaults include: RFC 1918 (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16),
+; loopback (127.0.0.0/8), link-local (169.254.0.0/16), CGNAT (100.64.0.0/10),
+; multicast/reserved, and IPv6 ULA/loopback/link-local equivalents.
+; blocked_ip_ranges[] = "203.0.113.0/24"
+; blocked_ip_ranges[] = "198.51.100.50"
+
+; Allowed CIDR ranges (whitelist). Entries here take precedence over the
+; blocked ranges above. Use this to permit access to specific internal hosts
+; or subnets that would otherwise be blocked by the defaults.
+; Single IPs are accepted and converted to /32 or /128.
+; allowed_ip_ranges[] = "192.168.1.222"
+; allowed_ip_ranges[] = "10.0.0.50"
+; allowed_ip_ranges[] = "192.168.100.0/24"
 
 [error]
 
