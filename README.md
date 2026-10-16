@@ -10,12 +10,12 @@ A fork of [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge), rewritten for 
 ## What's Inside
 
 - **PHP 8.5** with strict types wherever it made sense
-- **Alpine-based image** — noticeably smaller than the Debian variant
-- **SafeBridgeLoader** — bridges are loaded in an isolated process, so a broken bridge cannot crash the entire application
-- **Metadata cache** — the main page renders instantly, regardless of the bridge count
+- **Alpine-based image** noticeably smaller than the Debian variant
+- **SafeBridgeLoader** bridges are loaded in an isolated process, so a broken bridge cannot crash the entire application
+- **Metadata cache** the main page renders instantly, regardless of the bridge count
 - **Native PHP DOM parser** (`\Dom\HTMLDocument`) replacing the legacy `simple_html_dom`
-- **Proxy profiles** — FlareSolverr, SOCKS5 via TgWS, and plain HTTP proxies
-- **PSR-4 for bridges** — a single `RSSBridge\Bridges` namespace with proper autoloading
+- **Proxy profiles** FlareSolverr, SOCKS5 via TgWS, and plain HTTP proxies
+- **PSR-4 for bridges** a single `RSSBridge\Bridges` namespace with proper autoloading
 - Removed `DetectAction`, `FindfeedAction`, the donation UI, and other leftovers from the original project
 
 ## Installation
@@ -48,8 +48,8 @@ Multi-architecture Docker images are built weekly and published to GitHub Contai
 
 | Tag | Architecture | Optimization Level | Use Case |
 |-----|--------------|-------------------|----------|
-| `latest` | amd64 + arm64 | Baseline (`x86-64` / `armv8-a`) | Maximum compatibility — runs on any x86_64 CPU (2003+) or ARMv8 device |
-| `latest-modern` | amd64 + arm64 | High (`x86-64-v3` / `armv8.2-a` with crypto extensions) | Modern servers — Intel Haswell+ / AMD Zen+, ARM Cortex-A55+ and newer |
+| `latest` | amd64 + arm64 | Baseline (`x86-64` / `armv8-a`) | Maximum compatibility â€” runs on any x86_64 CPU (2003+) or ARMv8 device |
+| `latest-modern` | amd64 + arm64 | High (`x86-64-v3` / `armv8.2-a` with crypto extensions) | Modern servers â€” Intel Haswell+ / AMD Zen+, ARM Cortex-A55+ and newer |
 
 ### Date-Tagged Images
 
@@ -105,7 +105,7 @@ password = "cat"
 
 ### Admin notifications (unified system)
 
-All interface notifications � including the legacy admin messages � go through
+All interface notifications — including the legacy admin messages — go through
 the unified notification system in `lib/notifications.php` (`notify_info`,
 `notify_warning`, `notify_error`, rendered once by `render_notifications()` in
 `templates/base.html.php`). The old manual `alert-*` markup is gone.
@@ -165,9 +165,9 @@ When `custom_timeout = true`, the bridge form gains a `_cache_timeout` field, le
 
 ```ini
 [error]
-; "feed" — errors appear inside the feed (default)
-; "http" — an HTML error page is returned
-; "none" — errors are silently logged
+; "feed" â€” errors appear inside the feed (default)
+; "http" â€” an HTML error page is returned
+; "none" â€” errors are silently logged
 output = "feed"
 
 ; Number of occurrences before an error is reported
@@ -187,7 +187,7 @@ With `by_bridge = true`, each bridge form shows a "Disable proxy" checkbox, allo
 
 ## Proxy Profiles
 
-For more complex scenarios — bypassing Cloudflare, using residential IPs, and similar — use named proxy profiles. Bridges call them via `getProtectedContents()`, `getProtectedSimpleHTMLDOM()`, or `getProtectedBinary()`.
+For more complex scenarios - bypassing Cloudflare, using residential IPs, and similar - use named proxy profiles. Bridges call them via `getProtectedContents()`, `getProtectedSimpleHTMLDOM()`, or `getProtectedBinary()`.
 
 ### Direct
 
@@ -211,7 +211,7 @@ timeout = 60000
 
 ### TgWS (SOCKS5)
 
-A SOCKS5 proxy via [TgWS](https://github.com/LordArrin/tg-ws-proxy-docker) — useful for bypassing censorship.
+A SOCKS5 proxy via [TgWS](https://github.com/LordArrin/tg-ws-proxy-docker) â€” useful for bypassing censorship.
 
 ```ini
 [proxy_profile_tgws]
@@ -238,9 +238,9 @@ Place a `.php` file in `/config/bridges-v2/` and restart the container. That's a
 
 ```bash
 ./config/
-├── config.ini.php
-└── bridges-v2/
-    └── MyCustomBridge.php
+â”œâ”€â”€ config.ini.php
+â””â”€â”€ bridges-v2/
+    â””â”€â”€ MyCustomBridge.php
 ```
 
 Each bridge must live under the `RSSBridge\Bridges` namespace, extend `BridgeAbstract` or anpther basic bridge,
@@ -282,7 +282,7 @@ final class MyCustomBridge extends BridgeAbstract
 }
 ```
 
-The legacy `/config/bridges/` directory is no longer supported — the container will emit a warning in the logs on startup. Migrate any such bridges to `bridges-v2/` with a proper namespace.
+The legacy `/config/bridges/` directory is no longer supported the container will emit a warning in the logs on startup. Migrate any such bridges to `bridges-v2/` with a proper namespace.
 
 For a detailed guide on bridge development, see the separate `BRIDGES.md` document.
 
@@ -290,23 +290,23 @@ For a detailed guide on bridge development, see the separate `BRIDGES.md` docume
 
 ```
 rss-bridge/
-├── actions/              # Request handlers: FrontpageAction, DisplayAction
-├── bridges-v2/           # Bridges (PSR-4, RSSBridge\Bridges namespace)
-├── caches/               # Cache backends: File, SQLite, Memcached, ...
-├── config/               # Config of internal services - nginx, PHP ...
-├── formats/              # Output formats: Atom, Mrss, Json, Html, Plaintext, Sfeed
-├── lib/                  # Core: BridgeAbstract, BridgeFactory, SafeBridgeLoader, ...
-├── docs/                 # Additional documentation
-├── middlewares/          # HTTP middleware stack
-├── proxies/              # Proxy profile implementations
-├── templates/            # HTML templates
-├── quirks/               # Rendering helpers: template, html, seo, media_embed, ...
-├── bin/                  # CLI utilities: cache-clear, cache-prune
-├── config/               # Default configuration
-├── static/               # CSS, JS, images
-├── supervisor/           # Supervisor. Launches all internal services - Memcached, Nginx, PHP.
-├── docker-entrypoint.sh  # Container entrypoint
-└── Dockerfile
+â”œâ”€â”€ actions/              # Request handlers: FrontpageAction, DisplayAction
+â”œâ”€â”€ bridges-v2/           # Bridges (PSR-4, RSSBridge\Bridges namespace)
+â”œâ”€â”€ caches/               # Cache backends: File, SQLite, Memcached, ...
+â”œâ”€â”€ config/               # Config of internal services - nginx, PHP ...
+â”œâ”€â”€ formats/              # Output formats: Atom, Mrss, Json, Html, Plaintext, Sfeed
+â”œâ”€â”€ lib/                  # Core: BridgeAbstract, BridgeFactory, SafeBridgeLoader, ...
+â”œâ”€â”€ docs/                 # Additional documentation
+â”œâ”€â”€ middlewares/          # HTTP middleware stack
+â”œâ”€â”€ proxies/              # Proxy profile implementations
+â”œâ”€â”€ templates/            # HTML templates
+â”œâ”€â”€ quirks/               # Rendering helpers: template, html, seo, media_embed, ...
+â”œâ”€â”€ bin/                  # CLI utilities: cache-clear, cache-prune
+â”œâ”€â”€ config/               # Default configuration
+â”œâ”€â”€ static/               # CSS, JS, images
+â”œâ”€â”€ supervisor/           # Supervisor. Launches all internal services - Memcached, Nginx, PHP.
+â”œâ”€â”€ docker-entrypoint.sh  # Container entrypoint
+â””â”€â”€ Dockerfile
 ```
 
 ## Migration from Original RSS-Bridge
@@ -315,7 +315,7 @@ rss-bridge/
 
 - The minimum PHP version has been raised from 7.4 to 8.5, with strict types enforced
 - Bridges now live in `bridges-v2/` under the `RSSBridge\Bridges` namespace
-- `DetectAction` and `FindfeedAction` have been removed — automatic feed detection by URL is no longer available
+- `DetectAction` and `FindfeedAction` have been removed â€” automatic feed detection by URL is no longer available
 - The donation UI and `getDonationURI()` have been removed
 - `simple_html_dom` has been replaced with the built-in `\Dom\HTMLDocument`
 - All broken/abandoned bridges have been removed or rewritten.
@@ -368,7 +368,7 @@ chmod -R 755 ./config
 
 ### Bridges marked as "Broken"
 
-This typically indicates an incompatible method signature in one of the bridges. Open the logs and search for `Bridge compatibility error` — the output will point to the offending bridge and the exact compile error.
+This typically indicates an incompatible method signature in one of the bridges. Open the logs and search for `Bridge compatibility error` â€” the output will point to the offending bridge and the exact compile error.
 
 ## License
 
