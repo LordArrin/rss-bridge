@@ -52,7 +52,7 @@ final class DevToBridge extends BridgeAbstract
             $this->collectGuides();
         }
 
-        if (empty($this->items) === true) {
+        if ($this->items === []) {
             throwServerException('No items found. The site structure may have changed.');
         }
     }

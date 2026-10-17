@@ -310,7 +310,7 @@ final class CodebergReleasesBridge extends BridgeAbstract
             }
         }
 
-        return array_values(array_unique(array_filter($urls, fn(string $v): bool => $v !== '')));
+        return array_values(array_unique($urls));
     }
 
     private function buildContent(array $release, string $downloadsMode, array $downloadsFilter): string

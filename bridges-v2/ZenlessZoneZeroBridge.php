@@ -42,7 +42,7 @@ final class ZenlessZoneZeroBridge extends HoyoBase
                 continue;
             }
 
-            $style = (string) ($element->getAttribute('style') ?? '');
+            $style = $element->getAttribute('style') ?? '';
             if ($style !== '') {
                 $newStyle = preg_replace('/text-align\s*:\s*center\s*;?/i', '', $style);
                 if (is_string($newStyle) === true && $newStyle !== $style) {

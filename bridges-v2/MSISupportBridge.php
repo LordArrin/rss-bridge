@@ -111,8 +111,8 @@ final class MSISupportBridge extends BridgeAbstract
         if (isset($parsedUrl['query']) === true && $parsedUrl['query'] !== '') {
             $queryParams = [];
             parse_str($parsedUrl['query'], $queryParams);
-            if (isset($queryParams['sub_product']) === true && $queryParams['sub_product'] !== '') {
-                $subProduct = $queryParams['sub_product'];
+            if (isset($queryParams['sub_product']) === true && is_scalar($queryParams['sub_product']) === true && (string) $queryParams['sub_product'] !== '') {
+                $subProduct = (string) $queryParams['sub_product'];
             }
         }
 
@@ -199,8 +199,12 @@ final class MSISupportBridge extends BridgeAbstract
 
     private function buildFeedItem(array $file, string $subCategory, array $info, bool $hideAttachments): array
     {
-        $title = $this->decodeHtml($file['download_title'] ?? $subCategory);
-        $version = $this->decodeHtml($file['download_version'] ?? '');
+        $rawTitle = $file['download_title'] ?? $subCategory;
+        $title = $this->decodeHtml((is_scalar($rawTitle) === true) ? (string) $rawTitle : $subCategory);
+
+        $rawVersion = $file['download_version'] ?? '';
+        $version = $this->decodeHtml((is_scalar($rawVersion) === true) ? (string) $rawVersion : '');
+
         $itemTitle = "[{$subCategory}] {$title}";
         if ($version !== '') {
             $itemTitle .= " - {$version}";
@@ -216,19 +220,28 @@ final class MSISupportBridge extends BridgeAbstract
 
         $content = '<div style="' . self::CSS['item'] . '">';
 
-        if (isset($file['download_description']) === true && $file['download_description'] !== '') {
-            $desc = $this->cleanDescription($file['download_description']);
-            $content .= '<p style="' . self::CSS['p'] . '"><span style="' . self::CSS['label'] . '">Description:</span><br>' . $desc . '</p>';
+        if (isset($file['download_description']) === true && is_scalar($file['download_description']) === true) {
+            $descStr = (string) $file['download_description'];
+            if ($descStr !== '') {
+                $desc = $this->cleanDescription($descStr);
+                $content .= '<p style="' . self::CSS['p'] . '"><span style="' . self::CSS['label'] . '">Description:</span><br>' . $desc . '</p>';
+            }
         }
-        if (isset($file['os']) === true && $file['os'] !== '') {
-            $os = htmlspecialchars($this->decodeHtml($file['os']), ENT_QUOTES, 'UTF-8');
-            $content .= '<p style="' . self::CSS['p'] . '"><span style="' . self::CSS['label'] . '">OS:</span> ' . $os . '</p>';
+
+        if (isset($file['os']) === true && is_scalar($file['os']) === true) {
+            $osStr = (string) $file['os'];
+            if ($osStr !== '') {
+                $os = htmlspecialchars($this->decodeHtml($osStr), ENT_QUOTES, 'UTF-8');
+                $content .= '<p style="' . self::CSS['p'] . '"><span style="' . self::CSS['label'] . '">OS:</span> ' . $os . '</p>';
+            }
         }
-        if (isset($file['download_size']) === true && $file['download_size'] !== '') {
+
+        if (isset($file['download_size']) === true && is_numeric($file['download_size']) === true) {
             $sizeMb = round((float) $file['download_size'] / (1024 * 1024), 2);
             $content .= '<p style="' . self::CSS['p'] . '"><span style="' . self::CSS['label'] . '">Size:</span> ' . $sizeMb . ' MB</p>';
         }
-        if ($hideAttachments === false && isset($file['download_url']) === true && $file['download_url'] !== '') {
+
+        if ($hideAttachments === false && isset($file['download_url']) === true && is_string($file['download_url']) === true && $file['download_url'] !== '') {
             $downloadUrl = htmlspecialchars($file['download_url'], ENT_QUOTES, 'UTF-8');
             $downloadStyle = self::CSS['download'];
             $content .= sprintf(
@@ -241,14 +254,15 @@ final class MSISupportBridge extends BridgeAbstract
 
         $content .= '</div>';
 
+        $rawId = $file['download_id'] ?? null;
         $item = [
             'title'   => $itemTitle,
             'uri'     => $uri,
             'content' => $content,
-            'uid'     => $file['download_id'] ?? md5($itemTitle)
+            'uid'     => (is_scalar($rawId) === true) ? (string) $rawId : md5($itemTitle)
         ];
 
-        if (isset($file['download_release']) === true && $file['download_release'] !== '') {
+        if (isset($file['download_release']) === true && is_string($file['download_release']) === true && $file['download_release'] !== '') {
             $timestamp = strtotime($file['download_release']);
             $item['timestamp'] = $timestamp === false ? null : $timestamp;
         }
@@ -285,10 +299,15 @@ final class MSISupportBridge extends BridgeAbstract
                     if (is_array($file) === false) {
                         continue;
                     }
-                    if (($file['download_url'] ?? '') === '' && ($file['download_title'] ?? '') === '') {
+
+                    $fileUrl = (isset($file['download_url']) === true && is_scalar($file['download_url']) === true) ? (string) $file['download_url'] : '';
+                    $fileTitle = (isset($file['download_title']) === true && is_scalar($file['download_title']) === true) ? (string) $file['download_title'] : '';
+
+                    if ($fileUrl === '' && $fileTitle === '') {
                         continue;
                     }
-                    $allItems[] = $this->buildFeedItem($file, $subCategory, $info, $hideAttachments);
+
+                    $allItems[] = $this->buildFeedItem($file, (string) $subCategory, $info, $hideAttachments);
                 }
             }
         }

@@ -164,8 +164,8 @@ final class AlpinePackagesBridge extends BridgeAbstract
         foreach ($rows as $tr) {
             $itemData = $this->getElementData($tr);
 
-            $isPackageEmpty = empty($itemData['package']);
-            $isVersionEmpty = empty($itemData['version']);
+            $isPackageEmpty = $itemData['package'] === '';
+            $isVersionEmpty = $itemData['version'] === '';
             if ($isPackageEmpty === true || $isVersionEmpty === true) {
                 continue;
             }
@@ -188,7 +188,7 @@ final class AlpinePackagesBridge extends BridgeAbstract
             ];
         }
 
-        $isItemsEmpty = empty($this->items);
+        $isItemsEmpty = $this->items === [];
         if ($isItemsEmpty === true) {
             throwServerException('No packages found. Check your input parameters or the site status.');
         }

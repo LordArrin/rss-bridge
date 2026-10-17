@@ -111,7 +111,9 @@ final class CubariProxyBridge extends BridgeAbstract
                 $dates = $element['release_date'];
                 $date = max($dates);
                 $item['timestamp'] = (int) $date;
-                $keys = array_keys($dates, $date);
+
+                $keys = array_keys($dates, $date, true);
+
                 if (isset($keys[0]) === true) {
                     $group = (string) $keys[0];
                 }

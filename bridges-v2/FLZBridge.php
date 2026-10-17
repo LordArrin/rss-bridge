@@ -580,7 +580,7 @@ final class FLZBridge extends BridgeAbstract
         if ($this->loadCacheValue('login_failed') !== null) {
             $this->loginProblem = sprintf(
                 'Last FLZ+ login failed, further attempts are paused for up to %d hours. Check credentials and subscription.',
-                (int) (self::LOGIN_LOCK_TTL / 3600)
+                self::LOGIN_LOCK_TTL / 3600
             );
             return;
         }
@@ -611,7 +611,7 @@ final class FLZBridge extends BridgeAbstract
         $this->logger->warning(sprintf(
             'FLZ: login failed (%s), pausing for %d hours',
             $reason,
-            (int) (self::LOGIN_LOCK_TTL / 3600)
+            self::LOGIN_LOCK_TTL / 3600
         ));
         $this->saveCacheValue('login_failed', (string) time(), self::LOGIN_LOCK_TTL);
         $this->loginProblem = sprintf('FLZ+ login failed (%s). Check credentials and subscription.', $reason);

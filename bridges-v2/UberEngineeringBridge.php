@@ -77,7 +77,7 @@ final class UberEngineeringBridge extends BridgeAbstract
             throwServerException('Unable to find article feed data');
         }
 
-        $payload = rawurldecode(self::decode((string) $matches[1]));
+        $payload = rawurldecode(self::decode($matches[1]));
         $data = Json::decode($payload);
 
         if (is_array($data) === false) {

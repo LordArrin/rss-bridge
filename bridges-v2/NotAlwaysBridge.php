@@ -80,12 +80,12 @@ final class NotAlwaysBridge extends BridgeAbstract
             return null;
         }
 
-        $href = (string) ($link->getAttribute('href') ?? '');
+        $href = $link->getAttribute('href') ?? '';
         if ($href === '') {
             return null;
         }
 
-        $title = trim((string) $link->textContent);
+        $title = trim($link->textContent);
 
         $postHeader = $post->querySelector('.post_header');
         $storyContent = $post->querySelector('.storycontent');

@@ -170,8 +170,8 @@ final class NasaApodBridge extends BridgeAbstract
         $imgNode = $imageWrapper->querySelector('img');
 
         if ($imgNode !== null) {
-            $imgAlt = htmlspecialchars((string) ($imgNode->getAttribute('alt') ?? ''), ENT_QUOTES, 'UTF-8');
-            $imgStyle = htmlspecialchars((string) ($imgNode->getAttribute('style') ?? ''), ENT_QUOTES, 'UTF-8');
+            $imgAlt = htmlspecialchars($imgNode->getAttribute('alt') ?? '', ENT_QUOTES, 'UTF-8');
+            $imgStyle = htmlspecialchars($imgNode->getAttribute('style') ?? '', ENT_QUOTES, 'UTF-8');
             $safeImageUri = htmlspecialchars($imageUri, ENT_QUOTES, 'UTF-8');
 
             $imgTag = '<img src="' . $safeImageUri . '" alt="' . $imgAlt . '"';

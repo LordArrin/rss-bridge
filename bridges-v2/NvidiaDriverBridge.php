@@ -157,12 +157,10 @@ final class NvidiaDriverBridge extends BridgeAbstract
 
     public function getName(): string
     {
-        // Если контекст не установлен - вернуть статичное имя
         if ($this->queriedContext === null) {
             return static::NAME;
         }
 
-        // Определяем ОС из контекста
         $operatingSystem = match ($this->queriedContext) {
             'Windows' => 'Windows',
             'Linux' => 'Linux',
@@ -177,12 +175,11 @@ final class NvidiaDriverBridge extends BridgeAbstract
             default => null,
         };
 
-        $whqlValue = $key !== null ? (string) $this->getInput($key) : '';
+        $whqlValue = $key !== null ? $this->getInput($key) : '';
 
-        // Fallback на defaultValue если значение пустое
         if ($whqlValue === '' && $key !== null) {
             $paramDef = static::PARAMETERS[$this->queriedContext][$key] ?? [];
-            $whqlValue = (string) ($paramDef['defaultValue'] ?? '');
+            $whqlValue = $paramDef['defaultValue'] ?? '';
         }
 
         $driverType = self::WHQL_LABELS[$whqlValue] ?? 'All';

@@ -42,8 +42,8 @@ final class PlaySrfBridge extends BridgeAbstract
             throwClientException('Invalid region in show URL');
         }
 
-        $showId = (string) $matchShowId[0];
-        $region = (string) $matchRegion[0];
+        $showId = $matchShowId[0];
+        $region = $matchRegion[0];
 
         $limitInput = $this->getInput('limit');
         $limit = is_numeric($limitInput) === true ? (int) $limitInput : null;

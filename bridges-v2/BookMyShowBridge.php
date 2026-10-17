@@ -541,7 +541,8 @@ final class BookMyShowBridge extends BridgeAbstract
 
         $genreString = (string) ($eventGroup['EventGrpGenre'] ?? '');
         $categories = array_filter(
-            explode('|', ucwords(strtolower($genreString), '|'))
+            explode('|', ucwords(strtolower($genreString), '|')),
+            fn(string $v): bool => $v !== ''
         );
         $categories = array_values($categories);
 

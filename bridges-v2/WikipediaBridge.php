@@ -110,13 +110,15 @@ final class WikipediaBridge extends BridgeAbstract
         $baseUri = $this->getURI();
         $html = getSimpleHTMLDOM($baseUri . '/wiki');
 
-        $function = 'getContents' . ucfirst(strtolower($language));
-
-        if (method_exists($this, $function) === false) {
-            throwServerException("A function to get the contents for your language is missing ('{$function}')!");
-        }
-
-        $this->$function($html, $subjectId, $fullArticle);
+        match ($language) {
+            'en' => $this->getContentsEn($html, $subjectId, $fullArticle),
+            'de' => $this->getContentsDe($html, $subjectId, $fullArticle),
+            'fr' => $this->getContentsFr($html, $subjectId, $fullArticle),
+            'ru' => $this->getContentsRu($html, $subjectId, $fullArticle),
+            'eo' => $this->getContentsEo($html, $subjectId, $fullArticle),
+            'nl' => $this->getContentsNl($html, $subjectId, $fullArticle),
+            default => throwServerException("A function to get the contents for your language is missing ('getContents" . ucfirst(strtolower($language)) . "')!"),
+        };
     }
 
     private function isInComplexStructure(\Dom\Element $element): bool

@@ -353,7 +353,7 @@ final class AO3Bridge extends BridgeAbstract
     private function extractWorkId(string $uri): string
     {
         if (preg_match('#/works/(\d+)#', $uri, $matches) === 1) {
-            return (string) $matches[1];
+            return $matches[1];
         }
         return '';
     }

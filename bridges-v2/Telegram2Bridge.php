@@ -639,7 +639,17 @@ CSS,
             $method = $piece[1];
             $element = $piece[2];
 
-            $partHtml = $this->{$method}($element, $context);
+            $partHtml = match ($method) {
+                'processText'        => $this->processText($element, $context),
+                'processVideo'       => $this->processVideo($element, $context),
+                'processPhoto'       => $this->processPhoto($element, $context),
+                'processPoll'        => $this->processPoll($element, $context),
+                'processAttachment'  => $this->processAttachment($element, $context),
+                'processLinkPreview' => $this->processLinkPreview($element, $context),
+                'processLocation'    => $this->processLocation($element, $context),
+                'processSticker'     => $this->processSticker($element, $context),
+                default              => '',
+            };
 
             if ($partHtml === '') {
                 continue;

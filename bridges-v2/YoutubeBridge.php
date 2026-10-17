@@ -692,7 +692,7 @@ final class YoutubeBridge extends BridgeAbstract
             return null;
         }
 
-        $data = json_decode((string) $matches[1], false);
+        $data = json_decode($matches[1], false);
 
         if (is_object($data) === false) {
             return null;

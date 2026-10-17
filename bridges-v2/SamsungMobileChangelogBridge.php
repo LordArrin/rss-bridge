@@ -56,7 +56,7 @@ final class SamsungMobileChangelogBridge extends BridgeAbstract
 
         $dfltPageInput = $dom->querySelector('input#dflt_page');
         if ($dfltPageInput !== null) {
-            $dfltPageValue = (string) ($dfltPageInput->getAttribute('value') ?? '');
+            $dfltPageValue = $dfltPageInput->getAttribute('value') ?? '';
             if ($dfltPageValue !== '') {
                 $urlLanguage = urljoin($url, $dfltPageValue);
             } else {
@@ -65,7 +65,7 @@ final class SamsungMobileChangelogBridge extends BridgeAbstract
         } else {
             $enOption = $dom->querySelector('option[value*="eng.html"]');
             if ($enOption !== null) {
-                $enOptionValue = (string) ($enOption->getAttribute('value') ?? '');
+                $enOptionValue = $enOption->getAttribute('value') ?? '';
                 if ($enOptionValue !== '') {
                     $urlLanguage = urljoin($url, $enOptionValue);
                 } else {
@@ -92,7 +92,7 @@ final class SamsungMobileChangelogBridge extends BridgeAbstract
 
         $h1 = $dom->querySelector('h1');
         if ($h1 !== null) {
-            $this->deviceName = trim((string) $h1->textContent);
+            $this->deviceName = trim($h1->textContent);
         }
 
         $this->parseChangelog($container, $url);

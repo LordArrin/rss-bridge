@@ -81,14 +81,14 @@ final class NOSBridge extends BridgeAbstract
                 continue;
             }
 
-            $title = trim((string) $h2->textContent);
+            $title = trim($h2->textContent);
 
             $link = $article->querySelector('a');
             if ($link === null) {
                 continue;
             }
 
-            $href = (string) ($link->getAttribute('href') ?? '');
+            $href = $link->getAttribute('href') ?? '';
             if ($href === '') {
                 continue;
             }
@@ -96,13 +96,13 @@ final class NOSBridge extends BridgeAbstract
             $p = $article->querySelector('p');
             $content = '';
             if ($p !== null) {
-                $content = trim((string) $p->textContent);
+                $content = trim($p->textContent);
             }
 
             $timeElement = $article->querySelector('time');
             $timestamp = null;
             if ($timeElement !== null) {
-                $datetime = (string) ($timeElement->getAttribute('datetime') ?? '');
+                $datetime = $timeElement->getAttribute('datetime') ?? '';
                 if ($datetime !== '') {
                     $ts = strtotime($datetime);
                     if ($ts !== false) {
@@ -143,7 +143,7 @@ final class NOSBridge extends BridgeAbstract
                 if (str_contains($selector, 'href') === true) {
                     $attrName = 'href';
                 }
-                $attr = (string) ($el->getAttribute($attrName) ?? '');
+                $attr = $el->getAttribute($attrName) ?? '';
                 if ($attr !== '') {
                     $el->setAttribute($attrName, $this->resolveUrl($baseUrl, $attr));
                 }
@@ -163,8 +163,8 @@ final class NOSBridge extends BridgeAbstract
 
         if (str_starts_with($relative, '/') === true) {
             $parsed = parse_url($base);
-            $scheme = (string) ($parsed['scheme'] ?? 'https');
-            $host = (string) ($parsed['host'] ?? '');
+            $scheme = $parsed['scheme'] ?? 'https';
+            $host = $parsed['host'] ?? '';
             return $scheme . '://' . $host . $relative;
         }
 

@@ -73,18 +73,18 @@ final class GithubSearchBridge extends BridgeAbstract
                 continue;
             }
 
-            $href = (string) ($titleLink->getAttribute('href') ?? '');
+            $href = $titleLink->getAttribute('href') ?? '';
             if ($href === '') {
                 continue;
             }
 
             $item = [];
             $item['uri'] = self::BASE_URI . $href;
-            $item['title'] = trim((string) $titleElement->textContent);
+            $item['title'] = trim($titleElement->textContent);
 
             $timestamp = time();
             if ($dateElement !== null) {
-                $dateTitle = (string) ($dateElement->getAttribute('title') ?? '');
+                $dateTitle = $dateElement->getAttribute('title') ?? '';
                 if ($dateTitle !== '') {
                     $ts = strtotime($dateTitle);
                     if ($ts !== false) {
@@ -98,7 +98,7 @@ final class GithubSearchBridge extends BridgeAbstract
 
             $content = '<p>';
             if ($descriptionElement !== null) {
-                $content .= htmlspecialchars(trim((string) $descriptionElement->textContent));
+                $content .= htmlspecialchars(trim($descriptionElement->textContent));
             } else {
                 $content .= 'No description';
             }
@@ -111,8 +111,8 @@ final class GithubSearchBridge extends BridgeAbstract
                     if ($topicElement instanceof \Dom\Element === false) {
                         continue;
                     }
-                    $topicHref = (string) ($topicElement->getAttribute('href') ?? '');
-                    $topicTitle = trim((string) $topicElement->textContent);
+                    $topicHref = $topicElement->getAttribute('href') ?? '';
+                    $topicTitle = trim($topicElement->textContent);
 
                     if ($topicHref !== '') {
                         $topicLink = self::BASE_URI . $topicHref;
@@ -126,7 +126,7 @@ final class GithubSearchBridge extends BridgeAbstract
             if ($languageElement !== null) {
                 $content .= '<p>';
                 $content .= 'Language: ';
-                $content .= htmlspecialchars(trim((string) $languageElement->textContent));
+                $content .= htmlspecialchars(trim($languageElement->textContent));
                 $content .= '</p>';
             }
 

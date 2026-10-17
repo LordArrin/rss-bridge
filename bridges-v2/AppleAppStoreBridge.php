@@ -149,7 +149,7 @@ final class AppleAppStoreBridge extends BridgeAbstract
             throw new \Exception('Failed to parse serialized server data');
         }
 
-        if (isset($json['data']) === false || empty($json['data']) === true) {
+        if (isset($json['data']) === false || is_array($json['data']) === false || $json['data'] === []) {
             throw new \Exception('No app data found in serialized server data');
         }
 

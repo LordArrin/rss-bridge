@@ -305,9 +305,12 @@ final class ModrinthBridge extends BridgeAbstract
             return null;
         }
 
-        $items = array_filter(array_map('trim', explode(',', $input)));
+        $items = array_filter(
+            array_map('trim', explode(',', $input)),
+            fn(string $v): bool => $v !== ''
+        );
 
-        if (count($items) > 0) {
+        if ($items !== []) {
             return json_encode($items);
         }
 

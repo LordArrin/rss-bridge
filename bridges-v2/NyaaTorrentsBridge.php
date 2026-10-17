@@ -96,7 +96,7 @@ final class NyaaTorrentsBridge extends BridgeAbstract
             }
 
             $item = $feedItem;
-            $originalUri = (string) ($item['uri'] ?? '');
+            $originalUri = $item['uri'] ?? '';
 
             $viewUri = str_replace('.torrent', '', $originalUri);
             $viewUri = str_replace('/download/', '/view/', $viewUri);
@@ -115,7 +115,7 @@ final class NyaaTorrentsBridge extends BridgeAbstract
                     $descriptionNode = $dom->querySelector('#torrent-description');
                     $description = $descriptionNode !== null ? $descriptionNode->innerHTML : '';
 
-                    $decodedDescription = html_entity_decode((string) $description);
+                    $decodedDescription = html_entity_decode($description);
                     if (function_exists('markdownToHtml') === true) {
                         $content = \markdownToHtml($decodedDescription);
                     } else {

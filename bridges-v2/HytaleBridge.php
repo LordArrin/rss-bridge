@@ -61,7 +61,7 @@ final class HytaleBridge extends BridgeAbstract
             return;
         }
 
-        $articlePath = (string) ($link->getAttribute('href') ?? '');
+        $articlePath = $link->getAttribute('href') ?? '';
 
         if ($articlePath === '') {
             return;
@@ -71,14 +71,14 @@ final class HytaleBridge extends BridgeAbstract
 
         $item = [];
         $item['uri'] = $articleUrl;
-        $item['title'] = trim((string) $link->textContent);
+        $item['title'] = trim($link->textContent);
 
         $content = '';
 
         $imgElement = $blogPost->querySelector('img');
 
         if ($imgElement !== null) {
-            $imageUrl = (string) ($imgElement->getAttribute('src') ?? '');
+            $imageUrl = $imgElement->getAttribute('src') ?? '';
 
             if ($imageUrl !== '') {
                 $content .= '<img src="' . htmlspecialchars($imageUrl) . '" alt="Article thumbnail" style="' . self::CSS['img'] . '" />';
@@ -88,7 +88,7 @@ final class HytaleBridge extends BridgeAbstract
         $descriptionElement = $blogPost->querySelector(self::DESCRIPTION_SELECTOR);
 
         if ($descriptionElement !== null) {
-            $descriptionText = trim((string) $descriptionElement->textContent);
+            $descriptionText = trim($descriptionElement->textContent);
             if ($descriptionText !== '') {
                 if ($content !== '') {
                     $content .= '<br />';
@@ -106,7 +106,7 @@ final class HytaleBridge extends BridgeAbstract
         if ($footerSpans->length >= 1) {
             $firstSpan = $footerSpans->item(0);
             if ($firstSpan !== null) {
-                $dateText = trim((string) $firstSpan->textContent);
+                $dateText = trim($firstSpan->textContent);
                 if ($dateText !== '') {
                     $timestamp = strtotime($dateText);
                     if ($timestamp !== false) {
@@ -119,10 +119,10 @@ final class HytaleBridge extends BridgeAbstract
         $authorElement = $blogPost->querySelector(self::AUTHOR_SELECTOR);
 
         if ($authorElement !== null) {
-            $authorText = trim((string) $authorElement->textContent);
+            $authorText = trim($authorElement->textContent);
 
             if (preg_match('/Posted by\s+(.+)/i', $authorText, $matches) === 1) {
-                $item['author'] = trim((string) $matches[1]);
+                $item['author'] = trim($matches[1]);
             }
         }
 

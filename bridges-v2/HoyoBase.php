@@ -57,7 +57,7 @@ abstract class HoyoBase extends BridgeAbstract
     protected function getBannerUrl(array $jsonExt): string
     {
         $bannerKey = $this->getBannerKey();
-        return (string) ($jsonExt[$bannerKey][0]['url'] ?? '');
+        return $jsonExt[$bannerKey][0]['url'] ?? '';
     }
 
     protected function processContentHtml(\Dom\Element $wrapper, string $sContent): void
@@ -104,7 +104,7 @@ abstract class HoyoBase extends BridgeAbstract
                 continue;
             }
 
-            $sContent = (string) ($jsonItem['sContent'] ?? '');
+            $sContent = $jsonItem['sContent'] ?? '';
             if ($sContent === '') {
                 continue;
             }
@@ -120,10 +120,10 @@ abstract class HoyoBase extends BridgeAbstract
             $this->processYoutubeEmbeds($wrapper);
             $this->limitImageSize($wrapper);
 
-            $articleHtml = (string) $wrapper->innerHTML;
+            $articleHtml = $wrapper->innerHTML;
 
-            $sTitle = (string) ($jsonItem['sTitle'] ?? '');
-            $dtStartTime = (string) ($jsonItem['dtStartTime'] ?? '');
+            $sTitle = $jsonItem['sTitle'] ?? '';
+            $dtStartTime = $jsonItem['dtStartTime'] ?? '';
             if ($dtStartTime !== '') {
                 $timestamp = strtotime($dtStartTime);
                 if ($timestamp === false) {
@@ -136,7 +136,7 @@ abstract class HoyoBase extends BridgeAbstract
             $iInfoId = (int) ($jsonItem['iInfoId'] ?? 0);
             $uri = urljoin(self::URI, $this->getArticleUrl($iInfoId));
 
-            $sExt = (string) ($jsonItem['sExt'] ?? '');
+            $sExt = $jsonItem['sExt'] ?? '';
             $bannerUrl = '';
 
             if ($sExt !== '') {
@@ -185,10 +185,10 @@ abstract class HoyoBase extends BridgeAbstract
                 continue;
             }
 
-            $style = (string) ($element->getAttribute('style') ?? '');
+            $style = $element->getAttribute('style') ?? '';
             if ($style !== '') {
-                $newStyle = (string) preg_replace('/text-align\s*:\s*center\s*;?/i', '', $style);
-                if ($newStyle !== $style) {
+                $newStyle = preg_replace('/text-align\s*:\s*center\s*;?/i', '', $style);
+                if (is_string($newStyle) === true && $newStyle !== $style) {
                     $newStyle = trim($newStyle);
                     if ($newStyle === '') {
                         $element->removeAttribute('style');
@@ -227,7 +227,7 @@ abstract class HoyoBase extends BridgeAbstract
             $isInsideVideoFrame = false;
             while ($parent !== null) {
                 if ($parent instanceof \Dom\Element === true && $parent->tagName === 'div') {
-                    $class = (string) ($parent->getAttribute('class') ?? '');
+                    $class = $parent->getAttribute('class') ?? '';
                     if (strpos($class, 'ttr-video-frame') !== false) {
                         $isInsideVideoFrame = true;
                         break;
@@ -237,7 +237,7 @@ abstract class HoyoBase extends BridgeAbstract
             }
 
             if ($isInsideVideoFrame === false) {
-                $src = (string) ($iframe->getAttribute('src') ?? '');
+                $src = $iframe->getAttribute('src') ?? '';
                 if (preg_match('/youtube(-nocookie)?\.com\/embed\//i', $src) === 1 || preg_match('/youtu\.be\//i', $src) === 1) {
                     $elementsToReplace[] = $iframe;
                 }

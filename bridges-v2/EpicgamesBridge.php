@@ -96,15 +96,15 @@ final class EpicgamesBridge extends BridgeAbstract
 
             $item = [];
 
-            $url = (string) ($value->url ?? '');
+            $url = $value->url ?? '';
             if ($url !== '' && str_starts_with($url, '/') === true) {
                 $url = self::URI . $url;
             }
             $item['uri'] = $url;
 
-            $item['title'] = (string) ($value->title ?? '');
+            $item['title'] = $value->title ?? '';
 
-            $dateStr = (string) ($value->date ?? '');
+            $dateStr = $value->date ?? '';
             if ($dateStr !== '') {
                 $timestamp = strtotime($dateStr);
                 if ($timestamp !== false) {
@@ -112,15 +112,15 @@ final class EpicgamesBridge extends BridgeAbstract
                 }
             }
 
-            $author = (string) ($value->author ?? '');
+            $author = $value->author ?? '';
             if ($author !== '') {
                 $item['author'] = $author;
             } else {
                 $item['author'] = 'Epic Games Store';
             }
 
-            $contentRaw = (string) ($value->content ?? '');
-            $image = (string) ($value->image ?? '');
+            $contentRaw = $value->content ?? '';
+            $image = $value->image ?? '';
 
             $content = '';
             if ($image !== '') {
@@ -133,7 +133,7 @@ final class EpicgamesBridge extends BridgeAbstract
 
             $item['content'] = $content;
 
-            $uid = (string) ($value->_id ?? '');
+            $uid = $value->_id ?? '';
             $item['uid'] = $uid;
 
             $this->items[] = $item;
@@ -170,7 +170,7 @@ final class EpicgamesBridge extends BridgeAbstract
 
             $tag = strtolower($el->nodeName);
             $attrName = ($tag === 'a') ? 'href' : 'src';
-            $attr = (string) ($el->getAttribute($attrName) ?? '');
+            $attr = $el->getAttribute($attrName) ?? '';
 
             if ($attr === '') {
                 continue;
@@ -180,8 +180,8 @@ final class EpicgamesBridge extends BridgeAbstract
                 $resolved = $attr;
             } elseif (str_starts_with($attr, '/') === true) {
                 $parsed = parse_url(self::URI);
-                $scheme = (string) ($parsed['scheme'] ?? 'https');
-                $host = (string) ($parsed['host'] ?? '');
+                $scheme = $parsed['scheme'] ?? 'https';
+                $host = $parsed['host'] ?? '';
                 $resolved = $scheme . '://' . $host . $attr;
             } else {
                 $resolved = rtrim(self::URI, '/') . '/' . ltrim($attr, '/');
@@ -199,6 +199,6 @@ final class EpicgamesBridge extends BridgeAbstract
             }
         }
 
-        return (string) $wrapper->innerHTML;
+        return $wrapper->innerHTML;
     }
 }

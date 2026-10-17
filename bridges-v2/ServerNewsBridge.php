@@ -104,7 +104,7 @@ final class ServerNewsBridge extends BridgeAbstract
         }
 
         foreach ($wrapper->querySelectorAll('p, div, h1, h2, h3, h4, h5, h6') as $element) {
-            $style = (string)($element->getAttribute('style') ?? '');
+            $style = $element->getAttribute('style') ?? '';
             if ($style !== '') {
                 $newStyle = preg_replace('/text-align\s*:\s*center\s*;?/i', '', $style);
                 if (is_string($newStyle) === true && $newStyle !== $style) {
@@ -119,7 +119,7 @@ final class ServerNewsBridge extends BridgeAbstract
             $element->setAttribute('align', 'left');
         }
 
-        return (string)$wrapper->innerHTML;
+        return $wrapper->innerHTML;
     }
 
     private function fetchFullContent(string $url): array
@@ -205,7 +205,7 @@ final class ServerNewsBridge extends BridgeAbstract
             $element->remove();
         }
 
-        $content = (string)($article->innerHTML ?? '');
+        $content = $article->innerHTML;
         $content = preg_replace('/#([^\s#<]+)\s*/u', '', $content);
         $content = $this->applyStyles($content);
 

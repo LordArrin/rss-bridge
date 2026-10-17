@@ -106,7 +106,7 @@ final class EpicGamesFreeBridge extends BridgeAbstract
                 continue;
             }
 
-            $discountType = (string) ($promo['discountSetting']['discountType'] ?? '');
+            $discountType = $promo['discountSetting']['discountType'] ?? '';
             $discountPercentage = (int) ($promo['discountSetting']['discountPercentage'] ?? -1);
 
             if ($discountType !== 'PERCENTAGE' || $discountPercentage !== 0) {
@@ -134,14 +134,14 @@ final class EpicGamesFreeBridge extends BridgeAbstract
                 $keyImages = [];
             }
 
-            $content = (string) ($element['description'] ?? '');
+            $content = $element['description'] ?? '';
 
             $seenImages = [];
             foreach ($keyImages as $imageItem) {
                 if (is_array($imageItem) === false) {
                     continue;
                 }
-                $imageUrl = (string) ($imageItem['url'] ?? '');
+                $imageUrl = $imageItem['url'] ?? '';
                 if ($imageUrl === '') {
                     continue;
                 }
@@ -156,13 +156,13 @@ final class EpicGamesFreeBridge extends BridgeAbstract
                 $content .= '<p><img src="' . htmlspecialchars($imageUrl) . '" style="' . self::CSS['img'] . '" alt="" /></p>';
             }
 
-            $startDate = (string) ($promo['startDate'] ?? '');
+            $startDate = $promo['startDate'] ?? '';
             $timestamp = ($startDate !== '') ? strtotime($startDate) : false;
 
             $item = [
-                'author' => (string) ($element['seller']['name'] ?? 'Epic Games'),
+                'author' => $element['seller']['name'] ?? 'Epic Games',
                 'content' => $content,
-                'title' => (string) ($element['title'] ?? ''),
+                'title' => $element['title'] ?? '',
                 'uri' => $uri,
                 'uid' => $uri,
             ];

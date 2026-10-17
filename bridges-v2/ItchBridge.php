@@ -115,7 +115,7 @@ final class ItchBridge extends BridgeAbstract
         $this->limitImageSize($wrapper);
         $this->alignTextLeft($wrapper);
 
-        return (string)$wrapper->innerHTML;
+        return $wrapper->innerHTML;
     }
 
     private function limitImageSize(\Dom\Node $node): void
@@ -145,7 +145,7 @@ final class ItchBridge extends BridgeAbstract
                 continue;
             }
 
-            $style = (string)($element->getAttribute('style') ?? '');
+            $style = $element->getAttribute('style') ?? '';
             if ($style !== '') {
                 $newStyle = preg_replace('/text-align\s*:\s*center\s*;?/i', '', $style);
                 if (is_string($newStyle) === true && $newStyle !== $style) {
