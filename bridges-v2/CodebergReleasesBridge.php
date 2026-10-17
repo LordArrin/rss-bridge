@@ -248,7 +248,7 @@ final class CodebergReleasesBridge extends BridgeAbstract
         $categories = array_values(array_filter([
             $tag !== '' ? $tag : null,
             ($release['prerelease'] ?? false) === true ? 'pre-release' : null,
-        ]));
+        ], fn(?string $v): bool => $v !== null));
 
         $content = $this->buildContent($release, $downloadsMode, $downloadsFilter);
         if ($content === '') {
@@ -310,7 +310,7 @@ final class CodebergReleasesBridge extends BridgeAbstract
             }
         }
 
-        return array_values(array_unique(array_filter($urls)));
+        return array_values(array_unique(array_filter($urls, fn(string $v): bool => $v !== '')));
     }
 
     private function buildContent(array $release, string $downloadsMode, array $downloadsFilter): string

@@ -107,7 +107,7 @@ final class BastaBridge extends BridgeAbstract
             return '';
         }
 
-        return $dom->saveHTML($texte);
+        return $dom->saveHtml($texte);
     }
 
     private function resolveRelativeUrls(?\Dom\Element $container): void

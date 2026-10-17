@@ -150,7 +150,10 @@ final class Rule34pahealBridge extends BridgeAbstract
         }
 
         $dataTags = $element->getAttribute('data-tags') ?? '';
-        $categories = array_values(array_filter(explode(' ', $dataTags)));
+        $categories = array_values(array_filter(
+            explode(' ', $dataTags),
+            fn(string $v): bool => $v !== ''
+        ));
 
         $title = 'Image ' . $postId;
 

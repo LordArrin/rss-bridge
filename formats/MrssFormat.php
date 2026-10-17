@@ -28,7 +28,7 @@ final class MrssFormat extends FormatAbstract
 
     public function render(): string
     {
-        $document = new \DomDocument('1.0', 'UTF-8');
+        $document = new \DOMDocument('1.0', 'UTF-8');
         $document->formatOutput = true;
 
         $feed = $document->createElement('rss');
@@ -108,19 +108,19 @@ final class MrssFormat extends FormatAbstract
             $itemUid = $item->getUid();
             $isPermaLink = 'false';
 
-            if (empty($itemUid) === true && empty($itemUri) === false) {
+            if (($itemUid === null || $itemUid === '') && $itemUri !== null && $itemUri !== '') {
                 $itemUid = $itemUri;
                 $isPermaLink = 'true';
             }
 
-            if (empty($itemUid) === true) {
+            if ($itemUid === null || $itemUid === '') {
                 $itemUid = hash('sha1', (string) $itemTitle . $itemContent);
             }
 
             $entry = $document->createElement('item');
             $channel->appendChild($entry);
 
-            if (empty($itemTitle) === false) {
+            if ($itemTitle !== null && $itemTitle !== '') {
                 $entryTitle = $document->createElement('title');
                 $entry->appendChild($entryTitle);
                 $entryTitle->appendChild($document->createTextNode((string) $itemTitle));
@@ -143,7 +143,7 @@ final class MrssFormat extends FormatAbstract
                 }
             }
 
-            if (empty($itemUri) === false) {
+            if ($itemUri !== null && $itemUri !== '') {
                 $entryLink = $document->createElement('link');
                 $entry->appendChild($entryLink);
                 $entryLink->appendChild($document->createTextNode((string) $itemUri));
@@ -154,13 +154,13 @@ final class MrssFormat extends FormatAbstract
             $entry->appendChild($entryGuid);
             $entryGuid->appendChild($document->createTextNode((string) $itemUid));
 
-            if (empty($itemTimestamp) === false) {
+            if ($itemTimestamp !== null) {
                 $entryPublished = $document->createElement('pubDate');
                 $entry->appendChild($entryPublished);
                 $entryPublished->appendChild($document->createTextNode(gmdate(\DATE_RFC2822, $itemTimestamp)));
             }
 
-            if (empty($itemContent) === false) {
+            if ($itemContent !== '') {
                 $entryDescription = $document->createElement('description');
                 $entry->appendChild($entryDescription);
                 $entryDescription->appendChild($document->createTextNode($itemContent));

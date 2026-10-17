@@ -42,16 +42,16 @@ final class ForbidOldDomApiRule implements Rule
     ];
 
     private const REPLACEMENTS = [
-        'DOMDocument' => '\\Dom\\HTMLDocument::createFromString() or \\Dom\\XMLDocument::createFromString()',
-        'DOMXPath' => '\\Dom\\XPath',
-        'DOMNode' => '\\Dom\\Node',
-        'DOMNodeList' => '\\Dom\\NodeList',
-        'DOMElement' => '\\Dom\\Element',
-        'DOMAttr' => '\\Dom\\Attr',
-        'DOMText' => '\\Dom\\Text',
-        'DOMComment' => '\\Dom\\Comment',
-        'DOMCdataSection' => '\\Dom\\CdataSection',
-        'DOMDocumentFragment' => '\\Dom\\DocumentFragment',
+        'DOMDocument' => '\Dom\HTMLDocument::createFromString() or \Dom\XMLDocument::createFromString()',
+        'DOMXPath' => '\Dom\XPath',
+        'DOMNode' => '\Dom\Node',
+        'DOMNodeList' => '\Dom\NodeList',
+        'DOMElement' => '\Dom\Element',
+        'DOMAttr' => '\Dom\Attr',
+        'DOMText' => '\Dom\Text',
+        'DOMComment' => '\Dom\Comment',
+        'DOMCdataSection' => '\Dom\CdataSection',
+        'DOMDocumentFragment' => '\Dom\DocumentFragment',
     ];
 
     public function getNodeType(): string
@@ -72,7 +72,7 @@ final class ForbidOldDomApiRule implements Rule
             return [];
         }
 
-        $replacement = self::REPLACEMENTS[$shortName] ?? 'new \\Dom\\* API';
+        $replacement = self::REPLACEMENTS[$shortName] ?? 'new \Dom\* API';
 
         return [
             RuleErrorBuilder::message(sprintf(

@@ -57,23 +57,23 @@ final class TestFaktaBridge extends BridgeAbstract
             }
 
             $titleNode = $element->querySelector('h2');
-            $title = ($titleNode !== null) ? trim((string) $titleNode->textContent) : '';
+            $title = ($titleNode !== null) ? trim($titleNode->textContent) : '';
 
             $categoryNode = $element->querySelector('.red-label');
-            $category = ($categoryNode !== null) ? trim((string) $categoryNode->textContent) : '';
+            $category = ($categoryNode !== null) ? trim($categoryNode->textContent) : '';
 
             $linkNode = $element->querySelector('a');
-            $href = ($linkNode !== null) ? (string) ($linkNode->getAttribute('href') ?? '') : '';
+            $href = ($linkNode !== null) ? ($linkNode->getAttribute('href') ?? '') : '';
             if ($href === '') {
                 continue;
             }
             $url = urljoin(self::URI, $href);
 
             $figureNode = $element->querySelector('img');
-            $figureSrc = ($figureNode !== null) ? (string) ($figureNode->getAttribute('src') ?? '') : '';
+            $figureSrc = ($figureNode !== null) ? ($figureNode->getAttribute('src') ?? '') : '';
 
             $preambleNode = $element->querySelector('.text');
-            $preamble = ($preambleNode !== null) ? trim((string) $preambleNode->textContent) : '';
+            $preamble = ($preambleNode !== null) ? trim($preambleNode->textContent) : '';
 
             $articleHtml = getContents($url);
             if (is_string($articleHtml) === false || $articleHtml === '') {
@@ -88,14 +88,14 @@ final class TestFaktaBridge extends BridgeAbstract
             $articleTextNode = $articleDom->querySelector('article');
 
             $requestorNode = $articleDom->querySelector('div.uppdrag');
-            $requestor = ($requestorNode !== null) ? trim((string) $requestorNode->textContent) : '';
+            $requestor = ($requestorNode !== null) ? trim($requestorNode->textContent) : '';
 
             $authorNode = $articleDom->querySelector('span.name');
-            $author = ($authorNode !== null) ? trim((string) $authorNode->textContent) : '';
+            $author = ($authorNode !== null) ? trim($authorNode->textContent) : '';
             $author = $this->cleanAuthorName($author);
 
             $publishedNode = $articleDom->querySelector('span.created');
-            $publishedText = ($publishedNode !== null) ? trim((string) $publishedNode->textContent) : '';
+            $publishedText = ($publishedNode !== null) ? trim($publishedNode->textContent) : '';
             $publishedText = str_replace('Publicerad: ', '', $publishedText);
             $published = $this->parseSwedishDates($publishedText);
 
@@ -116,7 +116,7 @@ final class TestFaktaBridge extends BridgeAbstract
 
             if ($articleTextNode !== null) {
                 $this->limitImageSize($articleTextNode, $url);
-                $articleContent = (string) $articleTextNode->innerHTML;
+                $articleContent = $articleTextNode->innerHTML;
                 if ($articleContent !== '') {
                     $content .= $articleContent;
                 }
@@ -191,7 +191,7 @@ final class TestFaktaBridge extends BridgeAbstract
 
         foreach ($node->querySelectorAll('img') as $img) {
             if ($img instanceof \Dom\Element === true) {
-                $src = (string) ($img->getAttribute('src') ?? '');
+                $src = $img->getAttribute('src') ?? '';
                 if ($src !== '') {
                     $img->setAttribute('src', urljoin($baseUrl, $src));
                 }

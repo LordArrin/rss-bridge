@@ -231,7 +231,7 @@ final class WarThunderBridge extends BridgeAbstract
 
             if ($linksHtml !== '<p align="left" style="text-align: left; margin: 16px 0;"></p>' && $wrapper->parentNode !== null) {
                 $fragment = $wrapper->ownerDocument->createDocumentFragment();
-                $result = $fragment->appendXML($linksHtml);
+                $result = $fragment->appendXml($linksHtml);
                 if ($result === true) {
                     $wrapper->parentNode->replaceChild($fragment, $wrapper);
                 } else {

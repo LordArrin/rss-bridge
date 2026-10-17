@@ -51,7 +51,7 @@ final class GoodreadsBridge extends BridgeAbstract
             throwClientException('Invalid author URL format');
         }
 
-        $authorId = (string) $matches[1];
+        $authorId = $matches[1];
         $authorListUrl = 'https://www.goodreads.com/author/list/' . $authorId . '?sort=original_publication_year';
 
         $html = getContents($authorListUrl);
@@ -75,7 +75,7 @@ final class GoodreadsBridge extends BridgeAbstract
             }
 
             $dateSpan = $row->querySelector('.uitext');
-            $dateSpanText = ($dateSpan !== null) ? (string) $dateSpan->textContent : '';
+            $dateSpanText = ($dateSpan !== null) ? $dateSpan->textContent : '';
             $date = null;
             $isPublished = false;
 
@@ -104,30 +104,30 @@ final class GoodreadsBridge extends BridgeAbstract
                 continue;
             }
 
-            $title = trim((string) $bookTitleNode->textContent);
-            $href = (string) ($bookTitleNode->getAttribute('href') ?? '');
+            $title = trim($bookTitleNode->textContent);
+            $href = $bookTitleNode->getAttribute('href') ?? '';
 
             if ($href !== '' && str_starts_with($href, '/') === true) {
                 $href = rtrim(self::URI, '/') . $href;
             }
 
             $authorNameNode = $row->querySelector('.authorName');
-            $authorName = ($authorNameNode !== null) ? trim((string) $authorNameNode->textContent) : '';
+            $authorName = ($authorNameNode !== null) ? trim($authorNameNode->textContent) : '';
 
             $coverSrc = '';
             $bookCoverNode = $row->querySelector('.bookCover');
             if ($bookCoverNode !== null) {
                 if ($bookCoverNode->tagName === 'img') {
-                    $coverSrc = (string) ($bookCoverNode->getAttribute('data-src') ?? '');
+                    $coverSrc = $bookCoverNode->getAttribute('data-src') ?? '';
                     if ($coverSrc === '') {
-                        $coverSrc = (string) ($bookCoverNode->getAttribute('src') ?? '');
+                        $coverSrc = $bookCoverNode->getAttribute('src') ?? '';
                     }
                 } else {
                     $imgNode = $bookCoverNode->querySelector('img');
                     if ($imgNode !== null) {
-                        $coverSrc = (string) ($imgNode->getAttribute('data-src') ?? '');
+                        $coverSrc = $imgNode->getAttribute('data-src') ?? '';
                         if ($coverSrc === '') {
-                            $coverSrc = (string) ($imgNode->getAttribute('src') ?? '');
+                            $coverSrc = $imgNode->getAttribute('src') ?? '';
                         }
                     }
                 }
@@ -200,8 +200,8 @@ final class GoodreadsBridge extends BridgeAbstract
         $context = $this->queriedContext;
 
         if ($context === self::CONTEXT_AUTHOR_BOOKS) {
-            $authorUrl = (string) ($this->getInput('author_url') ?? '');
-            if ($authorUrl === '') {
+            $authorUrl = $this->getInput('author_url') ?? '';
+            if (is_string($authorUrl) === false || $authorUrl === '') {
                 throwClientException('Author URL is required');
             }
             $this->collectAuthorBooks($authorUrl);

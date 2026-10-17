@@ -89,7 +89,7 @@ final class DagensNyheterDirektBridge extends BridgeAbstract
                 $figcaption = $figure->querySelector('figcaption');
 
                 if ($img !== null) {
-                    $articleHtml .= $dom->saveHTML($img);
+                    $articleHtml .= $dom->saveHtml($img);
                 }
                 if ($figcaption !== null) {
                     $articleHtml .= '<p><i>' . trim($figcaption->textContent ?? '') . '</i></p>';
@@ -99,7 +99,7 @@ final class DagensNyheterDirektBridge extends BridgeAbstract
             if ($articleContent !== null) {
                 $paragraphs = $articleContent->querySelectorAll('p');
                 foreach ($paragraphs as $p) {
-                    $articleHtml .= $dom->saveHTML($p);
+                    $articleHtml .= $dom->saveHtml($p);
                 }
             }
 

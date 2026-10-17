@@ -554,12 +554,12 @@ final class CurlHttpClient implements HttpClient
 
             if (
                 in_array($lastErrno, [
-                CURLE_SSL_CERTPROBLEM,
-                CURLE_SSL_CIPHER,
-                CURLE_BAD_CONTENT_ENCODING,
-                CURLE_URL_MALFORMAT,
-                CURLE_COULDNT_RESOLVE_HOST,
-                CURLE_OPERATION_TIMEDOUT,
+                    CURLE_SSL_CERTPROBLEM,
+                    CURLE_SSL_CIPHER,
+                    CURLE_BAD_CONTENT_ENCODING,
+                    CURLE_URL_MALFORMAT,
+                    CURLE_COULDNT_RESOLVE_HOST,
+                    CURLE_OPERATION_TIMEDOUT,
                 ], true) === true
             ) {
                 break;
@@ -567,7 +567,7 @@ final class CurlHttpClient implements HttpClient
 
             if ($attempt < $maxAttempts) {
                 $delayUs = min(
-                    (int)((2 ** ($attempt - 1)) * 300_000) + mt_rand(0, 200_000),
+                    (2 ** ($attempt - 1)) * 300_000 + mt_rand(0, 200_000),
                     max(0, (int)(($deadline - microtime(true)) * 1_000_000))
                 );
                 if ($delayUs <= 0) {

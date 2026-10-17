@@ -25,7 +25,7 @@ final class AtomFormat extends FormatAbstract
 
     public function render(): string
     {
-        $document = new \DomDocument('1.0', 'UTF-8');
+        $document = new \DOMDocument('1.0', 'UTF-8');
         $document->formatOutput = true;
 
         $feedUrl = get_current_url();
@@ -102,19 +102,20 @@ final class AtomFormat extends FormatAbstract
             $entryUri = $item->getURI();
             $entryID = '';
 
-            if (empty($item->getUid()) === false) {
-                $entryID = 'urn:sha1:' . $item->getUid();
+            $uid = $item->getUid();
+            if ($uid !== null && $uid !== '') {
+                $entryID = 'urn:sha1:' . $uid;
             }
 
-            if (empty($entryID) === true) {
+            if ($entryID === '') {
                 $entryID = $entryUri;
             }
 
-            if (empty($entryID) === true) {
+            if ($entryID === '') {
                 $entryID = 'urn:sha1:' . hash('sha1', (string) $entryTitle . (string) $entryContent);
             }
 
-            if (empty($entryTitle) === true) {
+            if ($entryTitle === null || $entryTitle === '') {
                 $entryTitle = str_replace("\n", ' ', strip_tags((string) $entryContent));
                 if (strlen($entryTitle) > 140) {
                     $wrapPos = strpos(wordwrap($entryTitle, 140), "\n");
@@ -122,7 +123,7 @@ final class AtomFormat extends FormatAbstract
                 }
             }
 
-            if (empty($entryContent) === true) {
+            if ($entryContent === null || $entryContent === '') {
                 $entryContent = ' ';
             }
 
@@ -164,7 +165,7 @@ final class AtomFormat extends FormatAbstract
                     $itunesEnclosure->setAttribute('length', (string) $itemArray['enclosure']['length']);
                     $itunesEnclosure->setAttribute('type', (string) $itemArray['enclosure']['type']);
                 }
-            } elseif (empty($entryUri) === false) {
+            } elseif ($entryUri !== null && $entryUri !== '') {
                 $entryLinkAlternate = $document->createElement('link');
                 $entry->appendChild($entryLinkAlternate);
                 $entryLinkAlternate->setAttribute('rel', 'alternate');
@@ -172,12 +173,13 @@ final class AtomFormat extends FormatAbstract
                 $entryLinkAlternate->setAttribute('href', (string) $entryUri);
             }
 
-            if (empty($item->getAuthor()) === false) {
+            $authorStr = $item->getAuthor();
+            if ($authorStr !== null && $authorStr !== '') {
                 $author = $document->createElement('author');
                 $entry->appendChild($author);
-                $authorName = $document->createElement('name');
-                $author->appendChild($authorName);
-                $authorName->appendChild($document->createTextNode((string) $item->getAuthor()));
+                $authorNameElem = $document->createElement('name');
+                $author->appendChild($authorNameElem);
+                $authorNameElem->appendChild($document->createTextNode((string) $authorStr));
             }
 
             $content = $document->createElement('content');
@@ -201,7 +203,7 @@ final class AtomFormat extends FormatAbstract
 
             $thumbnail = method_exists($item, 'getThumbnail') === true ? $item->getThumbnail() : ($itemArray['thumbnail'] ?? null);
 
-            if (empty($thumbnail) === false) {
+            if ($thumbnail !== null && $thumbnail !== '') {
                 $thumbnailElement = $document->createElementNS(self::MRSS_NS, 'thumbnail');
                 $entry->appendChild($thumbnailElement);
                 $thumbnailElement->setAttribute('url', (string) $thumbnail);

@@ -27,7 +27,7 @@ final class FlareSolverrProxy extends ProxyAbstract
 
     public function isAvailable(): bool
     {
-        if (empty($this->config['url']) === true) {
+        if (($this->config['url'] ?? '') === '') {
             return false;
         }
 
@@ -80,7 +80,7 @@ final class FlareSolverrProxy extends ProxyAbstract
             $this->ensureSession($domain, $cookies);
         }
 
-        if (empty($cookies) === false) {
+        if ($cookies !== []) {
             $payload['cookies'] = $cookies;
         }
 

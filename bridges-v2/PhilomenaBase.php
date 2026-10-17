@@ -82,7 +82,7 @@ abstract class PhilomenaBase extends BridgeAbstract
     {
         $params = parent::getParameters();
         $filters = static::getAvailableFilters();
-        if (empty($filters) === false) {
+        if ($filters !== []) {
             $params['Global']['f'] = [
                 'name' => 'Content Filter',
                 'type' => 'list',
@@ -141,17 +141,23 @@ abstract class PhilomenaBase extends BridgeAbstract
 
         $tagsArray = [];
 
-        if (empty($q) === false) {
+        if ($q !== '') {
             $qNormalized = preg_replace('/[\s,]+/', ', ', $q);
-            $tagsArray = array_filter(array_map('trim', explode(',', $qNormalized)));
+            $tagsArray = array_filter(
+                array_map('trim', explode(',', $qNormalized)),
+                fn(string $v): bool => $v !== ''
+            );
         }
 
-        if (empty($excludeTags) === false) {
+        if ($excludeTags !== '') {
             $excludesNormalized = preg_replace('/[\s,]+/', ', ', $excludeTags);
-            $excludesArray = array_filter(array_map('trim', explode(',', $excludesNormalized)));
+            $excludesArray = array_filter(
+                array_map('trim', explode(',', $excludesNormalized)),
+                fn(string $v): bool => $v !== ''
+            );
             foreach ($excludesArray as $tag) {
                 $cleanTag = ltrim($tag, '-');
-                if (empty($cleanTag) === false) {
+                if ($cleanTag !== '') {
                     $tagsArray[] = '-' . $cleanTag;
                 }
             }
@@ -163,7 +169,7 @@ abstract class PhilomenaBase extends BridgeAbstract
     public function getName(): string
     {
         $q = $this->getNormalizedQuery();
-        if (empty($q) === false) {
+        if ($q !== '') {
             return static::NAME . ': ' . $q;
         }
         return parent::getName();
@@ -172,14 +178,14 @@ abstract class PhilomenaBase extends BridgeAbstract
     public function getURI(): string
     {
         $q = $this->getNormalizedQuery();
-        if (empty($q) === false) {
+        if ($q !== '') {
             $url = static::URI . 'search?';
             $params = [
                 'q' => $q,
                 'sf' => $this->getInput('sf') ?? 'created_at',
                 'sd' => $this->getInput('sd') ?? 'desc'
             ];
-            if (is_null($this->getInput('f')) === false) {
+            if ($this->getInput('f') !== null) {
                 $params['filter_id'] = $this->getInput('f');
             }
             return $url . http_build_query($params);
@@ -195,7 +201,7 @@ abstract class PhilomenaBase extends BridgeAbstract
 
         $q = $this->getNormalizedQuery();
 
-        if (empty($q) === true) {
+        if ($q === '') {
             throwClientException('Query cannot be empty.');
         }
 
@@ -220,7 +226,7 @@ abstract class PhilomenaBase extends BridgeAbstract
             throwClientException('Invalid API response.');
         }
 
-        if (empty($json->images) === true) {
+        if ($json->images === []) {
             return;
         }
 
@@ -228,7 +234,7 @@ abstract class PhilomenaBase extends BridgeAbstract
             $postUri = static::URI . 'images/' . $post->id;
             $artist = $this->extractArtist($post->tags ?? []);
 
-            $title = empty($artist) === false ? sprintf('Image %s by %s', $post->id, $artist) : sprintf('Image %s', $post->id);
+            $title = $artist !== '' ? sprintf('Image %s by %s', $post->id, $artist) : sprintf('Image %s', $post->id);
 
             $this->items[] = [
                 'uri' => $postUri,
@@ -267,30 +273,36 @@ abstract class PhilomenaBase extends BridgeAbstract
     {
         $html = '';
 
-        $isVideo = (isset($post->mime_type) === true && strpos($post->mime_type, 'video/') === 0)
-            || (isset($post->format) === true && in_array($post->format, ['webm', 'mp4'], true) === true);
+        $hasMimeType = isset($post->mime_type) === true;
+        $isVideoMimeType = $hasMimeType === true && strpos($post->mime_type, 'video/') === 0;
+
+        $hasFormat = isset($post->format) === true;
+        $isVideoFormat = $hasFormat === true && in_array($post->format, ['webm', 'mp4'], true) === true;
+
+        $isVideo = $isVideoMimeType === true || $isVideoFormat === true;
 
         $mediaUrl = $post->representations->full ?? '';
         $thumbUrl = $post->representations->medium ?? $post->representations->small ?? $mediaUrl;
 
-        if ($isVideo === true && empty($mediaUrl) === false) {
+        if ($isVideo === true && $mediaUrl !== '') {
             $html .= sprintf(
                 '<p><a href="%s"><video controls loop muted preload="metadata" style="max-width:100%%;height:auto;" src="%s"></video></a></p>',
                 $postUri,
-                htmlspecialchars($mediaUrl)
+                htmlspecialchars((string) $mediaUrl)
             );
-        } elseif (empty($thumbUrl) === false) {
+        } elseif ($thumbUrl !== '') {
             $html .= sprintf(
                 '<p><a href="%s"><img src="%s" alt="Image %s"></a></p>',
                 $postUri,
-                htmlspecialchars($thumbUrl),
-                $post->id
+                htmlspecialchars((string) $thumbUrl),
+                (string) $post->id
             );
         }
 
-        if (empty($post->description) === false) {
+        $hasDescription = isset($post->description) === true;
+        if ($hasDescription === true && $post->description !== '') {
             $cleanDesc = $this->cleanDescription($post->description);
-            if (empty($cleanDesc) === false) {
+            if ($cleanDesc !== '') {
                 $html .= sprintf(
                     '<p><b>Description:</b><br>%s</p>',
                     nl2br(htmlspecialchars($cleanDesc))
@@ -298,27 +310,33 @@ abstract class PhilomenaBase extends BridgeAbstract
             }
         }
 
+        $width = isset($post->width) === true ? (string) $post->width : '?';
+        $height = isset($post->height) === true ? (string) $post->height : '?';
+        $score = isset($post->score) === true ? (string) $post->score : 'N/A';
+
         $html .= sprintf(
             '<p><b>Size:</b> %sx%s | <b>Score:</b> %s</p>',
-            $post->width ?? '?',
-            $post->height ?? '?',
-            $post->score ?? 'N/A'
+            $width,
+            $height,
+            $score
         );
 
         if ($hideTags === false) {
-            if (empty($post->source_urls) === false) {
+            $hasSources = isset($post->source_urls) === true;
+            if ($hasSources === true && $post->source_urls !== []) {
                 $sources = '';
                 foreach ($post->source_urls as $source) {
                     $sources .= sprintf(
                         '<a href="%s" rel="noopener noreferrer">%s</a><br>',
-                        htmlspecialchars($source),
-                        htmlspecialchars($source)
+                        htmlspecialchars((string) $source),
+                        htmlspecialchars((string) $source)
                     );
                 }
                 $html .= sprintf('<p><b>Sources:</b><br>%s</p>', $sources);
             }
 
-            if (empty($post->tags) === false && is_array($post->tags) === true) {
+            $hasTags = isset($post->tags) === true;
+            if ($hasTags === true && $post->tags !== []) {
                 $html .= sprintf(
                     '<p><b>Tags:</b> %s</p>',
                     htmlspecialchars(implode(', ', $post->tags))

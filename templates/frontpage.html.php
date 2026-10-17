@@ -36,7 +36,7 @@
         // Normalize Telegram handle to URL
         $telegramUrl = '';
         $telegramDisplay = '';
-        if (!empty($adminTelegram)) {
+        if ($adminTelegram !== '') {
             $tg = trim($adminTelegram);
             
             // Already a full URL
@@ -93,7 +93,7 @@
             </span>
         </a>
 
-        <?php if (!empty($adminEmail)): ?>
+        <?php if ($adminEmail !== ''): ?>
         <!-- Email Badge -->
         <a href="mailto:<?= e($adminEmail) ?>" class="badge">
             <span class="badge__left">
@@ -107,7 +107,7 @@
         </a>
         <?php endif; ?>
 
-        <?php if (!empty($telegramUrl)): ?>
+        <?php if ($telegramUrl !== ''): ?>
         <!-- Telegram Badge -->
         <a href="<?= e($telegramUrl) ?>" rel="noopener noreferrer" target="_blank" class="badge">
             <span class="badge__left">

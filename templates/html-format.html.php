@@ -68,7 +68,7 @@
                 </h2>
 
                 <div class="item-meta">
-                    <?php if (!empty($item['timestamp'])): ?>
+                    <?php if (isset($item['timestamp'])): ?>
                         <p>
                             <time datetime="<?= date('c', $item['timestamp']) ?>">
                                 <?= date('Y-m-d H:i:s', $item['timestamp']) ?>
@@ -76,7 +76,7 @@
                         </p>
                     <?php endif; ?>
 
-                    <?php if (!empty($item['author'])): ?>
+                    <?php if (isset($item['author']) && $item['author'] !== ''): ?>
                         <p class="author">by: <?= e($item['author']) ?></p>
                     <?php endif; ?>
                 </div>
@@ -86,7 +86,7 @@
                     <?= break_annoying_html_tags($item['content']) ?>
                 </div>
 
-                <?php if (!empty($item['enclosures'])): ?>
+                <?php if (isset($item['enclosures']) && $item['enclosures'] !== []): ?>
                     <div class="item-attachments">
                         <p>Attachments:</p>
                         <ul>
@@ -101,7 +101,7 @@
                     </div>
                 <?php endif; ?>
 
-                <?php if (!empty($item['categories'])): ?>
+                <?php if (isset($item['categories']) && $item['categories'] !== []): ?>
                     <div class="item-categories">
                         <p>Categories:</p>
                         <ul>

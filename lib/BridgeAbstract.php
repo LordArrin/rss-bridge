@@ -63,7 +63,7 @@ abstract class BridgeAbstract
 
     public function getIcon()
     {
-        if (empty(static::URI) === false) {
+        if (is_string(static::URI) === true && static::URI !== '') {
             return rtrim(static::URI, '/') . '/favicon.ico';
         }
         return '';
@@ -142,7 +142,7 @@ abstract class BridgeAbstract
             throwClientException(sprintf('Invalid parameters value(s): %s', implode(', ', $invalidParameterKeys)));
         }
 
-        if (empty($this->queriedContext) === true) {
+        if ($this->queriedContext === null) {
             $queriedContext = $validator->getQueriedContext($input, $parameters);
             $this->queriedContext = $queriedContext;
         }

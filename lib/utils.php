@@ -104,7 +104,7 @@ final class Url
 
     public static function frameToCallPoint(array $frame): string
     {
-        if (empty($frame['class']) === false) {
+        if (($frame['class'] ?? '') !== '') {
             return sprintf(
                 '%s(%s): %s%s%s()',
                 $frame['file'],
@@ -114,7 +114,7 @@ final class Url
                 $frame['function'],
             );
         }
-        if (empty($frame['function']) === false) {
+        if (($frame['function'] ?? '') !== '') {
             return sprintf(
                 '%s(%s): %s()',
                 $frame['file'],
@@ -146,7 +146,7 @@ final class Url
         $mime = self::MIME_TYPES;
 
         $openBasedir = ini_get('open_basedir');
-        if (empty($openBasedir) === true && is_readable('/etc/mime.types') === true) {
+        if (($openBasedir === '' || $openBasedir === false) && is_readable('/etc/mime.types') === true) {
             $file = fopen('/etc/mime.types', 'r');
             if ($file !== false) {
                 while (($line = fgets($file)) !== false) {

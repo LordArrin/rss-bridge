@@ -62,7 +62,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
             $articleAuthor = null;
 
             $titleNode = $element->querySelector('h2.home-title');
-            $articleTitle = ($titleNode !== null) ? trim((string) $titleNode->textContent) : '';
+            $articleTitle = ($titleNode !== null) ? trim($titleNode->textContent) : '';
 
             $articleTimestamp = $this->extractTimestamp($element);
 
@@ -71,12 +71,12 @@ final class TheHackerNewsBridge extends BridgeAbstract
             if ($thumbnailNode !== null) {
                 $src = $thumbnailNode->getAttribute('src');
                 if ($src !== null && $src !== '' && str_starts_with($src, 'data:image/svg+xml') === false) {
-                    $articleThumbnail = (string) $src;
+                    $articleThumbnail = $src;
                 }
             }
 
             $descNode = $element->querySelector('div.home-desc');
-            $articleContentFallback = ($descNode !== null) ? trim((string) $descNode->textContent) : '';
+            $articleContentFallback = ($descNode !== null) ? trim($descNode->textContent) : '';
 
             $linkNode = $element->querySelector('a.story-link');
             if ($linkNode === null) {
@@ -88,7 +88,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
                 continue;
             }
 
-            $articleUrl = urljoin(self::URI, (string) $href);
+            $articleUrl = urljoin(self::URI, $href);
 
             $articleContent = $this->fetchArticleContent($articleUrl, $articleAuthor);
 
@@ -142,9 +142,9 @@ final class TheHackerNewsBridge extends BridgeAbstract
             return time();
         }
 
-        $parentHtml = (string) $parent->innerHTML;
+        $parentHtml = $parent->innerHTML;
         if (preg_match('/<\/i>(.*?)<\/span>/is', $parentHtml, $matches) === 1) {
-            $dateText = trim(strip_tags((string) $matches[1]));
+            $dateText = trim(strip_tags($matches[1]));
             if ($dateText !== '') {
                 $ts = strtotime($dateText);
                 if ($ts !== false) {
@@ -164,7 +164,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
         if ($authorSpans->length > 0) {
             $lastAuthor = $authorSpans->item($authorSpans->length - 1);
             if ($lastAuthor !== null) {
-                $author = trim((string) $lastAuthor->textContent);
+                $author = trim($lastAuthor->textContent);
             }
         }
 
@@ -188,7 +188,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
             }
         }
 
-        $html = break_annoying_html_tags((string) $articleBody->innerHTML);
+        $html = break_annoying_html_tags($articleBody->innerHTML);
 
         return $html;
     }

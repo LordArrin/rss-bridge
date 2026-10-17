@@ -199,7 +199,7 @@ final class CacheFactory
     {
         $socketPath = Configuration::getConfig('MemcachedCache', 'socket_path');
 
-        if (empty($socketPath) === true) {
+        if (($socketPath ?? '') === '') {
             throw new \Exception('"socket_path" param is not set for MemcachedCache (internal mode)');
         }
 
@@ -221,10 +221,10 @@ final class CacheFactory
         $host = Configuration::getConfig('MemcachedCache', 'host');
         $port = Configuration::getConfig('MemcachedCache', 'port');
 
-        if (empty($host) === true) {
+        if (($host ?? '') === '') {
             throw new \Exception('"host" param is not set for MemcachedCache (external mode)');
         }
-        if (empty($port) === true) {
+        if (($port ?? '') === '') {
             throw new \Exception('"port" param is not set for MemcachedCache (external mode)');
         }
 
@@ -233,7 +233,7 @@ final class CacheFactory
             throw new \Exception('"port" param is invalid for MemcachedCache');
         }
 
-        $portInt = intval($port);
+        $portInt = (int) $port;
         if ($portInt < 1 || $portInt > 65535) {
             throw new \Exception('"port" param is invalid for MemcachedCache');
         }

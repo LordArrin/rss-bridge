@@ -63,7 +63,7 @@ final class TopWarBridge extends BridgeAbstract
                 continue;
             }
 
-            $namespaces = $entry->getNameSpaces(true);
+            $namespaces = $entry->getNamespaces(true);
             $dc = isset($namespaces['dc']) === true ? $entry->children($namespaces['dc']) : null;
 
             $this->items[] = [

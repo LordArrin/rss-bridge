@@ -192,7 +192,7 @@ abstract class ProxyAbstract implements ProxyInterface
      */
     protected function validateResponse(string $response): bool
     {
-        return empty($response) === false;
+        return $response !== '';
     }
 
     protected function buildCacheKey(string $url, array $options): string
@@ -229,11 +229,13 @@ abstract class ProxyAbstract implements ProxyInterface
 
         $fullMessage = sprintf('[Proxy: %s] %s', $this->getName(), $message);
 
-        if (method_exists($this->logger, $level) === true) {
-            $this->logger->$level($fullMessage, $context);
-        } else {
-            $this->logger->info($fullMessage, $context);
-        }
+        match ($level) {
+            'debug' => $this->logger->debug($fullMessage, $context),
+            'info', 'notice' => $this->logger->info($fullMessage, $context),
+            'warning' => $this->logger->warning($fullMessage, $context),
+            'error', 'critical', 'alert', 'emergency' => $this->logger->error($fullMessage, $context),
+            default => $this->logger->info($fullMessage, $context),
+        };
     }
 
     /**

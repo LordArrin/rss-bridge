@@ -284,7 +284,7 @@ final class PawchiveBridge extends BridgeAbstract
 
     private function hasMedia(array $post): bool
     {
-        if (empty($post['file']['path']) === false) {
+        if (isset($post['file']['path']) === true && $post['file']['path'] !== '') {
             $name = $post['file']['name'] ?? basename($post['file']['path']);
 
             if ($this->isMediaByExtension((string)$name) === true) {
@@ -292,9 +292,9 @@ final class PawchiveBridge extends BridgeAbstract
             }
         }
 
-        if (empty($post['attachments']) === false && is_array($post['attachments']) === true) {
+        if (isset($post['attachments']) === true && is_array($post['attachments']) === true && $post['attachments'] !== []) {
             foreach ($post['attachments'] as $file) {
-                if (empty($file['path']) === false) {
+                if (isset($file['path']) === true && $file['path'] !== '') {
                     $name = $file['name'] ?? basename($file['path']);
 
                     if ($this->isMediaByExtension((string)$name) === true) {
@@ -311,7 +311,7 @@ final class PawchiveBridge extends BridgeAbstract
     {
         $text = (string)preg_replace_callback(
             '/[\x{10000}-\x{10FFFF}]/u',
-            fn() => '',
+            static fn(): string => '',
             $text
         );
 
@@ -334,17 +334,25 @@ final class PawchiveBridge extends BridgeAbstract
                 $inAnchor = true;
             } elseif (preg_match('/^<\/a>$/i', $part) === 1) {
                 $inAnchor = false;
-            } elseif ($inAnchor === false && trim($part) !== '' && str_starts_with(ltrim($part), '<') === false) {
-                $part = (string)preg_replace_callback(
-                    '/(https?:\/\/[^\s<>\"]+)/i',
-                    fn(array $matches): string => sprintf(
-                        '<a href="%s" style="%s">%s</a>',
-                        htmlspecialchars($matches[1], ENT_QUOTES | ENT_HTML5),
-                        $style,
-                        htmlspecialchars($matches[1], ENT_QUOTES | ENT_HTML5)
-                    ),
-                    $part
-                );
+            } else {
+                $isNotAnchor = ($inAnchor === false);
+                $isNotEmpty = (trim($part) !== '');
+                $isNotTagStart = (str_starts_with(ltrim($part), '<') === false);
+
+                if ($isNotAnchor === true && $isNotEmpty === true && $isNotTagStart === true) {
+                    $part = (string)preg_replace_callback(
+                        '/(https?:\/\/[^\s<>\"]+)/i',
+                        static function (array $matches) use ($style): string {
+                            return sprintf(
+                                '<a href="%s" style="%s">%s</a>',
+                                htmlspecialchars($matches[1], ENT_QUOTES | ENT_HTML5),
+                                $style,
+                                htmlspecialchars($matches[1], ENT_QUOTES | ENT_HTML5)
+                            );
+                        },
+                        $part
+                    );
+                }
             }
 
             $result .= $part;
@@ -508,7 +516,7 @@ final class PawchiveBridge extends BridgeAbstract
         $showResults = (bool)($poll['show_results'] ?? true);
         $isResultVisible = (bool)($poll['is_result_visible'] ?? true);
 
-        if (empty($choices) === true || is_array($choices) === false) {
+        if (is_array($choices) === false || $choices === []) {
             return '';
         }
 
@@ -662,7 +670,7 @@ final class PawchiveBridge extends BridgeAbstract
         $files = [];
         $seenPaths = [];
 
-        if (empty($post['file']['path']) === false) {
+        if (isset($post['file']['path']) === true && $post['file']['path'] !== '') {
             $file = $post['file'];
             $file['name'] = isset($file['name']) === true ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
             $file['path'] = trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
@@ -670,9 +678,9 @@ final class PawchiveBridge extends BridgeAbstract
             $files[] = $file;
         }
 
-        if (empty($post['attachments']) === false && is_array($post['attachments']) === true) {
+        if (isset($post['attachments']) === true && is_array($post['attachments']) === true && $post['attachments'] !== []) {
             foreach ($post['attachments'] as $file) {
-                if (empty($file['path']) === false) {
+                if (isset($file['path']) === true && $file['path'] !== '') {
                     $file['name'] = isset($file['name']) === true ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
                     $file['path'] = trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
 
@@ -771,7 +779,7 @@ final class PawchiveBridge extends BridgeAbstract
 
     private function renderAttachmentsBlock(array $downloadLinks): string
     {
-        if (empty($downloadLinks) === true) {
+        if ($downloadLinks === []) {
             return '';
         }
 
@@ -906,7 +914,7 @@ final class PawchiveBridge extends BridgeAbstract
 
         $contentHtml = $item['content'];
 
-        if (empty($post['embed']['url']) === false) {
+        if (isset($post['embed']['url']) === true && $post['embed']['url'] !== '') {
             $contentHtml .= $this->renderExternalLink($this->normalizeUrls((string)$post['embed']['url']));
         }
 
@@ -914,7 +922,7 @@ final class PawchiveBridge extends BridgeAbstract
         $this->processFiles($files, $hideAttachments, $contentHtml, $downloadLinks);
         $contentHtml .= $this->renderAttachmentsBlock($downloadLinks);
 
-        if (empty($post['poll']) === false && is_array($post['poll']) === true) {
+        if (isset($post['poll']) === true && is_array($post['poll']) === true && $post['poll'] !== []) {
             $contentHtml .= $this->renderPoll($post['poll']);
         }
 

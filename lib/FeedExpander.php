@@ -37,7 +37,7 @@ abstract class FeedExpander extends BridgeAbstract
      */
     public function collectExpandableDatas(string $url, int $maxItems = -1, array $headers = []): void
     {
-        if (empty($url) === true) {
+        if ($url === '') {
             throw new \Exception('There is no $url for this RSS expander');
         }
 

@@ -172,7 +172,7 @@ class FeedItem
         $this->content = null;
 
         if ($content instanceof \Dom\HTMLDocument) {
-            $content = $content->saveHTML();
+            $content = $content->saveHtml();
         } elseif ($content instanceof \Dom\Element) {
             $content = $content->outerHTML;
         }

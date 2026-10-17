@@ -178,7 +178,7 @@ final class TheGuardianBridge extends FeedExpander
 
         $result = '';
         foreach ($dom->documentElement->childNodes as $child) {
-            $result .= $dom->saveHTML($child);
+            $result .= $dom->saveHtml($child);
         }
 
         return $result;

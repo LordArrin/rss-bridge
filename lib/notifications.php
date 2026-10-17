@@ -226,7 +226,7 @@ function render_notification(array $n): string
 
     $html .= '<div class="notification-content">';
 
-    if (empty($n['title']) === false) {
+    if (($n['title'] ?? '') !== '') {
         $html .= sprintf('<strong class="notification-title">%s</strong>', e((string) $n['title']));
     }
 
@@ -235,7 +235,7 @@ function render_notification(array $n): string
         notification_body_html((string) ($n['body'] ?? ''), (array) ($n['links'] ?? []))
     );
 
-    if (empty($n['author']) === false) {
+    if (($n['author'] ?? '') !== '') {
         $html .= sprintf('<span class="notification-author">%s</span>', e((string) $n['author']));
     }
 

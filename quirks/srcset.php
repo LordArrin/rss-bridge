@@ -65,7 +65,7 @@ function parseSrcsetLargestImageUrl(string $srcset): ?string
 
     foreach ($entries as $size => $url) {
         // Extract numeric part from size (e.g. "640w" => 640)
-        $size_int = intval(substr($size, 0, strlen($size) - 1));
+        $size_int = (int) substr($size, 0, strlen($size) - 1);
 
         if ($size_int > $largest_image_size) {
             $largest_image_size = $size_int;

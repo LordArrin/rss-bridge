@@ -242,7 +242,9 @@ function render_template(string $template, array $context = []): string
     }
 
     $templateFilepath = __DIR__ . '/../templates/' . $template;
+    // phpcs:disable Generic.PHP.ForbiddenFunctions.Found
     extract($context);
+    // phpcs:enable
 
     ob_start();
     try {

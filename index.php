@@ -43,7 +43,7 @@ set_error_handler(function ($code, $message, $file, $line) use ($logger) {
 // There might be some fatal errors which are not caught by set_error_handler() or \Throwable.
 register_shutdown_function(function () use ($logger) {
     $error = error_get_last();
-    if ($error) {
+    if ($error !== null) {
         $message = sprintf(
             '(shutdown) %s: %s in %s line %s',
             $error['type'],
@@ -58,7 +58,7 @@ register_shutdown_function(function () use ($logger) {
 date_default_timezone_set(Configuration::getConfig('system', 'timezone'));
 
 $argv = $argv ?? null;
-if ($argv) {
+if (is_array($argv) === true) {
     parse_str(implode('&', array_slice($argv, 1)), $cliArgs);
     $request = Request::fromCli($cliArgs);
 } else {

@@ -94,10 +94,10 @@ final class MemcachedCache implements CacheInterface
         $this->maxChunks = ($maxChunks !== null && $maxChunks > 0) ? $maxChunks : self::MAX_CHUNKS;
 
         // Determine connection type: Unix socket or TCP
-        $isUnixSocket = (empty($socketPath) === false) || (str_starts_with($host, '/') === true);
+        $isUnixSocket = ($socketPath !== '') || (str_starts_with($host, '/') === true);
 
         if ($isUnixSocket === true) {
-            $socketPath = (empty($socketPath) === false) ? $socketPath : $host;
+            $socketPath = ($socketPath !== '') ? $socketPath : $host;
             $persistentId = 'rssbridge_memcached_unix_' . md5($socketPath);
         } else {
             $persistentId = 'rssbridge_memcached_tcp_' . $host . '_' . $port;
@@ -354,21 +354,22 @@ final class MemcachedCache implements CacheInterface
         $resultCode = $this->conn->getResultCode();
         $resultMessage = $this->conn->getResultMessage();
 
-        // Log with severity based on error type
-        $logLevel = match ($resultCode) {
-            self::RES_SERVER_END => 'error',
-            self::RES_TIMEOUT => 'error',
-            self::RES_E2BIG => 'warning',
-            self::RES_NOTSTORED => 'debug',
-            default => 'warning',
-        };
-
-        $this->logger->$logLevel('Failed to store an item in memcached', [
+        $context = [
             'key'           => $cacheKey,
             'size'          => $size,
             'resultCode'    => $resultCode,
             'resultMessage' => $resultMessage,
-        ]);
+        ];
+
+        if ($resultCode === self::RES_SERVER_END || $resultCode === self::RES_TIMEOUT) {
+            $this->logger->error('Failed to store an item in memcached', $context);
+        } elseif ($resultCode === self::RES_NOTSTORED) {
+            $this->logger->debug('Failed to store an item in memcached', $context);
+        } elseif ($resultCode === self::RES_E2BIG) {
+            $this->logger->warning('Failed to store an item in memcached (item too large)', $context);
+        } else {
+            $this->logger->warning('Failed to store an item in memcached', $context);
+        }
     }
 
     public function clear(): void

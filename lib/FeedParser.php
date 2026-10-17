@@ -39,7 +39,6 @@ final class FeedParser
             'items'     => [],
         ];
         if (isset($xml->item[0]) === true) {
-            // rss 1.0
             $channel = $xml->channel[0];
             $feed['title'] = trim((string)$channel->title);
             $feed['uri'] = trim((string)$channel->link);
@@ -50,7 +49,6 @@ final class FeedParser
                 $feed['items'][] = $this->parseRss1Item($item);
             }
         } elseif (isset($xml->channel[0]) === true) {
-            // rss 2.0
             $channel = $xml->channel[0];
             $feed['title'] = trim((string)$channel->title);
             $feed['uri'] = trim((string)$channel->link);
@@ -61,9 +59,7 @@ final class FeedParser
                 $feed['items'][] = $this->parseRss2Item($item);
             }
         } elseif (isset($xml->entry[0]) === true) {
-            // atom 1.0
             $feed['title'] = (string)$xml->title;
-            // Find best link (only one, or first of 'alternate')
             if (isset($xml->link) === false) {
                 $feed['uri'] = '';
             } elseif (count($xml->link) === 1) {
@@ -94,7 +90,6 @@ final class FeedParser
 
     private static function prepareXml(string $xmlString): string
     {
-        // Remove Unicode BOM
         $bom = pack('H*', 'EFBBBF');
         $xmlString = preg_replace("/^$bom/", '', $xmlString);
 
@@ -134,7 +129,6 @@ final class FeedParser
             }
         }
 
-        // When "link" field is present, URL is more reliable than "id" field
         if (count($feedItem->link) === 1) {
             $item['uri'] = (string)$feedItem->link[0]['href'];
         } else {
@@ -158,9 +152,7 @@ final class FeedParser
             'content'       => '',
             'timestamp'     => '',
             'author'        => '',
-            //'uid'           => null,
             'categories'    => [],
-            //'enclosures'    => [],
         ];
 
         foreach ($feedItem as $k => $v) {
@@ -173,7 +165,6 @@ final class FeedParser
         }
 
         if (isset($feedItem->link) === true) {
-            // todo: trim uri
             $item['uri'] = (string)$feedItem->link;
         }
         if (isset($feedItem->title) === true) {
@@ -197,7 +188,7 @@ final class FeedParser
         }
 
         foreach ($namespaces as $namespaceName => $namespaceUrl) {
-            if (in_array($namespaceName, ['', 'content']) === true) {
+            if (in_array($namespaceName, ['', 'content'], true) === true) {
                 continue;
             }
             $item[$namespaceName] = $this->parseModule($feedItem, $namespaceName, $namespaceUrl);
@@ -210,8 +201,7 @@ final class FeedParser
                 'type'      => (string) $enclosure['type'],
             ];
         }
-        if (empty($item['uri']) === true) {
-            // Let's use guid as uri if it's a permalink
+        if ($item['uri'] === '') {
             if (isset($feedItem->guid) === true) {
                 foreach ($feedItem->guid->attributes() as $attribute => $value) {
                     if ($attribute === 'isPermaLink' && ($value === 'true' || filter_var($feedItem->guid, FILTER_VALIDATE_URL) !== false)) {
@@ -228,7 +218,7 @@ final class FeedParser
         $item['author'] = $feedItem->author ?? $feedItem->creator ?? $dc->creator ?? $media->credit ?? '';
         $item['author'] = (string) $item['author'];
 
-        if (isset($feedItem->enclosure) === true && empty($feedItem->enclosure['url']) === false) {
+        if (isset($feedItem->enclosure) === true && (string) $feedItem->enclosure['url'] !== '') {
             $item['enclosures'] = [
                 (string) $feedItem->enclosure['url'],
             ];
@@ -238,19 +228,15 @@ final class FeedParser
 
     public function parseRss1Item(\SimpleXMLElement $feedItem): array
     {
-        // TODO: parse categories
         $item = [
             'uri'           => '',
             'title'         => '',
             'content'       => '',
             'timestamp'     => '',
             'author'        => '',
-            //'uid'           => null,
             'categories'    => [],
-            //'enclosures'    => [],
         ];
         if (isset($feedItem->link) === true) {
-            // todo: trim uri
             $item['uri'] = (string)$feedItem->link;
         }
         if (isset($feedItem->title) === true) {
@@ -274,9 +260,6 @@ final class FeedParser
 
     private function parseModule(\SimpleXMLElement $element, string $namespaceName, string $namespaceUrl): array
     {
-        // Unfortunately this parses out only node values as string
-        // TODO: parse attributes too
-
         $result = [];
         $module = $element->children($namespaceUrl);
         foreach ($module as $name => $value) {

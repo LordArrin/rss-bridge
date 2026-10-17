@@ -91,7 +91,7 @@ final class TgWSProxy extends ProxyAbstract
 
     public function isAvailable(): bool
     {
-        return empty($this->proxyUrl) === false;
+        return $this->proxyUrl !== null && $this->proxyUrl !== '';
     }
 
     private function maskProxyUrl(?string $url): string
@@ -260,7 +260,6 @@ final class TgWSProxy extends ProxyAbstract
             CURLOPT_HEADER         => $includeHeaders,
             CURLOPT_HTTPGET        => true,
             CURLOPT_HTTPHEADER     => [],
-            // Удалено: CURLOPT_POSTFIELDS => null, так как это GET-запрос, а null не допускается строгой типизацией
         ];
 
         curl_setopt_array($ch, $options);
@@ -338,12 +337,11 @@ final class TgWSProxy extends ProxyAbstract
 
                 $html = curl_exec($ch);
 
-                $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 $curlError = curl_error($ch);
-                $curlErrno = (int) curl_errno($ch);
+                $curlErrno = curl_errno($ch);
 
                 if ($html === false || $curlErrno !== 0) {
-                    // ИСПРАВЛЕНИЕ: $curlErrno передается как второй параметр ($code), третий ($previous) опущен (null)
                     throw new \RuntimeException(sprintf(
                         'cURL error %d: %s (HTTP %d)',
                         $curlErrno,
@@ -513,7 +511,6 @@ final class TgWSProxy extends ProxyAbstract
                 $effConnect = max(1, min($connectTimeout, (int) floor($remaining)));
                 $effRequest = max(1, min($requestTimeout, (int) floor($remaining)));
 
-                // Удалено: CURLOPT_POSTFIELDS => null
                 curl_setopt_array($ch, [
                     CURLOPT_URL            => $url,
                     CURLOPT_CONNECTTIMEOUT => $effConnect,
@@ -543,12 +540,11 @@ final class TgWSProxy extends ProxyAbstract
 
                 $body = curl_exec($ch);
 
-                $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 $curlError = curl_error($ch);
-                $curlErrno = (int) curl_errno($ch);
+                $curlErrno = curl_errno($ch);
 
                 if ($body === false || $curlErrno !== 0) {
-                    // ИСПРАВЛЕНИЕ: $curlErrno передается как второй параметр ($code), третий ($previous) опущен (null)
                     throw new \RuntimeException(sprintf(
                         'cURL error %d: %s (HTTP %d)',
                         $curlErrno,

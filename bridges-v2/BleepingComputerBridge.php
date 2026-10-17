@@ -75,7 +75,7 @@ final class BleepingComputerBridge extends FeedExpander
             }
         }
 
-        $item['content'] = trim($dom->saveHTML($articleBody));
+        $item['content'] = trim($dom->saveHtml($articleBody));
 
         return $item;
     }

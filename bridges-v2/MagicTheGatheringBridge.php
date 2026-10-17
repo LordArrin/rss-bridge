@@ -81,7 +81,7 @@ final class MagicTheGatheringBridge extends BridgeAbstract
             return null;
         }
 
-        $title = trim((string) $h3->innerHTML);
+        $title = trim($h3->innerHTML);
 
         $links = $article->querySelectorAll('a');
         if ($links->length < 3) {
@@ -95,8 +95,8 @@ final class MagicTheGatheringBridge extends BridgeAbstract
             return null;
         }
 
-        $author = trim((string) $authorLink->textContent);
-        $articlePath = (string) ($articleLink->getAttribute('href') ?? '');
+        $author = trim($authorLink->textContent);
+        $articlePath = $articleLink->getAttribute('href') ?? '';
 
         if ($articlePath === '') {
             return null;
@@ -125,7 +125,7 @@ final class MagicTheGatheringBridge extends BridgeAbstract
         $timeElement = $articleBody->querySelector('time');
         $timestamp = null;
         if ($timeElement !== null) {
-            $timeText = trim((string) $timeElement->textContent);
+            $timeText = trim($timeElement->textContent);
             if ($timeText !== '') {
                 $ts = strtotime($timeText);
                 if ($ts !== false) {
@@ -140,7 +140,7 @@ final class MagicTheGatheringBridge extends BridgeAbstract
         if ($contentDiv !== null) {
             $this->resolveRelativeLinks($contentDiv, $articleUrl);
             $this->limitImageSize($contentDiv);
-            $content = (string) $contentDiv->innerHTML;
+            $content = $contentDiv->innerHTML;
         }
 
         $item = [
@@ -175,7 +175,7 @@ final class MagicTheGatheringBridge extends BridgeAbstract
                 if (str_contains($selector, 'href') === true) {
                     $attrName = 'href';
                 }
-                $attr = (string) ($el->getAttribute($attrName) ?? '');
+                $attr = $el->getAttribute($attrName) ?? '';
                 if ($attr !== '') {
                     $el->setAttribute($attrName, $this->resolveUrl($baseUrl, $attr));
                 }
@@ -195,8 +195,8 @@ final class MagicTheGatheringBridge extends BridgeAbstract
 
         if (str_starts_with($relative, '/') === true) {
             $parsed = parse_url($base);
-            $scheme = (string) ($parsed['scheme'] ?? 'https');
-            $host = (string) ($parsed['host'] ?? '');
+            $scheme = $parsed['scheme'] ?? 'https';
+            $host = $parsed['host'] ?? '';
             return $scheme . '://' . $host . $relative;
         }
 

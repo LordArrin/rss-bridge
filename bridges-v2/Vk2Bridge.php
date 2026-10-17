@@ -581,10 +581,10 @@ final class Vk2Bridge extends BridgeAbstract
     private function detectOwnerId(string $u): int
     {
         if (preg_match('/^(club|public)(\d+)$/', $u, $m) === 1) {
-            return -intval($m[2]);
+            return -(int) $m[2];
         }
         if (preg_match('/^id(\d+)$/', $u, $m) === 1) {
-            return intval($m[1]);
+            return (int) $m[1];
         }
 
         $cacheKey = 'vk2_owner_' . md5(strtolower($u));

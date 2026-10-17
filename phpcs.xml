@@ -60,15 +60,35 @@
   <rule ref="Generic.PHP.ForbiddenFunctions">
     <properties>
       <property name="forbiddenFunctions" type="array">
-        <!-- Aliases and legacy functions -->
         <element key="sizeof" value="count"/>
         <element key="delete" value="unset"/>
         <element key="print" value="echo"/>
-        <!-- Deprecated in PHP 8.2+ (use mb_convert_encoding) -->
+        <element key="join" value="implode"/>
+        <element key="chop" value="rtrim"/>
+        <element key="doubleval" value="(float)"/>
+        <element key="floatval" value="(float)"/>
+        <element key="intval" value="(int)"/>
+        <element key="strval" value="(string)"/>
+        <element key="is_null" value="=== null"/>
+        <element key="create_function" value="Closure::fromCallable()"/>
         <element key="utf8_encode" value="mb_convert_encoding"/>
         <element key="utf8_decode" value="mb_convert_encoding"/>
         <element key="returnClientError" value="throwClientException"/>
         <element key="returnServerError" value="throwServerException"/>
+        <element key="var_dump" value=""/>
+        <element key="print_r" value=""/>
+        <element key="var_export" value=""/>
+        <element key="debug_print_backtrace" value=""/>
+        <element key="phpinfo" value=""/>
+        <element key="eval" value=""/>
+        <element key="extract" value=""/>
+        <element key="shell_exec" value=""/>
+        <element key="exec" value=""/>
+        <element key="system" value=""/>
+        <element key="passthru" value=""/>
+        <element key="popen" value=""/>
+        <element key="proc_open" value=""/>
+        <element key="pcntl_exec" value=""/>
       </property>
     </properties>
   </rule>

@@ -46,7 +46,7 @@ final class FreeCodeCampBridge extends FeedExpander
         }
 
         if ($articleContent !== null) {
-            $contentHtml = $dom->saveHTML($articleContent);
+            $contentHtml = $dom->saveHtml($articleContent);
             $content .= $contentHtml;
         }
 

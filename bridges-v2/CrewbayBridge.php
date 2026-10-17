@@ -254,10 +254,10 @@ final class CrewbayBridge extends BridgeAbstract
                         $sectionContent = $section->querySelector('.viewer-section-content');
 
                         if ($titleH3 !== null) {
-                            $content .= $htmlDetail->saveHTML($titleH3);
+                            $content .= $htmlDetail->saveHtml($titleH3);
                         }
                         if ($sectionContent !== null) {
-                            $content .= $htmlDetail->saveHTML($sectionContent);
+                            $content .= $htmlDetail->saveHtml($sectionContent);
                         }
                     }
                 } else {
@@ -265,10 +265,10 @@ final class CrewbayBridge extends BridgeAbstract
                     $contentP = $section->querySelector('.viewer-section-content p');
 
                     if ($contentH3 !== null) {
-                        $content .= $htmlDetail->saveHTML($contentH3);
+                        $content .= $htmlDetail->saveHtml($contentH3);
                     }
                     if ($contentP !== null) {
-                        $content .= $htmlDetail->saveHTML($contentP);
+                        $content .= $htmlDetail->saveHtml($contentP);
                     }
                 }
             }

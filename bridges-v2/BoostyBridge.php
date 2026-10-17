@@ -80,10 +80,10 @@ final class BoostyBridge extends BridgeAbstract
         if (isset($data['data']) === false || is_array($data['data']) === false) {
             throw new \Exception('Failed to fetch data from Boosty API');
         }
-        if (empty($data['data'][0]['user']['name']) === false) {
+        if (isset($data['data'][0]['user']['name']) === true && $data['data'][0]['user']['name'] !== '') {
             $this->blogDisplayName = (string) $data['data'][0]['user']['name'];
         }
-        if (empty($data['data'][0]['user']['avatarUrl']) === false) {
+        if (isset($data['data'][0]['user']['avatarUrl']) === true && $data['data'][0]['user']['avatarUrl'] !== '') {
             $this->blogAvatar = (string) $data['data'][0]['user']['avatarUrl'];
         }
         return $data['data'];
@@ -375,7 +375,7 @@ final class BoostyBridge extends BridgeAbstract
         if ($buf !== []) {
             $out .= '<p>' . implode('', $buf) . '</p>';
         }
-        if (empty($p['poll']) === false && is_array($p['poll']) === true) {
+        if (isset($p['poll']) === true && is_array($p['poll']) === true && $p['poll'] !== []) {
             $out .= $this->renderPoll($p['poll']);
         }
         return $out;
@@ -406,7 +406,7 @@ final class BoostyBridge extends BridgeAbstract
         foreach ($items as $item) {
             $content = $this->listItemContent($item);
             $nested = '';
-            if (empty($item['items']) === false && is_array($item['items']) === true) {
+            if (isset($item['items']) === true && is_array($item['items']) === true && $item['items'] !== []) {
                 $nested = $this->renderListItems($item['items'], $tag, $cssKey);
             }
             if ($content === '' && $nested === '') {
@@ -465,7 +465,7 @@ final class BoostyBridge extends BridgeAbstract
         }
 
         $title = $this->esc($b['title'] ?? ($b['track'] ?? 'File'));
-        if ($type === 'audio_file' && empty($b['artist']) === false) {
+        if (isset($b['artist']) === true && $b['artist'] !== '') {
             $title = $this->esc($b['artist']) . ' - ' . $title;
         }
         return '<p><a href="' . $url . '">' . $title . '</a></p>';
@@ -507,10 +507,10 @@ final class BoostyBridge extends BridgeAbstract
         if ($total > 0) {
             $footer[] = $total . ' voters';
         }
-        if (empty($poll['isMultiple']) === false) {
+        if (($poll['isMultiple'] ?? false) === true) {
             $footer[] = 'Multiple choice';
         }
-        if (empty($poll['isFinished']) === false) {
+        if (($poll['isFinished'] ?? false) === true) {
             $footer[] = 'Finished';
         }
 
@@ -669,7 +669,7 @@ final class BoostyBridge extends BridgeAbstract
 
     public function getIcon(): string
     {
-        if (empty($this->blogAvatar) === true) {
+        if ($this->blogAvatar === '') {
             return parent::getIcon();
         }
         return $this->blogAvatar . '#.png';

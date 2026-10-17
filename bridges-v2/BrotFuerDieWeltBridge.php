@@ -117,7 +117,7 @@ final class BrotFuerDieWeltBridge extends BridgeAbstract
 
                 $introBox = $articleDom->querySelector('body div.intro-box p');
                 if ($introBox !== null) {
-                    $description = $articleDom->saveHTML($introBox);
+                    $description = $articleDom->saveHtml($introBox);
                 }
             }
 
@@ -193,7 +193,7 @@ final class BrotFuerDieWeltBridge extends BridgeAbstract
 
                     $newsTextWrap = $articleDom->querySelector('body article.article-section div.news-text-wrap');
                     if ($newsTextWrap !== null) {
-                        $description = $articleDom->saveHTML($newsTextWrap);
+                        $description = $articleDom->saveHtml($newsTextWrap);
                     }
                 }
 

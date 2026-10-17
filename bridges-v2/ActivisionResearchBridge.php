@@ -130,7 +130,7 @@ final class ActivisionResearchBridge extends BridgeAbstract
                 $content .= '<img src="' . htmlspecialchars($imgUrl, ENT_QUOTES, 'UTF-8') . '" alt="">';
             }
 
-            $content .= $entryDom->saveHTML($contentElement);
+            $content .= $entryDom->saveHtml($contentElement);
 
             $this->items[] = [
                 'title' => $title,

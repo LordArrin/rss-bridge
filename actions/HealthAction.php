@@ -85,7 +85,7 @@ final class HealthAction implements ActionInterface
 
             if (method_exists($this->cache, 'getStats') === true) {
                 $stats = $this->cache->getStats();
-                if (empty($stats) === false) {
+                if (is_array($stats) === true && $stats !== []) {
                     $serverStats = reset($stats);
                     $result['memcached'] = [
                         'curr_items' => $serverStats['curr_items'] ?? 0,

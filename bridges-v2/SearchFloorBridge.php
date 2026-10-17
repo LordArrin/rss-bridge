@@ -354,7 +354,6 @@ final class SearchFloorBridge extends BridgeAbstract
         $resized = imagecreatetruecolor($newW, $newH);
 
         if ($resized === false) {
-            imagedestroy($source);
             return $this->fallbackDataUri($data);
         }
 
@@ -365,9 +364,6 @@ final class SearchFloorBridge extends BridgeAbstract
         ob_start();
         $ok = imagejpeg($resized, null, 90);
         $jpegData = ob_get_clean();
-
-        imagedestroy($source);
-        imagedestroy($resized);
 
         if ($ok === false || $jpegData === false || $jpegData === '') {
             return $this->fallbackDataUri($data);

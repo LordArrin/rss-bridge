@@ -201,7 +201,10 @@ final class BridgeFactory
 
         $output = [];
         $returnVar = 0;
+
+        // phpcs:ignore Generic.PHP.ForbiddenFunctions.Found
         exec($phpBinary . ' ' . escapeshellarg($testScript) . ' 2>&1', $output, $returnVar);
+
         unlink($testScript);
 
         $result = trim(implode("\n", $output));

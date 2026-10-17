@@ -46,7 +46,7 @@ class ParameterValidator
                 }
 
                 if (
-                    is_null($input[$name]) === true
+                    $input[$name] === null
                     && isset($contextParameters[$name]['required']) === true
                     && $contextParameters[$name]['required'] === true
                 ) {
@@ -84,7 +84,7 @@ class ParameterValidator
 
             // Check if all parameters of the context are satisfied
             foreach ($contextParameters as $id => $properties) {
-                if (empty($input[$id]) === false) {
+                if (($input[$id] ?? '') !== '') {
                     $queriedContexts[$contextName] = true;
                 } elseif (
                     isset($properties['type']) === true
@@ -131,7 +131,7 @@ class ParameterValidator
     {
         if ($pattern === null) {
             // No filtering taking place
-            $filteredValue = filter_var($value, FILTER_DEFAULT);
+            $filteredValue = filter_var($value, FILTER_UNSAFE_RAW);
         } else {
             $filteredValue = filter_var((string)$value, FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => '/^' . $pattern . '$/']]);
         }
@@ -157,7 +157,7 @@ class ParameterValidator
 
     private function validateListValue(mixed $value, array $expectedValues): ?string
     {
-        $filteredValue = filter_var($value, FILTER_DEFAULT);
+        $filteredValue = filter_var($value, FILTER_UNSAFE_RAW);
         if ($filteredValue === false) {
             return null;
         }

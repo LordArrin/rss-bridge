@@ -264,7 +264,7 @@ function getProtectedSimpleHTMLDOM(string $url, string $profileName, array $opti
 {
     $html = getProtectedContents($url, $profileName, $options);
 
-    if (empty($html) === true) {
+    if ($html === '') {
         throwClientException(sprintf("Proxy profile '%s' returned empty HTML for: %s", $profileName, $url));
     }
 

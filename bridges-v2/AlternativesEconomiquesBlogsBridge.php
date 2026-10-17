@@ -178,7 +178,7 @@ final class AlternativesEconomiquesBlogsBridge extends BridgeAbstract
     {
         $innerHTML = '';
         foreach ($node->childNodes as $child) {
-            $innerHTML .= $dom->saveHTML($child);
+            $innerHTML .= $dom->saveHtml($child);
         }
         return $innerHTML;
     }

@@ -180,16 +180,16 @@ final class BridgeMetadataCache
      */
     private function extractDomain(string $url): string
     {
-        if (empty($url) === true) {
+        if ($url === '') {
             return '';
         }
 
         $domain = parse_url($url, PHP_URL_HOST);
-        if ($domain !== null && $domain !== false && str_starts_with($domain, 'www.') === true) {
+        if (is_string($domain) === true && str_starts_with($domain, 'www.') === true) {
             $domain = substr($domain, 4);
         }
 
-        return (empty($domain) === false) ? $domain : '';
+        return is_string($domain) === true && $domain !== '' ? $domain : '';
     }
 
     /**

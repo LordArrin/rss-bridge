@@ -58,7 +58,10 @@ final class Configuration
             if ($enabledBridges === '*') {
                 self::setConfig('system', 'enabled_bridges', ['*']);
             } else {
-                self::setConfig('system', 'enabled_bridges', array_filter(array_map('trim', explode("\n", $enabledBridges))));
+                self::setConfig('system', 'enabled_bridges', array_filter(
+                    array_map('trim', explode("\n", $enabledBridges)),
+                    fn(string $v): bool => $v !== ''
+                ));
             }
         }
 
@@ -131,7 +134,7 @@ final class Configuration
         }
 
         $email = self::getConfig('admin', 'email');
-        if (empty($email) === false && filter_var((string)$email, FILTER_VALIDATE_EMAIL) === false) {
+        if ($email !== null && $email !== '' && filter_var((string)$email, FILTER_VALIDATE_EMAIL) === false) {
             self::throwConfigError('admin', 'email', 'Is not a valid email address');
         }
 

@@ -115,7 +115,6 @@ final class WorldbankBridge extends BridgeAbstract
                 }
             }
 
-            // Skip posts with future dates (API sometimes returns incorrect future dates)
             if ($timestamp > $currentTime) {
                 continue;
             }
@@ -136,11 +135,7 @@ final class WorldbankBridge extends BridgeAbstract
 
     private function extractProperty(object $element, string $property): string
     {
-        if (isset($element->{$property}) === false) {
-            return '';
-        }
-
-        $value = $element->{$property};
+        $value = read_json_path($element, $property);
 
         if (is_string($value) === true) {
             return $value;
@@ -155,18 +150,14 @@ final class WorldbankBridge extends BridgeAbstract
 
     private function extractCdataProperty(object $element, string $property): string
     {
-        if (isset($element->{$property}) === false) {
-            return '';
-        }
-
-        $value = $element->{$property};
+        $value = read_json_path($element, $property);
 
         if (is_string($value) === true) {
             return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
         }
 
-        if (is_object($value) === true && isset($value->{'cdata!'}) === true) {
-            $cdata = $value->{'cdata!'};
+        if (is_object($value) === true) {
+            $cdata = read_json_path($value, 'cdata!');
             if (is_string($cdata) === true) {
                 return htmlspecialchars($cdata, ENT_QUOTES, 'UTF-8');
             }

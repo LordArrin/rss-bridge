@@ -150,7 +150,7 @@ EOD;
         $item = [];
         $item['uri'] = self::URI;
 
-        if ($link !== null && $link instanceof \Dom\Element && $link->localName === 'a') {
+        if ($link !== null && $link instanceof \Dom\Element && strtolower($link->tagName) === 'a') {
             $href = $link->getAttribute('href') ?? '';
             if ($href !== '') {
                 $item['uri'] .= $href;
@@ -174,7 +174,7 @@ EOD;
                 $isEndTag = false;
 
                 if ($isTextNode === false && $node instanceof \Dom\Element) {
-                    if ($node->localName === 'h3') {
+                    if (strtolower($node->tagName) === 'h3') {
                         $isEndTag = true;
                     } else {
                         $classValue = $node->getAttribute('class') ?? '';
@@ -277,10 +277,10 @@ EOD;
             $parent = $link->parentNode;
             while ($parent !== null) {
                 if ($parent instanceof \Dom\Element) {
-                    if ($parent->localName === 'body') {
+                    if (strtolower($parent->tagName) === 'body') {
                         break;
                     }
-                    if ($parent->localName === 'p' || $parent->localName === 'div') {
+                    if (strtolower($parent->tagName) === 'p' || strtolower($parent->tagName) === 'div') {
                         $toRemove[] = $parent;
                         break;
                     }
@@ -288,7 +288,7 @@ EOD;
                 $parent = $parent->parentNode;
             }
 
-            if ($parent === null || $parent->localName === 'body') {
+            if ($parent === null || ($parent instanceof \Dom\Element && strtolower($parent->tagName) === 'body')) {
                 $toRemove[] = $link;
             }
         }

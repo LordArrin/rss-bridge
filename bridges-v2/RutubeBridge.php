@@ -176,27 +176,45 @@ final class RutubeBridge extends BridgeAbstract
             $videosMethod1 = 'allVideos(' . $cStr . ',)';
             $videosMethod2 = 'videos(' . $cStr . ',)';
 
-            if (isset($reduxState->api->queries->$videosMethod1->data->results) === true) {
-                $videos = $reduxState->api->queries->$videosMethod1->data->results;
-            } elseif (isset($reduxState->api->queries->$videosMethod2->data->results) === true) {
-                $videos = $reduxState->api->queries->$videosMethod2->data->results;
+            $results = read_json_path($reduxState, 'api', 'queries', $videosMethod1, 'data', 'results');
+
+            if (is_array($results) === true) {
+                $videos = $results;
+            } elseif (is_object($results) === true) {
+                $videos = (array)$results;
+            } else {
+                $results = read_json_path($reduxState, 'api', 'queries', $videosMethod2, 'data', 'results');
+
+                if (is_array($results) === true) {
+                    $videos = $results;
+                } elseif (is_object($results) === true) {
+                    $videos = (array)$results;
+                }
             }
 
             $channelInfoMethod = 'channelInfo({"userChannelId":' . $cStr . '})';
-            if (isset($reduxState->api->queries->$channelInfoMethod->data->name) === true) {
-                $this->title = (string)$reduxState->api->queries->$channelInfoMethod->data->name;
+            $name = read_json_path($reduxState, 'api', 'queries', $channelInfoMethod, 'data', 'name');
+
+            if ($name !== null) {
+                $this->title = (string)$name;
             }
         } elseif ($p !== null) {
             $pStr = (string)$p;
             $playListVideosMethod = 'getPlaylistVideos(' . $pStr . ',)';
             $playListMethod = 'getPlaylist(' . $pStr . ')';
 
-            if (isset($reduxState->api->queries->$playListVideosMethod->data->results) === true) {
-                $videos = $reduxState->api->queries->$playListVideosMethod->data->results;
+            $results = read_json_path($reduxState, 'api', 'queries', $playListVideosMethod, 'data', 'results');
+
+            if (is_array($results) === true) {
+                $videos = $results;
+            } elseif (is_object($results) === true) {
+                $videos = (array)$results;
             }
 
-            if (isset($reduxState->api->queries->$playListMethod->data->title) === true) {
-                $this->title = (string)$reduxState->api->queries->$playListMethod->data->title;
+            $title = read_json_path($reduxState, 'api', 'queries', $playListMethod, 'data', 'title');
+
+            if ($title !== null) {
+                $this->title = (string)$title;
             }
         } elseif ($s !== null && $s !== '') {
             $this->title = 'Поиск ' . (string)$s;

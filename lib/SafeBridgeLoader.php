@@ -40,8 +40,8 @@ class SafeBridgeLoader
      */
     public function createSafely(string $bridgeClassName): BridgeAbstract
     {
-        if (empty($bridgeClassName) === true || preg_match('/^[a-zA-Z0-9_\\\\]+$/', $bridgeClassName) !== 1) {
-            $stubName = (empty($bridgeClassName) === false) ? $bridgeClassName : 'Unknown';
+        if ($bridgeClassName === '' || preg_match('/^[a-zA-Z0-9_\\\\]+$/', $bridgeClassName) !== 1) {
+            $stubName = ($bridgeClassName !== '') ? $bridgeClassName : 'Unknown';
             return $this->createStub($stubName, 'Invalid bridge class name');
         }
 

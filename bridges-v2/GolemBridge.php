@@ -222,13 +222,13 @@ final class GolemBridge extends FeedExpander
 
         $multipageHeader = $wrapper->querySelector('header.paged-cluster-header h1');
         if ($multipageHeader !== null && $multipageHeader->textContent !== $firstHeaderText) {
-            $item .= $dom->saveHTML($multipageHeader);
+            $item .= $dom->saveHtml($multipageHeader);
         }
 
         $header = $wrapper->querySelector('header');
         if ($header !== null) {
             foreach ($header->querySelectorAll('p, figure') as $element) {
-                $item .= $dom->saveHTML($element);
+                $item .= $dom->saveHtml($element);
             }
         }
 
@@ -251,7 +251,7 @@ final class GolemBridge extends FeedExpander
         $selectorString = implode(', ', $contentSelectors);
 
         foreach ($wrapper->querySelectorAll($selectorString) as $element) {
-            $elementHtml = $dom->saveHTML($element);
+            $elementHtml = $dom->saveHtml($element);
             if (str_contains($prevcontent, $elementHtml) === false) {
                 $item .= $elementHtml;
             }
