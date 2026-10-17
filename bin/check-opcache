@@ -1,0 +1,195 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Check OPcache status and preload configuration.
+ * 
+ * This utility displays OPcache configuration, memory usage, cache statistics,
+ * and preload information. Note that full preload statistics are only available
+ * when running under PHP-FPM (via HTTP requests), not in CLI mode.
+ * 
+ * Usage:
+ *   bin/check-opcache [options]
+ * 
+ * Options:
+ *   -h, --help          Show this help message
+ *   --json              Output in JSON format
+ *   --verbose           Show detailed information including preloaded scripts
+ *   --preload-only      Show only preload statistics
+ * 
+ * Examples:
+ *   bin/check-opcache
+ *   bin/check-opcache --verbose
+ *   bin/check-opcache --json > opcache-status.json
+ * 
+ * Exit codes:
+ *   0  Success
+ *   1  Error or invalid arguments
+ */
+
+$helpText = <<<HELP
+OPcache Status Checker
+
+Usage: bin/check-opcache [options]
+
+Options:
+  -h, --help          Show this help message
+  --json              Output in JSON format
+  --verbose           Show detailed information including preloaded scripts
+  --preload-only      Show only preload statistics
+
+Examples:
+  bin/check-opcache
+  bin/check-opcache --verbose
+  bin/check-opcache --json > opcache-status.json
+
+Note: Full preload statistics are only available when running under PHP-FPM.
+HELP;
+
+$options = getopt('h', ['help', 'json', 'verbose', 'preload-only']);
+
+if (isset($options['h']) || isset($options['help'])) {
+    echo $helpText . "\n";
+    exit(0);
+}
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$isJson = isset($options['json']);
+$isVerbose = isset($options['verbose']);
+$isPreloadOnly = isset($options['preload-only']);
+
+$result = [
+    'timestamp' => date('c'),
+    'php_version' => PHP_VERSION,
+    'sapi' => php_sapi_name(),
+];
+
+echo "=== OPcache Status Check ===\n\n";
+
+$preloadFile = ini_get('opcache.preload');
+$preloadUser = ini_get('opcache.preload_user');
+$opcacheEnabled = (bool)ini_get('opcache.enable');
+$opcacheCliEnabled = (bool)ini_get('opcache.enable_cli');
+
+$result['configuration'] = [
+    'opcache_enabled' => $opcacheEnabled,
+    'opcache_cli_enabled' => $opcacheCliEnabled,
+    'preload_file' => $preloadFile,
+    'preload_user' => $preloadUser,
+    'memory_consumption' => ini_get('opcache.memory_consumption'),
+    'max_accelerated_files' => ini_get('opcache.max_accelerated_files'),
+    'validate_timestamps' => ini_get('opcache.validate_timestamps'),
+    'jit' => ini_get('opcache.jit'),
+    'jit_buffer_size' => ini_get('opcache.jit_buffer_size'),
+];
+
+echo "Configuration:\n";
+echo "  OPcache enabled: " . ($opcacheEnabled ? 'Yes' : 'No') . "\n";
+echo "  OPcache CLI enabled: " . ($opcacheCliEnabled ? 'Yes' : 'No') . "\n";
+echo "  Preload file: " . ($preloadFile ?: 'Not configured') . "\n";
+echo "  Preload user: " . ($preloadUser ?: 'Not configured') . "\n";
+echo "  Memory consumption: " . ini_get('opcache.memory_consumption') . " MB\n";
+echo "  Max accelerated files: " . ini_get('opcache.max_accelerated_files') . "\n";
+echo "  Validate timestamps: " . (ini_get('opcache.validate_timestamps') ? 'Yes' : 'No') . "\n";
+echo "  JIT: " . (ini_get('opcache.jit') ?: 'Disabled') . "\n";
+echo "  JIT buffer size: " . ini_get('opcache.jit_buffer_size') . " MB\n\n";
+
+if ($preloadFile && !file_exists($preloadFile)) {
+    echo "WARNING: Preload file does not exist: $preloadFile\n\n";
+    $result['warnings'][] = "Preload file does not exist: $preloadFile";
+}
+
+if ($preloadFile && file_exists($preloadFile)) {
+    $preloadStats = stat($preloadFile);
+    $result['preload_file_stats'] = [
+        'exists' => true,
+        'size' => $preloadStats['size'],
+        'owner_uid' => $preloadStats['uid'],
+        'permissions' => decoct($preloadStats['mode'] & 0777),
+    ];
+    
+    echo "Preload file exists: Yes\n";
+    echo "  Size: " . $preloadStats['size'] . " bytes\n";
+    echo "  Owner UID: " . $preloadStats['uid'] . "\n";
+    echo "  Permissions: " . decoct($preloadStats['mode'] & 0777) . "\n\n";
+}
+
+$status = opcache_get_status(false);
+
+if ($status === false) {
+    echo "OPcache status: Not available (CLI mode)\n";
+    echo "\nNote: opcache.enable_cli is disabled. Preload status can only be checked via HTTP.\n";
+    echo "To check preload via HTTP, create a temporary PHP file with:\n";
+    echo "  <?php echo json_encode(opcache_get_status(), JSON_PRETTY_PRINT);\n\n";
+    
+    $result['status'] = 'not_available_cli';
+    $result['recommendation'] = 'Use HTTP endpoint to check preload status';
+} else {
+    $result['status'] = 'available';
+    $result['opcache_status'] = [
+        'opcache_enabled' => $status['opcache_enabled'] ?? false,
+        'cache_full' => $status['cache_full'] ?? false,
+        'memory_usage' => $status['memory_usage'] ?? null,
+        'interned_strings_usage' => $status['interned_strings_usage'] ?? null,
+        'opcache_statistics' => $status['opcache_statistics'] ?? null,
+        'preload_statistics' => $status['preload_statistics'] ?? null,
+        'jit' => $status['jit'] ?? null,
+    ];
+    
+    echo "OPcache status: Available\n\n";
+    
+    if (isset($status['memory_usage'])) {
+        $mem = $status['memory_usage'];
+        echo "Memory Usage:\n";
+        echo "  Used: " . round($mem['used_memory'] / 1024 / 1024, 2) . " MB\n";
+        echo "  Free: " . round($mem['free_memory'] / 1024 / 1024, 2) . " MB\n";
+        echo "  Wasted: " . round($mem['wasted_memory'] / 1024 / 1024, 2) . " MB\n";
+        echo "  Current usage: " . round($mem['used_memory'] / $mem['total_memory'] * 100, 2) . "%\n\n";
+    }
+    
+    if (isset($status['opcache_statistics'])) {
+        $stats = $status['opcache_statistics'];
+        echo "Cache Statistics:\n";
+        echo "  Number of cached scripts: " . ($stats['num_cached_scripts'] ?? 0) . "\n";
+        echo "  Number of cached keys: " . ($stats['num_cached_keys'] ?? 0) . "\n";
+        echo "  Max cached keys: " . ($stats['max_cached_keys'] ?? 0) . "\n";
+        echo "  Hit rate: " . round($stats['opcache_hit_rate'] ?? 0, 2) . "%\n\n";
+    }
+    
+    if (isset($status['preload_statistics'])) {
+        $preload = $status['preload_statistics'];
+        echo "Preload Statistics:\n";
+        echo "  Preloaded scripts: " . count($preload['scripts'] ?? []) . "\n";
+        echo "  Memory consumption: " . round(($preload['memory_consumption'] ?? 0) / 1024 / 1024, 2) . " MB\n";
+        echo "  Preloaded functions: " . count($preload['functions'] ?? []) . "\n";
+        echo "  Preloaded classes: " . count($preload['classes'] ?? []) . "\n\n";
+        
+        if ($isVerbose && !empty($preload['scripts'])) {
+            echo "Preloaded scripts:\n";
+            foreach ($preload['scripts'] as $script) {
+                echo "  - $script\n";
+            }
+            echo "\n";
+        }
+    } else {
+        echo "Preload Statistics: Not available\n\n";
+    }
+    
+    if (isset($status['jit'])) {
+        $jit = $status['jit'];
+        echo "JIT Status:\n";
+        echo "  Enabled: " . ($jit['enabled'] ?? false ? 'Yes' : 'No') . "\n";
+        echo "  Buffer size: " . round(($jit['buffer_size'] ?? 0) / 1024 / 1024, 2) . " MB\n";
+        echo "  Optimizer: " . ($jit['optimizer'] ?? 'N/A') . "\n\n";
+    }
+}
+
+if ($isJson) {
+    echo "\n=== JSON Output ===\n";
+    echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+}
+
+exit(0);
