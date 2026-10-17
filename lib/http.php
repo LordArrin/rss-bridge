@@ -602,8 +602,25 @@ final class CurlHttpClient implements HttpClient
 
         if ($statusCode >= 300 && $statusCode < 400 && $statusCode !== 304) {
             $location = $responseHeaders['location'][count($responseHeaders['location']) - 1] ?? 'unknown';
+
+            $originalParsed = self::parseHttpUrl($url);
+            $redirectParsed = self::parseHttpUrl($location);
+
+            if ($originalParsed !== null && $redirectParsed !== null && $originalParsed['host'] === $redirectParsed['host']) {
+                $redirectCount = $config['_redirect_count'] ?? 0;
+                if ($redirectCount >= 5) {
+                    throw new HttpException(sprintf(
+                        'Too many redirects for %s (SSRF protection: redirect loop detected)',
+                        $url
+                    ));
+                }
+
+                $config['_redirect_count'] = $redirectCount + 1;
+                return $this->request($location, $config);
+            }
+
             throw new HttpException(sprintf(
-                'Refusing to follow redirect to %s for %s (SSRF protection: redirects are disabled to prevent bypasses)',
+                'Refusing to follow redirect to %s for %s (SSRF protection: cross-domain redirects are disabled to prevent bypasses)',
                 $location,
                 $url
             ));

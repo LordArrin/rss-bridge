@@ -56,11 +56,11 @@ final class FirefoxAddonsBridge extends BridgeAbstract
 
         $titleNode = $dom->querySelector('h1[class="AddonTitle"] > a');
         if ($titleNode !== null) {
-            $this->feedName = (string) $titleNode->textContent;
+            $this->feedName = $titleNode->textContent;
         }
 
         $authorNode = $dom->querySelector('span.AddonTitle-author > a');
-        $author = ($authorNode !== null) ? (string) $authorNode->textContent : '';
+        $author = ($authorNode !== null) ? $authorNode->textContent : '';
 
         $versionCards = $dom->querySelectorAll('li.AddonVersionCard');
         foreach ($versionCards as $li) {
@@ -71,7 +71,7 @@ final class FirefoxAddonsBridge extends BridgeAbstract
             $item = [];
 
             $versionNode = $li->querySelector('h2.AddonVersionCard-version');
-            $item['title'] = ($versionNode !== null) ? (string) $versionNode->textContent : '';
+            $item['title'] = ($versionNode !== null) ? $versionNode->textContent : '';
             $item['uid'] = $item['title'];
             $item['uri'] = $this->getURI();
             $item['author'] = $author;
@@ -79,31 +79,31 @@ final class FirefoxAddonsBridge extends BridgeAbstract
             $fileInfoNode = $li->querySelector('div.AddonVersionCard-fileInfo');
             $size = '';
             if ($fileInfoNode !== null) {
-                $fileInfoText = (string) $fileInfoNode->textContent;
+                $fileInfoText = $fileInfoNode->textContent;
                 $releaseDateRegex = '/Released ([\w, ]+) - ([\w. ]+)/';
                 if (preg_match($releaseDateRegex, $fileInfoText, $match) === 1) {
                     $timestamp = strtotime($match[1]);
                     if ($timestamp !== false) {
                         $item['timestamp'] = $timestamp;
                     }
-                    $size = (string) $match[2];
+                    $size = $match[2];
                 }
             }
 
             $compatNode = $li->querySelector('div.AddonVersionCard-compatibility');
-            $compatibility = ($compatNode !== null) ? (string) $compatNode->textContent : '';
+            $compatibility = ($compatNode !== null) ? $compatNode->textContent : '';
 
             $licenseNode = $li->querySelector('p.AddonVersionCard-license');
-            $license = ($licenseNode !== null) ? (string) $licenseNode->innerHTML : '';
+            $license = ($licenseNode !== null) ? $licenseNode->innerHTML : '';
 
             $downloadlink = '';
             $downloadNode = $li->querySelector('a.InstallButtonWrapper-download-link');
             if ($downloadNode !== null) {
-                $downloadlink = (string) ($downloadNode->getAttribute('href') ?? '');
+                $downloadlink = $downloadNode->getAttribute('href') ?? '';
             } else {
                 $altDownloadNode = $li->querySelector('a.Button.Button--action.AMInstallButton-button.Button--puffy');
                 if ($altDownloadNode !== null) {
-                    $downloadlink = (string) ($altDownloadNode->getAttribute('href') ?? '');
+                    $downloadlink = $altDownloadNode->getAttribute('href') ?? '';
                 }
             }
 
@@ -113,7 +113,7 @@ final class FirefoxAddonsBridge extends BridgeAbstract
             $xpiFilename = '';
             $xpiFileRegex = '/([A-Za-z0-9_.-]+)\.xpi$/';
             if (preg_match($xpiFileRegex, $downloadlink, $match) === 1) {
-                $xpiFilename = (string) $match[0];
+                $xpiFilename = $match[0];
             }
 
             $escapedCompatibility = htmlspecialchars($compatibility);
@@ -167,7 +167,7 @@ EOD;
             if ($a instanceof \Dom\Element === false) {
                 continue;
             }
-            $href = (string) ($a->getAttribute('href') ?? '');
+            $href = $a->getAttribute('href') ?? '';
             if ($href !== '') {
                 $cleaned = preg_replace($outgoingRegex, '', $href);
                 if (is_string($cleaned) === true) {
@@ -188,7 +188,7 @@ EOD;
             }
         }
 
-        return $this->cleanHtml((string) $node->innerHTML);
+        return $this->cleanHtml($node->innerHTML);
     }
 
     private function cleanHtml(string $html): string
@@ -220,7 +220,7 @@ EOD;
             }
         }
 
-        return trim((string) $wrapper->innerHTML);
+        return trim($wrapper->innerHTML);
     }
 
     public function detectParameters($url): ?array
@@ -230,7 +230,7 @@ EOD;
 
         $pattern = '/addons\.mozilla\.org\/(?:[\w-]+\/)?firefox\/addon\/([\w-]+)/';
         if (preg_match($pattern, $urlString, $matches) === 1) {
-            $params['id'] = (string) $matches[1];
+            $params['id'] = $matches[1];
             return $params;
         }
 

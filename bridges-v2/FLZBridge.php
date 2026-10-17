@@ -205,7 +205,7 @@ final class FLZBridge extends BridgeAbstract
         }
 
         usort($items, fn($a, $b) => ($b['timestamp'] ?? 0) <=> ($a['timestamp'] ?? 0));
-        $limit = (int) $this->getInput('limit');
+        $limit = $this->getInput('limit');
         $items = array_slice($items, 0, $limit > 0 ? $limit : 50);
 
         foreach ($items as $item) {
@@ -245,7 +245,7 @@ final class FLZBridge extends BridgeAbstract
         }
 
         $firstPath = array_key_first($feeds);
-        $segments = explode('/', trim((string) $firstPath, '/'));
+        $segments = explode('/', trim($firstPath, '/'));
 
         return self::URI . implode('/', array_map(
             fn($segment) => rawurlencode(mb_strtolower($segment)),
@@ -386,13 +386,13 @@ final class FLZBridge extends BridgeAbstract
             $teaser = trim((string) ($entry['content'] ?? ''));
 
             $item = [
-            'uri' => $uri,
-            'uid' => $this->articleId($uri),
-            'title' => $title,
-            'content' => $this->buildContent(
-                (string) $image,
-                $teaser !== '' ? '<p>' . e($teaser) . '</p>' : ''
-            ),
+                'uri' => $uri,
+                'uid' => $this->articleId($uri),
+                'title' => $title,
+                'content' => $this->buildContent(
+                    $image,
+                    $teaser !== '' ? '<p>' . e($teaser) . '</p>' : ''
+                ),
             ];
 
             if (isset($entry['timestamp']) === true) {
@@ -424,7 +424,7 @@ final class FLZBridge extends BridgeAbstract
                 break;
             }
 
-            sleep((int) $backoff);
+            sleep($backoff);
         }
 
         $this->skippedFeeds[] = $path;
@@ -473,7 +473,7 @@ final class FLZBridge extends BridgeAbstract
                     continue;
                 }
 
-                $innerHtml = (string) $node->innerHTML;
+                $innerHtml = $node->innerHTML;
                 if (str_contains($innerHtml, 'cat-ad-labeling') === false && str_contains($innerHtml, 'PR-Ver') === false) {
                     continue;
                 }
@@ -498,7 +498,7 @@ final class FLZBridge extends BridgeAbstract
 
         $body = $this->loadCacheValue($cacheKey);
         if (is_string($body) === true && $body !== '') {
-            return $this->buildContent((string) $image, $body);
+            return $this->buildContent($image, $body);
         }
 
         if ($this->hasTimeLeft() === false) {
@@ -520,12 +520,12 @@ final class FLZBridge extends BridgeAbstract
 
         if ($this->isPaywalled($html) === false) {
             $this->saveCacheValue($cacheKey, $body, self::ARTICLE_CACHE_TTL);
-            return $this->buildContent((string) $image, $body);
+            return $this->buildContent($image, $body);
         }
 
         $reason = $this->loginProblem !== '' ? $this->loginProblem : 'Login is active, but flz.de still doesn\'t deliver the article freely (subscription expired or article not included in subscription).';
 
-        return $this->buildNotice('FLZ+ article as teaser only: ' . $reason) . $this->buildContent((string) $image, $body);
+        return $this->buildNotice('FLZ+ article as teaser only: ' . $reason) . $this->buildContent($image, $body);
     }
 
     private function extractBody(\Dom\HTMLDocument $dom): string
@@ -538,7 +538,7 @@ final class FLZBridge extends BridgeAbstract
                 continue;
             }
 
-            $text = html_entity_decode((string) $element->textContent, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $text = html_entity_decode($element->textContent, ENT_QUOTES | ENT_HTML5, 'UTF-8');
             $text = trim((string) preg_replace('~\s+~u', ' ', $text));
 
             if ($text !== '') {
@@ -591,7 +591,7 @@ final class FLZBridge extends BridgeAbstract
                 'Accept: application/json',
                 'Cookie: ' . $this->cookie,
             ], $this->requestOptions());
-            $status = Json::decode((string) $statusRaw);
+            $status = Json::decode($statusRaw);
 
             if (is_array($status) === false || isset($status['code']) === false) {
                 throw new \Exception('Unexpected answer from the logon status');
@@ -603,7 +603,7 @@ final class FLZBridge extends BridgeAbstract
             return;
         }
 
-        if ((int) $status['code'] === 2000) {
+        if ($status['code'] === 2000) {
             return;
         }
 
@@ -723,12 +723,12 @@ final class FLZBridge extends BridgeAbstract
             $headers[] = 'Cookie: ' . $this->cookie;
         }
 
-        return (string) getContents($url, $headers, $this->requestOptions());
+        return getContents($url, $headers, $this->requestOptions());
     }
 
     private function requestOptions(): array
     {
-        $timeout = (int) Configuration::getConfig('http', 'timeout');
+        $timeout = Configuration::getConfig('http', 'timeout');
         return [CURLOPT_TIMEOUT => max(1, $timeout)];
     }
 

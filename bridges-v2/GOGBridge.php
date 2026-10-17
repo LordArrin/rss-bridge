@@ -123,15 +123,16 @@ final class GOGBridge extends BridgeAbstract
 
     private function extractGenreNames(object $game): array
     {
-        $genres = $game->genres ?? null;
+        $genres = read_json_path($game, 'genres');
         if (is_array($genres) === false) {
             return [];
         }
 
         $names = [];
         foreach ($genres as $genre) {
-            if (is_object($genre) === true && isset($genre->name) === true && is_string($genre->name) === true) {
-                $names[] = $genre->name;
+            $name = read_json_path($genre, 'name');
+            if (is_string($name) === true) {
+                $names[] = $name;
             }
         }
 
@@ -143,8 +144,9 @@ final class GOGBridge extends BridgeAbstract
         $dateFields = ['storeReleaseDate', 'releaseDate', 'globalReleaseDate'];
 
         foreach ($dateFields as $field) {
-            if (isset($game->{$field}) === true && is_string($game->{$field}) === true && $game->{$field} !== '') {
-                $parsed = strtotime($game->{$field});
+            $value = read_json_path($game, $field);
+            if (is_string($value) === true && $value !== '') {
+                $parsed = strtotime($value);
                 if ($parsed !== false && $parsed <= time()) {
                     return $parsed;
                 }
@@ -156,11 +158,7 @@ final class GOGBridge extends BridgeAbstract
 
     private function extractInt(object $obj, string $property): int
     {
-        if (isset($obj->{$property}) === false) {
-            return 0;
-        }
-
-        $value = $obj->{$property};
+        $value = read_json_path($obj, $property);
 
         if (is_int($value) === true) {
             return $value;
@@ -175,11 +173,7 @@ final class GOGBridge extends BridgeAbstract
 
     private function extractString(object $obj, string $property): string
     {
-        if (isset($obj->{$property}) === false) {
-            return '';
-        }
-
-        $value = $obj->{$property};
+        $value = read_json_path($obj, $property);
 
         if (is_string($value) === true) {
             return $value;
@@ -194,11 +188,7 @@ final class GOGBridge extends BridgeAbstract
 
     private function extractStringArray(object $obj, string $property): array
     {
-        if (isset($obj->{$property}) === false) {
-            return [];
-        }
-
-        $value = $obj->{$property};
+        $value = read_json_path($obj, $property);
 
         if (is_array($value) === false) {
             return [];
