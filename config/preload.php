@@ -7,21 +7,21 @@ $baseDir = __DIR__;
 $preloadFiles = [
     $baseDir . '/caches/CacheInterface.php',
     $baseDir . '/formats/FormatInterface.php',
-    
+
     $baseDir . '/lib/exceptions.php',
     $baseDir . '/lib/logger.php',
-    
+
     $baseDir . '/lib/BridgeAbstract.php',
     $baseDir . '/lib/FeedExpander.php',
-    
+
     $baseDir . '/formats/FormatAbstract.php',
-    
+
     $baseDir . '/caches/FileCache.php',
     $baseDir . '/caches/MemcachedCache.php',
     $baseDir . '/caches/SQLiteCache.php',
     $baseDir . '/caches/NullCache.php',
     $baseDir . '/caches/ArrayCache.php',
-    
+
     $baseDir . '/formats/AtomFormat.php',
     $baseDir . '/formats/JsonFormat.php',
     $baseDir . '/formats/MrssFormat.php',
@@ -31,19 +31,19 @@ $preloadFiles = [
 ];
 
 foreach ($preloadFiles as $file) {
-    if (file_exists($file)) {
+    if (file_exists($file) === true) {
         opcache_compile_file($file);
     }
 }
 
 $bridgeDir = $baseDir . '/bridges-v2';
-if (is_dir($bridgeDir)) {
+if (is_dir($bridgeDir) === true) {
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($bridgeDir, RecursiveDirectoryIterator::SKIP_DOTS)
     );
-    
+
     foreach ($iterator as $file) {
-        if ($file->isFile() && $file->getExtension() === 'php') {
+        if ($file->isFile() === true && $file->getExtension() === 'php') {
             opcache_compile_file($file->getPathname());
         }
     }

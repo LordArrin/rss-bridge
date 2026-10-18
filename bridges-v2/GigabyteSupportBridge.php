@@ -150,16 +150,18 @@ final class GigabyteSupportBridge extends BridgeAbstract
             if (class_exists('\\tidy') === true) {
                 $tidy = new \tidy();
                 $tidy->parseString($html, [
-                'clean' => true,
-                'output-xhtml' => true,
-                'wrap' => 0,
-                'drop-empty-elements' => false,
+                    'clean' => true,
+                    'output-xhtml' => true,
+                    'wrap' => 0,
+                    'drop-empty-elements' => false,
                 ], 'utf8');
                 $tidy->cleanRepair();
-                $html = (string)$tidy->value;
+                $html = (string) $tidy->value;
             }
 
-            $previousHandler = set_error_handler(function (int $severity, string $message): bool {
+            $previousHandler = null;
+
+            $previousHandler = set_error_handler(function (int $severity, string $message) use (&$previousHandler): bool {
                 if (str_contains($message, 'Dom\\HTMLDocument::createFromString()') === true) {
                     return true;
                 }

@@ -1,18 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ruleset name="RSS-Bridge Ruleset">
   <description>
-    Modernized ruleset for RSS-Bridge (PHP 8.5+).
+    Modernized ruleset for RSS-Bridge (PHP 8.6+).
     Based on PSR-12 with strict typing and modern PHP practices.
   </description>
 
   <!-- Specify the target PHP version for the analyzers to work correctly. -->
-  <config name="php_version" value="80500"/>
+  <config name="php_version" value="80600"/>
 
   <!-- Default check paths -->
+  <file>./.github</file>
   <file>./actions</file>
   <file>./bin</file>
   <file>./bridges-v2</file>
   <file>./caches</file>
+  <file>./config</file>
   <file>./formats</file>
   <file>./lib</file>
   <file>./middlewares</file>
@@ -23,7 +25,6 @@
   <exclude-pattern>./cache/*</exclude-pattern>
   <exclude-pattern>./config.default.ini.php</exclude-pattern>
   <exclude-pattern>./config.ini.php</exclude-pattern>
-  <exclude-pattern>./config/*.ini.php</exclude-pattern>
   <exclude-pattern>./static/*</exclude-pattern>
   <exclude-pattern>./templates/*</exclude-pattern>
   <exclude-pattern>./vendor/*</exclude-pattern>

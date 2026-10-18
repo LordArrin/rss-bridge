@@ -1,13 +1,6 @@
 name: Lint bridges
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - 'bridges-v2/**'
-      - 'phpcs.xml'
-      - 'phpstan.neon'
-      - '.github/workflows/lint-bridges.yml'
   pull_request:
     branches: [master]
     paths:

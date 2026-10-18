@@ -26,18 +26,18 @@ if ($config === false) {
 // Values from [MemcachedCache] in config.ini.php override these.
 $defaults = [];
 $defaultsFile = __DIR__ . '/memcached.conf';
-if (file_exists($defaultsFile)) {
+if (file_exists($defaultsFile) === true) {
     // parse_ini_file() treats '#' as a literal character, so strip full-line
     // comments before parsing the consolidated defaults file.
-    $rawDefaults = (string)file_get_contents($defaultsFile);
+    $rawDefaults = (string) file_get_contents($defaultsFile);
     // Replace '#'-style comment lines with ';'-style ones, which PHP's INI
     // parser understands natively (keeps line structure intact for errors).
     $strippedDefaults = preg_replace('/^(\h*)#.*$/m', '$1;', $rawDefaults);
     $parsedDefaults = parse_ini_string($strippedDefaults, true, INI_SCANNER_RAW);
-    if (is_array($parsedDefaults)) {
+    if (is_array($parsedDefaults) === true) {
         foreach ($parsedDefaults as $section => $values) {
-            if (is_array($values) && array_key_exists('value', $values)) {
-                $defaults[$section] = trim((string)$values['value']);
+            if (is_array($values) === true && array_key_exists('value', $values) === true) {
+                $defaults[$section] = trim((string) $values['value']);
             }
         }
     }
