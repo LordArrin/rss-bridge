@@ -12,7 +12,7 @@ final class IXBTGamesBridge extends BridgeAbstract
     public const URI = 'https://ixbt.games/';
     public const DESCRIPTION = 'Gaming industry news from IXBT Games';
     public const MAINTAINER = 'LordArrin';
-    public const CACHE_TIMEOUT = 1800;
+    public const CACHE_TIMEOUT = 14400;
 
     private const CSS_IMG = 'display: block; margin: 16px 0; max-width: 1600px; height: auto;';
     private const CSS_UL = 'list-style-type: disc; margin: 16px 0 16px 24px; padding: 0;';
