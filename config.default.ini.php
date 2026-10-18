@@ -109,11 +109,6 @@ token = ""
 output = "http"
 report_limit = 1
 
-[youtube]
-
-iframe = true
-nocookie = true
-
 [FileCache]
 
 path = ""
@@ -137,6 +132,11 @@ type = internal
 
 ; Internal only: path to Unix socket
 socket_path = "/var/run/memcached/memcached.sock"
+
+[youtube]
+
+iframe = true
+nocookie = true
 
 [Telegram2Bridge]
 embed_max_size = 32m

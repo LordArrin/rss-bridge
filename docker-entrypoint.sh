@@ -62,7 +62,7 @@ if [ ! -f /app/vendor/autoload.php ]; then
 fi
 
 # Read memcached configuration
-eval "$(php /app/memcached-config.php)"
+eval "$(php /app/config/memcached-config.php)"
 
 if [ "$MEMCACHED_TYPE" = "external" ]; then
     # External TCP memcached: just verify connectivity

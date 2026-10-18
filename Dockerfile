@@ -437,7 +437,6 @@ WORKDIR /app
 RUN composer install --optimize-autoloader --no-interaction --ignore-platform-reqs --classmap-authoritative && \
     sed -i "s/__RSSBRIDGE_IMAGE_VERSION__/${IMAGE_VERSION}/g" /app/index.html && \
     chmod +x /app/bin/* && \
-    chmod +x /app/memcached-config.php && \
     chmod +x /app/docker-entrypoint.sh
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
