@@ -27,9 +27,13 @@ timeout = 60
 
 ; SSRF protection. Before every outbound request the target hostname is
 ; resolved and each returned IP is screened against the blocked CIDR ranges.
-; The vetted IP is pinned via CURLOPT_RESOLVE to prevent DNS-rebinding attacks
-; between the check and the actual connect. Redirects are refused to prevent
-; bypasses via Location headers pointing at internal addresses.
+; Resolutions go through a process-wide DNS cache (60s TTL, 10s for negative
+; results) so "resolve -> check -> connect" always uses one single immutable
+; lookup result. The whole vetted IP set is pinned via CURLOPT_RESOLVE to
+; prevent DNS-rebinding attacks between the check and the actual connect
+; (a TTL-0 record can no longer flip the name to an internal address).
+; Redirects are refused to prevent bypasses via Location headers pointing at
+; internal addresses.
 ; Set to false only if you deliberately need bridges to reach internal services.
 ssrf_check = true
 

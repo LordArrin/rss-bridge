@@ -105,6 +105,13 @@ final class IpResolver
     private const CACHE_TTL = 60;
 
     /**
+     * Shorter TTL for failed lookups: a rebinding attacker who temporarily
+     * makes DNS unavailable must not be able to force repeated uncached
+     * re-resolutions (which would widen the TOCTOU window and amplify load).
+     */
+    private const NEGATIVE_CACHE_TTL = 10;
+
+    /**
      * @param string[]|string|null $blockedCidrs
      * @param string[]|string|null $allowedCidrs
      */
@@ -166,6 +173,15 @@ final class IpResolver
     }
 
     /**
+     * Resolves a hostname to its IP addresses through the process-wide DNS
+     * cache.
+     *
+     * The cache is the foundation of the DNS-rebinding protection: every
+     * outbound request pins the connection (via CURLOPT_RESOLVE) to exactly
+     * the IPs vetted here, so the "resolve -> check -> connect" sequence uses
+     * one single immutable resolution result. Flushing an entry (see
+     * clearCache()) forces a fresh lookup on the next request.
+     *
      * @return string[]
      */
     public function resolve(string $host): array
@@ -179,8 +195,11 @@ final class IpResolver
         }
 
         $cached = self::$cache[$host] ?? null;
-        if ($cached !== null && (time() - $cached['time']) < self::CACHE_TTL) {
-            return $cached['ips'];
+        if ($cached !== null) {
+            $ttl = $cached['ips'] === [] ? self::NEGATIVE_CACHE_TTL : self::CACHE_TTL;
+            if ((time() - $cached['time']) < $ttl) {
+                return $cached['ips'];
+            }
         }
 
         $ips = gethostbynamel($host);
@@ -199,6 +218,19 @@ final class IpResolver
         $ips = array_values(array_unique($ips));
         self::$cache[$host] = ['time' => time(), 'ips' => $ips];
         return $ips;
+    }
+
+    /**
+     * Drops cached DNS answers for one host (or all hosts when omitted).
+     * The next resolve() performs a fresh network lookup.
+     */
+    public static function clearCache(?string $host = null): void
+    {
+        if ($host === null) {
+            self::$cache = [];
+            return;
+        }
+        unset(self::$cache[strtolower(trim($host, '.'))]);
     }
 
     public function isAllowed(string $ip): bool
@@ -366,6 +398,82 @@ final class CurlHttpClient implements HttpClient
         return ['host' => $host, 'port' => (int)($parts['port'] ?? ($scheme === 'https' ? 443 : 80))];
     }
 
+    /**
+     * Builds the CURLOPT_RESOLVE entries that pin a hostname to its
+     * DNS-cached, SSRF-vetted IP addresses.
+     *
+     * DNS-rebinding protection works like this:
+     *  1. The hostname is resolved exactly once through IpResolver::resolve(),
+     *     which caches every answer for CACHE_TTL seconds.
+     *  2. All resolved IPs are screened against the blocked CIDR ranges; the
+     *     request is refused when no vetted address remains.
+     *  3. Every vetted address is handed to cURL via CURLOPT_RESOLVE, so the
+     *     connection reuses the cached result instead of triggering a second
+     *     lookup. An attacker-controlled TTL-0 record can therefore no longer
+     *     flip the name from a public IP to an internal one between the check
+     *     and the connect ("check TOCTOU" rebinding).
+     *  4. Because several A/AAAA records may be valid at once, all allowed IPs
+     *     are pinned (host:port:ip1,ip2,...) rather than only the first one,
+     *     preserving Happy-Eyeballs-style fallback without losing protection.
+     *
+     * Entries use the "+host:port:ip" form so previously cached connections
+     * bound to a stale (possibly rebound) address are flushed from the shared
+     * handle before the new pinning takes effect.
+     *
+     * @return string[] Zero or more CURLOPT_RESOLVE entry strings.
+     */
+    private function buildResolveEntries(string $url, bool $ssrfCheck): array
+    {
+        if ($ssrfCheck === false) {
+            return [];
+        }
+
+        $parsed = self::parseHttpUrl($url);
+        if ($parsed === null || $parsed['host'] === '') {
+            return [];
+        }
+
+        $host = $parsed['host'];
+        $port = $parsed['port'];
+
+        // Literal IP addresses need no resolution step: validate and let cURL
+        // connect directly.
+        if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+            if (self::ipResolver()->isBlocked($host) === true) {
+                throw new HttpException(sprintf(
+                    'Access to %s is blocked: the IP falls into a private or reserved range (SSRF protection)',
+                    $host
+                ));
+            }
+            return [];
+        }
+
+        // Single resolution point fed by the DNS cache (IpResolver::$cache).
+        $ips = self::ipResolver()->resolve($host);
+        if ($ips === []) {
+            // Nothing could be resolved; leave it to cURL to report the error.
+            return [];
+        }
+
+        $allowedIps = [];
+        foreach ($ips as $ip) {
+            if (self::ipResolver()->isAllowed($ip) === true) {
+                $allowedIps[] = $ip;
+            }
+        }
+
+        if ($allowedIps === []) {
+            throw new HttpException(sprintf(
+                'Access to %s is blocked: the host resolves only to private or reserved IP ranges (SSRF protection)',
+                $host
+            ));
+        }
+
+        // Pin the exact vetted set in the order returned by the resolver so a
+        // later, unchecked re-resolution cannot influence the connection.
+        return [sprintf('+%s:%d:%s', $host, $port, implode(',', $allowedIps))];
+    }
+
     public function request(string $url, array $config = []): Response
     {
         $ssrfCheck = $config['ssrf_check'] ?? null;
@@ -373,43 +481,7 @@ final class CurlHttpClient implements HttpClient
             $ssrfCheck = self::isSsrfCheckEnabled();
         }
 
-        $resolveEntries = [];
-
-        if ($ssrfCheck === true) {
-            $parsed = self::parseHttpUrl($url);
-            if ($parsed !== null && $parsed['host'] !== '') {
-                $host = $parsed['host'];
-                $port = $parsed['port'];
-
-                if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
-                    if (self::ipResolver()->isBlocked($host) === true) {
-                        throw new HttpException(sprintf(
-                            'Access to %s is blocked: the IP falls into a private or reserved range (SSRF protection)',
-                            $host
-                        ));
-                    }
-                } else {
-                    $ips = self::ipResolver()->resolve($host);
-                    if ($ips !== []) {
-                        $allowedIps = [];
-                        foreach ($ips as $ip) {
-                            if (self::ipResolver()->isAllowed($ip) === true) {
-                                $allowedIps[] = $ip;
-                            }
-                        }
-
-                        if ($allowedIps === []) {
-                            throw new HttpException(sprintf(
-                                'Access to %s is blocked: the host resolves only to private or reserved IP ranges (SSRF protection)',
-                                $host
-                            ));
-                        }
-
-                        $resolveEntries[] = sprintf('%s:%d:%s', $host, $port, $allowedIps[0]);
-                    }
-                }
-            }
-        }
+        $resolveEntries = $this->buildResolveEntries($url, $ssrfCheck === true);
 
         $optOutRequested = self::isOptOut($config['curl_options'] ?? []);
         $savedEnv = null;
@@ -579,6 +651,11 @@ final class CurlHttpClient implements HttpClient
                 curl_setopt($ch, CURLOPT_URL, $url);
                 if (curl_setopt_array($ch, $curlOptions) === false) {
                     throw new HttpException('Failed to set cURL options: tried to set an illegal curl option');
+                }
+                // Re-pin on every attempt: the DNS cache entry (and with it the
+                // vetted IP set) may have been refreshed between retries.
+                if ($resolveEntries !== []) {
+                    curl_setopt($ch, self::resolveOption(), $resolveEntries);
                 }
                 curl_setopt($ch, CURLOPT_HEADERFUNCTION, $headerCallback);
             }
