@@ -48,8 +48,8 @@ Multi-architecture Docker images are built weekly and published to GitHub Contai
 
 | Tag | Architecture | Optimization Level | Use Case |
 |-----|--------------|-------------------|----------|
-| `latest` | amd64 + arm64 | Baseline (`x86-64` / `armv8-a`) | Maximum compatibility â€” runs on any x86_64 CPU (2003+) or ARMv8 device |
-| `latest-modern` | amd64 + arm64 | High (`x86-64-v3` / `armv8.2-a` with crypto extensions) | Modern servers â€” Intel Haswell+ / AMD Zen+, ARM Cortex-A55+ and newer |
+| `latest` | amd64 + arm64 | Baseline (`x86-64` / `armv8-a`) | Maximum compatibility - runs on any x86_64 CPU (2003+) or ARMv8 device |
+| `latest-modern` | amd64 + arm64 | High (`x86-64-v3` / `armv8.2-a` with crypto extensions) | Modern servers - Intel Haswell+ / AMD Zen+, ARM Cortex-A55+ and newer |
 
 ### Date-Tagged Images
 
@@ -165,9 +165,9 @@ When `custom_timeout = true`, the bridge form gains a `_cache_timeout` field, le
 
 ```ini
 [error]
-; "feed" â€” errors appear inside the feed (default)
-; "http" â€” an HTML error page is returned
-; "none" â€” errors are silently logged
+; "feed" - errors appear inside the feed (default)
+; "http" - an HTML error page is returned
+; "none" - errors are silently logged
 output = "feed"
 
 ; Number of occurrences before an error is reported
@@ -211,7 +211,7 @@ timeout = 60000
 
 ### TgWS (SOCKS5)
 
-A SOCKS5 proxy via [TgWS](https://github.com/LordArrin/tg-ws-proxy-docker) â€” useful for bypassing censorship.
+A SOCKS5 proxy via [TgWS](https://github.com/LordArrin/tg-ws-proxy-docker) - useful for bypassing censorship.
 
 ```ini
 [proxy_profile_tgws]
@@ -315,7 +315,7 @@ rss-bridge/
 
 - The minimum PHP version has been raised from 7.4 to 8.5, with strict types enforced
 - Bridges now live in `bridges-v2/` under the `RSSBridge\Bridges` namespace
-- `DetectAction` and `FindfeedAction` have been removed â€” automatic feed detection by URL is no longer available
+- `DetectAction` and `FindfeedAction` have been removed - automatic feed detection by URL is no longer available
 - The donation UI and `getDonationURI()` have been removed
 - `simple_html_dom` has been replaced with the built-in `\Dom\HTMLDocument`
 - All broken/abandoned bridges have been removed or rewritten.
@@ -368,7 +368,7 @@ chmod -R 755 ./config
 
 ### Bridges marked as "Broken"
 
-This typically indicates an incompatible method signature in one of the bridges. Open the logs and search for `Bridge compatibility error` â€” the output will point to the offending bridge and the exact compile error.
+This typically indicates an incompatible method signature in one of the bridges. Open the logs and search for `Bridge compatibility error` - the output will point to the offending bridge and the exact compile error.
 
 ## License
 
