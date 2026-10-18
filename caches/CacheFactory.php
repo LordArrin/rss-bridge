@@ -103,7 +103,12 @@ final class CacheFactory
                     throw new \Exception('"memcached" extension not loaded. Please check "php.ini"');
                 }
 
-                $type = Configuration::getConfig('MemcachedCache', 'type') ?? 'internal';
+                $type = Configuration::getConfig('MemcachedCache', 'type');
+                if (($type ?? '') === '') {
+                    // Not set in config.ini.php: fall back to the
+                    // consolidated defaults in config/memcached.conf
+                    $type = $this->readMemcachedSetting('type') ?? 'internal';
+                }
 
                 if ($type === 'external') {
                     return $this->createMemcachedExternal();
@@ -198,6 +203,11 @@ final class CacheFactory
     private function createMemcachedInternal(): MemcachedCache
     {
         $socketPath = Configuration::getConfig('MemcachedCache', 'socket_path');
+
+        if (($socketPath ?? '') === '') {
+            // Fall back to the consolidated defaults in config/memcached.conf
+            $socketPath = $this->readMemcachedSetting('socket_path');
+        }
 
         if (($socketPath ?? '') === '') {
             throw new \Exception('"socket_path" param is not set for MemcachedCache (internal mode)');

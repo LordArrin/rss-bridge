@@ -126,15 +126,17 @@ enable_purge = true
 timeout = 5000
 
 [MemcachedCache]
-; type: internal (embedded Unix socket, secure) or external (separate TCP server)
+; All memcached settings (mode, socket/TCP address, server tuning flags and
+; PHP client chunking parameters) live in config/memcached.conf. Any key set
+; below overrides the corresponding default there. Examples:
+;   type = external          ; "internal" (Unix socket) or "external" (TCP)
+;   host = "10.0.0.5"        ; external mode only
+;   port = 11211             ; external mode only
+;   memory = 1g              ; server tuning: -m flag
 type = internal
 
 ; Internal only: path to Unix socket
 socket_path = "/var/run/memcached/memcached.sock"
-
-; External only: TCP server address
-;host = "127.0.0.1"
-;port = 11211
 
 [Telegram2Bridge]
 embed_max_size = 32m

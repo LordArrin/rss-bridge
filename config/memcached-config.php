@@ -3,6 +3,11 @@
 
 declare(strict_types=1);
 
+// Memcached startup configuration resolver.
+// Lives in config/ together with the consolidated defaults file
+// config/memcached.conf, which is its single source of truth for default
+// values (user overrides come from [MemcachedCache] in config.ini.php).
+
 $configFile = '/app/config.ini.php';
 
 if (file_exists($configFile) === false) {
@@ -20,7 +25,7 @@ if ($config === false) {
 // Single source of truth for embedded memcached defaults.
 // Values from [MemcachedCache] in config.ini.php override these.
 $defaults = [];
-$defaultsFile = __DIR__ . '/config/memcached.conf';
+$defaultsFile = __DIR__ . '/memcached.conf';
 if (file_exists($defaultsFile)) {
     // parse_ini_file() treats '#' as a literal character, so strip full-line
     // comments before parsing the consolidated defaults file.
