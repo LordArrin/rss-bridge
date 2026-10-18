@@ -1,6 +1,6 @@
 ![RSS-Bridge](static/not_boring_logo_blank.png)
 
-A fork of [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge), rewritten for PHP 8.5 on Alpine Linux. Less legacy code, proper type coverage, safe bridge loading, and working proxy support.
+A fork of [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge), rewritten for latest PHP on Alpine Linux. Less legacy code, proper type coverage, safe bridge loading, and working proxy support.
 
 [![LICENSE](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![PHP](https://img.shields.io/badge/PHP-8.5+-777BB4.svg?logo=php)](https://www.php.net/)
@@ -10,12 +10,12 @@ A fork of [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge), rewritten for 
 ## What's Inside
 
 - **PHP 8.5** with strict types wherever it made sense
-- **Alpine-based image** noticeably smaller than the Debian variant
-- **SafeBridgeLoader** bridges are loaded in an isolated process, so a broken bridge cannot crash the entire application
-- **Metadata cache** the main page renders instantly, regardless of the bridge count
+- **Alpine-based image** - noticeably smaller than the Debian variant
+- **SafeBridgeLoader** - bridges are loaded in an isolated process, so a broken bridge cannot crash the entire application
+- **Metadata cache** - the main page renders instantly, regardless of the bridge count
 - **Native PHP DOM parser** (`\Dom\HTMLDocument`) replacing the legacy `simple_html_dom`
-- **Proxy profiles** FlareSolverr, SOCKS5 via TgWS, and plain HTTP proxies
-- **PSR-4 for bridges** a single `RSSBridge\Bridges` namespace with proper autoloading
+- **Proxy profiles** - FlareSolverr, Telegram via TgWS, and plain HTTP proxies
+- **PSR-4 for bridges** - a single `RSSBridge\Bridges` namespace with proper autoloading
 - Removed `DetectAction`, `FindfeedAction`, the donation UI, and other leftovers from the original project
 
 ## Installation
