@@ -197,6 +197,50 @@ final class FileCache implements CacheInterface
         }
     }
 
+    /**
+     * Cross-process single-flight lock built on O_EXCL file creation.
+     *
+     * The lock file is created atomically; its mtime doubles as the lease
+     * start. An expired lease (holder crashed or regeneration hung past the
+     * terminate timeout) is reclaimed by unlinking and retrying once, so a
+     * dead worker can never block a feed permanently.
+     */
+    public function acquireLock(string $key, int $ttlSeconds): bool
+    {
+        $lockFile = $this->path . md5($key) . '.lock';
+
+        // The loop always returns on its first pass: fopen('xb') either wins,
+        // finds a live lease (false), or reclaims an expired one and retries
+        // the atomic create exactly once.
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $handle = @fopen($lockFile, 'xb');
+            if ($handle !== false) {
+                fclose($handle);
+                return true;
+            }
+
+            clearstatcache(true, $lockFile);
+            $mtime = @filemtime($lockFile);
+            if ($mtime === false) {
+                // Vanished between fopen and stat: another process released
+                // the lock. Retry the atomic create once.
+                continue;
+            }
+
+            if ((time() - $mtime) >= $ttlSeconds) {
+                // Stale lease from a crashed/timed-out holder: reclaim it.
+                // Race-safe: two reclaimers both unlink, but only one fopen
+                // with 'xb' can win; the loser falls through to "false".
+                @unlink($lockFile);
+                continue;
+            }
+
+            return false;
+        }
+
+        return false;
+    }
+
     private function createCacheFile(string $key): string
     {
         return $this->path . md5($key) . '.cache';

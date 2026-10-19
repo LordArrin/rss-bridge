@@ -60,4 +60,22 @@ interface CacheInterface
      * Called periodically to free up space.
      */
     public function prune(): void;
+
+    /**
+     * Attempt to acquire an exclusive, auto-expiring lock for a key.
+     *
+     * Used for single-flight regeneration: when a cached feed goes stale,
+     * only one process at a time may regenerate it while everyone else keeps
+     * serving the stale copy (see CacheMiddleware). Implementations that
+     * cannot coordinate across processes should return true so regeneration
+     * simply proceeds without deduplication.
+     *
+     * @param string $key      The key to lock.
+     * @param int    $ttlSeconds Lock lifetime; must exceed the worst-case
+     *                           regeneration time so a crashed holder cannot
+     *                           block the feed forever.
+     * @return bool True when the lock was acquired (caller may regenerate),
+     *              false when another process holds it.
+     */
+    public function acquireLock(string $key, int $ttlSeconds): bool;
 }

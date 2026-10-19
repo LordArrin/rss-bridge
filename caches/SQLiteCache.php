@@ -29,6 +29,7 @@ final class SQLiteCache implements CacheInterface
     private readonly Logger $logger;
     private readonly bool $enablePurge;
     private readonly \SQLite3 $db;
+    private readonly int $busyTimeoutMs;
 
     public function __construct(Logger $logger, array $config)
     {
@@ -81,12 +82,86 @@ final class SQLiteCache implements CacheInterface
         }
 
         $this->db->busyTimeout((int) $config['timeout']);
+        $this->busyTimeoutMs = (int) $config['timeout'];
 
         // WAL mode for better concurrent access
         $this->db->exec('PRAGMA journal_mode = WAL');
 
         // NORMAL synchronous for better performance (safe with WAL)
         $this->db->exec('PRAGMA synchronous = NORMAL');
+
+        // Lease table backing the single-flight lock (acquireLock()). Kept
+        // separate from "storage" so lock churn never rewrites feed payloads.
+        $this->db->exec("CREATE TABLE IF NOT EXISTS locks (
+            'key' BLOB PRIMARY KEY,
+            'expiration' INTEGER
+        )");
+        $this->db->exec('CREATE INDEX IF NOT EXISTS idx_locks_expiration ON locks (expiration)');
+    }
+
+    /**
+     * Cross-process single-flight lock via SQLite's write serialization.
+     *
+     * BEGIN IMMEDIATE acquires the write lock upfront and fails fast when a
+     * competing writer already holds it (busy_timeout is deliberately set to
+     * 0 for this short transaction so callers are not blocked behind an
+     * unrelated cache write). The winner upserts a lease row; expired leases
+     * left behind by crashed workers are reclaimed atomically.
+     */
+    public function acquireLock(string $key, int $ttlSeconds): bool
+    {
+        $lockKey = $this->createCacheKey('lock_' . $key);
+        $now = time();
+        $expiry = $now + $ttlSeconds;
+
+        try {
+            $this->db->exec('PRAGMA busy_timeout = 0');
+
+            if (@$this->db->exec('BEGIN IMMEDIATE') === false) {
+                // Another process is inside its own lock transaction right
+                // now. Treat as "busy elsewhere": caller serves stale instead
+                // of piling onto the contention.
+                return false;
+            }
+
+            $stmt = $this->db->prepare('SELECT expiration FROM locks WHERE key = :key');
+            $stmt->bindValue(':key', $lockKey, \SQLITE3_BLOB);
+            $result = $stmt->execute();
+            $row = $result !== false ? $result->fetchArray(\SQLITE3_ASSOC) : false;
+
+            if ($row !== false && (int) $row['expiration'] > $now) {
+                // Live lease held by another worker.
+                $this->db->exec('ROLLBACK');
+                return false;
+            }
+
+            $upsert = $this->db->prepare(
+                'INSERT OR REPLACE INTO locks (key, expiration) VALUES (:key, :expiration)'
+            );
+            $upsert->bindValue(':key', $lockKey, \SQLITE3_BLOB);
+            $upsert->bindValue(':expiration', $expiry, \SQLITE3_INTEGER);
+            $upsert->execute();
+
+            $this->db->exec('COMMIT');
+            return true;
+        } catch (\Exception $e) {
+            try {
+                if ($this->db->isBusy() === false) {
+                    @$this->db->exec('ROLLBACK');
+                }
+            } catch (\Exception $inner) {
+                // Ignore rollback failures; the lease simply expires on its own.
+            }
+            // Fail open: cache problems must never stop feed regeneration.
+            $this->logger->warning(sprintf(
+                'SQLite lock acquire failed (%s): proceeding without single-flight',
+                $e->getMessage()
+            ));
+            return true;
+        } finally {
+            // Restore the configured busy timeout for normal cache traffic.
+            $this->db->exec('PRAGMA busy_timeout = ' . $this->busyTimeoutMs);
+        }
     }
 
     public function get(string $key, mixed $default = null): mixed
@@ -201,11 +276,24 @@ final class SQLiteCache implements CacheInterface
             return;
         }
 
+        $now = time();
+
         $stmt = $this->db->prepare('DELETE FROM storage WHERE expiration > 0 AND expiration <= :now');
-        $stmt->bindValue(':now', time(), \SQLITE3_INTEGER);
+        $stmt->bindValue(':now', $now, \SQLITE3_INTEGER);
 
         try {
             $stmt->execute();
+        } catch (\Exception $e) {
+            $this->logger->warning(create_sane_exception_message($e));
+        }
+
+        // Expired lock leases are pure garbage: no worker will ever reclaim
+        // them through the normal path once the entry is regenerated.
+        $locks = $this->db->prepare('DELETE FROM locks WHERE expiration <= :now');
+        $locks->bindValue(':now', $now, \SQLITE3_INTEGER);
+
+        try {
+            $locks->execute();
         } catch (\Exception $e) {
             $this->logger->warning(create_sane_exception_message($e));
         }
@@ -215,6 +303,7 @@ final class SQLiteCache implements CacheInterface
     {
         try {
             $this->db->exec('DELETE FROM storage');
+            $this->db->exec('DELETE FROM locks');
         } catch (\Exception $e) {
             $this->logger->warning(create_sane_exception_message($e));
         }
