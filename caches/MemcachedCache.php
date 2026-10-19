@@ -385,6 +385,39 @@ final class MemcachedCache implements CacheInterface
     }
 
     /**
+     * Distributed single-flight lock using memcached's CAS semantics:
+     * add() only stores when the key is absent, so exactly one process wins.
+     */
+    public function acquireLock(string $key, int $ttlSeconds): bool
+    {
+        $lockKey = $this->createCacheKey('lock_' . $key);
+
+        try {
+            $stored = $this->conn->add($lockKey, 1, $ttlSeconds);
+        } catch (\Exception $e) {
+            // A broken memcached connection must never block regeneration.
+            $this->logger->warning(sprintf(
+                'Memcached lock acquire failed (%s): proceeding without single-flight',
+                $e->getMessage()
+            ));
+            return true;
+        }
+
+        if ($stored === false) {
+            $code = $this->conn->getResultCode();
+            if ($code === self::RES_NOTSTORED) {
+                // Another process holds the lock.
+                return false;
+            }
+            // Connection/server problem: fail open so feeds keep regenerating.
+            $this->logger->warning(sprintf('Memcached add() for lock failed (code %d)', $code));
+            return true;
+        }
+
+        return true;
+    }
+
+    /**
      * Get statistics about the memcached server.
      */
     public function getStats(): array

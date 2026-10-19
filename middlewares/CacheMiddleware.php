@@ -19,6 +19,20 @@ final class CacheMiddleware implements Middleware
 
     private const REMOVE_KEYS = ['token', 'action'];
 
+    /**
+     * Lease duration for the single-flight regeneration lock. Must exceed the
+     * worst-case regeneration time (curl timeout cascade tops out around 90s
+     * via request_terminate_timeout) so a hung-but-alive holder is never
+     * duplicated, while a crashed holder unblocks the feed within ~2 minutes.
+     */
+    private const REGENERATION_LOCK_TTL = 120;
+
+    /**
+     * How long clients/proxies should reuse a stale-served response before
+     * re-checking, while regeneration is in flight elsewhere.
+     */
+    private const STALE_RETRY_AFTER = 60;
+
     public function __invoke(Request $request, callable $next): Response
     {
         // Skip caching for certain actions
@@ -45,6 +59,24 @@ final class CacheMiddleware implements Middleware
                 }
             }
             return $cachedResponse;
+        }
+
+        // Stale-while-revalidate with single-flight regeneration.
+        //
+        // Under load from many readers hitting the same feed at (or just
+        // after) TTL expiry, every one of them used to run the full bridge:
+        // N concurrent upstream fetches per feed, which multiplies latency,
+        // exhausts the php-fpm pool and gets the instance rate-limited by
+        // the upstream. Now only the lock winner regenerates; everyone else
+        // keeps serving the expired-but-valid copy tagged as stale. The
+        // lock is a short lease (auto-expires), so a crashed worker can
+        // never wedge a feed.
+        $staleEntry = $this->cache->getWithStale($cacheKey);
+        $staleResponse = $staleEntry['stale'] ?? null;
+        if ($staleResponse instanceof Response && $staleResponse->getCode() === 200) {
+            if ($this->cache->acquireLock($cacheKey, self::REGENERATION_LOCK_TTL) === false) {
+                return $this->attachStaleHeaders($staleResponse);
+            }
         }
 
         // Execute the next middleware/action
@@ -135,10 +167,61 @@ final class CacheMiddleware implements Middleware
             // Tag the response so downstream consumers (and logs) can tell
             // stale-on-error apart from a fresh hit. withHeader lowercases
             // the name and returns an immutable clone.
-            return $stale->withHeader('x-feed-stale', '1');
+            return $this->attachStaleHeaders($stale);
         }
 
         return null;
+    }
+
+    /**
+     * Returns the stale copy with cache headers that discourage readers and
+     * proxies from hammering us while another worker regenerates:
+     *   - Age reflects how far past freshness the payload is.
+     *   - Cache-Control: stale-while-revalidate advertises that serving the
+     *     expired copy is intentional.
+     *   - Expires pushes browser/proxy rechecks to roughly one bridge TTL
+     *     ahead instead of "immediately".
+     * The last-modified header of the stale payload drives the staleness
+     * estimate; conditional (304) handling keeps working against it.
+     */
+    private function attachStaleHeaders(Response $stale): Response
+    {
+        $headers = [
+            'x-feed-stale' => '1',
+            'age' => (string) self::estimateStaleAge($stale),
+            'cache-control' => 'public, max-age=' . self::STALE_RETRY_AFTER . ', stale-while-revalidate=' . self::REGENERATION_LOCK_TTL,
+        ];
+
+        $lastModified = $stale->getHeader('last-modified');
+        if ($lastModified !== null) {
+            $lmTimestamp = strtotime($lastModified);
+            if ($lmTimestamp !== false) {
+                $headers['expires'] = gmdate('D, d M Y H:i:s ', $lmTimestamp + self::STALE_RETRY_AFTER) . 'GMT';
+            }
+        }
+
+        foreach ($headers as $name => $value) {
+            $stale = $stale->withHeader($name, $value);
+        }
+
+        return $stale;
+    }
+
+    /**
+     * Approximates the staleness of a cached response from its last-modified
+     * header (set when the feed was rendered successfully).
+     */
+    private static function estimateStaleAge(Response $response): int
+    {
+        $lastModified = $response->getHeader('last-modified');
+        if ($lastModified === null) {
+            return 0;
+        }
+        $timestamp = strtotime($lastModified);
+        if ($timestamp === false) {
+            return 0;
+        }
+        return max(0, time() - $timestamp);
     }
 
     /**

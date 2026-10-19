@@ -36,4 +36,11 @@ final class NullCache implements CacheInterface
     public function prune(): void
     {
     }
+
+    public function acquireLock(string $key, int $ttlSeconds): bool
+    {
+        // Nothing is stored, so there is nothing to deduplicate: let every
+        // caller proceed as if it held the lock.
+        return true;
+    }
 }

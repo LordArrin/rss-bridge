@@ -28,6 +28,22 @@ final class ArrayCache implements CacheInterface
         return $cached['fresh'] ?? $default;
     }
 
+    /** @var array<string, int> key => lease expiry timestamp */
+    private array $locks = [];
+
+    public function acquireLock(string $key, int $ttlSeconds): bool
+    {
+        $now = time();
+        $expiry = $this->locks[$key] ?? 0;
+
+        if ($expiry > $now) {
+            return false;
+        }
+
+        $this->locks[$key] = $now + $ttlSeconds;
+        return true;
+    }
+
     public function getWithStale(string $key): array
     {
         if (array_key_exists($key, $this->data) === false) {
@@ -75,6 +91,7 @@ final class ArrayCache implements CacheInterface
     public function clear(): void
     {
         $this->data = [];
+        $this->locks = [];
     }
 
     public function prune(): void
