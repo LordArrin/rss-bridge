@@ -64,6 +64,21 @@ final class AO3Bridge extends BridgeAbstract
         ]
     ];
 
+    // AO3 asked us to identify as a bot rather than imitate a browser (RSS-Bridge#3188)
+    private const HEADERS = [
+        'User-Agent: rss-bridge bot (https://github.com/LordArrin/rss-bridge)',
+        // Empty values make curl drop curl-impersonate's browser-only headers
+        'Sec-Ch-Ua:',
+        'Sec-Ch-Ua-Mobile:',
+        'Sec-Ch-Ua-Platform:',
+        'Sec-Fetch-Dest:',
+        'Sec-Fetch-Mode:',
+        'Sec-Fetch-Site:',
+        'Sec-Fetch-User:',
+        'Upgrade-Insecure-Requests:',
+        'Priority:',
+    ];
+
     private ?string $title = null;
 
     public function collectData(): void
@@ -122,10 +137,7 @@ final class AO3Bridge extends BridgeAbstract
 
     private function collectList(string $url): void
     {
-        $version = 'v0.0.1';
-        $headers = [
-            'useragent: rss-bridge ' . $version . ' (https://github.com/LordArrin/rss-bridge)'
-        ];
+        $headers = self::HEADERS;
 
         $response = $this->getContentsWithFallback($url, $headers);
         if ($response === '') {
@@ -285,10 +297,7 @@ final class AO3Bridge extends BridgeAbstract
 
     private function collectWork(string $url): void
     {
-        $version = 'v0.0.1';
-        $headers = [
-            'useragent: rss-bridge ' . $version . ' (https://github.com/LordArrin/rss-bridge)'
-        ];
+        $headers = self::HEADERS;
 
         $navResponse = $this->getContentsWithFallback($url . '/navigate', $headers);
         if ($navResponse === '') {
