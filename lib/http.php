@@ -679,8 +679,27 @@ final class CurlHttpClient implements HttpClient
 
         if ($statusCode >= 300 && $statusCode < 400 && $statusCode !== 304) {
             $location = $responseHeaders['location'][count($responseHeaders['location']) - 1] ?? 'unknown';
-
             $originalParsed = self::parseHttpUrl($url);
+
+            // Normalize relative redirects to absolute URLs so parseHttpUrl can evaluate them securely
+            if ($originalParsed !== null && preg_match('#^[a-z][a-z0-9+\-.]*://#i', $location) === 0) {
+                $scheme = $originalParsed['port'] === 443 ? 'https' : 'http';
+                $host = $originalParsed['host'];
+                $port = $originalParsed['port'];
+
+                if (str_starts_with($location, '/') === true) {
+                    $path = $location;
+                } else {
+                    $basePath = dirname($originalParsed['path'] ?? '/');
+                    if ($basePath === '.') {
+                        $basePath = '/';
+                    }
+                    $path = rtrim($basePath, '/') . '/' . ltrim($location, '/');
+                }
+
+                $location = ($port === 80 || $port === 443) ? sprintf('%s://%s%s', $scheme, $host, $path) : sprintf('%s://%s:%d%s', $scheme, $host, $port, $path);
+            }
+
             $redirectParsed = self::parseHttpUrl($location);
 
             if ($originalParsed !== null && $redirectParsed !== null && $originalParsed['host'] === $redirectParsed['host']) {

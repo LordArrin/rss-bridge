@@ -50,22 +50,24 @@ final class GitHubReleaseBridge extends BridgeAbstract
     private const ALLOWED_TAGS = [
         'div', 'a', 'p', 'ul', 'ol', 'li', 'strong', 'em', 'code', 'pre', 'blockquote', 'span',
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'br', 'hr', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-        'picture', 'source', 'figure', 'figcaption', 'del', 'details', 'summary', 'svg', 'path',
+        'picture', 'source', 'figure', 'figcaption', 'del', 'details', 'summary',
     ];
 
     private const CSS = [
         'wrapper' => 'font-size:14px; line-height:1.6; word-wrap:break-word;',
-        'alert_base' => 'padding:8px 16px; margin:16px 0; border-radius:6px;',
-        'alert_title' => 'font-weight:600; margin-bottom:4px; display:flex; align-items:center; gap:8px;',
+        'section' => 'margin:12px 0;',
+        'heading' => 'margin:0 0 8px 0; font-size:15px; font-weight:700; padding-left:12px; border-left:4px solid %s;',
+        'content' => 'padding-left:12px;',
         'ul' => 'list-style-type:disc; padding-left:24px;',
         'ol' => 'list-style-type:decimal; padding-left:24px;',
-        'alerts' => [
-            'NOTE' => '#0969da',
-            'TIP' => '#1a7f37',
-            'IMPORTANT' => '#8250df',
-            'WARNING' => '#9a6700',
-            'CAUTION' => '#cf222e',
-        ],
+    ];
+
+    private const ALERT_COLORS = [
+        'NOTE'      => '#0969da',
+        'TIP'       => '#1a7f37',
+        'IMPORTANT' => '#8250df',
+        'WARNING'   => '#9a6700',
+        'CAUTION'   => '#cf222e',
     ];
 
     private const FILE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -250,6 +252,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
     private function processMarkdown(string $markdown, string $owner, string $repo): string
     {
         $markdown = $this->enrichMarkdownMentions($markdown, $owner, $repo);
+        $markdown = $this->transformMarkdownAlerts($markdown);
 
         $parsedown = new \Parsedown();
         $parsedown->setSafeMode(false);
@@ -280,6 +283,53 @@ final class GitHubReleaseBridge extends BridgeAbstract
         return $result !== null ? $result : $markdown;
     }
 
+    private function transformMarkdownAlerts(string $markdown): string
+    {
+        $lines = explode("\n", $markdown);
+        $result = [];
+        $i = 0;
+        $len = count($lines);
+
+        while ($i < $len) {
+            $line = $lines[$i];
+
+            if (preg_match('/^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$/i', $line, $matches) === 1) {
+                $alertType = strtoupper($matches[1]);
+                $label = ucfirst(strtolower($alertType));
+                $color = self::ALERT_COLORS[$alertType] ?? '#666666';
+                $firstLineContent = trim($matches[2]);
+
+                $result[] = '<div style="' . self::CSS['section'] . '">';
+                $result[] = sprintf('<h3 style="' . self::CSS['heading'] . '"><strong>%s</strong></h3>', $color, htmlspecialchars($label));
+                $result[] = '<div style="' . self::CSS['content'] . '">';
+
+                if ($firstLineContent !== '') {
+                    $result[] = '<p style="margin:0 0 8px 0;">' . $firstLineContent . '</p>';
+                }
+
+                $i++;
+
+                $bodyLines = [];
+                while ($i < $len && preg_match('/^>\s?(.*)$/', $lines[$i], $m) === 1) {
+                    $bodyLines[] = $m[1];
+                    $i++;
+                }
+
+                if ($bodyLines !== []) {
+                    $result[] = implode("\n", $bodyLines);
+                }
+
+                $result[] = '</div>';
+                $result[] = '</div>';
+            } else {
+                $result[] = $line;
+                $i++;
+            }
+        }
+
+        return implode("\n", $result);
+    }
+
     private function processHtml(string $html, string $owner, string $repo): string
     {
         libxml_use_internal_errors(true);
@@ -289,7 +339,6 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
         $xpath = new \Dom\XPath($dom);
 
-        $this->transformAlerts($xpath);
         $this->shortenAutoLinks($xpath, $owner, $repo);
         $this->applyListStyles($xpath);
         $this->sanitizeHtml($xpath);
@@ -361,55 +410,6 @@ final class GitHubReleaseBridge extends BridgeAbstract
                 }
             }
         }
-    }
-
-    private function transformAlerts(\Dom\XPath $xpath): void
-    {
-        $alerts = $xpath->query('//div[contains(@class, "markdown-alert")]');
-
-        foreach ($alerts as $alert) {
-            if ($alert instanceof \Dom\Element === false) {
-                continue;
-            }
-
-            $alertType = $this->extractAlertType($alert);
-            if ($alertType === null) {
-                continue;
-            }
-
-            $color = self::CSS['alerts'][$alertType] ?? '#666';
-
-            $existing = $alert->getAttribute('style') ?? '';
-            $alertStyle = sprintf(
-                'border-left:4px solid %s; background-color:%s1a; %s',
-                $color,
-                $color,
-                self::CSS['alert_base']
-            );
-            $style = trim(($existing !== '' ? $existing . ' ' : '') . $alertStyle);
-            $alert->setAttribute('style', $style);
-
-            $titleNode = $alert->querySelector('p.markdown-alert-title');
-            if ($titleNode !== null) {
-                $titleExisting = $titleNode->getAttribute('style') ?? '';
-                $titleStyle = sprintf('color:%s; %s', $color, self::CSS['alert_title']);
-                $titleFull = trim(($titleExisting !== '' ? $titleExisting . ' ' : '') . $titleStyle);
-                $titleNode->setAttribute('style', $titleFull);
-            }
-        }
-    }
-
-    private function extractAlertType(\Dom\Element $alert): ?string
-    {
-        $className = $alert->getAttribute('class') ?? '';
-
-        foreach (array_keys(self::CSS['alerts']) as $type) {
-            if (str_contains($className, 'markdown-alert-' . strtolower($type)) === true) {
-                return $type;
-            }
-        }
-
-        return null;
     }
 
     private function shortenAutoLinks(\Dom\XPath $xpath, string $owner, string $repo): void

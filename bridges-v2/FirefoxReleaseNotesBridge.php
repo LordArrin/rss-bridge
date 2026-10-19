@@ -27,7 +27,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         '/(\d{4}-\d{2}-\d{2})/',
     ];
 
-    private const VERSION_PATTERN = '/(\d+(\.\d+)+)/';
+    private const VERSION_PATTERN = '/\/firefox\/([\d.]+)\/releasenotes\//';
 
     private const JUNK_SELECTORS = [
         'script',
@@ -84,16 +84,12 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         $dom = \Dom\HTMLDocument::createFromString($html);
         libxml_use_internal_errors(false);
 
-        $links = $dom->querySelectorAll('a[href*="/releasenotes/"]');
-        if ($links->length === 0) {
-            $links = $dom->querySelectorAll('a[href*="/firefox/"]');
-        }
+        $links = $dom->querySelectorAll('a[href*="/firefox/"][href*="/releasenotes/"]');
 
         $releases = [];
         foreach ($links as $link) {
-            $text = trim($link->textContent);
             $href = (string) $link->getAttribute('href');
-            if (preg_match(self::VERSION_PATTERN, $text, $matches) === 1) {
+            if (preg_match(self::VERSION_PATTERN, $href, $matches) === 1) {
                 $releases[] = [
                     'version' => $matches[1],
                     'url' => urljoin(self::URI, $href)
@@ -132,16 +128,17 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         if ($cachedHtml === null) {
             try {
                 $html = getContents($release['url']);
-                if (($html ?? '') !== '' && $html !== null) {
+                if ($html !== null && $html !== '') {
                     $this->cache->set($cacheKey, $html, self::RELEASE_NOTES_CACHE_TTL);
                     $cachedHtml = $html;
                 }
             } catch (\Exception $e) {
-                // Ignore
+                $item['content'] = '<p>Failed to load release notes page: ' . htmlspecialchars($e->getMessage()) . '</p>';
+                return $item;
             }
         }
 
-        if ($cachedHtml === '' || $cachedHtml === null) {
+        if ($cachedHtml === null || $cachedHtml === '') {
             $item['content'] = '<p>Failed to load release notes page.</p>';
             return $item;
         }
@@ -208,7 +205,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
             return implode("\n", $parts);
         }
 
-        foreach ($notesBlock->querySelectorAll('div[id]') as $div) {
+        foreach ($notesBlock->querySelectorAll('div[id].mzp-l-content') as $div) {
             $sectionId = $div->getAttribute('id') ?? '';
             if (in_array($sectionId, self::EXCLUDED_SECTIONS, true) === true) {
                 continue;
@@ -224,13 +221,8 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
                 continue;
             }
 
-            $main = $div->querySelector('.mzp-l-main');
-            if ($main === null) {
-                continue;
-            }
-
             $items = [];
-            foreach ($main->querySelectorAll('li.release-note') as $note) {
+            foreach ($div->querySelectorAll('li.release-note') as $note) {
                 $content = $note->querySelector('.release-note-content');
                 if ($content === null) {
                     continue;
@@ -256,20 +248,18 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
     {
         $color = self::SECTION_COLORS[$sectionId] ?? self::FALLBACK_SECTION_COLOR;
 
-        $headingStyle = sprintf(
-            'font-size:1.3em;font-weight:600;margin:1.5em 0 0.5em;padding:0.3em 0.6em;border-left:4px solid %s;color:%s;',
-            $color,
-            $color
-        );
-
-        $html = '<h3 style="' . $headingStyle . '">' . htmlspecialchars($title) . '</h3>';
-        $html .= '<ul style="list-style-type:disc;margin:0.5em 0;padding-left:1.5em;">';
+        $html = '<div style="margin:12px 0;">';
+        $html .= sprintf('<h3 style="margin:0 0 8px 0; font-size:15px; font-weight:700; padding-left:12px; border-left:4px solid %s;"><strong>%s</strong></h3>', $color, htmlspecialchars($title));
+        $html .= '<div style="padding-left:12px;">';
+        $html .= '<ul style="list-style-type:disc; margin:0.5em 0; padding-left:1.5em;">';
 
         foreach ($items as $item) {
             $html .= '<li style="margin:0.5em 0;">' . $item . '</li>';
         }
 
         $html .= '</ul>';
+        $html .= '</div>';
+        $html .= '</div>';
 
         return $html;
     }
@@ -297,6 +287,13 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
             $img->removeAttribute('width');
             $img->removeAttribute('height');
             $img->setAttribute('style', 'max-width:100%;height:auto;');
+        }
+
+        foreach ($wrapper->querySelectorAll('a[href]') as $link) {
+            $href = $link->getAttribute('href');
+            if ($href !== null && $href !== '' && str_starts_with($href, '/') === true) {
+                $link->setAttribute('href', urljoin(self::URI, $href));
+            }
         }
 
         return trim($wrapper->innerHTML);

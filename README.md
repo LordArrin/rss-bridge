@@ -16,6 +16,7 @@ A fork of [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge), rewritten for 
 - **Native PHP DOM parser** (`\Dom\HTMLDocument`) replacing the legacy `simple_html_dom`
 - **Proxy profiles** - FlareSolverr, Telegram via TgWS, and plain HTTP proxies
 - **PSR-4 for bridges** - a single `RSSBridge\Bridges` namespace with proper autoloading
+- **Advanced SSRF protection** - process-wide DNS caching, IP pinning via `CURLOPT_RESOLVE`, and strict CIDR blocking to prevent DNS-rebinding and internal network access
 - Removed `DetectAction`, `FindfeedAction`, the donation UI, and other leftovers from the original project
 
 ## Installation
@@ -151,15 +152,12 @@ enabled_bridges[] = RuStoreBridge
 
 ### Cache
 
-The default backend is `file`. Alternatives include `sqlite`, `memcached`, `null`, and `array`.
+The default backend is internal `memcached` - it has maximum performance and security. Alternatives include external `memcached`, `sqlite`, `file`, `null`, and `array`.
 
 ```ini
 [cache]
 type = "sqlite"
-custom_timeout = true
 ```
-
-When `custom_timeout = true`, the bridge form gains a `_cache_timeout` field, letting users set a custom TTL per feed.
 
 ### Error Reporting
 
@@ -173,17 +171,6 @@ output = "feed"
 ; Number of occurrences before an error is reported
 report_limit = 3
 ```
-
-### Global Proxy
-
-```ini
-[proxy]
-url = "http://proxy.example.com:8080"
-name = "Corporate Proxy"
-by_bridge = true
-```
-
-With `by_bridge = true`, each bridge form shows a "Disable proxy" checkbox, allowing users to bypass the proxy on a per-request basis.
 
 ## Proxy Profiles
 
@@ -211,7 +198,7 @@ timeout = 60000
 
 ### TgWS (SOCKS5)
 
-A SOCKS5 proxy via [TgWS](https://github.com/LordArrin/tg-ws-proxy-docker) - useful for bypassing censorship.
+A Telegram SOCKS5 proxy via [TgWS](https://github.com/LordArrin/tg-ws-proxy-docker) - useful for bypassing censorship.
 
 ```ini
 [proxy_profile_tgws]
@@ -226,7 +213,7 @@ retries = 3
 
 ```php
 $html = getProtectedContents('https://example.com', 'flaresolverr');
-$dom = getProtectedSimpleHTMLDOM('https://example.com', 'tgws');
+$dom = getProtectedSimpleHTMLDOM('https://example.com', 'flaresolverr');
 $binary = getProtectedBinary('https://example.com/image.jpg', 'direct');
 ```
 
@@ -236,14 +223,14 @@ If a profile is referenced but not defined in `config.ini.php`, `DirectProxy` th
 
 Place a `.php` file in `/config/bridges-v2/` and restart the container. That's all.
 
-```bash
+```text
 ./config/
-â”œâ”€â”€ config.ini.php
-â””â”€â”€ bridges-v2/
-    â””â”€â”€ MyCustomBridge.php
+├── config.ini.php
+└── bridges-v2/
+    └── MyCustomBridge.php
 ```
 
-Each bridge must live under the `RSSBridge\Bridges` namespace, extend `BridgeAbstract` or anpther basic bridge,
+Each bridge must live under the `RSSBridge\Bridges` namespace, extend `BridgeAbstract` or another basic bridge,
 start with `declare(strict_types=1);`, and have a filename ending with `Bridge.php`.
 
 ```php
@@ -282,31 +269,30 @@ final class MyCustomBridge extends BridgeAbstract
 }
 ```
 
-The legacy `/config/bridges/` directory is no longer supported the container will emit a warning in the logs on startup. Migrate any such bridges to `bridges-v2/` with a proper namespace.
+The legacy `/config/bridges/` directory is no longer supported; the container will emit a warning in the logs on startup. Migrate any such bridges to `bridges-v2/` with a proper namespace.
 
 For a detailed guide on bridge development, see the separate `BRIDGES.md` document.
 
 ## Project Structure
 
-```
+```text
 rss-bridge/
-â”œâ”€â”€ actions/              # Request handlers: FrontpageAction, DisplayAction
-â”œâ”€â”€ bridges-v2/           # Bridges (PSR-4, RSSBridge\Bridges namespace)
-â”œâ”€â”€ caches/               # Cache backends: File, SQLite, Memcached, ...
-â”œâ”€â”€ config/               # Config of internal services - nginx, PHP ...
-â”œâ”€â”€ formats/              # Output formats: Atom, Mrss, Json, Html, Plaintext, Sfeed
-â”œâ”€â”€ lib/                  # Core: BridgeAbstract, BridgeFactory, SafeBridgeLoader, ...
-â”œâ”€â”€ docs/                 # Additional documentation
-â”œâ”€â”€ middlewares/          # HTTP middleware stack
-â”œâ”€â”€ proxies/              # Proxy profile implementations
-â”œâ”€â”€ templates/            # HTML templates
-â”œâ”€â”€ quirks/               # Rendering helpers: template, html, seo, media_embed, ...
-â”œâ”€â”€ bin/                  # CLI utilities: cache-clear, cache-prune
-â”œâ”€â”€ config/               # Default configuration
-â”œâ”€â”€ static/               # CSS, JS, images
-â”œâ”€â”€ supervisor/           # Supervisor. Launches all internal services - Memcached, Nginx, PHP.
-â”œâ”€â”€ docker-entrypoint.sh  # Container entrypoint
-â””â”€â”€ Dockerfile
+├── actions/              # Request handlers: FrontpageAction, DisplayAction
+├── bridges-v2/           # Bridges (PSR-4, RSSBridge\Bridges namespace)
+├── caches/               # Cache backends: File, SQLite, Memcached, ...
+├── config/               # Config of internal services - nginx, PHP ...
+├── formats/              # Output formats: Atom, Mrss, Json, Html, Plaintext, Sfeed
+├── lib/                  # Core: BridgeAbstract, BridgeFactory, SafeBridgeLoader, IpResolver, ...
+├── docs/                 # Additional documentation
+├── middlewares/          # HTTP middleware stack
+├── proxies/              # Proxy profile implementations
+├── templates/            # HTML templates
+├── quirks/               # Rendering helpers: template, html, seo, media_embed, ...
+├── bin/                  # CLI utilities: cache-clear, cache-prune
+├── static/               # CSS, JS, images
+├── supervisor/           # Supervisor. Launches all internal services - Memcached, Nginx, PHP.
+├── docker-entrypoint.sh  # Container entrypoint
+└── Dockerfile
 ```
 
 ## Migration from Original RSS-Bridge
