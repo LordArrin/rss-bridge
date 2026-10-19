@@ -28,6 +28,13 @@ final class SQLiteCache implements CacheInterface
 
     private readonly Logger $logger;
     private readonly bool $enablePurge;
+    /**
+     * SQLITE_BUSY result code. The sqlite3 extension does not define the
+     * SQLITE_* constants, so we carry the value ourselves (stable since
+     * SQLite 2.x).
+     */
+    private const SQLITE_BUSY = 5;
+
     private readonly \SQLite3 $db;
     private readonly int $busyTimeoutMs;
 
@@ -146,7 +153,12 @@ final class SQLiteCache implements CacheInterface
             return true;
         } catch (\Exception $e) {
             try {
-                if ($this->db->isBusy() === false) {
+                // SQLite3::lastErrorCode() is SQLITE_BUSY (5) when another
+                // process still owns the write lock: rolling back would fail
+                // anyway, so leave it alone and let the lease expire on its
+                // own. Any other error means our (possibly open) transaction
+                // is ours to clean up.
+                if ($this->db->lastErrorCode() !== self::SQLITE_BUSY) {
                     @$this->db->exec('ROLLBACK');
                 }
             } catch (\Exception $inner) {

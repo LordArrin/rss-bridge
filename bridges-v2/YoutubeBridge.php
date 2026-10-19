@@ -666,7 +666,7 @@ final class YoutubeBridge extends BridgeAbstract
             }
         }
 
-        $headers = ['Accept-Language: en-US'];
+        $headers = ['Accept-Language: en-US', 'Cookie: SOCS=CAI'];
         $html = getContents($url, $headers);
 
         if ($cache === true && $html !== '') {
