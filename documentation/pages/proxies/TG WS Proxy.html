@@ -1,13 +1,14 @@
 <!-- meta:uri:https://github.com/LordArrin/tg-ws-proxy-docker -->
-<p><a href="https://github.com/LordArrin/tg-ws-proxy-docker" target="_blank" rel="noopener">TG WS Proxy</a> is a highly specialized proxy designed to bypass Telegram network blocks (e.g., via DPI) by tunneling traffic through Cloudflare Workers. It has been specifically adapted for RSS-Bridge with native SOCKS5 support.</p>
+<p><a href="https://github.com/LordArrin/tg-ws-proxy-docker" target="_blank" rel="noopener">TG WS Proxy</a> is a highly specialized proxy designed to bypass Telegram network blocks (e.g., via DPI) by tunneling traffic through Cloudflare. It has been specifically adapted for RSS-Bridge with native SOCKS5 support.</p>
 
 <ul>
     <li>
         <strong>Targeted Bypass.</strong>
         Solves Telegram-specific blocking without routing your entire RSS-Bridge traffic through a heavy VPN or general-purpose proxy.
-        <li>
-        <strong>Cloudflare Worker Tunnel.</strong>
-        Uses a <code>workers.dev</code> endpoint to mask the origin IP and bypass Deep Packet Inspection (DPI) systems.
+    </li>
+    <li>
+        <strong>Cloudflare Tunneling.</strong>
+        Uses Cloudflare infrastructure to mask the origin IP and bypass Deep Packet Inspection (DPI) systems.
     </li>
     <li>
         <strong>Native SOCKS5 Integration.</strong>
@@ -22,7 +23,7 @@
 <h4>Quick start</h4>
 <ol>
     <li>
-        <span>Add TG WS Proxy to your <code>docker-compose.yml</code>. <strong>Note:</strong> This service uses <code>network_mode: host</code>, meaning it binds directly to your host machine's network interfaces.</span>
+        <span>Add TG WS Proxy to your <code>docker-compose.yml</code>:</span>
         <div class="code-block">
             <button type="button" class="copy-btn" aria-label="Copy code">
                 <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
@@ -56,7 +57,7 @@
         </div>
     </li>
     <li>
-        <span>Register the proxy profile in RSS-Bridge <code>config/config.ini.php</code>. <strong>Important:</strong> Because the proxy uses <code>network_mode: host</code>, RSS-Bridge must connect to the <em>host machine's IP address</em> (or <code>host.docker.internal</code>), not the container name.</span>
+        <span>Register the proxy profile in RSS-Bridge <code>config/config.ini.php</code>:</span>
         <div class="code-block">
             <button type="button" class="copy-btn" aria-label="Copy code">
                 <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
@@ -77,6 +78,17 @@ retries = 3</code></pre>
     </li>
 </ol>
 
+<h4>Deployment Options</h4>
+<p>Choose the Cloudflare routing method that best fits your infrastructure:</p>
+<ul>
+    <li>
+        <strong><a href="https://github.com/Flowseal/tg-ws-proxy/blob/main/docs/EN/CfWorker.md" target="_blank" rel="noopener">Cloudflare Worker (Recommended & Free)</a></strong> — The simplest method. Uses a free <code>workers.dev</code> subdomain. No custom domain or DNS configuration required.
+    </li>
+    <li>
+        <strong><a href="https://github.com/Flowseal/tg-ws-proxy/blob/main/docs/EN/CfProxy.md" target="_blank" rel="noopener">Cloudflare Proxy (Advanced)</a></strong> — Requires your own domain routed through Cloudflare. Provides more control and custom branding, but involves manual DNS and SSL configuration.
+    </li>
+</ul>
+
 <h4>Configuration options</h4>
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border:1px solid var(--md-outline-variant);margin:12px 0;width:100%">
     <thead>
@@ -88,11 +100,11 @@ retries = 3</code></pre>
     <tbody>
         <tr>
             <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)"><code>PROXY_HOST</code> / <code>PORT</code> / <code>SECRET</code></td>
-            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">Credentials for your local MTProto proxy that the worker will forward traffic to.</td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">Credentials for your local MTProto proxy that the tunnel will forward traffic to.</td>
         </tr>
         <tr>
             <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)"><code>CFPROXY_WORKER_DOMAIN</code></td>
-            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">The active <code>workers.dev</code> domain used to bypass DPI blocking.</td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">The active Cloudflare Worker or Proxy domain used to bypass DPI blocking.</td>
         </tr>
         <tr>
             <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)"><code>SOCKS_ENABLED</code></td>
@@ -106,11 +118,11 @@ retries = 3</code></pre>
 </table>
 
 <div class="note info">
-    💡 <strong>Networking Note:</strong> Because this container uses <code>network_mode: host</code>, it does not have its own Docker network IP. When configuring <code>socks_url</code> in RSS-Bridge, you <em>must</em> use the IP address of the host machine (e.g., <code>192.168.1.1</code>) or <code>host.docker.internal</code>, not the container name <code>tg-ws-proxy</code>.
+    💡 <strong>Important Networking Note:</strong> Because this container uses <code>network_mode: host</code>, it does not have its own isolated Docker network IP. When configuring <code>socks_url</code> in RSS-Bridge, you <em>must</em> use the IP address of the host machine (e.g., <code>192.168.1.1</code>) or <code>host.docker.internal</code>, <strong>not</strong> the container name <code>tg-ws-proxy</code>.
 </div>
 
 <div class="note warning">
-    ⚠️ <strong>Scope Limitation:</strong> This proxy is highly specialized for Telegram traffic. Do not attempt to use it for general web scraping or other RSS-Bridge endpoints. For other censorship bypass, use different solution.
+    ⚠️ <strong>Scope Limitation:</strong> This proxy is highly specialized for Telegram traffic. Do not attempt to use it for general web scraping or other RSS-Bridge endpoints. For general Cloudflare bypass, use <a href="#proxies">Trawl</a> or <a href="#proxies">FlareSolverr</a>.
 </div>
 
 <h4>Troubleshooting</h4>
