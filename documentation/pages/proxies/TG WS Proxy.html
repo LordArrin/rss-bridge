@@ -103,8 +103,12 @@ retries = 3</code></pre>
             <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">Credentials for your local MTProto proxy that the tunnel will forward traffic to.</td>
         </tr>
         <tr>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)"><code>CFPROXY_DOMAIN</code></td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">Yours domain behind Cloudflare, used to bypass DPI blocking.</td>
+        </tr>
+        <tr>
             <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)"><code>CFPROXY_WORKER_DOMAIN</code></td>
-            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">The active Cloudflare Worker or Proxy domain used to bypass DPI blocking.</td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">The active Cloudflare Worker domain used to bypass DPI blocking.</td>
         </tr>
         <tr>
             <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)"><code>SOCKS_ENABLED</code></td>
@@ -122,7 +126,7 @@ retries = 3</code></pre>
 </div>
 
 <div class="note warning">
-    ⚠️ <strong>Scope Limitation:</strong> This proxy is highly specialized for Telegram traffic. Do not attempt to use it for general web scraping or other RSS-Bridge endpoints. For general Cloudflare bypass, use <a href="#proxies">Trawl</a> or <a href="#proxies">FlareSolverr</a>.
+    ⚠️ <strong>Scope Limitation:</strong> This proxy is highly specialized for Telegram traffic. Do not attempt to use it for general web scraping or other RSS-Bridge endpoints - it won't work</a>.
 </div>
 
 <h4>Troubleshooting</h4>
