@@ -65,17 +65,17 @@
 
 <h4>Hardware Compatibility Guide</h4>
 
-<div class="note info" style="margin-top: 16px;">
-    🐢 <strong>Use <code>latest</code> if:</strong>
-    <ul style="margin: 8px 0 0 20px; padding: 0;">
+<div style="margin-top: 16px; padding: 14px 18px; border-radius: var(--md-shape-md); background: var(--md-surface-container-highest); border-left: 4px solid var(--md-primary);">
+    🐢 <strong style="color: var(--md-primary);">Use <code>latest</code> if:</strong>
+    <ul style="margin: 8px 0 0 20px; padding: 0; color: var(--md-on-surface);">
         <li>You run on older hardware or VPS with an unknown CPU model.</li>
         <li>You need guaranteed compatibility with any x86_64 or ARMv8 device.</li>
         <li>You deploy in heterogeneous environments.</li>
     </ul>
 </div>
 
-<div style="margin-top: 16px; padding: 14px 18px; border-radius: var(--md-shape-md); background: var(--md-surface-container-highest); border-left: 4px solid var(--md-primary);">
-    🚀 <strong style="color: var(--md-primary);">Use <code>latest-modern</code> if:</strong>
+<div style="margin-top: 16px; padding: 14px 18px; border-radius: var(--md-shape-md); background: var(--md-surface-container-highest); border-left: 4px solid var(--md-warning);">
+    🚀 <strong style="color: var(--md-warning);">Use <code>latest-modern</code> if:</strong>
     <ul style="margin: 8px 0 0 20px; padding: 0; color: var(--md-on-surface);">
         <li>Your server has a modern CPU (Intel Haswell or newer, AMD Zen or newer, ARM Cortex-A55 or newer).</li>
         <li>You want ~15-30% performance improvement through AVX2, AES-NI, and ARM crypto extensions.</li>
