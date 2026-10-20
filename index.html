@@ -21,6 +21,7 @@
             <a href="#installation">Installation</a>
             <a href="#bridges">Bridges</a>
             <a href="#bridge-specific">Specific</a>
+            <a href="#proxies">Proxies</a> <!-- NEW -->
             <a href="#development">Development</a>
         </div>
     </div>
@@ -154,6 +155,17 @@ timeout = 60000</code></pre></div>
             <div class="loading" id="specific-loading">Loading specific bridge configurations...</div>
         </div>
     </section>
+
+    <!-- NEW: Proxies Section -->
+    <section class="doc-section" id="proxies">
+        <h2>Proxies Configuration</h2>
+        <p class="text-center">Proxy profiles bypass JavaScript challenges and CAPTCHAs for protected sites. Add them to <code>config/config.ini.php</code>. Click on a proxy to expand the instructions.</p>
+
+        <div class="proxies-list" id="proxies-list">
+            <div class="loading" id="proxies-loading">Loading proxy configurations...</div>
+        </div>
+    </section>
+    <!-- /NEW: Proxies Section -->
 
     <section class="doc-section" id="development">
         <h2>Developing Custom Bridges</h2>
@@ -303,8 +315,10 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
 
     let bridgesReady;
     let specificReady;
+    let proxiesReady; // NEW
     const bridgesReadyPromise = new Promise(r => bridgesReady = r);
     const specificReadyPromise = new Promise(r => specificReady = r);
+    const proxiesReadyPromise = new Promise(r => proxiesReady = r); // NEW
 
     const Utils = {
         debounce(fn, delay) {
@@ -365,19 +379,20 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         });
     }
 
+    // UPDATED: universal spoiler initialization for both bridges and proxies
     function initSpoilers() {
-        document.querySelectorAll('.bridge-specific-header').forEach(header => {
+        document.querySelectorAll('.bridge-specific-header, .proxies-header').forEach(header => {
             if (header.dataset.bound) return;
             header.dataset.bound = '1';
             
             header.addEventListener('click', () => {
-                const item = header.closest('.bridge-specific-item');
+                const item = header.closest('.bridge-specific-item, .proxies-item');
                 const isOpen = item.classList.contains('open');
                 
-                document.querySelectorAll('.bridge-specific-item.open').forEach(openItem => {
+                document.querySelectorAll('.bridge-specific-item.open, .proxies-item.open').forEach(openItem => {
                     if (openItem !== item) {
                         openItem.classList.remove('open');
-                        const openHeader = openItem.querySelector('.bridge-specific-header');
+                        const openHeader = openItem.querySelector('.bridge-specific-header, .proxies-header');
                         if (openHeader) openHeader.setAttribute('aria-expanded', 'false');
                     }
                 });
@@ -586,6 +601,111 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         }
     }
 
+    // NEW: loadProxies function (mirror of loadSpecificBridges)
+    async function loadProxies() {
+        const container = document.getElementById('proxies-list');
+        const loadingMessage = document.getElementById('proxies-loading');
+        
+        try {
+            const response = await fetch('./proxies.json');
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const proxies = await response.json();
+            
+            if (!Array.isArray(proxies)) {
+                throw new Error('Invalid JSON format: expected array');
+            }
+            
+            if (proxies.length === 0) {
+                loadingMessage.textContent = 'No proxies are configured yet.';
+                loadingMessage.classList.add('empty-state');
+                return;
+            }
+            
+            loadingMessage.remove();
+            
+            proxies.forEach(proxy => {
+                const item = document.createElement('div');
+                item.className = 'proxies-item';
+                item.dataset.file = proxy.file;
+                
+                const uri = proxy.uri || '';
+                const uriHtml = uri ? `<span class="bridge-uri">${uri}</span>` : '';
+                
+                item.innerHTML = `
+                    <button type="button" class="proxies-header" aria-expanded="false">
+                        <div class="header-main">
+                            <span class="bridge-name">${proxy.name}</span>
+                            ${uriHtml}
+                        </div>
+                        <span class="toggle-icon">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+                        </span>
+                    </button>
+                    <div class="proxies-content">
+                        <div class="proxies-content-inner">
+                            <div class="loading" style="padding: 20px; text-align: center;">Loading instructions...</div>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(item);
+            });
+            
+            const htmlFetches = proxies.map(proxy => 
+                fetch(`./documentation/pages/proxies/${proxy.file}`)
+                    .then(resp => {
+                        if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${proxy.file}`);
+                        return resp.text();
+                    })
+                    .then(html => ({ file: proxy.file, html }))
+                    .catch(err => ({ file: proxy.file, error: err.message }))
+            );
+            
+            const results = await Promise.all(htmlFetches);
+            
+            results.forEach(result => {
+                const item = container.querySelector(`[data-file="${result.file}"]`);
+                if (!item) return;
+                
+                const inner = item.querySelector('.proxies-content-inner');
+                
+                if (result.error) {
+                    inner.innerHTML = `
+                        <div class="note">
+                            Failed to load configuration for ${result.file}<br>
+                            <small>Error: ${result.error}</small>
+                        </div>
+                    `;
+                } else {
+                    const cleanHtml = result.html.replace(/^<!--\s*meta:uri:.*\s*-->\s*/m, '');
+                    inner.innerHTML = cleanHtml;
+                }
+            });
+            
+            initCopyButtons(container);
+            initSpoilers();
+            
+        } catch (error) {
+            loadingMessage.innerHTML = `
+                <div style="color: var(--md-error); padding: 20px; text-align: center;">
+                    <strong>Failed to load proxy configurations</strong><br>
+                    <small style="color: var(--md-on-surface-variant);">
+                        ${error.message}<br>
+                        Check browser console for details
+                    </small>
+                </div>
+            `;
+        } finally {
+            proxiesReady();
+        }
+    }
+    // /NEW: loadProxies
+
+    // UPDATED: wait for all three promises before scrolling
     async function scrollToTarget(href, behavior = 'smooth') {
         const target = document.querySelector(href);
         if (!target) return;
@@ -595,7 +715,7 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
             (bridgesContainer.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING);
 
         if (isBelowBridgesContainer) {
-            await Promise.all([bridgesReadyPromise, specificReadyPromise]);
+            await Promise.all([bridgesReadyPromise, specificReadyPromise, proxiesReadyPromise]);
             await new Promise(r => requestAnimationFrame(r));
             await new Promise(r => requestAnimationFrame(r));
         }
@@ -615,10 +735,11 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
     initCopyButtons();
     loadBridges();
     loadSpecificBridges();
+    loadProxies(); // NEW
 
     if (window.location.hash) {
         (async () => {
-            await Promise.all([bridgesReadyPromise, specificReadyPromise]);
+            await Promise.all([bridgesReadyPromise, specificReadyPromise, proxiesReadyPromise]); // UPDATED
             await new Promise(r => requestAnimationFrame(r));
             await scrollToTarget(window.location.hash, 'auto');
         })();

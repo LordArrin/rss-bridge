@@ -16,7 +16,6 @@ final class FimfictionBridge extends BridgeAbstract
     public const DESCRIPTION = 'Returns chapter updates for stories on Fimfiction';
     public const CACHE_TIMEOUT = 3600;
 
-    private const PROXY_PROFILE = 'flaresolverr';
     private const MAX_RETRIES = 5;
     private const RETRY_DELAY_US = 1500000;
 
@@ -26,7 +25,7 @@ final class FimfictionBridge extends BridgeAbstract
     ];
 
     public const PARAMETERS = [
-        [
+        '' => [
             'story_id' => [
                 'name' => 'Story ID',
                 'type' => 'text',
@@ -37,6 +36,18 @@ final class FimfictionBridge extends BridgeAbstract
                 'name' => 'Fetch full chapter content',
                 'type' => 'checkbox',
                 'defaultValue' => false,
+            ],
+        ],
+        'global' => [
+            'proxy_profile' => [
+                'name' => 'Proxy profile',
+                'type' => 'list',
+                'values' => [
+                    'FlareSolverr' => 'flaresolverr',
+                    'Trawl' => 'trawl',
+                ],
+                'required' => true,
+                'defaultValue' => 'flaresolverr',
             ],
         ],
     ];
@@ -52,6 +63,7 @@ final class FimfictionBridge extends BridgeAbstract
 
     private ?string $storyTitle = null;
     private ?string $storyImage = null;
+    private string $proxyProfile = 'flaresolverr';
 
     public function getName(): string
     {
@@ -72,6 +84,9 @@ final class FimfictionBridge extends BridgeAbstract
     public function collectData(): void
     {
         $storyId = (string) $this->getInput('story_id');
+
+        $proxyInput = (string) $this->getInput('proxy_profile');
+        $this->proxyProfile = $proxyInput !== '' ? $proxyInput : 'flaresolverr';
 
         $storyUrl = self::URI . 'story/' . $storyId . '/';
         $options = $this->buildProxyOptions();
@@ -116,7 +131,7 @@ final class FimfictionBridge extends BridgeAbstract
 
         for ($attempt = 1; $attempt <= self::MAX_RETRIES; $attempt++) {
             try {
-                $html = getProtectedContents($url, self::PROXY_PROFILE, $options);
+                $html = getProtectedContents($url, $this->proxyProfile, $options);
 
                 if ($html === '') {
                     throw new \Exception('Received empty HTML response');
@@ -128,11 +143,12 @@ final class FimfictionBridge extends BridgeAbstract
 
                 if ($attempt > 1) {
                     $this->logger->info(sprintf(
-                        'FimfictionBridge: %s succeeded on attempt %d/%d for %s',
+                        'FimfictionBridge: %s succeeded on attempt %d/%d for %s via %s',
                         $context,
                         $attempt,
                         self::MAX_RETRIES,
-                        $url
+                        $url,
+                        $this->proxyProfile
                     ));
                 }
 
@@ -141,11 +157,12 @@ final class FimfictionBridge extends BridgeAbstract
                 $lastException = $e;
 
                 $this->logger->warning(sprintf(
-                    'FimfictionBridge: %s attempt %d/%d failed for %s: %s',
+                    'FimfictionBridge: %s attempt %d/%d failed for %s via %s: %s',
                     $context,
                     $attempt,
                     self::MAX_RETRIES,
                     $url,
+                    $this->proxyProfile,
                     $e->getMessage()
                 ));
 
