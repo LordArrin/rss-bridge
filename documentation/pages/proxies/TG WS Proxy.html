@@ -1,0 +1,127 @@
+<!-- meta:uri:https://github.com/LordArrin/tg-ws-proxy-docker -->
+<p><a href="https://github.com/LordArrin/tg-ws-proxy-docker" target="_blank" rel="noopener">TG WS Proxy</a> is a highly specialized proxy designed to bypass Telegram network blocks (e.g., via DPI) by tunneling traffic through Cloudflare Workers. It has been specifically adapted for RSS-Bridge with native SOCKS5 support.</p>
+
+<ul>
+    <li>
+        <strong>Targeted Bypass.</strong>
+        Solves Telegram-specific blocking without routing your entire RSS-Bridge traffic through a heavy VPN or general-purpose proxy.
+        <li>
+        <strong>Cloudflare Worker Tunnel.</strong>
+        Uses a <code>workers.dev</code> endpoint to mask the origin IP and bypass Deep Packet Inspection (DPI) systems.
+    </li>
+    <li>
+        <strong>Native SOCKS5 Integration.</strong>
+        Built-in SOCKS5 server specifically configured to work seamlessly with the RSS-Bridge Telegram bridge.
+    </li>
+    <li>
+        <strong>Hardened Security.</strong>
+        Runs with a read-only filesystem, <code>no-new-privileges</code>, and isolated <code>tmpfs</code> mounts to minimize the attack surface.
+    </li>
+</ul>
+
+<h4>Quick start</h4>
+<ol>
+    <li>
+        <span>Add TG WS Proxy to your <code>docker-compose.yml</code>. <strong>Note:</strong> This service uses <code>network_mode: host</code>, meaning it binds directly to your host machine's network interfaces.</span>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>services:
+  tg-ws-proxy:
+    image: lordarrin/tg-ws-proxy:latest
+    container_name: tg-ws-proxy
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - PROXY_HOST=192.168.1.1        # Your local MTProto proxy host
+      - PROXY_PORT=443                # Your local MTProto proxy port
+      - PROXY_SECRET=your_secret_here # MTProto proxy secret
+      - CFPROXY_WORKER_DOMAIN=rough-unit-*.workers.dev
+      - KEEPALIVE=true
+      - SOCKS_ENABLED=true
+      - SOCKS_HOST=192.168.1.1        # Host IP reachable by RSS-Bridge
+      - SOCKS_PORT=1080               # Port for RSS-Bridge to connect to
+      - SOCKS_USER=your_socks_user
+      - SOCKS_PASS=your_socks_pass
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
+      - /home/app/.cache:noexec,nosuid,size=32m</code></pre>
+        </div>
+    </li>
+    <li>
+        <span>Register the proxy profile in RSS-Bridge <code>config/config.ini.php</code>. <strong>Important:</strong> Because the proxy uses <code>network_mode: host</code>, RSS-Bridge must connect to the <em>host machine's IP address</em> (or <code>host.docker.internal</code>), not the container name.</span>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>[proxy_profile_tgws]
+type = "TgWS"
+socks_url = "socks5h://your_socks_user:your_socks_pass@192.168.1.1:1080"
+connect_timeout = 10
+request_timeout = 30
+retries = 3</code></pre>
+        </div>
+    </li>
+    <li>
+        <span>Restart the stack (<code>docker compose up -d</code>) and select <strong>TgWS</strong> in the <em>Proxy profile</em> dropdown of the Telegram bridge.</span>
+    </li>
+</ol>
+
+<h4>Configuration options</h4>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border:1px solid var(--md-outline-variant);margin:12px 0;width:100%">
+    <thead>
+        <tr>
+            <th style="padding:6px 13px;border:1px solid var(--md-outline-variant);text-align:left;font-weight:bold;background:var(--md-surface-container-highest)">Variable</th>
+            <th style="padding:6px 13px;border:1px solid var(--md-outline-variant);text-align:left;font-weight:bold;background:var(--md-surface-container-highest)">Purpose</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)"><code>PROXY_HOST</code> / <code>PORT</code> / <code>SECRET</code></td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">Credentials for your local MTProto proxy that the worker will forward traffic to.</td>
+        </tr>
+        <tr>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)"><code>CFPROXY_WORKER_DOMAIN</code></td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">The active <code>workers.dev</code> domain used to bypass DPI blocking.</td>
+        </tr>
+        <tr>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)"><code>SOCKS_ENABLED</code></td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">Must be <code>true</code> to expose the SOCKS5 port for RSS-Bridge.</td>
+        </tr>
+        <tr>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)"><code>SOCKS_HOST</code> / <code>PORT</code> / <code>USER</code> / <code>PASS</code></td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">The SOCKS5 endpoint details. <code>HOST</code> must be an IP reachable by the RSS-Bridge container.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="note info">
+    💡 <strong>Networking Note:</strong> Because this container uses <code>network_mode: host</code>, it does not have its own Docker network IP. When configuring <code>socks_url</code> in RSS-Bridge, you <em>must</em> use the IP address of the host machine (e.g., <code>192.168.1.1</code>) or <code>host.docker.internal</code>, not the container name <code>tg-ws-proxy</code>.
+</div>
+
+<div class="note warning">
+    ⚠️ <strong>Scope Limitation:</strong> This proxy is highly specialized for Telegram traffic. Do not attempt to use it for general web scraping or other RSS-Bridge endpoints. For other censorship bypass, use different solution.
+</div>
+
+<h4>Troubleshooting</h4>
+<ul>
+    <li>
+        <strong><code>Connection refused</code></strong> — RSS-Bridge is trying to connect to the container name instead of the host IP. Update the <code>socks_url</code> in <code>config.ini.php</code> to use your host machine's actual IP address.
+    </li>
+    <li>
+        <strong><code>Worker error / 502 Bad Gateway</code></strong> — Verify that your <code>CFPROXY_WORKER_DOMAIN</code> is correctly deployed in Cloudflare and that the <code>PROXY_SECRET</code> matches your MTProto proxy.
+    </li>
+    <li>
+        <strong><code>Authentication failed</code></strong> — Double-check that <code>SOCKS_USER</code> and <code>SOCKS_PASS</code> in the compose file exactly match the credentials in your RSS-Bridge <code>socks_url</code>.
+    </li>
+</ul>
