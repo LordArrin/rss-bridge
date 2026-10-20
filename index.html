@@ -21,7 +21,7 @@
             <a href="#installation">Installation</a>
             <a href="#bridges">Bridges</a>
             <a href="#bridge-specific">Specific</a>
-            <a href="#proxies">Proxies</a> <!-- NEW -->
+            <a href="#proxies">Proxies</a>
             <a href="#development">Development</a>
         </div>
     </div>
@@ -73,47 +73,9 @@
 
     <section class="doc-section" id="installation">
         <h2>Installation &amp; Setup</h2>
-
-        <h3>Quick Start with Docker</h3>
-        <p>The easiest way to run RSS-Bridge is using the Docker image:</p>
-<div class="code-block"><button type="button" class="copy-btn" aria-label="Copy code"><span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span><span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span><span class="copy-label-copy">Copy</span><span class="copy-label-copied">Copied!</span></button><pre><code>docker run -d \
-  --name rss-bridge \
-  -p 3000:80 \
-  -v /path/to/config:/config \
-  --restart unless-stopped \
-  lordarrin/rss-bridge:latest</code></pre></div>
-        <p>After startup, open <code>http://localhost:3000</code> in your browser.</p>
-
-        <h3>Using Docker Compose</h3>
-        <p>Create a <code>docker-compose.yml</code> file:</p>
-<div class="code-block"><button type="button" class="copy-btn" aria-label="Copy code"><span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span><span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span><span class="copy-label-copy">Copy</span><span class="copy-label-copied">Copied!</span></button><pre><code>services:
-  rss-bridge:
-    image: lordarrin/rss-bridge:latest
-    container_name: rss-bridge
-    ports:
-      - "3000:80"
-    volumes:
-      - ./config:/config
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '2'</code></pre></div>
-        <p>Run with: <code>docker compose up -d</code></p>
-
-        <h3>Configuration Structure</h3>
-        <ul>
-            <li><code>/config.ini.php</code> — main settings and API keys</li>
-            <li><code>/bridges-v2/</code> — folder for custom bridges</li>
-        </ul>
-
-        <h3>Performance Tips</h3>
-        <ul>
-            <li>Use SSD for configuration storage</li>
-            <li>Allocate at least 1 GB of RAM</li>
-            <li>Set CPU limits for stable operation</li>
-        </ul>
+        <div id="setup-content">
+            <div class="loading" id="setup-loading">Loading installation instructions...</div>
+        </div>
     </section>
 
     <section class="searchbar" id="bridges">
@@ -141,7 +103,6 @@
         </div>
     </section>
 
-    <!-- NEW: Proxies Section -->
     <section class="doc-section" id="proxies">
         <h2>Proxies Configuration</h2>
         <p class="text-center">Proxy profiles bypass JavaScript challenges and CAPTCHAs for protected sites. Add them to <code>config/config.ini.php</code>. Click on a proxy to expand the instructions.</p>
@@ -150,7 +111,6 @@
             <div class="loading" id="proxies-loading">Loading proxy configurations...</div>
         </div>
     </section>
-    <!-- /NEW: Proxies Section -->
 
     <section class="doc-section" id="development">
         <h2>Developing Custom Bridges</h2>
@@ -300,10 +260,12 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
 
     let bridgesReady;
     let specificReady;
-    let proxiesReady; // NEW
+    let proxiesReady;
+    let setupReady;
     const bridgesReadyPromise = new Promise(r => bridgesReady = r);
     const specificReadyPromise = new Promise(r => specificReady = r);
-    const proxiesReadyPromise = new Promise(r => proxiesReady = r); // NEW
+    const proxiesReadyPromise = new Promise(r => proxiesReady = r);
+    const setupReadyPromise = new Promise(r => setupReady = r);
 
     const Utils = {
         debounce(fn, delay) {
@@ -364,7 +326,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         });
     }
 
-    // UPDATED: universal spoiler initialization for both bridges and proxies
     function initSpoilers() {
         document.querySelectorAll('.bridge-specific-header, .proxies-header').forEach(header => {
             if (header.dataset.bound) return;
@@ -586,7 +547,6 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
         }
     }
 
-    // NEW: loadProxies function (mirror of loadSpecificBridges)
     async function loadProxies() {
         const container = document.getElementById('proxies-list');
         const loadingMessage = document.getElementById('proxies-loading');
@@ -688,9 +648,38 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
             proxiesReady();
         }
     }
-    // /NEW: loadProxies
 
-    // UPDATED: wait for all three promises before scrolling
+    async function loadSetup() {
+        const container = document.getElementById('setup-content');
+        const loadingMessage = document.getElementById('setup-loading');
+        
+        try {
+            const response = await fetch('./documentation/pages/setup/basics.html');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const html = await response.text();
+            loadingMessage.remove();
+            container.innerHTML = html;
+            
+            initCopyButtons(container);
+            
+        } catch (error) {
+            loadingMessage.innerHTML = `
+                <div style="color: var(--md-error); padding: 20px; text-align: center;">
+                    <strong>Failed to load installation instructions</strong><br>
+                    <small style="color: var(--md-on-surface-variant);">
+                        ${error.message}<br>
+                        Check browser console for details
+                    </small>
+                </div>
+            `;
+        } finally {
+            setupReady();
+        }
+    }
+
     async function scrollToTarget(href, behavior = 'smooth') {
         const target = document.querySelector(href);
         if (!target) return;
@@ -700,7 +689,7 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
             (bridgesContainer.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING);
 
         if (isBelowBridgesContainer) {
-            await Promise.all([bridgesReadyPromise, specificReadyPromise, proxiesReadyPromise]);
+            await Promise.all([bridgesReadyPromise, specificReadyPromise, proxiesReadyPromise, setupReadyPromise]);
             await new Promise(r => requestAnimationFrame(r));
             await new Promise(r => requestAnimationFrame(r));
         }
@@ -718,13 +707,14 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=<span class="tok-nu
     });
 
     initCopyButtons();
+    loadSetup();
     loadBridges();
     loadSpecificBridges();
-    loadProxies(); // NEW
+    loadProxies();
 
     if (window.location.hash) {
         (async () => {
-            await Promise.all([bridgesReadyPromise, specificReadyPromise, proxiesReadyPromise]); // UPDATED
+            await Promise.all([bridgesReadyPromise, specificReadyPromise, proxiesReadyPromise, setupReadyPromise]);
             await new Promise(r => requestAnimationFrame(r));
             await scrollToTarget(window.location.hash, 'auto');
         })();

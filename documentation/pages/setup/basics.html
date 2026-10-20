@@ -1,0 +1,84 @@
+<h3>Quick Start with Docker Compose</h3>
+<p>The easiest and recommended way to run RSS-Bridge is using Docker Compose:</p>
+
+<div class="code-block">
+    <button type="button" class="copy-btn" aria-label="Copy code">
+        <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+        <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+        <span class="copy-label-copy">Copy</span>
+        <span class="copy-label-copied">Copied!</span>
+    </button>
+    <pre><code>services:
+  rss-bridge:
+    image: lordarrin/rss-bridge:latest
+    container_name: rss-bridge
+    ports:
+      - "3000:80"
+    volumes:
+      - ./config:/config
+    restart: unless-stopped</code></pre>
+</div>
+
+<p>Run the following command in the same directory:</p>
+<div class="code-block">
+    <button type="button" class="copy-btn" aria-label="Copy code">
+        <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+        <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+        <span class="copy-label-copy">Copy</span>
+        <span class="copy-label-copied">Copied!</span>
+    </button>
+    <pre><code>docker compose up -d</code></pre>
+</div>
+
+<p>After startup, open <a href="http://localhost:3000/" target="_blank" rel="noopener">http://localhost:3000/</a> to see the main page with all available bridges.</p>
+
+<hr style="border: 0; border-top: 1px solid var(--md-outline-variant); margin: 32px 0;">
+
+<h3>Docker Images</h3>
+<p>Multi-architecture Docker images are built weekly and published to GitHub Container Registry. Each build includes the latest security patches from Alpine, latest OpenSSL, hardened Freenginx, curl-impersonate (with BoringSSL for TLS fingerprint impersonation), and Mimalloc memory allocator.</p>
+
+<h4>Available Tags</h4>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border:1px solid var(--md-outline-variant);margin:12px 0;width:100%">
+    <thead>
+        <tr>
+            <th style="padding:6px 13px;border:1px solid var(--md-outline-variant);text-align:left;font-weight:bold;background:var(--md-surface-container-highest)">Tag</th>
+            <th style="padding:6px 13px;border:1px solid var(--md-outline-variant);text-align:left;font-weight:bold;background:var(--md-surface-container-highest)">Architecture</th>
+            <th style="padding:6px 13px;border:1px solid var(--md-outline-variant);text-align:left;font-weight:bold;background:var(--md-surface-container-highest)">Optimization Level</th>
+            <th style="padding:6px 13px;border:1px solid var(--md-outline-variant);text-align:left;font-weight:bold;background:var(--md-surface-container-highest)">Use Case</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)"><code>latest</code></td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">amd64 + arm64</td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">Baseline (<code>x86-64</code> / <code>armv8-a</code>)</td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">Maximum compatibility — runs on any x86_64 CPU (2003+) or ARMv8 device</td>
+        </tr>
+        <tr>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)"><code>latest-modern</code></td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">amd64 + arm64</td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">High (<code>x86-64-v3</code> / <code>armv8.2-a</code> with crypto)</td>
+            <td style="padding:6px 13px;border:1px solid var(--md-outline-variant)">Modern servers — Intel Haswell+ / AMD Zen+, ARM Cortex-A55+ and newer</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Hardware Compatibility Guide</h4>
+
+<div class="note info" style="margin-top: 16px;">
+    💡 <strong>Use <code>latest</code> if:</strong>
+    <ul style="margin: 8px 0 0 20px; padding: 0;">
+        <li>You run on older hardware or VPS with an unknown CPU model.</li>
+        <li>You need guaranteed compatibility with any x86_64 or ARMv8 device.</li>
+        <li>You deploy in heterogeneous environments.</li>
+    </ul>
+</div>
+
+<div class="note" style="margin-top: 16px; background: var(--md-primary-container); color: var(--md-on-primary-container);">
+    🚀 <strong>Use <code>latest-modern</code> if:</strong>
+    <ul style="margin: 8px 0 0 20px; padding: 0;">
+        <li>Your server has a modern CPU (Intel Haswell or newer, AMD Zen or newer, ARM Cortex-A55 or newer).</li>
+        <li>You want ~15-30% performance improvement through AVX2, AES-NI, and ARM crypto extensions.</li>
+        <li>You run on cloud providers with modern instances (AWS Graviton3+, Azure, GCP).</li>
+    </ul>
+</div>
