@@ -582,15 +582,18 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
 }
 
 /* ============================================================
-   11. BRIDGE SPECIFIC CONFIGURATION (spoilers)
+   11. BRIDGE & PROXY SPECIFIC CONFIGURATION (spoilers)
    ============================================================ */
-.bridge-specific-list {
+.bridge-specific-list,
+.proxies-list {
     display: flex;
     flex-direction: column;
     gap: 12px;
     margin-top: 24px;
 }
-.bridge-specific-item {
+
+.bridge-specific-item,
+.proxies-item {
     background: var(--md-surface-container-lowest);
     border-radius: var(--md-shape-lg);
     box-shadow: var(--md-elevation-1);
@@ -598,10 +601,14 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
     overflow: hidden;
     transition: box-shadow var(--md-motion-duration-medium) var(--md-motion-easing-standard);
 }
-.bridge-specific-item:hover {
+
+.bridge-specific-item:hover,
+.proxies-item:hover {
     box-shadow: var(--md-elevation-2);
 }
-.bridge-specific-header {
+
+.bridge-specific-header,
+.proxies-header {
     width: 100%;
     padding: 20px 24px;
     background: transparent;
@@ -618,31 +625,45 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
     line-height: 1.5;
     position: relative;
 }
-.bridge-specific-header::after { display: none; }
-.bridge-specific-header:hover {
+
+.bridge-specific-header::after,
+.proxies-header::after { 
+    display: none; 
+}
+
+.bridge-specific-header:hover,
+.proxies-header:hover {
     background: color-mix(in srgb, var(--md-on-surface) 5%, transparent);
 }
-.bridge-specific-header .header-main {
+
+.bridge-specific-header .header-main,
+.proxies-header .header-main {
     flex-grow: 1;
     display: flex;
     flex-direction: column;
     gap: 4px;
     min-width: 0;
 }
-.bridge-specific-header .bridge-name {
+
+.bridge-specific-header .bridge-name,
+.proxies-header .bridge-name {
     font-size: 1.25rem;
     font-weight: 500;
     color: var(--md-primary);
     letter-spacing: -0.01em;
 }
-.bridge-specific-header .bridge-uri {
+
+.bridge-specific-header .bridge-uri,
+.proxies-header .bridge-uri {
     color: var(--md-on-surface-variant);
     font-size: 0.875rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.bridge-specific-header .toggle-icon {
+
+.bridge-specific-header .toggle-icon,
+.proxies-header .toggle-icon {
     flex-shrink: 0;
     width: 24px;
     height: 24px;
@@ -652,43 +673,61 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
     color: var(--md-on-surface-variant);
     transition: transform var(--md-motion-duration-short) var(--md-motion-easing-standard);
 }
-.bridge-specific-header .toggle-icon svg {
+
+.bridge-specific-header .toggle-icon svg,
+.proxies-header .toggle-icon svg {
     width: 20px;
     height: 20px;
     fill: currentColor;
 }
-.bridge-specific-item.open .toggle-icon {
+
+.bridge-specific-item.open .toggle-icon,
+.proxies-item.open .toggle-icon {
     transform: rotate(180deg);
 }
-.bridge-specific-content {
+
+.bridge-specific-content,
+.proxies-content {
     max-height: 0;
     overflow: hidden;
     transition: max-height var(--md-motion-duration-medium) var(--md-motion-easing-standard);
 }
-.bridge-specific-item.open .bridge-specific-content {
+
+.bridge-specific-item.open .bridge-specific-content,
+.proxies-item.open .proxies-content {
     max-height: 3000px;
     transition: max-height var(--md-motion-duration-long) var(--md-motion-easing-decelerate);
 }
-.bridge-specific-content-inner {
+
+.bridge-specific-content-inner,
+.proxies-content-inner {
     padding: 0 24px 24px;
     border-top: 1px solid var(--md-outline-variant);
     margin-top: 0;
     padding-top: 20px;
 }
-.bridge-specific-content-inner h4 {
+
+.bridge-specific-content-inner h4,
+.proxies-content-inner h4 {
     font-size: 1.125rem;
     font-weight: 500;
     margin: 20px 0 12px;
     color: var(--md-on-surface);
 }
-.bridge-specific-content-inner h4:first-child {
+
+.bridge-specific-content-inner h4:first-child,
+.proxies-content-inner h4:first-child {
     margin-top: 0;
 }
-.bridge-specific-content-inner p {
+
+.bridge-specific-content-inner p,
+.proxies-content-inner p {
     margin-bottom: 12px;
     line-height: 1.6;
 }
-.bridge-specific-content-inner .note {
+
+.bridge-specific-content-inner .note,
+.proxies-content-inner .note {
     background: var(--md-warning-container);
     color: var(--md-on-warning-container);
     padding: 14px 18px;
@@ -698,16 +737,22 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
     font-size: 0.875rem;
     line-height: 1.6;
 }
-.bridge-specific-content-inner .note.info {
+
+.bridge-specific-content-inner .note.info,
+.proxies-content-inner .note.info {
     background: var(--md-primary-container);
     color: var(--md-on-primary-container);
 }
-.bridge-specific-content-inner ol {
+
+.bridge-specific-content-inner ol,
+.proxies-content-inner ol {
     counter-reset: step-counter;
     margin: 12px 0 16px 0;
     padding: 0;
 }
-.bridge-specific-content-inner ol li {
+
+.bridge-specific-content-inner ol li,
+.proxies-content-inner ol li {
     list-style: none;
     counter-increment: step-counter;
     position: relative;
@@ -719,7 +764,9 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
     align-items: flex-start;
     gap: 8px;
 }
-.bridge-specific-content-inner ol li::before {
+
+.bridge-specific-content-inner ol li::before,
+.proxies-content-inner ol li::before {
     content: counter(step-counter);
     position: absolute;
     left: 0;
@@ -735,10 +782,14 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
     font-weight: 500;
     font-size: 0.875rem;
 }
-.bridge-specific-content-inner ol li > span {
+
+.bridge-specific-content-inner ol li > span,
+.proxies-content-inner ol li > span {
     line-height: 1.6;
 }
-.bridge-specific-content-inner .code-block {
+
+.bridge-specific-content-inner .code-block,
+.proxies-content-inner .code-block {
     margin: 8px 0;
     width: 100%;
 }

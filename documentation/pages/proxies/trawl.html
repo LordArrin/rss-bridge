@@ -1,0 +1,116 @@
+<!-- meta:uri:https://github.com/germondai/trawl -->
+<p><a href="https://github.com/germondai/trawl" target="_blank" rel="noopener">Trawl</a> is a self-hosted scraping engine that bypasses JavaScript challenges and CAPTCHAs. It is a modern alternative to FlareSolverr with wider protection coverage:</p>
+
+<ul>
+    <li>
+        <strong>Faster.</strong>
+        Trawl starts with plain HTTP and only opens a browser when the site actually requires one. Repeat requests reuse the saved clearance and often complete in under a second.
+    </li>
+    <li>
+        <strong>More protections.</strong>
+        Cloudflare, Anubis, Akamai, Imperva, DDoS-Guard, plus built-in CAPTCHA solving: Turnstile, reCAPTCHA v2, hCaptcha, GeeTest, ALTCHA.
+    </li>
+    <li>
+        <strong>Drop-in replacement.</strong>
+        Bridges that work with FlareSolverr work with Trawl — just select it in the <em>Proxy profile</em> dropdown on the bridge page.
+    </li>
+</ul>
+
+<h4>Quick start</h4>
+<ol>
+    <li>
+        <span>Add Trawl to your <code>docker-compose.yml</code> alongside RSS-Bridge (no exposed ports — it stays inside the Docker network):</span>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>services:
+  trawl:
+    image: ghcr.io/germondai/trawl:latest
+    shm_size: 2gb
+    environment:
+      - BROWSER_POOL_SIZE=2
+      - SESSION_CACHE_DRIVER=memory
+      - SCRAPE_MAX_TIMEOUT_MS=180000
+      - TIER1_TRANSPORT=bun
+      - MCP_ENABLED=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8191/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped</code></pre>
+        </div>
+    </li>
+    <li>
+        <span>Register the proxy profile in <code>config.ini.php</code>:</span>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>[proxy_profile_trawl]
+type = "Trawl"
+url = "http://trawl:8191"
+timeout = 180000</code></pre>
+        </div>
+    </li>
+    <li>
+        <span>Restart the stack (<code>docker compose up -d</code>) and select <strong>Trawl</strong> in the <em>Proxy profile</em> dropdown of any bridge that supports it.</span>
+    </li>
+</ol>
+
+<h4>Configuration options</h4>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border:1px solid #d0d7de;margin:12px 0">
+    <thead>
+        <tr>
+            <th style="padding:6px 13px;border:1px solid #d0d7de;text-align:left;font-weight:bold">Option</th>
+            <th style="padding:6px 13px;border:1px solid #d0d7de;text-align:left;font-weight:bold">Default</th>
+            <th style="padding:6px 13px;border:1px solid #d0d7de;text-align:left;font-weight:bold">Purpose</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td style="padding:6px 13px;border:1px solid #d0d7de"><code>url</code></td>
+            <td style="padding:6px 13px;border:1px solid #d0d7de">— (required)</td>
+            <td style="padding:6px 13px;border:1px solid #d0d7de">Trawl address inside the Docker network</td>
+        </tr>
+        <tr>
+            <td style="padding:6px 13px;border:1px solid #d0d7de"><code>timeout</code></td>
+            <td style="padding:6px 13px;border:1px solid #d0d7de"><code>180000</code></td>
+            <td style="padding:6px 13px;border:1px solid #d0d7de">Maximum time per request, in milliseconds</td>
+        </tr>
+        <tr>
+            <td style="padding:6px 13px;border:1px solid #d0d7de"><code>twocaptcha_api_key</code></td>
+            <td style="padding:6px 13px;border:1px solid #d0d7de">empty</td>
+            <td style="padding:6px 13px;border:1px solid #d0d7de">Optional fallback for hard CAPTCHAs (paid service)</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="note info">
+    💡 <strong>Note:</strong> The <code>twocaptcha_api_key</code> is validated lazily on first use. If the key turns out to be invalid or the balance is exhausted, a warning is logged and the key is ignored until the container restarts — requests keep working through Trawl's built-in solvers. Most sites do not need 2Captcha at all.
+</div>
+
+<div class="note warning">
+    ⚠️ <strong>Security:</strong> Keep Trawl on the internal Docker network without published ports. Its API has no authentication — anyone with access to it can make requests from your server's IP.
+</div>
+
+<h4>Troubleshooting</h4>
+<ul>
+    <li>
+        <strong><code>Trawl unavailable</code></strong> — the container is not running or the <code>url</code> is wrong. Check <code>docker compose ps</code> and the health status.
+    </li>
+    <li>
+        <strong>Requests succeed but feeds are empty</strong> — the site may block your server's IP entirely. Configure an upstream proxy in Trawl (<code>PROXY_URL</code> environment variable).
+    </li>
+    <li>
+        <strong>Timeouts on heavy sites</strong> — increase <code>SCRAPE_MAX_TIMEOUT_MS</code> in the compose file and <code>timeout</code> in <code>config.ini.php</code> together.
+    </li>
+</ul>
