@@ -381,21 +381,51 @@ final class CurlHttpClient implements HttpClient
         return \RSSBridge\Configuration::getConfig('http', 'ssrf_check') !== false;
     }
 
+    /**
+     * Parses an absolute URL into its security-relevant components.
+     *
+     * Returns null for anything that is not a plain http/https URL with a
+     * usable host (unparseable input, missing scheme/host, foreign schemes
+     * such as file:// or gopher://, empty or malformed hosts). The returned
+     * host is normalized so that two spellings of the same resource always
+     * compare equal in the SSRF redirect check:
+     *  - lowercased (DNS hostnames are case-insensitive);
+     *  - IPv6 brackets removed ("[::1]" -> "::1");
+     *  - trailing root dots removed ("example.com." == "example.com"), while
+     *    a leading dot is preserved because it pins cookies to an exact host
+     *    and must stay distinguishable from the bare name.
+     *
+     * @return array{host: string, port: int, scheme: string, path: string}|null
+     */
     private static function parseHttpUrl(string $url): ?array
     {
-        $parts = parse_url($url);
-        if ($parts === false || isset($parts['host']) === false || isset($parts['scheme']) === false) {
+        $parts = parse_url(trim($url));
+        if (is_array($parts) === false || isset($parts['scheme'], $parts['host']) === false) {
             return null;
         }
+
         $scheme = strtolower($parts['scheme']);
-        if (in_array($scheme, ['http', 'https'], true) === false) {
+        if ($scheme !== 'http' && $scheme !== 'https') {
             return null;
         }
+
         $host = strtolower($parts['host']);
         if (str_starts_with($host, '[') === true && str_ends_with($host, ']') === true) {
-            $host = substr($host, 1, -1);
+            $host = substr($host, 1, -1); // literal IPv6 without brackets
         }
-        return ['host' => $host, 'port' => (int)($parts['port'] ?? ($scheme === 'https' ? 443 : 80))];
+        if ($host !== '' && str_starts_with($host, '.') === false) {
+            $host = rtrim($host, '.'); // strip FQDN root dot(s), keep ".exact" hosts
+        }
+        if ($host === '') {
+            return null;
+        }
+
+        return [
+            'host' => $host,
+            'port' => (int)($parts['port'] ?? ($scheme === 'https' ? 443 : 80)),
+            'scheme' => $scheme,
+            'path' => $parts['path'] ?? '/',
+        ];
     }
 
     /**
@@ -472,6 +502,31 @@ final class CurlHttpClient implements HttpClient
         // Pin the exact vetted set in the order returned by the resolver so a
         // later, unchecked re-resolution cannot influence the connection.
         return [sprintf('+%s:%d:%s', $host, $port, implode(',', $allowedIps))];
+    }
+
+    /**
+     * Checks if two hosts belong to the same effective domain tree.
+     * This allows safe canonical redirects (e.g., www.example.com <-> example.com)
+     * while still blocking actual cross-domain SSRF bypasses.
+     *
+     * @param string $host1 The original host.
+     * @param string $host2 The redirect target host.
+     * @return bool True if they are the same domain or subdomain of each other.
+     */
+    private static function isSameEffectiveDomain(string $host1, string $host2): bool
+    {
+        if ($host1 === $host2) {
+            return true;
+        }
+
+        // Allow redirects between a domain and its subdomains.
+        // e.g., 'www.djmag.com' ends with '.djmag.com' -> True (Safe)
+        // e.g., 'evil.com' ends with '.djmag.com' -> False (Blocked)
+        if (str_ends_with($host1, '.' . $host2) === true || str_ends_with($host2, '.' . $host1) === true) {
+            return true;
+        }
+
+        return false;
     }
 
     public function request(string $url, array $config = []): Response
@@ -683,14 +738,14 @@ final class CurlHttpClient implements HttpClient
 
             // Normalize relative redirects to absolute URLs so parseHttpUrl can evaluate them securely
             if ($originalParsed !== null && preg_match('#^[a-z][a-z0-9+\-.]*://#i', $location) === 0) {
-                $scheme = $originalParsed['port'] === 443 ? 'https' : 'http';
+                $scheme = $originalParsed['scheme'];
                 $host = $originalParsed['host'];
                 $port = $originalParsed['port'];
 
                 if (str_starts_with($location, '/') === true) {
                     $path = $location;
                 } else {
-                    $basePath = dirname($originalParsed['path'] ?? '/');
+                    $basePath = dirname($originalParsed['path']);
                     if ($basePath === '.') {
                         $basePath = '/';
                     }
@@ -702,7 +757,12 @@ final class CurlHttpClient implements HttpClient
 
             $redirectParsed = self::parseHttpUrl($location);
 
-            if ($originalParsed !== null && $redirectParsed !== null && $originalParsed['host'] === $redirectParsed['host']) {
+            // FIX: Use isSameEffectiveDomain to allow www <-> non-www redirects safely
+            if (
+                $originalParsed !== null
+                && $redirectParsed !== null
+                && self::isSameEffectiveDomain($originalParsed['host'], $redirectParsed['host']) === true
+            ) {
                 $redirectCount = $config['_redirect_count'] ?? 0;
                 if ($redirectCount >= 5) {
                     throw new HttpException(sprintf(

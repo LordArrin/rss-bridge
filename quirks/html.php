@@ -91,7 +91,7 @@ function html_tag(string $name, ?string $content = null, array $attributes = [])
     foreach ($attributes as $key => $value) {
         match ($key) {
             // String attributes: rendered as key="escaped_value"
-            'type', 'id', 'name', 'value', 'placeholder', 'title', 'pattern', 
+            'type', 'id', 'name', 'value', 'placeholder', 'title', 'pattern',
             'class', 'for', 'oncontextmenu', 'data-for', 'formtarget' => (function () use (&$html, $key, $value): void {
                 if ($value !== null && $value !== '' && $value !== false) {
                     $html .= sprintf(' %s="%s"', $key, e((string) $value));
@@ -153,8 +153,8 @@ function html_option(string $name, string $value, bool $selected = false): strin
 /**
  * Break potentially dangerous HTML tags by inserting a zero-width non-joiner.
  *
- * This function sanitizes raw HTML strings to prevent XSS. It performs 
- * case-insensitive tag breaking, strips inline event handlers, and 
+ * This function sanitizes raw HTML strings to prevent XSS. It performs
+ * case-insensitive tag breaking, strips inline event handlers, and
  * neutralizes javascript: URLs.
  *
  * @param string $html The HTML content to sanitize.
@@ -216,15 +216,15 @@ function sanitize_dom_element_attributes(\Dom\Element $element, array $allowedAt
     foreach ($element->attributes as $attr) {
         $attrName = strtolower($attr->name);
 
-        // 1. Remove if not in whitelist
-        if (!in_array($attrName, $allowed, true)) {
+        // 1. Remove if not in whitelist (Explicit false comparison)
+        if (in_array($attrName, $allowed, true) === false) {
             $attrsToRemove[] = $attrName;
             continue;
         }
 
-        // 2. Strict URI validation for href and src
-        if (in_array($attrName, ['href', 'src'], true)) {
-            if (!is_safe_uri($attr->value)) {
+        // 2. Strict URI validation for href and src (Explicit true comparison)
+        if (in_array($attrName, ['href', 'src'], true) === true) {
+            if (is_safe_uri($attr->value) === false) {
                 $attrsToRemove[] = $attrName;
             }
         }
@@ -250,7 +250,9 @@ function sanitize_dom_element_attributes(\Dom\Element $element, array $allowedAt
 function is_safe_uri(string $uri): bool
 {
     $uri = trim($uri);
-    if ($uri === '' || str_starts_with($uri, '#') || str_starts_with($uri, '/')) {
+
+    // Explicit true comparisons for str_starts_with
+    if ($uri === '' || str_starts_with($uri, '#') === true || str_starts_with($uri, '/') === true) {
         return true; // Anchors and relative paths are safe
     }
 
@@ -258,18 +260,20 @@ function is_safe_uri(string $uri): bool
     if ($parsed === false) {
         return false; // Malformed URI
     }
-    
-    $scheme = isset($parsed['scheme']) ? strtolower((string) $parsed['scheme']) : '';
+
+    // Explicit true comparison for array_key_exists
+    $scheme = array_key_exists('scheme', $parsed) === true ? strtolower((string) $parsed['scheme']) : '';
 
     // Strict whitelist of allowed schemes
     $safeSchemes = ['http', 'https', 'mailto', 'ftp'];
-    
-    // Allow data: ONLY for images (basic check)
+
+    // Allow data: ONLY for images (basic check, explicit true comparison)
     if ($scheme === 'data') {
-        return str_starts_with($uri, 'data:image/');
+        return str_starts_with($uri, 'data:image/') === true;
     }
 
-    return in_array($scheme, $safeSchemes, true);
+    // Explicit true comparison for in_array
+    return in_array($scheme, $safeSchemes, true) === true;
 }
 
 /**
@@ -288,6 +292,6 @@ function sanitize_inline_css(string $css): string
     $css = (string) preg_replace('/@import/i', '', $css);
     // Remove javascript: inside url()
     $css = (string) preg_replace('/url\s*\(\s*["\']?\s*javascript:/i', 'url("about:blank")', $css);
-    
+
     return trim($css);
 }
