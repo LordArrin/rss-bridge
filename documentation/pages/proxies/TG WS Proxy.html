@@ -74,7 +74,7 @@ retries = 3</code></pre>
         </div>
     </li>
     <li>
-        <span>Restart the stack (<code>docker compose up -d</code>) and select <strong>TgWS</strong> in the <em>Proxy profile</em> dropdown of the Telegram bridge.</span>
+        <span>Restart the stack (<code>docker compose up -d</code>) and select <strong>Use proxy</strong> in the settings of the Telegram bridge.</span>
     </li>
 </ol>
 
@@ -82,10 +82,10 @@ retries = 3</code></pre>
 <p>Choose the Cloudflare routing method that best fits your infrastructure:</p>
 <ul>
     <li>
-        <strong><a href="https://github.com/Flowseal/tg-ws-proxy/blob/main/docs/EN/CfWorker.md" target="_blank" rel="noopener">Cloudflare Worker (Recommended & Free)</a></strong> — The simplest method. Uses a free <code>workers.dev</code> subdomain. No custom domain or DNS configuration required.
+        <strong><a href="https://github.com/Flowseal/tg-ws-proxy/blob/main/docs/EN/CfWorker.md" target="_blank" rel="noopener">Cloudflare Worker</a></strong> — The simplest method. Uses a free <code>workers.dev</code> subdomain. No custom domain or DNS configuration required.
     </li>
     <li>
-        <strong><a href="https://github.com/Flowseal/tg-ws-proxy/blob/main/docs/EN/CfProxy.md" target="_blank" rel="noopener">Cloudflare Proxy (Advanced)</a></strong> — Requires your own domain routed through Cloudflare. Provides more control and custom branding, but involves manual DNS and SSL configuration.
+        <strong><a href="https://github.com/Flowseal/tg-ws-proxy/blob/main/docs/EN/CfProxy.md" target="_blank" rel="noopener">Cloudflare Proxy</a></strong> — Requires your own domain routed through Cloudflare. Provides more control and custom branding, but involves manual DNS and SSL configuration.
     </li>
 </ul>
 
