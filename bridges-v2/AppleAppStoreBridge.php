@@ -113,7 +113,40 @@ final class AppleAppStoreBridge extends BridgeAbstract
         return sprintf('https://apps.apple.com/%s/app/id%s', $country, $id);
     }
 
-    public function getName()
+    private function resolveHtmlUrl(): string
+    {
+        $id = (string)$this->getInput('id');
+        $country = strtolower((string)$this->getInput('country'));
+        $lookupUrl = sprintf('https://itunes.apple.com/lookup?id=%s&country=%s', urlencode($id), urlencode($country));
+
+        try {
+            $response = getContents($lookupUrl);
+            $json = json_decode($response, true, 512, JSON_THROW_ON_ERROR);
+
+            $url = $json['results'][0]['trackViewUrl'] ?? null;
+
+            if (is_string($url) === true && $url !== '') {
+                $parsed = filter_var($url, FILTER_VALIDATE_URL);
+
+                if ($parsed !== false && str_contains((string)$parsed, 'apps.apple.com') === true) {
+                    $parts = parse_url((string)$parsed);
+
+                    if (
+                        isset($parts['scheme'], $parts['host'], $parts['path']) === true &&
+                        $parts['host'] === 'apps.apple.com' &&
+                        str_contains($parts['path'], '/id' . $id) === true
+                    ) {
+                        return $parts['scheme'] . '://' . $parts['host'] . $parts['path'];
+                    }
+                }
+            }
+        } catch (\JsonException | \Exception $e) {
+        }
+
+        return $this->makeHtmlUrl();
+    }
+
+    public function getName(): string
     {
         if ($this->appName !== null) {
             return $this->appName;
@@ -124,7 +157,7 @@ final class AppleAppStoreBridge extends BridgeAbstract
 
     private function getAppData(): array
     {
-        $url = $this->makeHtmlUrl();
+        $url = $this->resolveHtmlUrl();
         $content = getContents($url);
 
         $startTag = '<script type="application/json" id="serialized-server-data">';
@@ -212,7 +245,7 @@ final class AppleAppStoreBridge extends BridgeAbstract
         return $versionHistory;
     }
 
-    public function collectData()
+    public function collectData(): void
     {
         $data = $this->getAppData();
 
@@ -220,31 +253,32 @@ final class AppleAppStoreBridge extends BridgeAbstract
 
         $versionHistory = $this->getVersionHistory($data);
 
+        if ($versionHistory === []) {
+            throwServerException('No version history found. The site may have changed its layout or the app has no updates.');
+        }
+
+        $cleanItemUri = $this->resolveHtmlUrl();
+
         foreach ($versionHistory as $entry) {
             $version = $entry['versionDisplay'] ?? 'Unknown Version';
             $releaseNotes = $entry['releaseNotes'] ?? 'No release notes available';
             $releaseDate = $entry['releaseDate'] ?? 'Unknown Date';
 
-            $item = [];
-            $item['title'] = $version;
-
             $contentHtml = nl2br(e($releaseNotes));
             if ($contentHtml === '') {
                 $contentHtml = 'No release notes available';
             }
-            $item['content'] = $contentHtml;
 
-            $parsedTimestamp = strtotime($releaseDate);
-            if ($parsedTimestamp !== false) {
-                $item['timestamp'] = $parsedTimestamp;
-            } else {
-                $item['timestamp'] = $releaseDate;
-            }
+            $parsedTimestamp = strtotime((string)$releaseDate);
 
-            $item['author'] = $author;
-            $item['uri'] = $data['canonicalURL'] ?? $this->makeHtmlUrl();
-
-            $this->items[] = $item;
+            $this->items[] = [
+                'title'     => $version,
+                'uri'       => $cleanItemUri,
+                'content'   => $contentHtml,
+                'timestamp' => $parsedTimestamp !== false ? $parsedTimestamp : time(),
+                'author'    => $author,
+                'uid'       => $version,
+            ];
         }
     }
 }
