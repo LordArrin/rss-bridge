@@ -55,8 +55,14 @@ final class RssBridge
             CacheMiddleware::class,
         ];
 
-        // Process through middleware chain
-        return $this->processMiddlewares($middlewares, $request, $actionHandler);
+        // The action receives the very same Request object that flows
+        // through the middleware chain (see processMiddlewares), so
+        // attributes set by the action (e.g. the resolved cache TTL in
+        // DisplayAction) are visible to middlewares like CacheMiddleware
+        // when it decorates the response on the way back out.
+        return $this->processMiddlewares($middlewares, $request, function (Request $sharedRequest) use ($actionHandler): Response {
+            return $actionHandler($sharedRequest);
+        });
     }
 
     private function processMiddlewares(
