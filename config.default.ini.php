@@ -78,6 +78,14 @@ max_filesize = 40
 type = "memcached"
 custom_timeout = false
 
+; Feed responses (HTTP 200) carry Cache-Control: public, max-age=N,
+; stale-while-revalidate=M where N equals the effective server-side cache
+; timeout (the bridge's CACHE_TIMEOUT, or ?_cache_timeout when
+; custom_timeout = true) and M covers the single-flight regeneration lease.
+; They also expose a strong ETag validator, so readers and intermediaries
+; can revalidate with If-None-Match (or If-Modified-Since) and receive a
+; body-less 304 Not Modified whenever the feed content has not changed.
+
 [proxy_profile_direct]
 
 type = "Direct"

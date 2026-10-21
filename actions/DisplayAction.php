@@ -73,16 +73,22 @@ final class DisplayAction implements ActionInterface
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => $message]), 500);
         }
 
+        // Effective server-side freshness window for this feed. Computed
+        // before rendering so it can travel with the response (via a request
+        // attribute) and be reused by CacheMiddleware for the client-facing
+        // Cache-Control header.
+        $ttl = $request->get('_cache_timeout');
+        if (Configuration::getConfig('cache', 'custom_timeout') === true && isset($ttl) === true) {
+            $ttl = (int) $ttl;
+            $ttl = max(1, min($ttl, 86400));
+        } else {
+            $ttl = $bridge->getCacheTimeout();
+        }
+        $request = $request->withAttribute('_resolved_cache_timeout', (int) $ttl);
+
         $response = $this->createResponse($request, $bridge, $format);
 
         if ($response->getCode() === 200) {
-            $ttl = $request->get('_cache_timeout');
-            if (Configuration::getConfig('cache', 'custom_timeout') === true && isset($ttl) === true) {
-                $ttl = (int) $ttl;
-                $ttl = max(1, min($ttl, 86400));
-            } else {
-                $ttl = $bridge->getCacheTimeout();
-            }
             if ((int) $ttl > 0) {
                 $this->cache->set($cacheKey, $response, (int) $ttl);
             }
@@ -154,17 +160,74 @@ final class DisplayAction implements ActionInterface
         $now = time();
         $formatObj->setLastModified($now);
 
-        $headers = [
-            'last-modified' => gmdate('D, d M Y H:i:s ', $now) . 'GMT',
-            'content-type'  => $formatObj->getMimeType() . '; charset=UTF-8',
-        ];
-
         $body = $formatObj->render();
 
         ini_set('mbstring.substitute_character', 'none');
         $body = mb_convert_encoding($body, 'UTF-8', 'UTF-8');
 
+        // Feed rendering is mostly deterministic: when the freshly generated
+        // body is byte-for-byte identical to the one we served previously,
+        // keep the old Last-Modified timestamp and ETag. Readers that cached
+        // the unchanged feed then still match on their stored validators
+        // (If-Modified-Since / If-None-Match) and receive a body-less 304
+        // instead of pulling the full feed down again after every cache
+        // regeneration. The previous entry travels through the cache as the
+        // Response object itself, so no extra bookkeeping is needed.
+        $lastModifiedTimestamp = $now;
+        $etag = self::createETag($body);
+        $previousEntry = $this->cache->getWithStale($this->createCacheKey($request))['stale'] ?? null;
+        if ($previousEntry instanceof Response && $previousEntry->getCode() === 200) {
+            $previousEtag = $previousEntry->getHeader('etag');
+            $sameContent = $previousEtag === $etag
+                || ($previousEtag === null && $previousEntry->getBody() === $body);
+            if ($sameContent === true) {
+                $previousLastModified = strtotime((string) $previousEntry->getHeader('last-modified'));
+                if ($previousLastModified !== false && $previousLastModified < $now) {
+                    $lastModifiedTimestamp = $previousLastModified;
+                    // Re-render with the original timestamp so formats that
+                    // embed it in the document (e.g. Atom's <updated>) stay
+                    // consistent with the response headers.
+                    $formatObj->setLastModified($previousLastModified);
+                    $body = mb_convert_encoding($formatObj->render(), 'UTF-8', 'UTF-8');
+                    // Reuse the previous tag so clients never see two valid
+                    // representations of the same content.
+                    $etag = $previousEtag;
+                }
+            }
+        }
+
+        $headers = [
+            'last-modified' => gmdate('D, d M Y H:i:s ', $lastModifiedTimestamp) . 'GMT',
+            // Strong ETag over the exact bytes being sent: readers and
+            // proxies can revalidate cheaply with If-None-Match and get a
+            // body-less 304 whenever the feed has not changed (conditional
+            // handling lives in CacheMiddleware).
+            'etag' => $etag,
+            'content-type'  => $formatObj->getMimeType() . '; charset=UTF-8',
+        ];
+
         return new Response($body, 200, $headers);
+    }
+
+    /**
+     * Builds a strong ETag (RFC 9110 section 8.8.3) from the response body:
+     * md5 keeps the tag short and fixed-size regardless of feed length.
+     */
+    private static function createETag(string $body): string
+    {
+        return '"' . md5($body) . '"';
+    }
+
+    /**
+     * Cache key for the request parameters. Must stay in sync with the key
+     * built in __invoke() and with CacheMiddleware::createCacheKey().
+     */
+    private function createCacheKey(Request $request): string
+    {
+        $params = $request->toArray();
+        unset($params['token'], $params['action']);
+        ksort($params);
+        return 'http_' . json_encode($params);
     }
 
     private function createFeedItemFromException(\Throwable $e, BridgeAbstract $bridge): array
