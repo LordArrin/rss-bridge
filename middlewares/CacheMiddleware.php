@@ -415,7 +415,7 @@ final class CacheMiddleware implements Middleware
         if (str_starts_with($etag, 'W/') === true || str_starts_with($etag, 'w/') === true) {
             $etag = substr($etag, 2);
         }
-        return trim($etag, "\"");
+        return trim($etag, '"');
     }
 
     /**
