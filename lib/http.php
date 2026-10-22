@@ -572,7 +572,24 @@ final class CurlHttpClient implements HttpClient
 
         $config = array_merge($defaultConfig, $config);
 
-        $deadline = microtime(true) + ((int)$config['timeout'] * (1 + (int)$config['retries'])) * 1.35;
+        // Overall time budget for this request (all attempts and backoff
+        // delays included). Every individual attempt is then capped by the
+        // time remaining at the start of that attempt ("deadline-aware"
+        // timeout), so retries can never push the total runtime past the
+        // deadline and get the PHP-FPM worker force-killed mid-response,
+        // which would produce truncated/incorrect output.
+        $budget = ((int)$config['timeout'] * (1 + (int)$config['retries'])) * 1.35;
+
+        // If a PHP max_execution_time is configured (typical in FPM setups),
+        // clamp the budget to it minus a small safety margin so the client
+        // finishes gracefully before PHP aborts the script.
+        $maxExec = (int)ini_get('max_execution_time');
+        if ($maxExec > 0) {
+            $budget = min($budget, max(1.0, $maxExec - 2.0));
+        }
+
+        // Preserve an already-propagated deadline across internal redirects.
+        $deadline = $config['_deadline'] ?? (microtime(true) + $budget);
 
         $httpHeaders = [];
         foreach ($config['headers'] as $name => $value) {
@@ -664,9 +681,28 @@ final class CurlHttpClient implements HttpClient
         $body = false;
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-            if ($attempt > 1 && (microtime(true) + $config['timeout']) > $deadline) {
+            // Deadline-aware timeout: never let a single attempt run longer
+            // than the time left until the overall deadline. This keeps the
+            // whole request (including retries and backoff delays) inside the
+            // budget instead of being cut off by PHP-FPM's hard timeout, which
+            // would return truncated or otherwise incorrect responses.
+            $remaining = $deadline - microtime(true);
+            if ($remaining < 1) {
+                if ($attempt === 1) {
+                    throw new HttpException(sprintf(
+                        'Refusing to request %s: no time left within the request deadline',
+                        $url
+                    ));
+                }
                 break;
             }
+            $attemptTimeout = min((int)$config['timeout'], (int)ceil($remaining));
+            $attemptConnectTimeout = min(
+                (int)$curlOptions[CURLOPT_CONNECTTIMEOUT],
+                max(1, $attemptTimeout - 1)
+            );
+            curl_setopt($ch, CURLOPT_TIMEOUT, $attemptTimeout);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $attemptConnectTimeout);
 
             $responseHeaders = [];
             curl_setopt($ch, CURLOPT_HEADERFUNCTION, $headerCallback);
@@ -693,11 +729,16 @@ final class CurlHttpClient implements HttpClient
             }
 
             if ($attempt < $maxAttempts) {
+                // Back off only as long as the deadline allows; if the delay
+                // would consume nearly all of the remaining budget, stop
+                // retrying instead of starting an attempt that is doomed to
+                // be truncated.
+                $remainingUs = (int)(($deadline - microtime(true)) * 1_000_000);
                 $delayUs = min(
                     (2 ** ($attempt - 1)) * 300_000 + mt_rand(0, 200_000),
-                    max(0, (int)(($deadline - microtime(true)) * 1_000_000))
+                    max(0, $remainingUs - 1_000_000)
                 );
-                if ($delayUs <= 0) {
+                if ($remainingUs < 1_000_000 || $delayUs <= 0) {
                     break;
                 }
                 usleep($delayUs);
@@ -772,6 +813,9 @@ final class CurlHttpClient implements HttpClient
                 }
 
                 $config['_redirect_count'] = $redirectCount + 1;
+                // Propagate the deadline so a chain of internal redirects
+                // shares one single time budget (deadline-aware across hops).
+                $config['_deadline'] = $deadline;
                 return $this->request($location, $config);
             }
 
