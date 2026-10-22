@@ -702,9 +702,19 @@ final class CurlHttpClient implements HttpClient
             CURLE_GOT_NOTHING,
             CURLE_PARTIAL_FILE,
             CURLE_SSL_CONNECT_ERROR,
-            CURLE_HTTP2,
-            CURLE_HTTP2_STREAM,
         ];
+
+        if (defined('CURLE_HTTP2') === true) {
+            $transientErrnos[] = (int) constant('CURLE_HTTP2');
+        } else {
+            $transientErrnos[] = 16; // Fallback for CURLE_HTTP2
+        }
+
+        if (defined('CURLE_HTTP2_STREAM') === true) {
+            $transientErrnos[] = (int) constant('CURLE_HTTP2_STREAM');
+        } else {
+            $transientErrnos[] = 96; // Fallback for CURLE_HTTP2_STREAM
+        }
         if ((int)$config['retries'] === 0) {
             $maxAttempts = 2;
         }
