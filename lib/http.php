@@ -186,7 +186,9 @@ final class IpResolver
      */
     public function resolve(string $host): array
     {
-        $host = strtolower(trim($host, '.'));
+        // rtrim (not trim!) so a leading dot — the "exact host" cookie-pinning
+        // form — survives and stays distinguishable from the bare name.
+        $host = strtolower(rtrim($host, '.'));
         if ($host === '') {
             return [];
         }
@@ -230,7 +232,7 @@ final class IpResolver
             self::$cache = [];
             return;
         }
-        unset(self::$cache[strtolower(trim($host, '.'))]);
+        unset(self::$cache[strtolower(rtrim($host, '.'))]);
     }
 
     public function isAllowed(string $ip): bool
@@ -465,6 +467,15 @@ final class CurlHttpClient implements HttpClient
 
         $host = $parsed['host'];
         $port = $parsed['port'];
+
+        // Hostnames with a leading dot ("exact host" cookie form, e.g.
+        // ".example.com") cannot be expressed as a cURL pinning entry
+        // ("host:port:ip" would be parsed as an empty host), and such URLs
+        // are not fetched in practice. Skip pinning; the SSRF check below
+        // still applies to the resolved address.
+        if (str_starts_with($host, '.') === true) {
+            return [];
+        }
 
         // Literal IP addresses need no resolution step: validate and let cURL
         // connect directly.
@@ -774,6 +785,8 @@ final class CurlHttpClient implements HttpClient
         }
 
         if ($statusCode >= 300 && $statusCode < 400 && $statusCode !== 304) {
+            // The header callback stores every raw "Location:" value in
+            // lowercase form, so read it back through the same key.
             $location = $responseHeaders['location'][count($responseHeaders['location']) - 1] ?? 'unknown';
             $originalParsed = self::parseHttpUrl($url);
 
@@ -798,12 +811,7 @@ final class CurlHttpClient implements HttpClient
 
             $redirectParsed = self::parseHttpUrl($location);
 
-            // FIX: Use isSameEffectiveDomain to allow www <-> non-www redirects safely
-            if (
-                $originalParsed !== null
-                && $redirectParsed !== null
-                && self::isSameEffectiveDomain($originalParsed['host'], $redirectParsed['host']) === true
-            ) {
+            if (self::isSameEffectiveDomain($originalParsed['host'], $redirectParsed['host']) === true) {
                 $redirectCount = $config['_redirect_count'] ?? 0;
                 if ($redirectCount >= 5) {
                     throw new HttpException(sprintf(
