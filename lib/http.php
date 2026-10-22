@@ -516,13 +516,72 @@ final class CurlHttpClient implements HttpClient
     }
 
     /**
+     * Returns the registrable domain (eTLD+1) of a host, approximated with a
+     * small list of common two-level public suffixes (co.uk, com.au, ...).
+     * IP addresses have no registrable domain and yield null.
+     *
+     * @param string $host Lowercased hostname.
+     * @return string|null The registrable domain, or null for IPs/edge cases.
+     */
+    private static function registrableDomain(string $host): ?string
+    {
+        if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+            return null;
+        }
+
+        $labels = explode('.', $host);
+        $count = count($labels);
+        if ($count < 2) {
+            return null; // single label (localhost, intranet names)
+        }
+
+        // Two-level public suffixes: 'example.co.uk' -> 'example.co.uk',
+        // 'www.bbc.co.uk' -> 'bbc.co.uk'
+        $twoLevelSuffixes = [
+            'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'me.uk', 'ltd.uk', 'plc.uk',
+            'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au',
+            'co.nz', 'net.nz', 'org.nz', 'govt.nz',
+            'co.za', 'org.za', 'web.za',
+            'com.br', 'net.br', 'org.br', 'gov.br',
+            'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'go.jp',
+            'co.kr', 'or.kr', 'ne.kr',
+            'com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn',
+            'com.mx', 'com.ar', 'com.tr', 'com.pl', 'com.ua', 'com.ru',
+        ];
+
+        $suffixLength = 1;
+        if ($count >= 3) {
+            $candidateSuffix = $labels[$count - 2] . '.' . $labels[$count - 1];
+            if (in_array($candidateSuffix, $twoLevelSuffixes, true) === true) {
+                $suffixLength = 2;
+            }
+        }
+
+        if ($count <= $suffixLength) {
+            // Host *is* the public suffix itself (e.g. 'co.uk') — treat it as
+            // its own registrable domain so exact matches still compare equal.
+            return $host;
+        }
+
+        return implode('.', array_slice($labels, -$suffixLength - 1));
+    }
+
+    /**
      * Checks if two hosts belong to the same effective domain tree.
      * This allows safe canonical redirects (e.g., www.example.com <-> example.com)
      * while still blocking actual cross-domain SSRF bypasses.
      *
+     * Redirects are allowed when either host is a suffix of the other (covers
+     * apex <-> subdomain hops such as 'www.djmag.com' <-> 'djmag.com') or when
+     * both share the same registrable domain (eTLD+1), which permits sibling
+     * subdomains like 'apod.nasa.gov' -> 'science.nasa.gov'. Because the target
+     * URL is re-validated by IpResolver on the follow-up request, this does not
+     * weaken SSRF protection: hosts that resolve only to private/reserved ranges
+     * remain blocked even after an allowed redirect.
+     *
      * @param string $host1 The original host.
      * @param string $host2 The redirect target host.
-     * @return bool True if they are the same domain or subdomain of each other.
+     * @return bool True if they belong to the same registrable domain tree.
      */
     private static function isSameEffectiveDomain(string $host1, string $host2): bool
     {
@@ -530,10 +589,18 @@ final class CurlHttpClient implements HttpClient
             return true;
         }
 
-        // Allow redirects between a domain and its subdomains.
+        // Suffix relationship: one host is the apex of the other.
         // e.g., 'www.djmag.com' ends with '.djmag.com' -> True (Safe)
-        // e.g., 'evil.com' ends with '.djmag.com' -> False (Blocked)
         if (str_ends_with($host1, '.' . $host2) === true || str_ends_with($host2, '.' . $host1) === true) {
+            return true;
+        }
+
+        // Same registrable domain (eTLD+1): sibling subdomains of one site.
+        // e.g., 'apod.nasa.gov' and 'science.nasa.gov' -> 'nasa.gov' -> True
+        // e.g., 'evil.com' vs 'nasa.gov' -> False (Blocked)
+        $domain1 = self::registrableDomain($host1);
+        $domain2 = self::registrableDomain($host2);
+        if ($domain1 !== null && $domain1 === $domain2) {
             return true;
         }
 
