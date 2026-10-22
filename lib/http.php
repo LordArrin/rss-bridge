@@ -21,10 +21,43 @@ class HttpException extends \Exception
 {
     public ?Response $response;
 
+    /**
+     * Delay hint parsed from the upstream Retry-After header (seconds), when
+     * present. Readers and our own cache layer use it to back off exactly as
+     * long as the upstream asks instead of hammering it with revalidation
+     * requests, which is what turns a transient 429 into a permanent ban.
+     */
+    public ?int $retryAfter = null;
+
     public function __construct(string $message = '', int $statusCode = 0, ?Response $response = null)
     {
         parent::__construct($message, $statusCode);
         $this->response = $response ?? new Response('', 0);
+        if ($this->response !== null) {
+            $this->retryAfter = self::parseRetryAfter($this->response->getHeader('retry-after'));
+        }
+    }
+
+    /**
+     * Parses a Retry-After header value per RFC 9110 section 10.2.3: either
+     * delta-seconds or an HTTP-date. Returns null when absent/unparseable,
+     * and clamps absurd values so a bogus "Retry-After: 999999999" cannot
+     * wedge negative caching for years.
+     */
+    public static function parseRetryAfter(?string $value): ?int
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+        $value = trim($value);
+        if (ctype_digit($value) === true) {
+            return max(0, min(86400, (int) $value));
+        }
+        $timestamp = strtotime($value);
+        if ($timestamp === false) {
+            return null;
+        }
+        return max(0, min(86400, $timestamp - time()));
     }
 
     public static function fromResponse(Response $response, string $url): HttpException
