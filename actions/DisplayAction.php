@@ -124,12 +124,27 @@ final class DisplayAction implements ActionInterface
                 $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
             } elseif ($e instanceof RateLimitException) {
                 $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
-                return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), 429);
+                return new Response(
+                    render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]),
+                    429,
+                    self::rateLimitHeaders($e)
+                );
             } elseif ($e instanceof HttpException) {
                 $code = $e->getCode();
                 if ($code >= 400 && $code <= 599) {
                     $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
-                    return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $code);
+                    // Forward the upstream Retry-After hint (429/503 from the
+                    // origin server) to the reader. FreshRSS and Capy Reader
+                    // honor it before their next poll; without it they fall
+                    // back to re-polling on their own schedule and keep
+                    // hitting an endpoint that just told us to slow down.
+                    $headers = [];
+                    if ($e instanceof RateLimitException) {
+                        $headers = self::rateLimitHeaders($e);
+                    } elseif ($e->retryAfter !== null && in_array($code, [429, 503], true) === true) {
+                        $headers['retry-after'] = (string) $e->retryAfter;
+                    }
+                    return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $code, $headers);
                 }
             } else {
                 $this->logger->error(sprintf('Exception in DisplayAction(%s)', $bridge->getShortName()), ['e' => $e]);
@@ -207,6 +222,25 @@ final class DisplayAction implements ActionInterface
         ];
 
         return new Response($body, 200, $headers);
+    }
+
+    /**
+     * Builds the headers for a 429 response. Rate-limiting readers (FreshRSS
+     * cron, Capy Reader polling) back off when Retry-After is present; the
+     * default window matches the negative-caching TTL in CacheMiddleware so
+     * what the reader sees and what we actually cache stay in sync.
+     *
+     * @return array<string,string>
+     */
+    private static function rateLimitHeaders(\Throwable $e): array
+    {
+        $retryAfter = 3600;
+        if ($e instanceof \RSSBridge\Http\HttpException && $e->retryAfter !== null) {
+            // Honor the upstream hint, but never shorter than our own
+            // negative-cache window would suggest and never longer than a day.
+            $retryAfter = max(60, min(86400, $e->retryAfter));
+        }
+        return ['retry-after' => (string) $retryAfter];
     }
 
     /**

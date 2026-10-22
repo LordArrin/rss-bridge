@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Middlewares;
 
+use RSSBridge\Http\HttpException;
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
 use RSSBridge\Caches\CacheInterface;
@@ -152,7 +153,13 @@ final class CacheMiddleware implements Middleware
         ) {
             $stale = $this->serveStale($cacheKey, $response);
             if ($stale !== null) {
-                return $stale;
+                // We are intentionally serving expired-but-valid data while
+                // regeneration failed. Tell the reader (FreshRSS cron, Capy
+                // Reader polling) exactly when to come back so it does not
+                // re-hit us every minute against a feed whose upstream is
+                // down or rate-limiting.
+                $retryAfter = min(max(self::STALE_RETRY_AFTER, $this->resolveMaxAge($request)), 3600);
+                return $stale->withHeader('retry-after', (string) $retryAfter);
             }
         }
 
@@ -176,6 +183,19 @@ final class CacheMiddleware implements Middleware
             // Negative caching must be short: a stale 429/500 would block the
             // feed for every user while upstream is temporarily unavailable.
             $ttl = 60 + random_int(0, 120);
+
+            // When the response carries a Retry-After hint (ours or the
+            // upstream's), align both the negative-cache TTL and the header
+            // we return to the reader so they back off for exactly as long as
+            // we do. Without this, FreshRSS/Capy Reader re-poll immediately,
+            // trigger another regeneration against a rate-limiting upstream,
+            // and deepen the ban.
+            $retryAfterHint = HttpException::parseRetryAfter($response->getHeader('retry-after'));
+            if ($retryAfterHint !== null && $code >= 400) {
+                $ttl = max(30, min(1800, $retryAfterHint));
+                $response = $response->withHeader('retry-after', (string) $ttl);
+            }
+
             $this->cache->set($cacheKey, $response, $ttl);
         }
 
@@ -428,7 +448,7 @@ final class CacheMiddleware implements Middleware
      */
     private static function createNotModifiedHeaders(array $validators): array
     {
-        $headers = ['vary' => 'Accept-Encoding, Accept-Language, Cookie'];
+        $headers = self::addDateHeader(['vary' => 'Accept-Encoding, Accept-Language, Cookie']);
         foreach ($validators as $name => $value) {
             if (is_string($value) === true && $value !== '') {
                 $headers[$name] = $value;
@@ -445,5 +465,24 @@ final class CacheMiddleware implements Middleware
         }
         ksort($params);
         return 'http_' . json_encode($params);
+    }
+
+    /**
+     * RFC 7231 section 7.1.1.2: a 304 must carry the headers whose values
+     * would have been sent with a 200 for the same request - Date, ETag/
+     * Last-Modified and Vary. PHP emits Date automatically, so we add it
+     * explicitly here because some readers (older FreshRSS curl-based poller
+     * versions and Capy Reader) use it to sanity-check the freshness
+     * information attached to the cached entry they keep on disk.
+     *
+     * @param array<string,string> $headers
+     * @return array<string,string>
+     */
+    private static function addDateHeader(array $headers): array
+    {
+        if (isset($headers['date']) === false) {
+            $headers['date'] = gmdate('D, d M Y H:i:s') . ' GMT';
+        }
+        return $headers;
     }
 }

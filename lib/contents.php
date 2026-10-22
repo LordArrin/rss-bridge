@@ -38,6 +38,56 @@ function get_sitemap(string $url): array
 }
 
 /**
+ * Computes the unix timestamp until which a cached upstream response may be
+ * served without contacting the origin, based on the server's own freshness
+ * signals (RFC 9110 section 4.2.1 priority order):
+ *   - Cache-Control: no-store / no-cache / must-revalidate -> never fresh
+ *   - Cache-Control: max-age=N (relative to the Date header)
+ *   - Expires header (absolute; "0" and malformed dates mean expired)
+ * Returns null when the response carries no usable freshness information,
+ * in which case callers fall back to their conditional-request behavior.
+ */
+function responseFreshUntil(Response $response): ?int
+{
+    $cacheControl = $response->getHeader('cache-control');
+    if ($cacheControl !== null && $cacheControl !== '') {
+        $directives = array_map('trim', explode(',', strtolower($cacheControl)));
+        foreach (['no-store', 'no-cache', 'must-revalidate'] as $blocking) {
+            if (in_array($blocking, $directives, true) === true) {
+                return null;
+            }
+        }
+        foreach ($directives as $directive) {
+            if (str_starts_with($directive, 'max-age=') === true) {
+                $seconds = (int) substr($directive, strlen('max-age='));
+                // Anchor on the response Date when present; clock skew
+                // between us and the origin otherwise makes a bare
+                // time() + max-age either too generous or too short.
+                $date = $response->getHeader('date');
+                $anchor = $date !== null ? strtotime($date) : false;
+                if ($anchor === false) {
+                    $anchor = time();
+                }
+                return $anchor + max(0, $seconds);
+            }
+        }
+    }
+
+    $expires = $response->getHeader('expires');
+    if ($expires !== null && $expires !== '') {
+        // RFC 7234: an HTTP-date past value means fresh; "0" (and other
+        // legacy junk) means already expired.
+        $timestamp = strtotime($expires);
+        if ($timestamp === false) {
+            return time() - 1;
+        }
+        return $timestamp;
+    }
+
+    return null;
+}
+
+/**
  * Fetch data from an http url
  *
  * @param array $httpHeaders E.g. ['Content-type: text/plain']
@@ -90,6 +140,21 @@ function getContents(
         $cachedResponse = null;
     }
     if ($cachedResponse !== null) {
+        // Honor the upstream's own freshness signal (Cache-Control:
+        // max-age / Expires): while the cached copy is still fresh we
+        // return it directly instead of revalidating on every reader
+        // poll. Without this, a FreshRSS cron hitting the same bridge
+        // many times per minute turns into one conditional request to
+        // the origin per poll - exactly the pattern that gets an
+        // instance rate-limited or IP-banned.
+        $freshUntil = responseFreshUntil($cachedResponse);
+        if ($freshUntil !== null && $freshUntil > time()) {
+            if ($returnFull === true) {
+                return $cachedResponse;
+            }
+            return $cachedResponse->getBody();
+        }
+
         $lastModified = $cachedResponse->getHeader('last-modified');
         if ($lastModified !== null && $lastModified !== '') {
             try {
