@@ -10,7 +10,7 @@ final class NasaApodBridge extends FeedExpander
 {
     public const NAME = 'NASA Picture of the Day';
     public const URI = 'https://science.nasa.gov/apod/';
-    public const DESCRIPTION = 'Returns the latest NASA Picture of the Day with explanations';
+    public const DESCRIPTION = 'Returns the 3 latest NASA APOD pictures and explanations via official RSS feed';
     public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 43200;
 
@@ -21,17 +21,20 @@ final class NasaApodBridge extends FeedExpander
 
     protected function parseItem(array $item): array|false
     {
-        if (!isset($item['apod']) || !is_array($item['apod'])) {
+        $apod = $item['apod'] ?? null;
+
+        if (is_array($apod) === false) {
             return false;
         }
 
-        $apod = $item['apod'];
-
         $media = '';
-        if (!empty($apod['hdurl'])) {
-            $imageUri = htmlspecialchars((string) $apod['hdurl'], ENT_QUOTES, 'UTF-8');
+        $hdurl = (string) ($apod['hdurl'] ?? '');
+
+        if ($hdurl === '') {
+        } else {
+            $imageUri = htmlspecialchars($hdurl, ENT_QUOTES, 'UTF-8');
             $imageAlt = htmlspecialchars((string) ($apod['alt'] ?? ''), ENT_QUOTES, 'UTF-8');
-            
+
             $media = sprintf(
                 '<a href="%s"><img src="%s" alt="%s" /></a><br />',
                 $imageUri,
@@ -41,13 +44,13 @@ final class NasaApodBridge extends FeedExpander
         }
 
         $explanation = (string) ($apod['explanation'] ?? '');
-        $cleanExplanation = preg_replace(
+        $cleaned = preg_replace(
             '/\A(<strong>Explanation:\s*<\/strong>\s*)<b>Explanation<\/b>\s*:\s*/iu',
             '$1',
             $explanation
         );
-        
-        $item['content'] = $media . ($cleanExplanation ?? $explanation);
+
+        $item['content'] = $media . ($cleaned ?? $explanation);
 
         return $item;
     }

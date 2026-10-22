@@ -73,10 +73,6 @@ final class DisplayAction implements ActionInterface
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => $message]), 500);
         }
 
-        // Effective server-side freshness window for this feed. Computed
-        // before rendering so it can travel with the response (via a request
-        // attribute) and be reused by CacheMiddleware for the client-facing
-        // Cache-Control header.
         $ttl = $request->get('_cache_timeout');
         if (Configuration::getConfig('cache', 'custom_timeout') === true && isset($ttl) === true) {
             $ttl = (int) $ttl;
@@ -133,17 +129,12 @@ final class DisplayAction implements ActionInterface
                 $code = $e->getCode();
                 if ($code >= 400 && $code <= 599) {
                     $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
-                    // Forward the upstream Retry-After hint (429/503 from the
-                    // origin server) to the reader. FreshRSS and Capy Reader
-                    // honor it before their next poll; without it they fall
-                    // back to re-polling on their own schedule and keep
-                    // hitting an endpoint that just told us to slow down.
+
                     $headers = [];
-                    if ($e instanceof RateLimitException) {
-                        $headers = self::rateLimitHeaders($e);
-                    } elseif ($e->retryAfter !== null && in_array($code, [429, 503], true) === true) {
+                    if ($e->retryAfter !== null && in_array($code, [429, 503], true) === true) {
                         $headers['retry-after'] = (string) $e->retryAfter;
                     }
+
                     return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $code, $headers);
                 }
             } else {
@@ -180,14 +171,6 @@ final class DisplayAction implements ActionInterface
         ini_set('mbstring.substitute_character', 'none');
         $body = mb_convert_encoding($body, 'UTF-8', 'UTF-8');
 
-        // Feed rendering is mostly deterministic: when the freshly generated
-        // body is byte-for-byte identical to the one we served previously,
-        // keep the old Last-Modified timestamp and ETag. Readers that cached
-        // the unchanged feed then still match on their stored validators
-        // (If-Modified-Since / If-None-Match) and receive a body-less 304
-        // instead of pulling the full feed down again after every cache
-        // regeneration. The previous entry travels through the cache as the
-        // Response object itself, so no extra bookkeeping is needed.
         $lastModifiedTimestamp = $now;
         $etag = self::createETag($body);
         $previousEntry = $this->cache->getWithStale($this->createCacheKey($request))['stale'] ?? null;
@@ -199,13 +182,8 @@ final class DisplayAction implements ActionInterface
                 $previousLastModified = strtotime((string) $previousEntry->getHeader('last-modified'));
                 if ($previousLastModified !== false && $previousLastModified < $now) {
                     $lastModifiedTimestamp = $previousLastModified;
-                    // Re-render with the original timestamp so formats that
-                    // embed it in the document (e.g. Atom's <updated>) stay
-                    // consistent with the response headers.
                     $formatObj->setLastModified($previousLastModified);
                     $body = mb_convert_encoding($formatObj->render(), 'UTF-8', 'UTF-8');
-                    // Reuse the previous tag so clients never see two valid
-                    // representations of the same content.
                     $etag = $previousEtag;
                 }
             }
@@ -213,10 +191,6 @@ final class DisplayAction implements ActionInterface
 
         $headers = [
             'last-modified' => gmdate('D, d M Y H:i:s ', $lastModifiedTimestamp) . 'GMT',
-            // Strong ETag over the exact bytes being sent: readers and
-            // proxies can revalidate cheaply with If-None-Match and get a
-            // body-less 304 whenever the feed has not changed (conditional
-            // handling lives in CacheMiddleware).
             'etag' => $etag,
             'content-type'  => $formatObj->getMimeType() . '; charset=UTF-8',
         ];
@@ -225,8 +199,8 @@ final class DisplayAction implements ActionInterface
     }
 
     /**
-     * Builds the headers for a 429 response. Rate-limiting readers (FreshRSS
-     * cron, Capy Reader polling) back off when Retry-After is present; the
+     * Builds the headers for a 429 response. Rate-limiting readers
+     * back off when Retry-After is present; the
      * default window matches the negative-caching TTL in CacheMiddleware so
      * what the reader sees and what we actually cache stay in sync.
      *
@@ -235,9 +209,7 @@ final class DisplayAction implements ActionInterface
     private static function rateLimitHeaders(\Throwable $e): array
     {
         $retryAfter = 3600;
-        if ($e instanceof \RSSBridge\Http\HttpException && $e->retryAfter !== null) {
-            // Honor the upstream hint, but never shorter than our own
-            // negative-cache window would suggest and never longer than a day.
+        if ($e instanceof HttpException && $e->retryAfter !== null) {
             $retryAfter = max(60, min(86400, $e->retryAfter));
         }
         return ['retry-after' => (string) $retryAfter];

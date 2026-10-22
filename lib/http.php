@@ -3,10 +3,6 @@
 /**
  * HTTP client module containing request/response handling.
  *
- * This file contains multiple classes and an interface by design
- * (single-module approach). PSR-1 single-class-per-file rule is
- * intentionally disabled for this file.
- *
  * @phpcs:disable PSR1.Classes.ClassDeclaration.MultipleClasses
  * @phpcs:disable Generic.Files.OneClassPerFile.MultipleFound
  * @phpcs:disable Generic.Files.OneInterfacePerFile.MultipleFound
@@ -22,10 +18,7 @@ class HttpException extends \Exception
     public ?Response $response;
 
     /**
-     * Delay hint parsed from the upstream Retry-After header (seconds), when
-     * present. Readers and our own cache layer use it to back off exactly as
-     * long as the upstream asks instead of hammering it with revalidation
-     * requests, which is what turns a transient 429 into a permanent ban.
+     * Delay hint parsed from the upstream Retry-After header (seconds).
      */
     public ?int $retryAfter = null;
 
@@ -33,16 +26,11 @@ class HttpException extends \Exception
     {
         parent::__construct($message, $statusCode);
         $this->response = $response ?? new Response('', 0);
-        if ($this->response !== null) {
-            $this->retryAfter = self::parseRetryAfter($this->response->getHeader('retry-after'));
-        }
+        $this->retryAfter = self::parseRetryAfter($this->response->getHeader('retry-after'));
     }
 
     /**
-     * Parses a Retry-After header value per RFC 9110 section 10.2.3: either
-     * delta-seconds or an HTTP-date. Returns null when absent/unparseable,
-     * and clamps absurd values so a bogus "Retry-After: 999999999" cannot
-     * wedge negative caching for years.
+     * Parses a Retry-After header value per RFC 9110 section 10.2.3.
      */
     public static function parseRetryAfter(?string $value): ?int
     {
@@ -136,12 +124,6 @@ final class IpResolver
     private static array $cache = [];
 
     private const CACHE_TTL = 60;
-
-    /**
-     * Shorter TTL for failed lookups: a rebinding attacker who temporarily
-     * makes DNS unavailable must not be able to force repeated uncached
-     * re-resolutions (which would widen the TOCTOU window and amplify load).
-     */
     private const NEGATIVE_CACHE_TTL = 10;
 
     /**
@@ -184,10 +166,6 @@ final class IpResolver
         $this->allowedCidrs = array_values(array_unique($mergedAllowed));
     }
 
-    /**
-     * Converts a single IP address to a CIDR notation (/32 for IPv4, /128 for IPv6).
-     * If the input is already a CIDR, returns it unchanged.
-     */
     private static function normalizeToCidr(string $input): string
     {
         if ($input === '') {
@@ -206,21 +184,12 @@ final class IpResolver
     }
 
     /**
-     * Resolves a hostname to its IP addresses through the process-wide DNS
-     * cache.
-     *
-     * The cache is the foundation of the DNS-rebinding protection: every
-     * outbound request pins the connection (via CURLOPT_RESOLVE) to exactly
-     * the IPs vetted here, so the "resolve -> check -> connect" sequence uses
-     * one single immutable resolution result. Flushing an entry (see
-     * clearCache()) forces a fresh lookup on the next request.
+     * Resolves a hostname to its IP addresses through the process-wide DNS cache.
      *
      * @return string[]
      */
     public function resolve(string $host): array
     {
-        // rtrim (not trim!) so a leading dot — the "exact host" cookie-pinning
-        // form — survives and stays distinguishable from the bare name.
         $host = strtolower(rtrim($host, '.'));
         if ($host === '') {
             return [];
@@ -255,10 +224,6 @@ final class IpResolver
         return $ips;
     }
 
-    /**
-     * Drops cached DNS answers for one host (or all hosts when omitted).
-     * The next resolve() performs a fresh network lookup.
-     */
     public static function clearCache(?string $host = null): void
     {
         if ($host === null) {
@@ -419,17 +384,6 @@ final class CurlHttpClient implements HttpClient
     /**
      * Parses an absolute URL into its security-relevant components.
      *
-     * Returns null for anything that is not a plain http/https URL with a
-     * usable host (unparseable input, missing scheme/host, foreign schemes
-     * such as file:// or gopher://, empty or malformed hosts). The returned
-     * host is normalized so that two spellings of the same resource always
-     * compare equal in the SSRF redirect check:
-     *  - lowercased (DNS hostnames are case-insensitive);
-     *  - IPv6 brackets removed ("[::1]" -> "::1");
-     *  - trailing root dots removed ("example.com." == "example.com"), while
-     *    a leading dot is preserved because it pins cookies to an exact host
-     *    and must stay distinguishable from the bare name.
-     *
      * @return array{host: string, port: int, scheme: string, path: string}|null
      */
     private static function parseHttpUrl(string $url): ?array
@@ -446,10 +400,10 @@ final class CurlHttpClient implements HttpClient
 
         $host = strtolower($parts['host']);
         if (str_starts_with($host, '[') === true && str_ends_with($host, ']') === true) {
-            $host = substr($host, 1, -1); // literal IPv6 without brackets
+            $host = substr($host, 1, -1);
         }
         if ($host !== '' && str_starts_with($host, '.') === false) {
-            $host = rtrim($host, '.'); // strip FQDN root dot(s), keep ".exact" hosts
+            $host = rtrim($host, '.');
         }
         if ($host === '') {
             return null;
@@ -464,26 +418,7 @@ final class CurlHttpClient implements HttpClient
     }
 
     /**
-     * Builds the CURLOPT_RESOLVE entries that pin a hostname to its
-     * DNS-cached, SSRF-vetted IP addresses.
-     *
-     * DNS-rebinding protection works like this:
-     *  1. The hostname is resolved exactly once through IpResolver::resolve(),
-     *     which caches every answer for CACHE_TTL seconds.
-     *  2. All resolved IPs are screened against the blocked CIDR ranges; the
-     *     request is refused when no vetted address remains.
-     *  3. Every vetted address is handed to cURL via CURLOPT_RESOLVE, so the
-     *     connection reuses the cached result instead of triggering a second
-     *     lookup. An attacker-controlled TTL-0 record can therefore no longer
-     *     flip the name from a public IP to an internal one between the check
-     *     and the connect ("check TOCTOU" rebinding).
-     *  4. Because several A/AAAA records may be valid at once, all allowed IPs
-     *     are pinned (host:port:ip1,ip2,...) rather than only the first one,
-     *     preserving Happy-Eyeballs-style fallback without losing protection.
-     *
-     * Entries use the "+host:port:ip" form so previously cached connections
-     * bound to a stale (possibly rebound) address are flushed from the shared
-     * handle before the new pinning takes effect.
+     * Builds the CURLOPT_RESOLVE entries that pin a hostname to its DNS-cached, SSRF-vetted IP addresses.
      *
      * @return string[] Zero or more CURLOPT_RESOLVE entry strings.
      */
@@ -501,17 +436,10 @@ final class CurlHttpClient implements HttpClient
         $host = $parsed['host'];
         $port = $parsed['port'];
 
-        // Hostnames with a leading dot ("exact host" cookie form, e.g.
-        // ".example.com") cannot be expressed as a cURL pinning entry
-        // ("host:port:ip" would be parsed as an empty host), and such URLs
-        // are not fetched in practice. Skip pinning; the SSRF check below
-        // still applies to the resolved address.
         if (str_starts_with($host, '.') === true) {
             return [];
         }
 
-        // Literal IP addresses need no resolution step: validate and let cURL
-        // connect directly.
         if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
             if (self::ipResolver()->isBlocked($host) === true) {
                 throw new HttpException(sprintf(
@@ -522,10 +450,8 @@ final class CurlHttpClient implements HttpClient
             return [];
         }
 
-        // Single resolution point fed by the DNS cache (IpResolver::$cache).
         $ips = self::ipResolver()->resolve($host);
         if ($ips === []) {
-            // Nothing could be resolved; leave it to cURL to report the error.
             return [];
         }
 
@@ -543,15 +469,11 @@ final class CurlHttpClient implements HttpClient
             ));
         }
 
-        // Pin the exact vetted set in the order returned by the resolver so a
-        // later, unchecked re-resolution cannot influence the connection.
         return [sprintf('+%s:%d:%s', $host, $port, implode(',', $allowedIps))];
     }
 
     /**
-     * Returns the registrable domain (eTLD+1) of a host, approximated with a
-     * small list of common two-level public suffixes (co.uk, com.au, ...).
-     * IP addresses have no registrable domain and yield null.
+     * Returns the registrable domain (eTLD+1) of a host.
      *
      * @param string $host Lowercased hostname.
      * @return string|null The registrable domain, or null for IPs/edge cases.
@@ -565,11 +487,9 @@ final class CurlHttpClient implements HttpClient
         $labels = explode('.', $host);
         $count = count($labels);
         if ($count < 2) {
-            return null; // single label (localhost, intranet names)
+            return null;
         }
 
-        // Two-level public suffixes: 'example.co.uk' -> 'example.co.uk',
-        // 'www.bbc.co.uk' -> 'bbc.co.uk'
         $twoLevelSuffixes = [
             'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'me.uk', 'ltd.uk', 'plc.uk',
             'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au',
@@ -591,46 +511,22 @@ final class CurlHttpClient implements HttpClient
         }
 
         if ($count <= $suffixLength) {
-            // Host *is* the public suffix itself (e.g. 'co.uk') — treat it as
-            // its own registrable domain so exact matches still compare equal.
             return $host;
         }
 
         return implode('.', array_slice($labels, -$suffixLength - 1));
     }
 
-    /**
-     * Checks if two hosts belong to the same effective domain tree.
-     * This allows safe canonical redirects (e.g., www.example.com <-> example.com)
-     * while still blocking actual cross-domain SSRF bypasses.
-     *
-     * Redirects are allowed when either host is a suffix of the other (covers
-     * apex <-> subdomain hops such as 'www.djmag.com' <-> 'djmag.com') or when
-     * both share the same registrable domain (eTLD+1), which permits sibling
-     * subdomains like 'apod.nasa.gov' -> 'science.nasa.gov'. Because the target
-     * URL is re-validated by IpResolver on the follow-up request, this does not
-     * weaken SSRF protection: hosts that resolve only to private/reserved ranges
-     * remain blocked even after an allowed redirect.
-     *
-     * @param string $host1 The original host.
-     * @param string $host2 The redirect target host.
-     * @return bool True if they belong to the same registrable domain tree.
-     */
     private static function isSameEffectiveDomain(string $host1, string $host2): bool
     {
         if ($host1 === $host2) {
             return true;
         }
 
-        // Suffix relationship: one host is the apex of the other.
-        // e.g., 'www.djmag.com' ends with '.djmag.com' -> True (Safe)
         if (str_ends_with($host1, '.' . $host2) === true || str_ends_with($host2, '.' . $host1) === true) {
             return true;
         }
 
-        // Same registrable domain (eTLD+1): sibling subdomains of one site.
-        // e.g., 'apod.nasa.gov' and 'science.nasa.gov' -> 'nasa.gov' -> True
-        // e.g., 'evil.com' vs 'nasa.gov' -> False (Blocked)
         $domain1 = self::registrableDomain($host1);
         $domain2 = self::registrableDomain($host2);
         if ($domain1 !== null && $domain1 === $domain2) {
@@ -683,23 +579,13 @@ final class CurlHttpClient implements HttpClient
 
         $config = array_merge($defaultConfig, $config);
 
-        // Overall time budget for this request (all attempts and backoff
-        // delays included). Every individual attempt is then capped by the
-        // time remaining at the start of that attempt ("deadline-aware"
-        // timeout), so retries can never push the total runtime past the
-        // deadline and get the PHP-FPM worker force-killed mid-response,
-        // which would produce truncated/incorrect output.
         $budget = ((int)$config['timeout'] * (1 + (int)$config['retries'])) * 1.35;
 
-        // If a PHP max_execution_time is configured (typical in FPM setups),
-        // clamp the budget to it minus a small safety margin so the client
-        // finishes gracefully before PHP aborts the script.
         $maxExec = (int)ini_get('max_execution_time');
         if ($maxExec > 0) {
             $budget = min($budget, max(1.0, $maxExec - 2.0));
         }
 
-        // Preserve an already-propagated deadline across internal redirects.
         $deadline = $config['_deadline'] ?? (microtime(true) + $budget);
 
         $httpHeaders = [];
@@ -792,11 +678,6 @@ final class CurlHttpClient implements HttpClient
         $body = false;
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-            // Deadline-aware timeout: never let a single attempt run longer
-            // than the time left until the overall deadline. This keeps the
-            // whole request (including retries and backoff delays) inside the
-            // budget instead of being cut off by PHP-FPM's hard timeout, which
-            // would return truncated or otherwise incorrect responses.
             $remaining = $deadline - microtime(true);
             if ($remaining < 1) {
                 if ($attempt === 1) {
@@ -840,10 +721,6 @@ final class CurlHttpClient implements HttpClient
             }
 
             if ($attempt < $maxAttempts) {
-                // Back off only as long as the deadline allows; if the delay
-                // would consume nearly all of the remaining budget, stop
-                // retrying instead of starting an attempt that is doomed to
-                // be truncated.
                 $remainingUs = (int)(($deadline - microtime(true)) * 1_000_000);
                 $delayUs = min(
                     (2 ** ($attempt - 1)) * 300_000 + mt_rand(0, 200_000),
@@ -859,8 +736,6 @@ final class CurlHttpClient implements HttpClient
                 if (curl_setopt_array($ch, $curlOptions) === false) {
                     throw new HttpException('Failed to set cURL options: tried to set an illegal curl option');
                 }
-                // Re-pin on every attempt: the DNS cache entry (and with it the
-                // vetted IP set) may have been refreshed between retries.
                 if ($resolveEntries !== []) {
                     curl_setopt($ch, self::resolveOption(), $resolveEntries);
                 }
@@ -885,12 +760,9 @@ final class CurlHttpClient implements HttpClient
         }
 
         if ($statusCode >= 300 && $statusCode < 400 && $statusCode !== 304) {
-            // The header callback stores every raw "Location:" value in
-            // lowercase form, so read it back through the same key.
             $location = $responseHeaders['location'][count($responseHeaders['location']) - 1] ?? 'unknown';
             $originalParsed = self::parseHttpUrl($url);
 
-            // Normalize relative redirects to absolute URLs so parseHttpUrl can evaluate them securely
             if ($originalParsed !== null && preg_match('#^[a-z][a-z0-9+\-.]*://#i', $location) === 0) {
                 $scheme = $originalParsed['scheme'];
                 $host = $originalParsed['host'];
@@ -921,8 +793,6 @@ final class CurlHttpClient implements HttpClient
                 }
 
                 $config['_redirect_count'] = $redirectCount + 1;
-                // Propagate the deadline so a chain of internal redirects
-                // shares one single time budget (deadline-aware across hops).
                 $config['_deadline'] = $deadline;
                 return $this->request($location, $config);
             }
