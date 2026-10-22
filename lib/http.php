@@ -125,6 +125,7 @@ final class IpResolver
 
     private const CACHE_TTL = 60;
     private const NEGATIVE_CACHE_TTL = 10;
+    private const MAX_CACHE_ENTRIES = 512;
 
     /**
      * @param string[]|string|null $blockedCidrs
@@ -221,6 +222,22 @@ final class IpResolver
 
         $ips = array_values(array_unique($ips));
         self::$cache[$host] = ['time' => time(), 'ips' => $ips];
+
+        // Bound the cache size for long-running processes.
+        if (count(self::$cache) > self::MAX_CACHE_ENTRIES) {
+            $now = time();
+            foreach (self::$cache as $name => $entry) {
+                $entryTtl = $entry['ips'] === [] ? self::NEGATIVE_CACHE_TTL : self::CACHE_TTL;
+                if (($now - $entry['time']) >= $entryTtl) {
+                    unset(self::$cache[$name]);
+                }
+            }
+            if (count(self::$cache) > self::MAX_CACHE_ENTRIES) {
+                uasort(self::$cache, static fn (array $a, array $b): int => $a['time'] <=> $b['time']);
+                self::$cache = array_slice(self::$cache, -self::MAX_CACHE_ENTRIES, null, true);
+            }
+        }
+
         return $ips;
     }
 
@@ -677,6 +694,21 @@ final class CurlHttpClient implements HttpClient
         $lastErrno = 0;
         $body = false;
 
+        // Transient connection errors worth one immediate retry.
+        $transientErrnos = [
+            CURLE_COULDNT_CONNECT,
+            CURLE_RECV_ERROR,
+            CURLE_SEND_ERROR,
+            CURLE_GOT_NOTHING,
+            CURLE_PARTIAL_FILE,
+            CURLE_SSL_CONNECT_ERROR,
+            CURLE_HTTP2,
+            CURLE_HTTP2_STREAM,
+        ];
+        if ((int)$config['retries'] === 0) {
+            $maxAttempts = 2;
+        }
+
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             $remaining = $deadline - microtime(true);
             if ($remaining < 1) {
@@ -695,6 +727,9 @@ final class CurlHttpClient implements HttpClient
             );
             curl_setopt($ch, CURLOPT_TIMEOUT, $attemptTimeout);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $attemptConnectTimeout);
+            // Millisecond resolution to respect the fractional deadline budget.
+            curl_setopt($ch, CURLOPT_TIMEOUT_MS, max(500, (int)round(min($remaining, $attemptTimeout) * 1000)));
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, max(500, $attemptConnectTimeout * 1000));
 
             $responseHeaders = [];
             curl_setopt($ch, CURLOPT_HEADERFUNCTION, $headerCallback);
@@ -720,27 +755,45 @@ final class CurlHttpClient implements HttpClient
                 break;
             }
 
-            if ($attempt < $maxAttempts) {
-                $remainingUs = (int)(($deadline - microtime(true)) * 1_000_000);
+            if ($attempt >= $maxAttempts) {
+                break;
+            }
+
+            $isTransient = in_array($lastErrno, $transientErrnos, true) === true;
+            if ((int)$config['retries'] === 0 && $isTransient === false) {
+                break;
+            }
+
+            $remainingUs = (int)(($deadline - microtime(true)) * 1_000_000);
+            if ($remainingUs < 1_000_000) {
+                break;
+            }
+            if ($isTransient === true) {
+                // Retry transient errors quickly, without full backoff.
+                $delayUs = min(200_000, max(0, $remainingUs - 1_000_000));
+                if ($delayUs <= 0) {
+                    $delayUs = 1;
+                }
+            } else {
                 $delayUs = min(
                     (2 ** ($attempt - 1)) * 300_000 + mt_rand(0, 200_000),
                     max(0, $remainingUs - 1_000_000)
                 );
-                if ($remainingUs < 1_000_000 || $delayUs <= 0) {
+                if ($delayUs <= 0) {
                     break;
                 }
-                usleep($delayUs);
-
-                curl_reset($ch);
-                curl_setopt($ch, CURLOPT_URL, $url);
-                if (curl_setopt_array($ch, $curlOptions) === false) {
-                    throw new HttpException('Failed to set cURL options: tried to set an illegal curl option');
-                }
-                if ($resolveEntries !== []) {
-                    curl_setopt($ch, self::resolveOption(), $resolveEntries);
-                }
-                curl_setopt($ch, CURLOPT_HEADERFUNCTION, $headerCallback);
             }
+            usleep($delayUs);
+
+            curl_reset($ch);
+            curl_setopt($ch, CURLOPT_URL, $url);
+            if (curl_setopt_array($ch, $curlOptions) === false) {
+                throw new HttpException('Failed to set cURL options: tried to set an illegal curl option');
+            }
+            if ($resolveEntries !== []) {
+                curl_setopt($ch, self::resolveOption(), $resolveEntries);
+            }
+            curl_setopt($ch, CURLOPT_HEADERFUNCTION, $headerCallback);
         }
 
         $statusCode = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
@@ -763,7 +816,12 @@ final class CurlHttpClient implements HttpClient
             $location = $responseHeaders['location'][count($responseHeaders['location']) - 1] ?? 'unknown';
             $originalParsed = self::parseHttpUrl($url);
 
-            if ($originalParsed !== null && preg_match('#^[a-z][a-z0-9+\-.]*://#i', $location) === 0) {
+            if ($originalParsed === null || $location === 'unknown') {
+                // No usable Location header: return the response as-is.
+                return new Response($body, $statusCode, $responseHeaders);
+            }
+
+            if (preg_match('#^[a-z][a-z0-9+\-.]*://#i', $location) === 0) {
                 $scheme = $originalParsed['scheme'];
                 $host = $originalParsed['host'];
                 $port = $originalParsed['port'];
@@ -782,6 +840,15 @@ final class CurlHttpClient implements HttpClient
             }
 
             $redirectParsed = self::parseHttpUrl($location);
+
+            if ($redirectParsed === null) {
+                // Refuse non-http(s) or unparsable redirect targets.
+                throw new HttpException(sprintf(
+                    'Refusing to follow invalid redirect to %s for %s (SSRF protection: unsupported redirect target)',
+                    $location,
+                    $url
+                ));
+            }
 
             if (self::isSameEffectiveDomain($originalParsed['host'], $redirectParsed['host']) === true) {
                 $redirectCount = $config['_redirect_count'] ?? 0;
