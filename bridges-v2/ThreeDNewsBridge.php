@@ -27,6 +27,7 @@ final class ThreeDNewsBridge extends BridgeAbstract
     private const LIMIT_PREVIEW_MAX = 20;
     private const LIMIT_FULL_MAX = 10;
     private const REQUEST_DELAY_MS = 1000;
+    private const CACHE_PREFIX_YT_THUMBNAIL = 'yt_thumb_';
 
     private const REMOVE_SELECTORS = [
         '.caption',
@@ -95,9 +96,9 @@ final class ThreeDNewsBridge extends BridgeAbstract
             $url = 'https:' . $url;
         }
 
-        $url = preg_replace('/\?.*$/', '', $url);
-        $url = preg_replace('/\/sm\./', '/', $url);
-        $url = preg_replace('/\.(800|400|200|100)\./', '.', $url);
+        $url = (string)preg_replace('/\?.*$/', '', $url);
+        $url = (string)preg_replace('/\/sm\./', '/', $url);
+        $url = (string)preg_replace('/\.(800|400|200|100)\./', '.', $url);
 
         return $url;
     }
@@ -173,31 +174,62 @@ final class ThreeDNewsBridge extends BridgeAbstract
         return false;
     }
 
+    private function checkYouTubeThumbnail(string $videoId): string
+    {
+        $cacheKey = self::CACHE_PREFIX_YT_THUMBNAIL . $videoId;
+        $cached = $this->loadCacheValue($cacheKey);
+
+        if (is_string($cached) === true) {
+            return $cached;
+        }
+
+        $maxResUrl = "https://img.youtube.com/vi/{$videoId}/maxresdefault.jpg";
+        $fallbackUrl = "https://img.youtube.com/vi/{$videoId}/hqdefault.jpg";
+        $thumbnailUrl = $fallbackUrl;
+
+        try {
+            $curlOptions = [
+                CURLOPT_RANGE => 'bytes=0-0',
+                CURLOPT_TIMEOUT => 5,
+                CURLOPT_CONNECTTIMEOUT => 3,
+            ];
+
+            $response = getContents($maxResUrl, [], $curlOptions, true);
+
+            if ($response instanceof \RSSBridge\Http\Response) {
+                $code = $response->getCode();
+                if ($code >= 200 && $code < 400) {
+                    $thumbnailUrl = $maxResUrl;
+                }
+            }
+        } catch (\Exception $e) {
+            // Fallback to hqdefault on error
+        }
+
+        $this->saveCacheValue($cacheKey, $thumbnailUrl, 604800);
+
+        return $thumbnailUrl;
+    }
+
     private function processYouTubeIframes(string $html): string
     {
-        return preg_replace_callback(
+        return (string)preg_replace_callback(
             '/<iframe[^>]*src=["\'](?:https?:)?\/\/(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]+)[^"\']*["\'][^>]*>/i',
-            function ($matches) {
+            function (array $matches): string {
                 $videoId = $matches[1];
-                $thumbnailUrl = "https://img.youtube.com/vi/{$videoId}/maxresdefault.jpg";
-                $fallbackUrl = "https://img.youtube.com/vi/{$videoId}/hqdefault.jpg";
+                $thumbnailUrl = $this->checkYouTubeThumbnail($videoId);
                 $videoUrl = "https://www.youtube.com/watch?v={$videoId}";
 
-                $thumbnailData = @file_get_contents($thumbnailUrl);
-                if ($thumbnailData === false || strlen($thumbnailData) < 100) {
-                    $thumbnailUrl = $fallbackUrl;
-                }
+                $escapedVideoUrl = htmlspecialchars($videoUrl, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $escapedThumbnailUrl = htmlspecialchars($thumbnailUrl, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
+                $linkOpen = '<a href="' . $escapedVideoUrl . '" target="_blank" rel="noopener">';
+                $img = '<img src="' . $escapedThumbnailUrl . '" style="' . self::IMG_STYLE . '" alt="YouTube Video" />';
+                $linkClose = '</a>';
                 $linkStyle = 'display: block; text-align: center; margin: 0 0 16px 0;';
+                $textLink = '<a href="' . $escapedVideoUrl . '" target="_blank" rel="noopener" style="' . $linkStyle . '">Watch on YouTube</a>';
 
-                return sprintf(
-                    '<p><a href="%s" target="_blank"><img src="%s" style="%s" alt="YouTube Video" /></a><a href="%s" target="_blank" style="%s">Watch on YouTube</a></p>',
-                    htmlspecialchars($videoUrl, ENT_QUOTES),
-                    htmlspecialchars($thumbnailUrl, ENT_QUOTES),
-                    self::IMG_STYLE,
-                    htmlspecialchars($videoUrl, ENT_QUOTES),
-                    $linkStyle
-                );
+                return '<p>' . $linkOpen . $img . $linkClose . $textLink . '</p>';
             },
             $html
         );
@@ -205,9 +237,9 @@ final class ThreeDNewsBridge extends BridgeAbstract
 
     private function processHtmlContent(string $html): string
     {
-        $html = preg_replace_callback('/<img\s+([^>]*)>/i', function ($matches) {
+        $html = (string)preg_replace_callback('/<img\s+([^>]*)>/i', function (array $matches): string {
             $attributes = $matches[1];
-            $attributes = preg_replace('/\s+(width|height|align|style)=["\'][^"\']*["\']/i', '', $attributes);
+            $attributes = (string)preg_replace('/\s+(width|height|align|style)=["\'][^"\']*["\']/i', '', $attributes);
             $attributes = trim($attributes);
 
             if ($attributes !== '') {
@@ -217,11 +249,11 @@ final class ThreeDNewsBridge extends BridgeAbstract
             return '<img ' . $attributes . 'style="' . self::IMG_STYLE . '" align="left" />';
         }, $html);
 
-        $html = preg_replace_callback('/<(p|div|h[1-6])\s+([^>]*)>/i', function ($matches) {
+        $html = (string)preg_replace_callback('/<(p|div|h[1-6])\s+([^>]*)>/i', function (array $matches): string {
             $tag = strtolower($matches[1]);
             $attributes = $matches[2];
 
-            $newAttributes = preg_replace('/\s*style=["\'][^"\']*text-align\s*:\s*center[^"\']*["\']/i', '', $attributes);
+            $newAttributes = (string)preg_replace('/\s*style=["\'][^"\']*text-align\s*:\s*center[^"\']*["\']/i', '', $attributes);
             $newAttributes = trim($newAttributes);
 
             if ($newAttributes === '') {
@@ -323,6 +355,34 @@ final class ThreeDNewsBridge extends BridgeAbstract
         }
     }
 
+    private function fetchFullArticleContent(string $link): string
+    {
+        try {
+            $html = getContents($link);
+
+            if ($html === '') {
+                return '';
+            }
+
+            libxml_use_internal_errors(true);
+            $dom = \Dom\HTMLDocument::createFromString($html);
+            libxml_clear_errors();
+
+            $articleBody = $dom->querySelector('.news-full-item-main-pub.news-full-item.article-entry');
+
+            if ($articleBody === null) {
+                return '';
+            }
+
+            $this->removeGarbage($articleBody);
+            $this->processArticleImages($articleBody);
+
+            return $articleBody->innerHTML ?? '';
+        } catch (\Exception $e) {
+            return '';
+        }
+    }
+
     public function collectData(): void
     {
         $categoryInput = $this->getInput('category');
@@ -376,7 +436,8 @@ final class ThreeDNewsBridge extends BridgeAbstract
             if (isset($item->enclosure) === true) {
                 $enclosureUrl = (string)$item->enclosure['url'];
                 if ($enclosureUrl !== '') {
-                    $enclosureImage = '<img src="' . htmlspecialchars($enclosureUrl, ENT_QUOTES) . '" style="' . self::IMG_STYLE . '" align="left" />';
+                    $escapedUrl = htmlspecialchars($enclosureUrl, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                    $enclosureImage = '<img src="' . $escapedUrl . '" style="' . self::IMG_STYLE . '" align="left" />';
                 }
             }
 
@@ -387,13 +448,9 @@ final class ThreeDNewsBridge extends BridgeAbstract
                     usleep(self::REQUEST_DELAY_MS * 1000);
                 }
 
-                $dom = getSimpleHTMLDOM($link);
-                $articleBody = $dom->querySelector('.news-full-item-main-pub.news-full-item.article-entry');
-
-                if ($articleBody !== null) {
-                    $this->removeGarbage($articleBody);
-                    $this->processArticleImages($articleBody);
-                    $content = $articleBody->innerHTML;
+                $fullContent = $this->fetchFullArticleContent($link);
+                if ($fullContent !== '') {
+                    $content = $fullContent;
                 }
             }
 

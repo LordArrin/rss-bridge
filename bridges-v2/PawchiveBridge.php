@@ -52,6 +52,14 @@ final class PawchiveBridge extends BridgeAbstract
         ],
     ]];
 
+    protected const LIMIT = [
+        'name' => 'Limit',
+        'type' => 'number',
+        'required' => false,
+        'defaultValue' => 10,
+        'title' => 'Maximum number of posts to fetch',
+    ];
+
     private const array ACTIVE_SERVICES = [
         'Pixiv Fanbox' => 'fanbox',
         'Patreon' => 'patreon',
@@ -162,6 +170,7 @@ final class PawchiveBridge extends BridgeAbstract
 
     private const array DOMAINS = ['pawchive.pw'];
     private const string CACHE_KEY_ACTIVE_DOMAIN = 'active_domain';
+    private const string CACHE_KEY_THUMBNAILS_AVAILABLE = 'thumbnails_available';
 
     private ?string $author = null;
     private ?string $authorAvatarUrl = null;
@@ -699,25 +708,54 @@ final class PawchiveBridge extends BridgeAbstract
 
     private function thumbnailsAvailable(array $files): bool
     {
-        return array_any($files, function (array $file): bool {
+        $thumbnailDomain = $this->getThumbnailDomain();
+        $cacheKey = self::CACHE_KEY_THUMBNAILS_AVAILABLE . '_' . $thumbnailDomain;
+
+        $cached = $this->loadCacheValue($cacheKey);
+        if (is_bool($cached) === true) {
+            return $cached;
+        }
+
+        $available = false;
+
+        foreach ($files as $file) {
             $fileName = trim($file['name'] ?? basename($file['path']));
 
             if ($fileName === '' || $this->isImageByExtension($fileName) === false) {
-                return false;
+                continue;
             }
 
-            $ch = curl_init($this->getThumbnailUrl($file['path']));
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
+            $thumbnailUrl = $this->getThumbnailUrl($file['path']);
+
+            try {
+                $curlOptions = [
+                CURLOPT_RANGE => 'bytes=0-0',
                 CURLOPT_TIMEOUT => 5,
                 CURLOPT_CONNECTTIMEOUT => 3,
-                CURLOPT_RANGE => 'bytes=0-0',
-            ]);
-            curl_exec($ch);
-            $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+                ];
 
-            return $code >= 200 && $code < 400;
-        });
+                $response = getContents($thumbnailUrl, [], $curlOptions, true);
+
+                if ($response instanceof \RSSBridge\Http\Response) {
+                    $code = $response->getCode();
+                    if ($code >= 200 && $code < 400) {
+                        $available = true;
+                        break;
+                    }
+                }
+            } catch (\Exception $e) {
+                $this->logger->debug(sprintf(
+                    'Thumbnail check failed for %s: %s',
+                    $thumbnailUrl,
+                    $e->getMessage()
+                ));
+                continue;
+            }
+        }
+
+        $this->saveCacheValue($cacheKey, $available, self::CACHE_TIMEOUT);
+
+        return $available;
     }
 
     private function processFiles(array $files, bool $hideAttachments, string &$contentHtml, array &$downloadLinks): void

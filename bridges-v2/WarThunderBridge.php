@@ -24,6 +24,7 @@ final class WarThunderBridge extends BridgeAbstract
     private const LIMIT_FULL_MAX = 5;
     private const REQUEST_DELAY_MS = 1500;
     private const ITEMS_PER_PAGE = 18;
+    private const CACHE_PREFIX_YT_THUMBNAIL = 'yt_thumb_';
 
     public const PARAMETERS = [
         [
@@ -58,28 +59,61 @@ final class WarThunderBridge extends BridgeAbstract
         ]
     ];
 
+    private function checkYouTubeThumbnail(string $videoId): string
+    {
+        $cacheKey = self::CACHE_PREFIX_YT_THUMBNAIL . $videoId;
+        $cached = $this->loadCacheValue($cacheKey);
+
+        if (is_string($cached) === true) {
+            return $cached;
+        }
+
+        $maxResUrl = "https://img.youtube.com/vi/{$videoId}/maxresdefault.jpg";
+        $fallbackUrl = "https://img.youtube.com/vi/{$videoId}/hqdefault.jpg";
+        $thumbnailUrl = $fallbackUrl;
+
+        try {
+            $curlOptions = [
+                CURLOPT_RANGE => 'bytes=0-0',
+                CURLOPT_TIMEOUT => 5,
+                CURLOPT_CONNECTTIMEOUT => 3,
+            ];
+
+            $response = getContents($maxResUrl, [], $curlOptions, true);
+
+            if ($response instanceof \RSSBridge\Http\Response) {
+                $code = $response->getCode();
+                if ($code >= 200 && $code < 400) {
+                    $thumbnailUrl = $maxResUrl;
+                }
+            }
+        } catch (\Exception $e) {
+            // Fallback to hqdefault on error
+        }
+
+        $this->saveCacheValue($cacheKey, $thumbnailUrl, 604800);
+
+        return $thumbnailUrl;
+    }
+
     private function processYouTubeIframes(string $html): string
     {
-        return preg_replace_callback(
+        return (string)preg_replace_callback(
             '/<iframe[^>]*src=["\'](?:https?:)?\/\/(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]+)[^"\']*["\'][^>]*>/i',
             function (array $matches): string {
                 $videoId = $matches[1];
-                $thumbnailUrl = "https://img.youtube.com/vi/{$videoId}/maxresdefault.jpg";
-                $fallbackUrl = "https://img.youtube.com/vi/{$videoId}/hqdefault.jpg";
+                $thumbnailUrl = $this->checkYouTubeThumbnail($videoId);
                 $videoUrl = "https://www.youtube.com/watch?v={$videoId}";
 
-                $thumbnailData = @file_get_contents($thumbnailUrl);
-                if ($thumbnailData === false || strlen($thumbnailData) < 100) {
-                    $thumbnailUrl = $fallbackUrl;
-                }
+                $escapedVideoUrl = htmlspecialchars($videoUrl, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $escapedThumbnailUrl = htmlspecialchars($thumbnailUrl, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
-                return sprintf(
-                    '<p><a href="%s" target="_blank"><img src="%s" style="%s" alt="YouTube Video" /></a><a href="%s" target="_blank" style="display: block; text-align: center; margin: 0 0 16px 0;">Watch on YouTube</a></p>',
-                    htmlspecialchars($videoUrl, ENT_QUOTES),
-                    htmlspecialchars($thumbnailUrl, ENT_QUOTES),
-                    self::IMG_STYLE,
-                    htmlspecialchars($videoUrl, ENT_QUOTES)
-                );
+                $linkOpen = '<a href="' . $escapedVideoUrl . '" target="_blank" rel="noopener">';
+                $img = '<img src="' . $escapedThumbnailUrl . '" style="' . self::IMG_STYLE . '" alt="YouTube Video" />';
+                $linkClose = '</a>';
+                $textLink = '<a href="' . $escapedVideoUrl . '" target="_blank" rel="noopener" style="display: block; text-align: center; margin: 0 0 16px 0;">Watch on YouTube</a>';
+
+                return '<p>' . $linkOpen . $img . $linkClose . $textLink . '</p>';
             },
             $html
         );
@@ -87,8 +121,8 @@ final class WarThunderBridge extends BridgeAbstract
 
     private function processHtmlContent(string $html): string
     {
-        $html = preg_replace_callback('/<img\s+([^>]*)>/i', function (array $matches): string {
-            $attributes = preg_replace('/\s+(width|height|align|style)=["\'][^"\']*["\']/i', '', $matches[1]);
+        $html = (string)preg_replace_callback('/<img\s+([^>]*)>/i', function (array $matches): string {
+            $attributes = (string)preg_replace('/\s+(width|height|align|style)=["\'][^"\']*["\']/i', '', $matches[1]);
             $attributes = trim($attributes);
 
             if ($attributes !== '') {
@@ -98,9 +132,9 @@ final class WarThunderBridge extends BridgeAbstract
             return '<img ' . $attributes . 'style="' . self::IMG_STYLE . '" align="left" />';
         }, $html);
 
-        $html = preg_replace_callback('/<ul\s+([^>]*)>/i', function (array $matches): string {
+        $html = (string)preg_replace_callback('/<ul\s+([^>]*)>/i', function (array $matches): string {
             $attributes = $matches[1];
-            $attributes = preg_replace('/\s*style=["\'][^"\']*["\']/i', '', $attributes);
+            $attributes = (string)preg_replace('/\s*style=["\'][^"\']*["\']/i', '', $attributes);
             $attributes = trim($attributes);
 
             if ($attributes !== '') {
@@ -110,9 +144,9 @@ final class WarThunderBridge extends BridgeAbstract
             return '<ul ' . $attributes . 'style="' . self::LIST_STYLE . '">';
         }, $html);
 
-        $html = preg_replace_callback('/<li\s+([^>]*)>/i', function (array $matches): string {
+        $html = (string)preg_replace_callback('/<li\s+([^>]*)>/i', function (array $matches): string {
             $attributes = $matches[1];
-            $attributes = preg_replace('/\s*style=["\'][^"\']*["\']/i', '', $attributes);
+            $attributes = (string)preg_replace('/\s*style=["\'][^"\']*["\']/i', '', $attributes);
             $attributes = trim($attributes);
 
             if ($attributes !== '') {
@@ -122,9 +156,10 @@ final class WarThunderBridge extends BridgeAbstract
             return '<li ' . $attributes . 'style="' . self::LI_STYLE . '">';
         }, $html);
 
-        $html = preg_replace_callback('/<(p|div|h[1-6])\s+([^>]*)>/i', function (array $matches): string {
+        $html = (string)preg_replace_callback('/<(p|div|h[1-6])\s+([^>]*)>/i', function (array $matches): string {
             $tag = strtolower($matches[1]);
-            $attributes = trim(preg_replace('/\s*style=["\'][^"\']*text-align\s*:\s*center[^"\']*["\']/i', '', $matches[2]));
+            $regex = '/\s*style=["\'][^"\']*text-align\s*:\s*center[^"\']*["\']/i';
+            $attributes = trim((string)preg_replace($regex, '', $matches[2]));
 
             if ($attributes === '') {
                 return '<' . $tag . ' align="left">';
@@ -220,16 +255,20 @@ final class WarThunderBridge extends BridgeAbstract
                     $href = 'https:' . $href;
                 }
 
-                if ($linksHtml !== '<p align="left" style="text-align: left; margin: 16px 0;">') {
+                $startTag = '<p align="left" style="text-align: left; margin: 16px 0;">';
+                if ($linksHtml !== $startTag) {
                     $linksHtml .= ' | ';
                 }
 
-                $linksHtml .= '<a href="' . htmlspecialchars($href, ENT_QUOTES) . '" target="_blank">' .
-                              htmlspecialchars($text, ENT_QUOTES) . '</a>';
+                $escapedHref = htmlspecialchars($href, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $escapedText = htmlspecialchars($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+                $linksHtml .= '<a href="' . $escapedHref . '" target="_blank" rel="noopener">' . $escapedText . '</a>';
             }
             $linksHtml .= '</p>';
 
-            if ($linksHtml !== '<p align="left" style="text-align: left; margin: 16px 0;"></p>' && $wrapper->parentNode !== null) {
+            $emptyParagraph = '<p align="left" style="text-align: left; margin: 16px 0;"></p>';
+            if ($linksHtml !== $emptyParagraph && $wrapper->parentNode !== null) {
                 $fragment = $wrapper->ownerDocument->createDocumentFragment();
                 $result = $fragment->appendXml($linksHtml);
                 if ($result === true) {
@@ -377,41 +416,45 @@ final class WarThunderBridge extends BridgeAbstract
             usleep(self::REQUEST_DELAY_MS * 1000);
         }
 
-        $html = getContents($link);
+        try {
+            $html = getContents($link);
 
-        if ($html === '') {
-            return '';
-        }
-
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_clear_errors();
-
-        $article = $dom->querySelector('.section--narrow.article');
-
-        if ($article === null) {
-            return '';
-        }
-
-        $this->removeGarbage($article);
-        $this->processImageContainers($article);
-        $this->processScreenshotLinks($article);
-
-        $contentParts = [];
-        $grids = $article->querySelectorAll('.g-grid');
-
-        foreach ($grids as $grid) {
-            if ($grid instanceof \Dom\Element === false) {
-                continue;
+            if ($html === '') {
+                return '';
             }
 
-            $col = $grid->querySelector('.g-col');
-            if ($col !== null) {
-                $contentParts[] = $col->innerHTML;
-            }
-        }
+            libxml_use_internal_errors(true);
+            $dom = \Dom\HTMLDocument::createFromString($html);
+            libxml_clear_errors();
 
-        return implode("\n", $contentParts);
+            $article = $dom->querySelector('.section--narrow.article');
+
+            if ($article === null) {
+                return '';
+            }
+
+            $this->removeGarbage($article);
+            $this->processImageContainers($article);
+            $this->processScreenshotLinks($article);
+
+            $contentParts = [];
+            $grids = $article->querySelectorAll('.g-grid');
+
+            foreach ($grids as $grid) {
+                if ($grid instanceof \Dom\Element === false) {
+                    continue;
+                }
+
+                $col = $grid->querySelector('.g-col');
+                if ($col !== null) {
+                    $contentParts[] = $col->innerHTML;
+                }
+            }
+
+            return implode("\n", $contentParts);
+        } catch (\Exception $e) {
+            return '';
+        }
     }
 
     private function processContent(string $content): string
@@ -451,7 +494,8 @@ final class WarThunderBridge extends BridgeAbstract
             $content = $description;
 
             if ($imageUrl !== '') {
-                $content = '<img src="' . htmlspecialchars($imageUrl, ENT_QUOTES) . '" style="' . self::IMG_STYLE . '" align="left" />' . "\n" . $content;
+                $escapedImageUrl = htmlspecialchars($imageUrl, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $content = '<img src="' . $escapedImageUrl . '" style="' . self::IMG_STYLE . '" align="left" />' . "\n" . $content;
             }
 
             if ($fetchFull === true && $link !== '') {
