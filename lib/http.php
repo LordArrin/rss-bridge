@@ -124,7 +124,12 @@ final class IpResolver
     private static array $cache = [];
 
     private const CACHE_TTL = 60;
-    private const NEGATIVE_CACHE_TTL = 10;
+    // Negative results are cached a bit longer than 10s: transient resolver
+    // failures (SERVFAIL/timeout under upstream load) would otherwise be
+    // re-tried on every request, hammering both the resolver and the origin
+    // while producing needless "could not resolve host" errors. 30s is still
+    // short enough to recover quickly once the name resolves again.
+    private const NEGATIVE_CACHE_TTL = 30;
     private const MAX_CACHE_ENTRIES = 512;
 
     /**
@@ -569,6 +574,10 @@ final class CurlHttpClient implements HttpClient
             putenv('CURL_IMPERSONATE');
         }
 
+        // The handle is a CurlHandle object (PHP >= 8.0); curl_close() must
+        // NOT be called - it was deprecated in 8.0 and errors in 8.4+. It is
+        // released automatically when $ch leaves scope, including on the
+        // exception paths below, so no fd/socket leak is possible.
         $ch = curl_init($url);
         if ($ch === false) {
             if ($savedEnv !== null) {
@@ -577,6 +586,26 @@ final class CurlHttpClient implements HttpClient
             throw new HttpException('Failed to initialize cURL');
         }
 
+        try {
+            return $this->doRequest($ch, $url, $config, $resolveEntries, $optOutRequested, $savedEnv);
+        } finally {
+            // Restore the impersonate env var even when the request throws,
+            // so a failed bridge cannot leave other workers without TLS
+            // fingerprinting for the rest of their process lifetime.
+            if ($savedEnv !== null) {
+                putenv('CURL_IMPERSONATE=' . $savedEnv);
+            }
+        }
+    }
+
+    private function doRequest(
+        \CurlHandle $ch,
+        string $url,
+        array $config,
+        array $resolveEntries,
+        bool $optOutRequested,
+        ?string $savedEnv
+    ): Response {
         if ($optOutRequested === true) {
             $config['curl_options'][self::impersonateOption()] = '';
         }
@@ -810,6 +839,8 @@ final class CurlHttpClient implements HttpClient
 
         if ($savedEnv !== null) {
             putenv('CURL_IMPERSONATE=' . $savedEnv);
+            // The finally block in request() restores it as well; clearing
+            // the marker here keeps the restore idempotent on the happy path.
             $savedEnv = null;
         }
 
