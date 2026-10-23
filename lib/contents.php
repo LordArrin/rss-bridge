@@ -42,8 +42,12 @@ function get_sitemap(string $url): array
  * served without contacting the origin, based on the server's own freshness
  * signals (RFC 9110 section 4.2.1 priority order):
  *   - Cache-Control: no-store / no-cache / must-revalidate -> never fresh
- *   - Cache-Control: max-age=N (relative to the Date header)
+ *   - Cache-Control: max-age=N (relative to the Date header, minus Age)
  *   - Expires header (absolute; "0" and malformed dates mean expired)
+ * RFC 9111 section 4.2.3: an intermediary (CDN/proxy) reports how long it
+ * has held the response via the Age header, so remaining freshness is
+ * max_age - (now - (Date - Age)). Ignoring Age would let a stale copy
+ * served through a proxy be treated as fully fresh by our own cache.
  * Returns null when the response carries no usable freshness information,
  * in which case callers fall back to their conditional-request behavior.
  */
@@ -67,6 +71,12 @@ function responseFreshUntil(Response $response): ?int
                 $anchor = $date !== null ? strtotime($date) : false;
                 if ($anchor === false) {
                     $anchor = time();
+                }
+                // Subtract the Age reported by intermediaries (RFC 9111).
+                // A missing/garbage/negative Age is treated as 0.
+                $age = $response->getHeader('age');
+                if ($age !== null && $age !== '' && ctype_digit($age) === true) {
+                    $anchor -= (int) $age;
                 }
                 return $anchor + max(0, $seconds);
             }
