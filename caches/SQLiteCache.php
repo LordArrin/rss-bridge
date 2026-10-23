@@ -79,31 +79,81 @@ final class SQLiteCache implements CacheInterface
         $this->db = new \SQLite3($file);
         $this->db->enableExceptions(true);
 
-        if (is_file($file) === false || filesize($file) === 0) {
-            $this->db->exec("CREATE TABLE storage (
-                'key' BLOB PRIMARY KEY,
-                'value' BLOB,
-                'expiration' INTEGER
-            )");
-            $this->db->exec('CREATE INDEX idx_storage_expiration ON storage (expiration)');
-        }
-
+        // Apply the configured busy timeout *before* any statement that takes
+        // the write lock (schema setup below). Without this, concurrent
+        // workers racing to initialize the schema on first requests would hit
+        // SQLITE_BUSY immediately and crash the request with an uncaught
+        // "database is locked" exception.
         $this->db->busyTimeout((int) $config['timeout']);
         $this->busyTimeoutMs = (int) $config['timeout'];
 
-        // WAL mode for better concurrent access
-        $this->db->exec('PRAGMA journal_mode = WAL');
+        // WAL mode for better concurrent access. Must be set before creating
+        // tables so the whole database is born in WAL. It still needs the
+        // write lock and can fail transiently under contention at exactly
+        // this moment; retry briefly before giving up. Falling back to the
+        // default journal is safe: correctness is unchanged, only throughput.
+        $walOk = false;
+        for ($attempt = 0; $attempt < 5 && $walOk === false; $attempt++) {
+            try {
+                $this->db->exec('PRAGMA journal_mode = WAL');
+                $walOk = true;
+            } catch (\Exception $e) {
+                if ($this->db->lastErrorCode() !== self::SQLITE_BUSY) {
+                    throw $e;
+                }
+                usleep(200000); // 200 ms
+            }
+        }
 
         // NORMAL synchronous for better performance (safe with WAL)
-        $this->db->exec('PRAGMA synchronous = NORMAL');
+        if ($walOk === true) {
+            $this->db->exec('PRAGMA synchronous = NORMAL');
+        }
+
+        if (is_file($file) === false || filesize($file) === 0) {
+            // Guarded by an exclusive create: two processes may both observe
+            // the empty file, but only one can win the O_EXCL race. The loser
+            // skips table creation and relies on the idempotent
+            // CREATE TABLE IF NOT EXISTS statements below; the busy timeout
+            // applied above makes it wait out the winner's schema write.
+            $initLock = @fopen($file . '.initlock', 'xb');
+            if ($initLock !== false) {
+                try {
+                    $this->db->exec("CREATE TABLE IF NOT EXISTS storage (
+                        'key' BLOB PRIMARY KEY,
+                        'value' BLOB,
+                        'expiration' INTEGER
+                    )");
+                    $this->db->exec('CREATE INDEX IF NOT EXISTS idx_storage_expiration ON storage (expiration)');
+                } finally {
+                    fclose($initLock);
+                    @unlink($file . '.initlock');
+                }
+            }
+        }
 
         // Lease table backing the single-flight lock (acquireLock()). Kept
         // separate from "storage" so lock churn never rewrites feed payloads.
+        // Idempotent and cheap; runs on every open (also upgrades old DBs).
         $this->db->exec("CREATE TABLE IF NOT EXISTS locks (
             'key' BLOB PRIMARY KEY,
             'expiration' INTEGER
         )");
         $this->db->exec('CREATE INDEX IF NOT EXISTS idx_locks_expiration ON locks (expiration)');
+
+        // The storage table is created unconditionally as well (IF NOT EXISTS
+        // makes it a no-op on existing databases). Relying solely on the
+        // filesize()==0 branch above would leave a window where a concurrent
+        // worker opens the file after another process created it but before
+        // that process has flushed its schema write: sqlite3_open() succeeds
+        // on the zero-filled header, filesize() is non-zero, and the loser
+        // would then fail later with "no such table: storage".
+        $this->db->exec("CREATE TABLE IF NOT EXISTS storage (
+            'key' BLOB PRIMARY KEY,
+            'value' BLOB,
+            'expiration' INTEGER
+        )");
+        $this->db->exec('CREATE INDEX IF NOT EXISTS idx_storage_expiration ON storage (expiration)');
     }
 
     /**
