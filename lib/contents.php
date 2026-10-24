@@ -248,43 +248,6 @@ function getSimpleHTMLDOM(
 }
 
 /**
- * Fetch contents from the Internet as HTMLDocument object. Contents are cached
- * and re-used for subsequent calls until the cache duration elapsed.
- *
- * @return \Dom\HTMLDocument Parsed HTML document
- * @throws \Exception If the HTTP response is empty or parsing fails
- */
-function getSimpleHTMLDOMCached(
-    string $url,
-    int $ttl = 86400,
-    array $header = [],
-    array $opts = []
-): \Dom\HTMLDocument {
-    global $container;
-
-    /** @var CacheInterface $cache */
-    $cache = $container['cache'];
-
-    $cacheKey = 'pages_' . $url;
-    $content = $cache->get($cacheKey);
-    if ($content === null || $content === false) {
-        $content = getContents($url, $header, $opts);
-        $cache->set($cacheKey, $content, $ttl);
-    }
-
-    if ($content === '') {
-        throw new \Exception('Unable to parse dom because the http response was the empty string');
-    }
-
-    libxml_use_internal_errors(true);
-    $dom = \Dom\HTMLDocument::createFromString($content);
-    libxml_clear_errors();
-    libxml_use_internal_errors(false);
-
-    return $dom;
-}
-
-/**
  * Retrieves HTML via a named proxy profile.
  *
  * @return string HTML content

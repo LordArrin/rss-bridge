@@ -23,7 +23,7 @@ final class WeLiveSecurityBridge extends FeedExpander
     protected function parseItem(array $item): array
     {
         try {
-            $dom = getSimpleHTMLDOMCached($item['uri']);
+            $dom = getSimpleHTMLDOM($item['uri']);
         } catch (\Throwable $e) {
             $item['content'] = ($item['content'] ?? '') . '<br /><p><em>Could not request ' . $this->getName() . ': ' . $item['uri'] . '</em></p>';
             return $item;

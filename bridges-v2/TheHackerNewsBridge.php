@@ -158,11 +158,12 @@ final class TheHackerNewsBridge extends BridgeAbstract
 
     private function fetchArticleContent(string $url, ?string &$author): string
     {
-        $articleDom = getSimpleHTMLDOMCached($url, 86400);
+        $articleDom = getSimpleHTMLDOM($url);
 
         $authorSpans = $articleDom->querySelectorAll('span.author');
-        if ($authorSpans->length > 0) {
-            $lastAuthor = $authorSpans->item($authorSpans->length - 1);
+        $spanCount = count($authorSpans);
+        if ($spanCount > 0) {
+            $lastAuthor = $authorSpans->item($spanCount - 1);
             if ($lastAuthor !== null) {
                 $author = trim($lastAuthor->textContent);
             }

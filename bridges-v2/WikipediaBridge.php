@@ -332,7 +332,7 @@ final class WikipediaBridge extends BridgeAbstract
 
     private function loadFullArticle(string $uri): string
     {
-        $contentHtml = getSimpleHTMLDOMCached($uri);
+        $contentHtml = getSimpleHTMLDOM($uri);
 
         $content = $contentHtml->querySelector('#mw-content-text .mw-parser-output');
 

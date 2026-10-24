@@ -133,7 +133,6 @@ final class DevToBridge extends BridgeAbstract
         $limitInput = $this->getInput('limit');
         $limit = $limitInput !== null && $limitInput !== '' ? (int)$limitInput : 15;
 
-        // Calculate date based on period
         $date = new \DateTime();
         switch ($period) {
             case 'week':
@@ -187,7 +186,7 @@ final class DevToBridge extends BridgeAbstract
                 continue;
             }
 
-            $articleDom = getSimpleHTMLDOMCached($articleUrl, 86400);
+            $articleDom = getSimpleHTMLDOM($articleUrl);
 
             $bodyEl = $articleDom->querySelector('.crayons-article__body');
             $content = $bodyEl !== null ? $bodyEl->innerHTML : '';
@@ -240,7 +239,7 @@ final class DevToBridge extends BridgeAbstract
                 continue;
             }
 
-            $guideDom = getSimpleHTMLDOMCached($guideUrl, 86400);
+            $guideDom = getSimpleHTMLDOM($guideUrl);
 
             $bodyEl = $guideDom->querySelector('.crayons-article__body');
             $content = $bodyEl !== null ? $bodyEl->innerHTML : '';
