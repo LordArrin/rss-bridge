@@ -102,7 +102,7 @@ final class NvidiaDriverBridge extends BridgeAbstract
         $url = 'https://www.nvidia.com/Download/processFind.aspx?' . http_build_query($parameters);
         $html = getContents($url);
 
-        if ($html === '' || $html === null) {
+        if ($html === '') {
             throwServerException('Failed to fetch NVIDIA driver page');
         }
 
@@ -117,7 +117,7 @@ final class NvidiaDriverBridge extends BridgeAbstract
             }
 
             $imgId = $img->getAttribute('id');
-            if ($imgId === null) {
+            if ($imgId === '') {
                 continue;
             }
 
@@ -132,9 +132,9 @@ final class NvidiaDriverBridge extends BridgeAbstract
                 continue;
             }
 
-            $driverName = trim($nameCell->textContent ?? '');
-            $version = trim($versionCell->textContent ?? '');
-            $date = trim($dateCell->textContent ?? '');
+            $driverName = trim($nameCell->textContent);
+            $version = trim($versionCell->textContent);
+            $date = trim($dateCell->textContent);
 
             $releaseNotes = $this->extractReleaseNotes($contentSpan);
 

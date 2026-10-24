@@ -14,23 +14,41 @@ use function RSSBridge\Exceptions\throwClientException;
 
 function get_sitemap(string $url): array
 {
-    $doc = new \DOMDocument();
-    $doc->loadXML(getContents($url));
-    $urls = [];
+    $xmlString = getContents($url);
+    if ($xmlString === '') {
+        return [];
+    }
 
-    foreach ($doc->getElementsByTagName('url') as $url) {
+    libxml_use_internal_errors(true);
+    $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
+    libxml_clear_errors();
+    libxml_use_internal_errors(false);
+
+    if ($doc->documentElement === null) {
+        return [];
+    }
+
+    $urls = [];
+    foreach ($doc->querySelectorAll('url') as $urlNode) {
+        $locNode = $urlNode->querySelector('loc');
+        $lastmodNode = $urlNode->querySelector('lastmod');
+        $changefreqNode = $urlNode->querySelector('changefreq');
+        $priorityNode = $urlNode->querySelector('priority');
+
         $item = [
-            'loc'           => $url->getElementsByTagName('loc')->item(0)->nodeValue ?? null,
-            'lastmod'       => $url->getElementsByTagName('lastmod')->item(0)->nodeValue ?? null,
-            'changefreq'    => $url->getElementsByTagName('changefreq')->item(0)->nodeValue ?? null,
-            'priority'      => $url->getElementsByTagName('priority')->item(0)->nodeValue ?? null,
+            'loc'        => $locNode !== null ? $locNode->textContent : null,
+            'lastmod'    => $lastmodNode !== null ? $lastmodNode->textContent : null,
+            'changefreq' => $changefreqNode !== null ? $changefreqNode->textContent : null,
+            'priority'   => $priorityNode !== null ? $priorityNode->textContent : null,
         ];
 
-        $news = $url->getElementsByTagNameNS('http://www.google.com/schemas/sitemap-news/0.9', '*');
-        foreach ($news as $element) {
-            $localName = $element->localName;
-            $prefix = $element->prefix;
-            $item[$prefix][$localName] = $element->nodeValue;
+        $newsNodes = $urlNode->getElementsByTagNameNS('http://www.google.com/schemas/sitemap-news/0.9', '*');
+        foreach ($newsNodes as $element) {
+            if ($element instanceof \Dom\Element) {
+                $localName = $element->localName;
+                $prefix = $element->prefix ?? 'news';
+                $item[$prefix][$localName] = $element->textContent;
+            }
         }
         $urls[] = $item;
     }
@@ -40,16 +58,7 @@ function get_sitemap(string $url): array
 /**
  * Computes the unix timestamp until which a cached upstream response may be
  * served without contacting the origin, based on the server's own freshness
- * signals (RFC 9110 section 4.2.1 priority order):
- *   - Cache-Control: no-store / no-cache / must-revalidate -> never fresh
- *   - Cache-Control: max-age=N (relative to the Date header, minus Age)
- *   - Expires header (absolute; "0" and malformed dates mean expired)
- * RFC 9111 section 4.2.3: an intermediary (CDN/proxy) reports how long it
- * has held the response via the Age header, so remaining freshness is
- * max_age - (now - (Date - Age)). Ignoring Age would let a stale copy
- * served through a proxy be treated as fully fresh by our own cache.
- * Returns null when the response carries no usable freshness information,
- * in which case callers fall back to their conditional-request behavior.
+ * signals (RFC 9110 section 4.2.1 priority order).
  */
 function responseFreshUntil(Response $response): ?int
 {
@@ -64,16 +73,11 @@ function responseFreshUntil(Response $response): ?int
         foreach ($directives as $directive) {
             if (str_starts_with($directive, 'max-age=') === true) {
                 $seconds = (int) substr($directive, strlen('max-age='));
-                // Anchor on the response Date when present; clock skew
-                // between us and the origin otherwise makes a bare
-                // time() + max-age either too generous or too short.
                 $date = $response->getHeader('date');
                 $anchor = $date !== null ? strtotime($date) : false;
                 if ($anchor === false) {
                     $anchor = time();
                 }
-                // Subtract the Age reported by intermediaries (RFC 9111).
-                // A missing/garbage/negative Age is treated as 0.
                 $age = $response->getHeader('age');
                 if ($age !== null && $age !== '' && ctype_digit($age) === true) {
                     $anchor -= (int) $age;
@@ -85,8 +89,6 @@ function responseFreshUntil(Response $response): ?int
 
     $expires = $response->getHeader('expires');
     if ($expires !== null && $expires !== '') {
-        // RFC 7234: an HTTP-date past value means fresh; "0" (and other
-        // legacy junk) means already expired.
         $timestamp = strtotime($expires);
         if ($timestamp === false) {
             return time() - 1;
@@ -100,9 +102,8 @@ function responseFreshUntil(Response $response): ?int
 /**
  * Fetch data from an http url
  *
- * @param array $httpHeaders E.g. ['Content-type: text/plain']
- * @param array $curlOptions Associative array e.g. [CURLOPT_MAXREDIRS => 3]
- * @param bool $returnFull Whether to return Response object
+ * @param array<string, string>|list<string> $httpHeaders E.g. ['Accept' => 'application/json'] or ['Accept: application/json']
+ * @param array<int, mixed> $curlOptions Associative array e.g. [CURLOPT_MAXREDIRS => 3]
  * @return string|Response
  */
 function getContents(
@@ -110,7 +111,7 @@ function getContents(
     array $httpHeaders = [],
     array $curlOptions = [],
     bool $returnFull = false
-) {
+): string|Response {
     global $container;
 
     /** @var \RSSBridge\Http\HttpClient $httpClient */
@@ -119,44 +120,38 @@ function getContents(
     /** @var CacheInterface $cache */
     $cache = $container['cache'];
 
-    // TODO: consider url validation at this point
-
     $config = [
-        // Only pass the configured useragent when the deployment actually
-        // sets one. With curl-impersonate active and no explicit config, we
-        // must not send any UA override at all — the profile's own UA has to
-        // survive untouched (an empty value would produce an empty
-        // "User-Agent:" header that many WAFs silently black-hole).
-        'timeout'       => Configuration::getConfig('http', 'timeout'),
-        'retries'       => Configuration::getConfig('http', 'retries'),
-        'curl_options'  => $curlOptions + [CURLOPT_ENCODING => ''],
+        'timeout'      => Configuration::getConfig('http', 'timeout'),
+        'retries'      => Configuration::getConfig('http', 'retries'),
+        'curl_options' => $curlOptions + [CURLOPT_ENCODING => ''],
     ];
+
     $httpHeadersNormalized = [];
-    foreach ($httpHeaders as $httpHeader) {
-        $parts = explode(':', $httpHeader);
-        $headerName = trim($parts[0]);
-        $headerValue = trim(implode(':', array_slice($parts, 1)));
-        $httpHeadersNormalized[$headerName] = $headerValue;
+    foreach ($httpHeaders as $key => $value) {
+        if (is_string($key) === true) {
+            // Modern associative array format: ['Header-Name' => 'Value']
+            $httpHeadersNormalized[$key] = (string) $value;
+        } else {
+            // Legacy list format fallback: ['Header-Name: Value']
+            $parts = explode(':', (string) $value, 2);
+            if (count($parts) === 2) {
+                $httpHeadersNormalized[trim($parts[0])] = trim($parts[1]);
+            }
+        }
     }
 
     $requestBodyHash = null;
     if (isset($curlOptions[CURLOPT_POSTFIELDS]) === true) {
         $requestBodyHash = md5(Json::encode($curlOptions[CURLOPT_POSTFIELDS], false));
     }
-    $cacheKey = implode('_', ['server',  $url, $requestBodyHash]);
+    $cacheKey = implode('_', ['server', $url, $requestBodyHash]);
 
     $cachedResponse = $cache->get($cacheKey);
     if (($cachedResponse instanceof Response) === false) {
         $cachedResponse = null;
     }
+
     if ($cachedResponse !== null) {
-        // Honor the upstream's own freshness signal (Cache-Control:
-        // max-age / Expires): while the cached copy is still fresh we
-        // return it directly instead of revalidating on every reader
-        // poll. Without this, a FreshRSS cron hitting the same bridge
-        // many times per minute turns into one conditional request to
-        // the origin per poll - exactly the pattern that gets an
-        // instance rate-limited or IP-banned.
         $freshUntil = responseFreshUntil($cachedResponse);
         if ($freshUntil !== null && $freshUntil > time()) {
             if ($returnFull === true) {
@@ -168,13 +163,14 @@ function getContents(
         $lastModified = $cachedResponse->getHeader('last-modified');
         if ($lastModified !== null && $lastModified !== '') {
             try {
-                // Some servers send Unix timestamp instead of RFC7231 date. Prepend it with @ to allow parsing as DateTime
-                $lastModified = new \DateTimeImmutable((is_numeric($lastModified) === true ? '@' : '') . $lastModified);
-                $config['if_not_modified_since'] = $lastModified->getTimestamp();
+                $lastModifiedStr = is_numeric($lastModified) === true ? '@' . $lastModified : $lastModified;
+                $lastModifiedDate = new \DateTimeImmutable($lastModifiedStr);
+                $config['if_not_modified_since'] = $lastModifiedDate->getTimestamp();
             } catch (\Exception $e) {
                 // Failed to parse last-modified
             }
         }
+
         $etag = $cachedResponse->getHeader('etag');
         if (($etag !== null && $etag !== '') === true) {
             $httpHeadersNormalized['if-none-match'] = $etag;
@@ -185,11 +181,6 @@ function getContents(
 
     $maxFileSize = Configuration::getConfig('http', 'max_filesize');
     if ($maxFileSize !== null && $maxFileSize !== false && (int)$maxFileSize > 0) {
-        // Config value is expressed in megabytes; the HTTP client expects
-        // bytes (CURLOPT_MAXFILESIZE and the xferinfo progress callback).
-        // A zero/negative/absent value disables the limit: without this
-        // guard max_filesize = 0 would abort every request on its very
-        // first progress tick (downloaded(0+) > 0).
         $config['max_filesize'] = (int)$maxFileSize * 2 ** 20;
     }
 
@@ -207,7 +198,6 @@ function getContents(
                     in_array('no-cache', $directives, true) === true
                     || in_array('no-store', $directives, true) === true
                 ) {
-                    // Don't cache as instructed by the server
                     break;
                 }
             }
@@ -216,10 +206,8 @@ function getContents(
         case 301:
         case 302:
         case 303:
-            // todo: cache
             break;
         case 304:
-            // Not Modified
             if ($cachedResponse instanceof Response) {
                 $response = $response->withBody($cachedResponse->getBody());
             }
@@ -228,6 +216,7 @@ function getContents(
             $e = HttpException::fromResponse($response, $url);
             throw $e;
     }
+
     if ($returnFull === true) {
         return $response;
     }
@@ -236,10 +225,6 @@ function getContents(
 
 /**
  * Gets contents from the Internet as HTMLDocument object.
- *
- * @param string $url The URL.
- * @param array $header (optional) A list of cURL headers.
- * @param array $opts (optional) A list of cURL options as associative array.
  *
  * @return \Dom\HTMLDocument Parsed HTML document
  * @throws \Exception If the HTTP response is empty or parsing fails
@@ -266,11 +251,6 @@ function getSimpleHTMLDOM(
  * Fetch contents from the Internet as HTMLDocument object. Contents are cached
  * and re-used for subsequent calls until the cache duration elapsed.
  *
- * @param string $url The URL.
- * @param int $ttl Cache duration in seconds.
- * @param array $header (optional) A list of cURL headers.
- * @param array $opts (optional) A list of cURL options as associative array.
- *
  * @return \Dom\HTMLDocument Parsed HTML document
  * @throws \Exception If the HTTP response is empty or parsing fails
  */
@@ -292,6 +272,10 @@ function getSimpleHTMLDOMCached(
         $cache->set($cacheKey, $content, $ttl);
     }
 
+    if ($content === '') {
+        throw new \Exception('Unable to parse dom because the http response was the empty string');
+    }
+
     libxml_use_internal_errors(true);
     $dom = \Dom\HTMLDocument::createFromString($content);
     libxml_clear_errors();
@@ -303,9 +287,6 @@ function getSimpleHTMLDOMCached(
 /**
  * Retrieves HTML via a named proxy profile.
  *
- * @param string $url URL for request
- * @param string $profileName Profile name from config.ini.php (e.g. 'flaresolverr', 'tgws', 'direct')
- * @param array $options Options: cookies, timeout, wait, use_cache, cache_ttl
  * @return string HTML content
  */
 function getProtectedContents(string $url, string $profileName, array $options = []): string
@@ -329,9 +310,6 @@ function getProtectedContents(string $url, string $profileName, array $options =
 /**
  * Retrieves HTML via a named proxy profile as HTMLDocument object.
  *
- * @param string $url URL for request
- * @param string $profileName Profile name from config.ini.php
- * @param array $options Options: cookies, timeout, wait, use_cache, cache_ttl
  * @return \Dom\HTMLDocument Parsed HTML document
  * @throws \Exception If the proxy returns empty HTML or parsing fails
  */
@@ -354,9 +332,6 @@ function getProtectedSimpleHTMLDOM(string $url, string $profileName, array $opti
 /**
  * Retrieves binary content (images, videos, etc.) via a named proxy profile.
  *
- * @param string $url URL for request
- * @param string $profileName Profile name from config.ini.php
- * @param array $options Options: timeout, connect_timeout
  * @return array{body: string, type: string}|null
  */
 function getProtectedBinary(string $url, string $profileName, array $options = []): ?array

@@ -76,7 +76,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         }
 
         $html = getContents(self::URI);
-        if ($html === '' || $html === null) {
+        if ($html === '') {
             throwClientException('Failed to load Firefox releases page.');
         }
 
@@ -128,7 +128,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         if ($cachedHtml === null) {
             try {
                 $html = getContents($release['url']);
-                if ($html !== null && $html !== '') {
+                if ($html !== '') {
                     $this->cache->set($cacheKey, $html, self::RELEASE_NOTES_CACHE_TTL);
                     $cachedHtml = $html;
                 }
@@ -138,7 +138,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
             }
         }
 
-        if ($cachedHtml === null || $cachedHtml === '') {
+        if (is_string($cachedHtml) === false || $cachedHtml === '') {
             $item['content'] = '<p>Failed to load release notes page.</p>';
             return $item;
         }
@@ -171,7 +171,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         $timeTag = $html->querySelector('time');
         if ($timeTag !== null) {
             $datetime = $timeTag->getAttribute('datetime');
-            $dateText = ($datetime !== null && $datetime !== '') ? $datetime : $timeTag->textContent;
+            $dateText = ($datetime !== '') ? $datetime : $timeTag->textContent;
             $timestamp = strtotime($dateText);
             if ($timestamp !== false) {
                 return $timestamp;
@@ -291,7 +291,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
 
         foreach ($wrapper->querySelectorAll('a[href]') as $link) {
             $href = $link->getAttribute('href');
-            if ($href !== null && $href !== '' && str_starts_with($href, '/') === true) {
+            if ($href !== '' && str_starts_with($href, '/') === true) {
                 $link->setAttribute('href', urljoin(self::URI, $href));
             }
         }

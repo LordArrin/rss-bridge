@@ -157,7 +157,7 @@ function media_embed_fetch_binary(
             $response = getContents($url, [], [], true);
             $body = $response->getBody();
 
-            if ($body === '' || $body === null) {
+            if ($body === '') {
                 throw new \RuntimeException('Empty response body');
             }
 
@@ -166,7 +166,7 @@ function media_embed_fetch_binary(
             $type = trim(explode(';', (string) $contentType)[0]);
 
             return [
-                'body' => (string) $body,
+                'body' => $body,
                 'type' => $type,
             ];
         } catch (\Throwable $e) {
@@ -186,7 +186,7 @@ function media_embed_fetch_binary(
         }
     }
 
-    if ($logger !== null) {
+    if ($logger !== null && $lastException !== null) {
         $logger->warning(sprintf(
             'media_embed_fetch_binary exhausted retries for %s: %s',
             $url,

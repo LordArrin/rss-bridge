@@ -96,7 +96,7 @@ final class AuthorTodayBridge extends BridgeAbstract
         $url = self::URI . '/work/' . $workId;
         $html = getContents($url);
 
-        if ($html === '' || $html === null) {
+        if ($html === '') {
             throwServerException("Unable to load page: {$url}");
         }
 

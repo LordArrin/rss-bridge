@@ -143,7 +143,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
         try {
             $html = getContents($this->supportUrl($info));
 
-            if ($html === '' || $html === null) {
+            if ($html === '') {
                 return null;
             }
 

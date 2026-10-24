@@ -143,9 +143,11 @@ final class GithubClient
 
         $this->logger->info(sprintf('github: github_client->fetch(%s)', $url));
 
-        $headers = ['Accept: application/vnd.github+json'];
+        $headers = [
+            'Accept' => 'application/vnd.github+json',
+        ];
         if ($this->token !== null && $this->token !== '') {
-            $headers[] = 'Authorization: Bearer ' . $this->token;
+            $headers['Authorization'] = 'Bearer ' . $this->token;
         }
 
         try {

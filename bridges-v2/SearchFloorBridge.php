@@ -120,7 +120,7 @@ final class SearchFloorBridge extends BridgeAbstract
     private function loadHtml(string $url, string $errorMessage): \Dom\HTMLDocument
     {
         $html = getContents($url);
-        if ($html === '' || $html === null) {
+        if ($html === '') {
             throw new \Exception($errorMessage);
         }
 
@@ -233,7 +233,7 @@ final class SearchFloorBridge extends BridgeAbstract
 
         try {
             $htmlContent = getContents($url);
-            if ($htmlContent === '' || $htmlContent === null) {
+            if ($htmlContent === '') {
                 return ['description' => '', 'chapter' => ''];
             }
 

@@ -71,7 +71,7 @@ final class PanoramaBridge extends BridgeAbstract
     private function fetchHtml(string $url): \Dom\HTMLDocument
     {
         $html = getContents($url);
-        if ($html === '' || $html === null) {
+        if ($html === '') {
             throw new \Exception("Failed to fetch {$url}");
         }
 
@@ -89,16 +89,17 @@ final class PanoramaBridge extends BridgeAbstract
 
         if ($cachedHtml === null) {
             try {
-                $cachedHtml = getContents($url);
-                if (($cachedHtml ?? '') !== '' && $cachedHtml !== null) {
-                    $this->cache->set($cacheKey, $cachedHtml, $ttl);
+                $htmlString = getContents($url);
+                if ($htmlString !== '') {
+                    $this->cache->set($cacheKey, $htmlString, $ttl);
+                    $cachedHtml = $htmlString;
                 }
             } catch (\Exception $e) {
                 return null;
             }
         }
 
-        if ($cachedHtml === '' || $cachedHtml === null) {
+        if (is_string($cachedHtml) === false || $cachedHtml === '') {
             return null;
         }
 
@@ -183,7 +184,7 @@ final class PanoramaBridge extends BridgeAbstract
         }
 
         $src = $imgTag->getAttribute('src');
-        return $src !== null ? $this->normalizeUrl($src) : '';
+        return $src !== '' ? $this->normalizeUrl($src) : '';
     }
 
     private function extractTitle(\Dom\HTMLDocument $articleHTML, string $fallbackTitle): string
@@ -196,7 +197,7 @@ final class PanoramaBridge extends BridgeAbstract
         $ogTitle = $articleHTML->querySelector('meta[property="og:title"]');
         if ($ogTitle !== null) {
             $content = $ogTitle->getAttribute('content');
-            return $content !== null ? trim($content) : $fallbackTitle;
+            return $content !== '' ? trim($content) : $fallbackTitle;
         }
 
         return $fallbackTitle;
@@ -207,7 +208,7 @@ final class PanoramaBridge extends BridgeAbstract
         $publishedTime = $articleHTML->querySelector('meta[property="article:published_time"]');
         if ($publishedTime !== null) {
             $content = $publishedTime->getAttribute('content');
-            if ($content !== null) {
+            if ($content !== '') {
                 $timestamp = strtotime($content);
                 if ($timestamp !== false) {
                     return $timestamp;
@@ -223,7 +224,7 @@ final class PanoramaBridge extends BridgeAbstract
         $authorTag = $articleHTML->querySelector('meta[property="article:author"]');
         if ($authorTag !== null) {
             $content = $authorTag->getAttribute('content');
-            return $content !== null ? $content : self::DEFAULT_AUTHOR;
+            return $content !== '' ? $content : self::DEFAULT_AUTHOR;
         }
 
         return self::DEFAULT_AUTHOR;
@@ -234,7 +235,7 @@ final class PanoramaBridge extends BridgeAbstract
         $ogImage = $articleHTML->querySelector('meta[property="og:image"]');
         if ($ogImage !== null) {
             $content = $ogImage->getAttribute('content');
-            if ($content !== null) {
+            if ($content !== '') {
                 $imageUrl = trim($content);
                 if ($imageUrl !== '') {
                     return $this->normalizeUrl($imageUrl);
@@ -280,7 +281,7 @@ final class PanoramaBridge extends BridgeAbstract
         $ogDesc = $articleHTML->querySelector('meta[property="og:description"]');
         if ($ogDesc !== null) {
             $content = $ogDesc->getAttribute('content');
-            if ($content !== null) {
+            if ($content !== '') {
                 $description = trim($content);
                 if ($description !== '') {
                     return '<p><em>' . htmlspecialchars($description) . '</em></p>';

@@ -4,16 +4,11 @@ declare(strict_types=1);
 
 namespace RSSBridge;
 
-use RSSBridge\FeedItem;
-
 /**
- * Very basic and naive feed parser.
+ * Modernized feed parser using PHP 8.4+ \Dom\XMLDocument API.
  *
- * Scrapes out rss 0.91, 1.0, 2.0 and atom 1.0.
- *
- * Produces array meant to be used inside rss-bridge.
- *
- * The item structure is tweaked so that it works with FeedItem
+ * Scrapes RSS 0.91, 1.0, 2.0 and Atom 1.0.
+ * Produces an array structure compatible with RSSBridge\FeedItem.
  */
 final class FeedParser
 {
@@ -22,63 +17,84 @@ final class FeedParser
         $xmlString = self::prepareXml($xmlString);
 
         libxml_use_internal_errors(true);
-        $xml = simplexml_load_string(trim($xmlString));
+        $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
         $xmlErrors = libxml_get_errors();
         libxml_use_internal_errors(false);
-        if ($xml === false) {
-            $firstXmlErrorMessage = '';
-            if ($xmlErrors !== []) {
-                $firstXmlErrorMessage = $xmlErrors[0]->message;
-            }
+
+        if ($doc->documentElement === null) {
+            $firstXmlErrorMessage = $xmlErrors !== [] ? $xmlErrors[0]->message : 'Unknown parsing error';
             throw new \Exception(sprintf('Unable to parse xml: %s', $firstXmlErrorMessage));
         }
+
+        $root = $doc->documentElement;
+        $rootName = strtolower($root->localName);
+
         $feed = [
-            'title'     => null,
-            'uri'       => null,
-            'icon'      => null,
-            'items'     => [],
+            'title'  => '',
+            'uri'    => '',
+            'icon'   => '',
+            'items'  => [],
         ];
-        if (isset($xml->item[0]) === true) {
-            $channel = $xml->channel[0];
-            $feed['title'] = trim((string)$channel->title);
-            $feed['uri'] = trim((string)$channel->link);
-            if (isset($channel->image->url) === true) {
-                $feed['icon'] = trim((string)$channel->image->url);
-            }
-            foreach ($xml->item as $item) {
-                $feed['items'][] = $this->parseRss1Item($item);
-            }
-        } elseif (isset($xml->channel[0]) === true) {
-            $channel = $xml->channel[0];
-            $feed['title'] = trim((string)$channel->title);
-            $feed['uri'] = trim((string)$channel->link);
-            if (isset($channel->image->url) === true) {
-                $feed['icon'] = trim((string)$channel->image->url);
-            }
-            foreach ($channel->item as $item) {
-                $feed['items'][] = $this->parseRss2Item($item);
-            }
-        } elseif (isset($xml->entry[0]) === true) {
-            $feed['title'] = (string)$xml->title;
-            if (isset($xml->link) === false) {
-                $feed['uri'] = '';
-            } elseif (count($xml->link) === 1) {
-                $feed['uri'] = (string)$xml->link[0]['href'];
-            } else {
-                $feed['uri'] = '';
-                foreach ($xml->link as $link) {
-                    if (strtolower((string) $link['rel']) === 'alternate') {
-                        $feed['uri'] = (string)$link['href'];
-                        break;
-                    }
+
+        if ($rootName === 'rdf') {
+            $channel = $root->querySelector('channel');
+            if ($channel !== null) {
+                $titleNode = $channel->querySelector('title');
+                $feed['title'] = $titleNode !== null ? $this->getNodeText($titleNode) : '';
+
+                $linkNode = $channel->querySelector('link');
+                $feed['uri'] = $linkNode !== null ? $this->getNodeText($linkNode) : '';
+
+                $image = $channel->querySelector('image');
+                if ($image !== null) {
+                    $urlNode = $image->querySelector('url');
+                    $feed['icon'] = $urlNode !== null ? $this->getNodeText($urlNode) : '';
                 }
             }
-            if (isset($xml->icon) === true) {
-                $feed['icon'] = (string) $xml->icon;
-            } elseif (isset($xml->logo) === true) {
-                $feed['icon'] = (string) $xml->logo;
+            foreach ($root->querySelectorAll('item') as $item) {
+                $feed['items'][] = $this->parseRss1Item($item);
             }
-            foreach ($xml->entry as $item) {
+        } elseif ($rootName === 'rss') {
+            $channel = $root->querySelector('channel');
+            if ($channel !== null) {
+                $titleNode = $channel->querySelector('title');
+                $feed['title'] = $titleNode !== null ? $this->getNodeText($titleNode) : '';
+
+                $linkNode = $channel->querySelector('link');
+                $feed['uri'] = $linkNode !== null ? $this->getNodeText($linkNode) : '';
+
+                $image = $channel->querySelector('image');
+                if ($image !== null) {
+                    $urlNode = $image->querySelector('url');
+                    $feed['icon'] = $urlNode !== null ? $this->getNodeText($urlNode) : '';
+                }
+            }
+            foreach ($root->querySelectorAll('channel > item') as $item) {
+                $feed['items'][] = $this->parseRss2Item($item);
+            }
+        } elseif ($rootName === 'feed') {
+            $titleNode = $root->querySelector('title');
+            $feed['title'] = $titleNode !== null ? $this->getNodeText($titleNode) : '';
+
+            $feed['uri'] = '';
+            foreach ($root->querySelectorAll('link') as $link) {
+                $rel = $this->getNodeAttr($link, 'rel');
+                if ($rel === 'alternate' || $rel === null || $rel === '') {
+                    $href = $this->getNodeAttr($link, 'href');
+                    $feed['uri'] = $href !== null ? $href : '';
+                    break;
+                }
+            }
+
+            $iconNode = $root->querySelector('icon');
+            if ($iconNode === null) {
+                $iconNode = $root->querySelector('logo');
+            }
+            if ($iconNode !== null) {
+                $feed['icon'] = $this->getNodeText($iconNode);
+            }
+
+            foreach ($root->querySelectorAll('entry') as $item) {
                 $feed['items'][] = $this->parseAtomItem($item);
             }
         } else {
@@ -91,7 +107,7 @@ final class FeedParser
     private static function prepareXml(string $xmlString): string
     {
         $bom = pack('H*', 'EFBBBF');
-        $xmlString = preg_replace("/^$bom/", '', $xmlString);
+        $xmlString = preg_replace("/^$bom/", '', $xmlString) ?? $xmlString;
 
         $problematicStrings = [
             '&nbsp;',
@@ -101,174 +117,265 @@ final class FeedParser
         return str_replace($problematicStrings, '', $xmlString);
     }
 
-    public function parseAtomItem(\SimpleXMLElement $feedItem): array
+    public function parseAtomItem(\Dom\Element $feedItem): array
     {
-        $item = $this->parseRss2Item($feedItem);
-        if (isset($feedItem->id) === true) {
-            $item['uri'] = (string)$feedItem->id;
+        $item = [
+            'uri'        => '',
+            'title'      => '',
+            'content'    => '',
+            'timestamp'  => '',
+            'author'     => '',
+            'categories' => [],
+            'enclosures' => [],
+        ];
+
+        $idNode = $feedItem->querySelector('id');
+        if ($idNode !== null) {
+            $item['uri'] = $this->getNodeText($idNode);
         }
-        if (isset($feedItem->title) === true) {
-            $item['title'] = trim(html_entity_decode((string)$feedItem->title));
+
+        $titleNode = $feedItem->querySelector('title');
+        if ($titleNode !== null) {
+            $item['title'] = trim(html_entity_decode($this->getNodeText($titleNode)));
         }
-        if (isset($feedItem->updated) === true) {
-            $item['timestamp'] = strtotime((string)$feedItem->updated);
+
+        $updatedNode = $feedItem->querySelector('updated');
+        if ($updatedNode !== null) {
+            $timestamp = strtotime($this->getNodeText($updatedNode));
+            $item['timestamp'] = $timestamp !== false ? $timestamp : '';
         }
-        if (isset($feedItem->author) === true) {
-            $item['author'] = (string)$feedItem->author->name;
+
+        $authorNode = $feedItem->querySelector('author > name');
+        if ($authorNode !== null) {
+            $item['author'] = $this->getNodeText($authorNode);
         }
-        if (isset($feedItem->content) === true) {
-            $contentChildren = $feedItem->content->children();
-            if (count($contentChildren) > 0) {
+
+        $contentNode = $feedItem->querySelector('content');
+        if ($contentNode !== null) {
+            if ($contentNode->hasChildNodes() === true && $contentNode->childNodes->count() > 0) {
                 $content = '';
-                foreach ($contentChildren as $contentChild) {
-                    $content .= $contentChild->asXML();
+                foreach ($contentNode->childNodes as $child) {
+                    $content .= $child->C14N();
                 }
                 $item['content'] = $content;
             } else {
-                $item['content'] = (string)$feedItem->content;
+                $item['content'] = $this->getNodeText($contentNode);
             }
         }
 
-        if (count($feedItem->link) === 1) {
-            $item['uri'] = (string)$feedItem->link[0]['href'];
-        } else {
-            foreach ($feedItem->link as $link) {
-                if (strtolower((string) $link['rel']) === 'alternate') {
-                    $item['uri'] = (string)$link['href'];
-                }
-                if (strtolower((string) $link['rel']) === 'enclosure') {
-                    $item['enclosures'][] = (string)$link['href'];
-                }
-            }
-        }
-        return $item;
-    }
-
-    public function parseRss2Item(\SimpleXMLElement $feedItem): array
-    {
-        $item = [
-            'uri'           => '',
-            'title'         => '',
-            'content'       => '',
-            'timestamp'     => '',
-            'author'        => '',
-            'categories'    => [],
-        ];
-
-        foreach ($feedItem as $k => $v) {
-            if (count($v) === 0) {
-                if ($k === 'category') {
-                    $item['categories'][] = (string) $v;
-                }
-                $item[$k] = (string) $v;
-            }
-        }
-
-        if (isset($feedItem->link) === true) {
-            $item['uri'] = (string)$feedItem->link;
-        }
-        if (isset($feedItem->title) === true) {
-            $item['title'] = trim(html_entity_decode((string)$feedItem->title));
-        }
-        if (isset($feedItem->description) === true) {
-            $item['content'] = (string)$feedItem->description;
-        }
-
-        $namespaces = $feedItem->getNamespaces(true);
-        if (isset($namespaces['dc']) === true) {
-            $dc = $feedItem->children($namespaces['dc']);
-        }
-        if (isset($namespaces['media']) === true) {
-            $media = $feedItem->children($namespaces['media']);
-        }
-
-        if (isset($namespaces['content']) === true) {
-            $content = $feedItem->children($namespaces['content']);
-            $item['content'] = (string) $content;
-        }
-
-        foreach ($namespaces as $namespaceName => $namespaceUrl) {
-            if (in_array($namespaceName, ['', 'content'], true) === true) {
+        foreach ($feedItem->querySelectorAll('link') as $link) {
+            $rel = $this->getNodeAttr($link, 'rel');
+            $href = $this->getNodeAttr($link, 'href');
+            if ($href === null) {
                 continue;
             }
-            $item[$namespaceName] = $this->parseModule($feedItem, $namespaceName, $namespaceUrl);
+
+            if ($rel === 'alternate' || $rel === null || $rel === '') {
+                $item['uri'] = $href;
+            }
+            if ($rel === 'enclosure') {
+                $item['enclosures'][] = $href;
+            }
         }
-        if (isset($namespaces['itunes']) === true) {
-            $enclosure = $feedItem->enclosure;
+
+        foreach ($feedItem->querySelectorAll('category') as $cat) {
+            $item['categories'][] = $this->getNodeText($cat);
+        }
+
+        return $item;
+    }
+
+    public function parseRss2Item(\Dom\Element $feedItem): array
+    {
+        $item = [
+            'uri'        => '',
+            'title'      => '',
+            'content'    => '',
+            'timestamp'  => '',
+            'author'     => '',
+            'categories' => [],
+            'enclosures' => [],
+        ];
+
+        $linkNode = $feedItem->querySelector('link');
+        if ($linkNode !== null) {
+            $item['uri'] = $this->getNodeText($linkNode);
+        }
+
+        $titleNode = $feedItem->querySelector('title');
+        if ($titleNode !== null) {
+            $item['title'] = trim(html_entity_decode($this->getNodeText($titleNode)));
+        }
+
+        $contentEncodedList = $feedItem->getElementsByTagNameNS('http://purl.org/rss/1.0/modules/content/', 'encoded');
+        $contentEncoded = $contentEncodedList->item(0);
+        if ($contentEncoded instanceof \Dom\Element) {
+            $item['content'] = $contentEncoded->textContent;
+        } else {
+            $descNode = $feedItem->querySelector('description');
+            if ($descNode !== null) {
+                $item['content'] = $this->getNodeText($descNode);
+            }
+        }
+
+        $dcCreatorList = $feedItem->getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', 'creator');
+        $dcCreator = $dcCreatorList->item(0);
+
+        $mediaCreditList = $feedItem->getElementsByTagNameNS('http://search.yahoo.com/mrss/', 'credit');
+        $mediaCredit = $mediaCreditList->item(0);
+
+        $authorNode = $feedItem->querySelector('author');
+        if ($authorNode === null) {
+            $authorNode = $dcCreator instanceof \Dom\Element ? $dcCreator : null;
+        }
+        if ($authorNode === null) {
+            $authorNode = $mediaCredit instanceof \Dom\Element ? $mediaCredit : null;
+        }
+        if ($authorNode instanceof \Dom\Element) {
+            $item['author'] = $this->getNodeText($authorNode);
+        }
+
+        $dcDateList = $feedItem->getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', 'date');
+        $dcDate = $dcDateList->item(0);
+
+        $pubDate = $feedItem->querySelector('pubDate');
+        $dateNode = $pubDate !== null ? $pubDate : ($dcDate instanceof \Dom\Element ? $dcDate : null);
+        if ($dateNode instanceof \Dom\Element) {
+            $timestamp = strtotime($this->getNodeText($dateNode));
+            $item['timestamp'] = $timestamp !== false ? $timestamp : '';
+        }
+
+        foreach ($feedItem->querySelectorAll('category') as $cat) {
+            $item['categories'][] = $this->getNodeText($cat);
+        }
+
+        $enclosure = $feedItem->querySelector('enclosure');
+        if ($enclosure !== null && $enclosure->hasAttribute('url') === true) {
+            $url = $enclosure->getAttribute('url');
+            $item['enclosures'][] = $url;
             $item['enclosure'] = [
-                'url'       => (string) $enclosure['url'],
-                'length'    => (string) $enclosure['length'],
-                'type'      => (string) $enclosure['type'],
+                'url'    => $url,
+                'length' => $enclosure->hasAttribute('length') === true ? $enclosure->getAttribute('length') : '',
+                'type'   => $enclosure->hasAttribute('type') === true ? $enclosure->getAttribute('type') : '',
             ];
         }
+
         if ($item['uri'] === '') {
-            if (isset($feedItem->guid) === true) {
-                foreach ($feedItem->guid->attributes() as $attribute => $value) {
-                    if ($attribute === 'isPermaLink' && ($value === 'true' || filter_var($feedItem->guid, FILTER_VALIDATE_URL) !== false)) {
-                        $item['uri'] = (string) $feedItem->guid;
-                        break;
-                    }
+            $guid = $feedItem->querySelector('guid');
+            if ($guid !== null) {
+                $isPermaLink = $this->getNodeAttr($guid, 'isPermaLink');
+                $guidText = $this->getNodeText($guid);
+                if (($isPermaLink === 'true' || filter_var($guidText, FILTER_VALIDATE_URL) !== false)) {
+                    $item['uri'] = $guidText;
                 }
             }
         }
 
-        $item['timestamp'] = $feedItem->pubDate ?? $dc->date ?? '';
-        $item['timestamp'] = strtotime((string) $item['timestamp']);
+        $modules = [];
+        foreach ($feedItem->childNodes as $child) {
+            if ($child instanceof \Dom\Element && $child->namespaceURI !== null) {
+                $parts = explode(':', $child->nodeName, 2);
+                $prefix = $parts[0] ?? '';
+                $localName = $parts[1] ?? $child->nodeName;
 
-        $item['author'] = $feedItem->author ?? $feedItem->creator ?? $dc->creator ?? $media->credit ?? '';
-        $item['author'] = (string) $item['author'];
+                if ($prefix === '' || $prefix === 'content') {
+                    continue;
+                }
 
-        if (isset($feedItem->enclosure) === true && (string) $feedItem->enclosure['url'] !== '') {
-            $item['enclosures'] = [
-                (string) $feedItem->enclosure['url'],
-            ];
+                if (isset($modules[$prefix]) === false) {
+                    $modules[$prefix] = [];
+                }
+
+                if ($child->hasChildNodes() === true && $child->childNodes->count() > 0) {
+                    $modules[$prefix][$localName] = $this->parseDomModule($child);
+                } else {
+                    $modules[$prefix][$localName] = $this->getNodeText($child);
+                }
+            }
         }
+
+        foreach ($modules as $ns => $data) {
+            $item[$ns] = $data;
+        }
+
         return $item;
     }
 
-    public function parseRss1Item(\SimpleXMLElement $feedItem): array
+    public function parseRss1Item(\Dom\Element $feedItem): array
     {
         $item = [
-            'uri'           => '',
-            'title'         => '',
-            'content'       => '',
-            'timestamp'     => '',
-            'author'        => '',
-            'categories'    => [],
+            'uri'        => '',
+            'title'      => '',
+            'content'    => '',
+            'timestamp'  => '',
+            'author'     => '',
+            'categories' => [],
         ];
-        if (isset($feedItem->link) === true) {
-            $item['uri'] = (string)$feedItem->link;
+
+        $linkNode = $feedItem->querySelector('link');
+        if ($linkNode !== null) {
+            $item['uri'] = $this->getNodeText($linkNode);
         }
-        if (isset($feedItem->title) === true) {
-            $item['title'] = html_entity_decode((string)$feedItem->title);
+
+        $titleNode = $feedItem->querySelector('title');
+        if ($titleNode !== null) {
+            $item['title'] = trim(html_entity_decode($this->getNodeText($titleNode)));
         }
-        if (isset($feedItem->description) === true) {
-            $item['content'] = (string)$feedItem->description;
+
+        $descNode = $feedItem->querySelector('description');
+        if ($descNode !== null) {
+            $item['content'] = $this->getNodeText($descNode);
         }
-        $namespaces = $feedItem->getNamespaces(true);
-        if (isset($namespaces['dc']) === true) {
-            $dc = $feedItem->children($namespaces['dc']);
-            if (isset($dc->date) === true) {
-                $item['timestamp'] = strtotime((string)$dc->date);
-            }
-            if (isset($dc->creator) === true) {
-                $item['author'] = (string)$dc->creator;
-            }
+
+        $dcDateList = $feedItem->getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', 'date');
+        $dcDate = $dcDateList->item(0);
+        if ($dcDate instanceof \Dom\Element) {
+            $timestamp = strtotime($this->getNodeText($dcDate));
+            $item['timestamp'] = $timestamp !== false ? $timestamp : '';
         }
+
+        $dcCreatorList = $feedItem->getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', 'creator');
+        $dcCreator = $dcCreatorList->item(0);
+        if ($dcCreator instanceof \Dom\Element) {
+            $item['author'] = $this->getNodeText($dcCreator);
+        }
+
         return $item;
     }
 
-    private function parseModule(\SimpleXMLElement $element, string $namespaceName, string $namespaceUrl): array
+    private function parseDomModule(\Dom\Element $element): array|string
     {
         $result = [];
-        $module = $element->children($namespaceUrl);
-        foreach ($module as $name => $value) {
-            if (get_class($value) === 'SimpleXMLElement' && $value->count() !== 0) {
-                $result[$name] = $this->parseModule($value, $namespaceName, $namespaceUrl);
-            } else {
-                $result[$name] = (string) $value;
+        $hasElements = false;
+
+        foreach ($element->childNodes as $child) {
+            if ($child instanceof \Dom\Element) {
+                $hasElements = true;
+                $parts = explode(':', $child->nodeName, 2);
+                $localName = $parts[1] ?? $child->nodeName;
+
+                if ($child->hasChildNodes() === true && $child->childNodes->count() > 0) {
+                    $result[$localName] = $this->parseDomModule($child);
+                } else {
+                    $result[$localName] = $this->getNodeText($child);
+                }
             }
         }
+
+        if ($hasElements === false) {
+            return $this->getNodeText($element);
+        }
+
         return $result;
+    }
+
+    private function getNodeText(?\Dom\Element $element): string
+    {
+        return $element !== null ? trim((string)$element->textContent) : '';
+    }
+
+    private function getNodeAttr(?\Dom\Element $element, string $name): ?string
+    {
+        return ($element !== null && $element->hasAttribute($name) === true) ? $element->getAttribute($name) : null;
     }
 }

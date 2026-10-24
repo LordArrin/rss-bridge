@@ -77,7 +77,7 @@ abstract class NginxBase extends BridgeAbstract
     private function collectChanges(): void
     {
         $content = getContents($this->getChangesUrl());
-        if ($content === false) {
+        if ($content === '') {
             throw new \Exception('Failed to load CHANGES');
         }
 
@@ -212,7 +212,7 @@ abstract class NginxBase extends BridgeAbstract
     private function collectNews(): void
     {
         $html = getContents($this->getNewsUrl());
-        if ($html === false || $html === '') {
+        if ($html === '') {
             throw new \Exception('Failed to load news page');
         }
 
@@ -246,7 +246,7 @@ abstract class NginxBase extends BridgeAbstract
             if ($wrapper !== null) {
                 foreach ($wrapper->querySelectorAll('a[href]') as $link) {
                     $href = $link->getAttribute('href');
-                    if ($href !== null && $href !== '' && str_starts_with($href, '/') === true) {
+                    if ($href !== '' && str_starts_with($href, '/') === true) {
                         $link->setAttribute('href', urljoin($this->getURI(), $href));
                     }
                 }
