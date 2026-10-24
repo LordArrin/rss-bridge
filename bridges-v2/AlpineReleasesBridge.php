@@ -29,11 +29,10 @@ final class AlpineReleasesBridge extends BridgeAbstract
         $xml = \Dom\XMLDocument::createFromString($feedXml);
         libxml_use_internal_errors(false);
 
-        $entries = $xml->getElementsByTagName('entry');
-
-        foreach ($entries as $entry) {
-            $titleEl = $entry->getElementsByTagName('title')->item(0);
-            $title = $titleEl !== null ? trim($titleEl->textContent ?? '') : '';
+        // Modern API: querySelectorAll instead of getElementsByTagName
+        foreach ($xml->querySelectorAll('entry') as $entry) {
+            $titleEl = $entry->querySelector('title');
+            $title = $titleEl !== null ? trim($titleEl->textContent) : '';
             if ($title === '') {
                 continue;
             }
@@ -45,10 +44,10 @@ final class AlpineReleasesBridge extends BridgeAbstract
             preg_match_all('/(\d+\.\d+(?:\.\d+)?)/', $title, $matches);
             $versions = $matches[1] ?? [];
 
-            $updatedEl = $entry->getElementsByTagName('updated')->item(0);
+            $updatedEl = $entry->querySelector('updated');
             $timestamp = 0;
             if ($updatedEl !== null) {
-                $dateText = trim($updatedEl->textContent ?? '');
+                $dateText = trim($updatedEl->textContent);
                 if ($dateText !== '') {
                     $parsed = strtotime($dateText);
                     if ($parsed !== false) {
@@ -57,10 +56,11 @@ final class AlpineReleasesBridge extends BridgeAbstract
                 }
             }
 
-            $contentEl = $entry->getElementsByTagName('content')->item(0);
-            $summaryEl = $entry->getElementsByTagName('summary')->item(0);
-            $rawContent = $contentEl !== null ? ($contentEl->textContent ?? '') : ($summaryEl !== null ? $summaryEl->textContent : '');
-            $content = trim((string)$rawContent);
+            $contentEl = $entry->querySelector('content');
+            $summaryEl = $entry->querySelector('summary');
+
+            $rawContent = $contentEl !== null ? $contentEl->textContent : ($summaryEl !== null ? $summaryEl->textContent : '');
+            $content = trim((string) $rawContent);
 
             $plainContent = trim(strip_tags($content));
             if ($plainContent === $title || $plainContent === '') {
@@ -72,20 +72,20 @@ final class AlpineReleasesBridge extends BridgeAbstract
                 $content = $branchesMeta . ($content !== '' ? '<br>' . $content : '');
             }
 
-            $linkEl = $entry->getElementsByTagName('link')->item(0);
-            $uri = $linkEl !== null ? ($linkEl->getAttribute('href') ?? '') : '';
+            $linkEl = $entry->querySelector('link');
+            $uri = $linkEl !== null ? $linkEl->getAttribute('href') : '';
 
-            $authorEl = $entry->getElementsByTagName('author')->item(0);
             $author = '';
+            $authorEl = $entry->querySelector('author');
             if ($authorEl !== null) {
-                $authorNameEl = $authorEl->getElementsByTagName('name')->item(0);
+                $authorNameEl = $authorEl->querySelector('name');
                 if ($authorNameEl !== null) {
-                    $author = trim($authorNameEl->textContent ?? '');
+                    $author = trim($authorNameEl->textContent);
                 }
             }
 
-            $idEl = $entry->getElementsByTagName('id')->item(0);
-            $uid = $idEl !== null ? ($idEl->textContent ?? '') : uniqid('alpine-', true);
+            $idEl = $entry->querySelector('id');
+            $uid = $idEl !== null ? $idEl->textContent : uniqid('alpine-', true);
 
             $this->items[] = [
                 'title'     => $title,
@@ -97,9 +97,8 @@ final class AlpineReleasesBridge extends BridgeAbstract
             ];
         }
 
-        usort($this->items, function ($a, $b) {
-            return $b['timestamp'] - $a['timestamp'];
-        });
+        // Modern PHP spaceship operator for sorting
+        usort($this->items, static fn (array $a, array $b): int => $b['timestamp'] <=> $a['timestamp']);
     }
 
     private function getBranchesInfo(): array
@@ -116,8 +115,7 @@ final class AlpineReleasesBridge extends BridgeAbstract
 
         $branches = [];
 
-        $rows = $dom->querySelectorAll('table tr');
-        foreach ($rows as $row) {
+        foreach ($dom->querySelectorAll('table tr') as $row) {
             $cells = $row->querySelectorAll('td');
             $cellsArray = iterator_to_array($cells);
 
@@ -125,20 +123,20 @@ final class AlpineReleasesBridge extends BridgeAbstract
                 continue;
             }
 
-            $branchName = $this->cleanText(trim($cellsArray[0]->textContent ?? ''));
+            $branchName = $this->cleanText(trim($cellsArray[0]->textContent));
             if (str_starts_with($branchName, 'v') === true) {
                 $branchName = substr($branchName, 1);
             }
 
-            $branchDate = $this->cleanText(trim($cellsArray[1]->textContent ?? ''));
-            $endOfSupport = $this->cleanText(trim($cellsArray[4]->textContent ?? ''));
+            $branchDate = $this->cleanText(trim($cellsArray[1]->textContent));
+            $endOfSupport = $this->cleanText(trim($cellsArray[4]->textContent));
 
-            preg_match_all('/(\d+\.\d+(?:\.\d+)?)/', trim($cellsArray[3]->textContent ?? ''), $matches);
+            preg_match_all('/(\d+\.\d+(?:\.\d+)?)/', trim($cellsArray[3]->textContent), $matches);
 
             foreach ($matches[1] ?? [] as $version) {
                 $branches[$version] = [
-                    'branchName' => $branchName,
-                    'branchDate' => $branchDate,
+                    'branchName'   => $branchName,
+                    'branchDate'   => $branchDate,
                     'endOfSupport' => $endOfSupport,
                 ];
             }
@@ -167,9 +165,7 @@ final class AlpineReleasesBridge extends BridgeAbstract
             return '';
         }
 
-        usort($versions, function ($a, $b) {
-            return version_compare($b, $a);
-        });
+        usort($versions, static fn (string $a, string $b): int => version_compare($b, $a));
 
         $rows = '';
         foreach ($versions as $version) {
@@ -178,9 +174,7 @@ final class AlpineReleasesBridge extends BridgeAbstract
             }
 
             $info = $branches[$version];
-            $esc = function ($s) {
-                return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
-            };
+            $esc = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 
             $rows .= '<tr>';
             $rows .= '<td><b>' . $esc($version) . '</b></td>';
@@ -195,12 +189,12 @@ final class AlpineReleasesBridge extends BridgeAbstract
         }
 
         return <<<HTML
-    <table border="1" cellpadding="4" cellspacing="0">
-    <thead><tr>
-    <th>Version</th><th>Branch</th><th>Branch date</th><th>End of support</th>
-    </tr></thead>
-    <tbody>{$rows}</tbody>
-    </table>
-    HTML;
+<table border="1" cellpadding="4" cellspacing="0">
+<thead><tr>
+<th>Version</th><th>Branch</th><th>Branch date</th><th>End of support</th>
+</tr></thead>
+<tbody>{$rows}</tbody>
+</table>
+HTML;
     }
 }

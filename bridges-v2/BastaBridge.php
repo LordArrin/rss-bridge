@@ -7,11 +7,12 @@ namespace RSSBridge\Bridges;
 use RSSBridge\BridgeAbstract;
 
 use function RSSBridge\Exceptions\throwServerException;
+use function urljoin;
 
 final class BastaBridge extends BridgeAbstract
 {
     public const NAME = 'Bastamag';
-    public const URI = 'https://www.bastamag.net/';
+    public const URI = 'https://basta.media/';
     public const DESCRIPTION = 'Returns the newest articles.';
     public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
@@ -27,7 +28,7 @@ final class BastaBridge extends BridgeAbstract
 
     public function collectData(): void
     {
-        $limit = (int)$this->getInput('limit');
+        $limit = (int) $this->getInput('limit');
         if ($limit <= 0) {
             $limit = 10;
         }
@@ -42,7 +43,7 @@ final class BastaBridge extends BridgeAbstract
         $xml = \Dom\XMLDocument::createFromString($feedHtml);
         libxml_use_internal_errors(false);
 
-        $items = $xml->getElementsByTagName('item');
+        $items = $xml->querySelectorAll('item');
         $count = 0;
 
         foreach ($items as $element) {
@@ -50,16 +51,16 @@ final class BastaBridge extends BridgeAbstract
                 break;
             }
 
-            $titleEl = $element->getElementsByTagName('title')->item(0);
-            $guidEl = $element->getElementsByTagName('guid')->item(0);
-            $dateEl = $element->getElementsByTagName('dc:date')->item(0);
+            $titleEl = $element->querySelector('title');
+            $guidEl = $element->querySelector('guid');
+            $dateEl = $element->querySelector('dc\:date');
 
             if ($titleEl === null || $guidEl === null) {
                 continue;
             }
 
-            $title = trim($titleEl->textContent ?? '');
-            $uri = trim($guidEl->textContent ?? '');
+            $title = trim($titleEl->textContent);
+            $uri = trim($guidEl->textContent);
 
             if ($title === '' || $uri === '') {
                 continue;
@@ -67,7 +68,7 @@ final class BastaBridge extends BridgeAbstract
 
             $timestamp = null;
             if ($dateEl !== null) {
-                $dateText = trim($dateEl->textContent ?? '');
+                $dateText = trim($dateEl->textContent);
                 if ($dateText !== '') {
                     $parsed = strtotime($dateText);
                     if ($parsed !== false) {
@@ -79,10 +80,10 @@ final class BastaBridge extends BridgeAbstract
             $content = $this->fetchArticleContent($uri);
 
             $this->items[] = [
-                'title' => $title,
-                'uri' => $uri,
+                'title'     => $title,
+                'uri'       => $uri,
                 'timestamp' => $timestamp,
-                'content' => $content,
+                'content'   => $content,
             ];
 
             $count++;
@@ -100,6 +101,26 @@ final class BastaBridge extends BridgeAbstract
         $dom = \Dom\HTMLDocument::createFromString($html);
         libxml_use_internal_errors(false);
 
+        $junkSelectors = [
+            '.sur-le-meme-sujet',
+            '.meme-sujet',
+            '.same-topic',
+            '.lire-aussi',
+            '.also-read',
+            '.related',
+            '.related-articles',
+            '.articles-lies',
+            '[data-role="related"]',
+            'svg[aria-hidden="true"]',
+            '.spip_document',
+        ];
+
+        foreach ($junkSelectors as $selector) {
+            foreach ($dom->querySelectorAll($selector) as $junk) {
+                $junk->remove();
+            }
+        }
+
         $this->resolveRelativeUrls($dom->documentElement);
 
         $texte = $dom->querySelector('div.texte');
@@ -107,7 +128,7 @@ final class BastaBridge extends BridgeAbstract
             return '';
         }
 
-        return $dom->saveHtml($texte);
+        return $texte->innerHTML;
     }
 
     private function resolveRelativeUrls(?\Dom\Element $container): void
@@ -116,16 +137,31 @@ final class BastaBridge extends BridgeAbstract
             return;
         }
 
-        $base = rtrim(self::URI, '/');
+        $base = self::URI;
         $elements = $container->querySelectorAll('[src], [href]');
+
         foreach ($elements as $el) {
             foreach (['src', 'href'] as $attr) {
-                $value = $el->getAttribute($attr);
-                if ($value === null) {
+                if ($el->hasAttribute($attr) === false) {
                     continue;
                 }
-                if (str_starts_with($value, '/') === true && str_starts_with($value, '//') === false) {
-                    $el->setAttribute($attr, $base . $value);
+
+                $value = $el->getAttribute($attr);
+
+                if (
+                    $value === '' ||
+                    preg_match('#^(https?:)?//#i', $value) === 1 ||
+                    str_starts_with($value, 'data:') === true ||
+                    str_starts_with($value, 'mailto:') === true ||
+                    str_starts_with($value, 'javascript:') === true ||
+                    str_starts_with($value, 'tel:') === true
+                ) {
+                    continue;
+                }
+
+                $resolvedUrl = urljoin($base, $value);
+                if ($resolvedUrl !== null && $resolvedUrl !== '') {
+                    $el->setAttribute($attr, $resolvedUrl);
                 }
             }
         }

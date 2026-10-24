@@ -133,14 +133,25 @@ class FeedItem
         return $this->timestamp;
     }
 
-    public function setTimestamp($datetime)
+    public function setTimestamp($datetime): void
     {
         $this->timestamp = null;
-        if (is_numeric($datetime) === true) {
-            $timestamp = $datetime;
-        } else {
-            $timestamp = strtotime($datetime);
+
+        if ($datetime === null) {
+            return;
         }
+
+        if (is_numeric($datetime) === true) {
+            $timestamp = (int) $datetime;
+        } elseif (is_string($datetime) === true) {
+            $timestamp = strtotime($datetime);
+            if ($timestamp === false) {
+                return;
+            }
+        } else {
+            return;
+        }
+
         if ($timestamp > 0) {
             $this->timestamp = $timestamp;
         }
@@ -164,9 +175,6 @@ class FeedItem
         return $this->content;
     }
 
-    /**
-     * @param string|array|\Dom\HTMLDocument|\Dom\Element $content The item content
-     */
     public function setContent($content)
     {
         $this->content = null;
