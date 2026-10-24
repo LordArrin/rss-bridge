@@ -17,7 +17,6 @@ parameters:
         - lib/logger.php
         - lib/json.php
         - lib/utils.php
-        - lib/utils-functions.php
         - lib/contents.php
         - quirks/template.php
         - quirks/html.php

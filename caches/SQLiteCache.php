@@ -6,6 +6,7 @@ namespace RSSBridge\Caches;
 
 use RSSBridge\Logger\Logger;
 use RSSBridge\Configuration;
+use RSSBridge\Utils\Url;
 
 /**
  * SQLite-based persistent cache with WAL mode for better concurrency.
@@ -314,7 +315,7 @@ final class SQLiteCache implements CacheInterface
         try {
             $stmt->execute();
         } catch (\Exception $e) {
-            $this->logger->warning(create_sane_exception_message($e));
+            $this->logger->warning(Url::createSaneExceptionMessage($e));
         }
     }
 
@@ -328,7 +329,7 @@ final class SQLiteCache implements CacheInterface
         try {
             $stmt->execute();
         } catch (\Exception $e) {
-            $this->logger->warning(create_sane_exception_message($e));
+            $this->logger->warning(Url::createSaneExceptionMessage($e));
         }
     }
 
@@ -346,7 +347,7 @@ final class SQLiteCache implements CacheInterface
         try {
             $stmt->execute();
         } catch (\Exception $e) {
-            $this->logger->warning(create_sane_exception_message($e));
+            $this->logger->warning(Url::createSaneExceptionMessage($e));
         }
 
         // Expired lock leases are pure garbage: no worker will ever reclaim
@@ -357,7 +358,7 @@ final class SQLiteCache implements CacheInterface
         try {
             $locks->execute();
         } catch (\Exception $e) {
-            $this->logger->warning(create_sane_exception_message($e));
+            $this->logger->warning(Url::createSaneExceptionMessage($e));
         }
     }
 
@@ -367,7 +368,7 @@ final class SQLiteCache implements CacheInterface
             $this->db->exec('DELETE FROM storage');
             $this->db->exec('DELETE FROM locks');
         } catch (\Exception $e) {
-            $this->logger->warning(create_sane_exception_message($e));
+            $this->logger->warning(Url::createSaneExceptionMessage($e));
         }
     }
 

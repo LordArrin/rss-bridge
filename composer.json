@@ -32,7 +32,6 @@
             "lib/json.php",
             "lib/exceptions.php",
             "lib/utils.php",
-            "lib/utils-functions.php",
             "lib/contents.php",
             "lib/http.php",
             "lib/logger.php",

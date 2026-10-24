@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Caches;
 
 use RSSBridge\Logger\Logger;
+use RSSBridge\Utils\Url;
 
 /**
  * File-based cache storage with security hardening.
@@ -129,7 +130,7 @@ final class FileCache implements CacheInterface
         try {
             file_put_contents($cacheFile, $data, LOCK_EX);
         } catch (\Exception $e) {
-            $this->logger->warning(create_sane_exception_message($e));
+            $this->logger->warning(Url::createSaneExceptionMessage($e));
         }
     }
 

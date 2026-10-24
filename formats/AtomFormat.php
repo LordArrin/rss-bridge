@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Formats;
 
+use RSSBridge\Utils\Url;
+
 /**
  * AtomFormat - RFC 4287: The Atom Syndication Format
  * https://tools.ietf.org/html/rfc4287
@@ -28,7 +30,7 @@ final class AtomFormat extends FormatAbstract
         $document = \Dom\XMLDocument::createEmpty('1.0', 'UTF-8');
         $document->formatOutput = true;
 
-        $feedUrl = get_current_url();
+        $feedUrl = Url::getCurrentUrl();
 
         $feed = $document->createElementNS(self::ATOM_NS, 'feed');
         $document->appendChild($feed);
@@ -193,7 +195,7 @@ final class AtomFormat extends FormatAbstract
                 $entryEnclosure = $document->createElementNS(self::ATOM_NS, 'link');
                 $entry->appendChild($entryEnclosure);
                 $entryEnclosure->setAttribute('rel', 'enclosure');
-                $entryEnclosure->setAttribute('type', parse_mime_type($enclosure));
+                $entryEnclosure->setAttribute('type', Url::parseMimeType($enclosure));
                 $entryEnclosure->setAttribute('href', (string) $enclosure);
             }
 

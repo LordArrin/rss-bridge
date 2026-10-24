@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Formats;
 
+use RSSBridge\Utils\Url;
+
 /**
  * MrssFormat - RSS 2.0 + Media RSS
  * http://www.rssboard.org/rss-specification
@@ -68,7 +70,7 @@ final class MrssFormat extends FormatAbstract
                 $channel->appendChild($linkSelf);
                 $linkSelf->setAttribute('rel', 'self');
                 $linkSelf->setAttribute('type', 'application/atom+xml');
-                $feedUrl = get_current_url();
+                $feedUrl = Url::getCurrentUrl();
                 $linkSelf->setAttribute('href', $feedUrl);
             } elseif ($feedKey === 'icon') {
                 $icon = $feedValue;
@@ -170,7 +172,7 @@ final class MrssFormat extends FormatAbstract
                 $entryEnclosure = $document->createElementNS(self::MRSS_NS, 'content');
                 $entry->appendChild($entryEnclosure);
                 $entryEnclosure->setAttribute('url', (string) $enclosure);
-                $entryEnclosure->setAttribute('type', parse_mime_type($enclosure));
+                $entryEnclosure->setAttribute('type', Url::parseMimeType($enclosure));
             }
 
             foreach ($item->getCategories() as $category) {

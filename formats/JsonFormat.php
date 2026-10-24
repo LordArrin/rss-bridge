@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Formats;
 
+use RSSBridge\Utils\Url;
+
 /**
  * JsonFormat - JSON Feed Version 1.1
  * https://jsonfeed.org/version/1.1
@@ -39,7 +41,7 @@ final class JsonFormat extends FormatAbstract
             'version'       => 'https://jsonfeed.org/version/1.1',
             'title'         => $feedArray['name'] ?? '',
             'home_page_url' => $feedArray['uri'] ?? '',
-            'feed_url'      => get_current_url(),
+            'feed_url'      => Url::getCurrentUrl(),
         ];
 
         if (isset($feedArray['icon']) === true && $feedArray['icon'] !== '') {
@@ -90,7 +92,7 @@ final class JsonFormat extends FormatAbstract
             }
 
             if ($entryContent !== '') {
-                if (is_html($entryContent) === true) {
+                if (Url::isHtml($entryContent) === true) {
                     $entry['content_html'] = $entryContent;
                 } else {
                     $entry['content_text'] = $entryContent;
@@ -102,7 +104,7 @@ final class JsonFormat extends FormatAbstract
                 foreach ($entryEnclosures as $enclosure) {
                     $entry['attachments'][] = [
                         'url'       => $enclosure,
-                        'mime_type' => parse_mime_type($enclosure)
+                        'mime_type' => Url::parseMimeType($enclosure)
                     ];
                 }
             }

@@ -50,30 +50,3 @@ namespace RSSBridge\Exceptions {
         throw new RateLimitException($message);
     }
 }
-
-namespace {
-    // --- Compatibility layer -------------------------------------------
-    // Aliases so legacy code (bridges, actions, middlewares) can keep
-    // referencing the exception classes in the global namespace.
-    class_alias(\RSSBridge\Exceptions\ClientException::class, 'ClientException');
-    class_alias(\RSSBridge\Exceptions\RateLimitException::class, 'RateLimitException');
-
-    // Thin wrappers around the namespaced helpers for legacy callers.
-    // They return void instead of "never": a wrapper that calls a
-    // never-returning function cannot itself be declared "never", but
-    // control still never returns to the caller.
-    function throwClientException(string $message = ''): void
-    {
-        \RSSBridge\Exceptions\throwClientException($message);
-    }
-
-    function throwServerException(string $message = ''): void
-    {
-        \RSSBridge\Exceptions\throwServerException($message);
-    }
-
-    function throwRateLimitException(string $message = ''): void
-    {
-        \RSSBridge\Exceptions\throwRateLimitException($message);
-    }
-}

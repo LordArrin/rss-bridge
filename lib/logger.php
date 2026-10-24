@@ -228,10 +228,3 @@ final class NullLogger implements Logger
     {
     }
 }
-
-// backward compatibility
-class_alias(\RSSBridge\Logger\Logger::class, 'Logger');
-class_alias(\RSSBridge\Logger\SimpleLogger::class, 'SimpleLogger');
-class_alias(\RSSBridge\Logger\StreamHandler::class, 'StreamHandler');
-class_alias(\RSSBridge\Logger\ErrorLogHandler::class, 'ErrorLogHandler');
-class_alias(\RSSBridge\Logger\NullLogger::class, 'NullLogger');

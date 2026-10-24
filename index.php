@@ -6,6 +6,7 @@ use RSSBridge\Configuration;
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
 use RSSBridge\RssBridge;
+use RSSBridge\Utils\Url;
 
 require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/lib/config.php';
@@ -32,8 +33,8 @@ set_error_handler(function ($code, $message, $file, $line) use ($logger) {
     }
     $text = sprintf(
         '%s at %s line %s',
-        sanitize_root($message),
-        sanitize_root($file),
+        Url::sanitizeRoot($message),
+        Url::sanitizeRoot($file),
         $line
     );
     $logger->warning($text);
@@ -47,8 +48,8 @@ register_shutdown_function(function () use ($logger) {
         $message = sprintf(
             '(shutdown) %s: %s in %s line %s',
             $error['type'],
-            sanitize_root($error['message']),
-            sanitize_root($error['file']),
+            Url::sanitizeRoot($error['message']),
+            Url::sanitizeRoot($error['file']),
             $error['line']
         );
         $logger->error($message);

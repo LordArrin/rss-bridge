@@ -7,6 +7,7 @@ namespace RSSBridge;
 use RSSBridge\FeedParser;
 use RSSBridge\Formats\MrssFormat;
 use RSSBridge\Formats\AtomFormat;
+use RSSBridge\Utils\Url;
 
 /**
  * Abstract base class for bridges that expand an existing RSS/Atom feed.
@@ -58,7 +59,7 @@ abstract class FeedExpander extends BridgeAbstract
             $this->feed = $feedParser->parseFeed($xmlString);
         } catch (\Exception $e) {
             // FeedMergeBridge relies on this specific message format
-            throw new \Exception(sprintf('Failed to parse xml from %s: %s', $url, create_sane_exception_message($e)));
+            throw new \Exception(sprintf('Failed to parse xml from %s: %s', $url, Url::createSaneExceptionMessage($e)));
         }
 
         $items = array_slice($this->feed['items'] ?? [], 0, $maxItems);

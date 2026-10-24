@@ -1097,11 +1097,3 @@ final class Response
         echo $this->body;
     }
 }
-
-class_alias(\RSSBridge\Http\HttpException::class, 'HttpException');
-class_alias(\RSSBridge\Http\CloudFlareException::class, 'CloudFlareException');
-class_alias(\RSSBridge\Http\HttpClient::class, 'HttpClient');
-class_alias(\RSSBridge\Http\IpResolver::class, 'IpResolver');
-class_alias(\RSSBridge\Http\CurlHttpClient::class, 'CurlHttpClient');
-class_alias(\RSSBridge\Http\Request::class, 'Request');
-class_alias(\RSSBridge\Http\Response::class, 'Response');
