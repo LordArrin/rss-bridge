@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use RSSBridge\Utils\Url;
 
 use function RSSBridge\Exceptions\throwClientException;
 
@@ -225,7 +226,7 @@ final class ThePirateBayBridge extends BridgeAbstract
             $content .= '<b>Files:</b> ' . e((string)$numFiles) . '<br>';
         }
 
-        $content .= '<b>Size:</b> ' . format_bytes((int)($torrent->size ?? 0)) . '<br>';
+        $content .= '<b>Size:</b> ' . Url::formatBytes((int)($torrent->size ?? 0)) . '<br>';
         $content .= '<b>Seeders:</b> ' . e((string)($torrent->seeders ?? '0')) . '<br>';
         $content .= '<b>Leechers:</b> ' . e((string)($torrent->leechers ?? '0')) . '<br>';
         $content .= '<b>Info hash:</b> ' . e((string)($torrent->info_hash ?? '')) . '<br><br>';

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use RSSBridge\Utils\Url;
 
 final class DockerHubBridge extends BridgeAbstract
 {
@@ -268,7 +269,7 @@ final class DockerHubBridge extends BridgeAbstract
             $rows .= '<a href="' . e($layersUrl) . '">' . e($shortId) . '</a>';
             $rows .= '</td>';
             $rows .= '<td style="' . self::CSS['cell'] . '">' . e($os) . '/' . e($architecture) . '</td>';
-            $rows .= '<td style="' . self::CSS['cell'] . '">' . e(format_bytes($size)) . '</td>';
+            $rows .= '<td style="' . self::CSS['cell'] . '">' . e(Url::formatBytes($size)) . '</td>';
             $rows .= '</tr>';
         }
 

@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace RSSBridge\Middlewares;
 
-use RSSBridge\Logger\Logger;
 use RSSBridge\Exceptions\ClientException;
 use RSSBridge\Exceptions\RateLimitException;
 use RSSBridge\Http\HttpException;
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
+use RSSBridge\Logger\Logger;
+use RSSBridge\Utils\Url;
 
 final class ExceptionMiddleware implements Middleware
 {
@@ -42,7 +43,7 @@ final class ExceptionMiddleware implements Middleware
             if ($status < 500) {
                 $this->logger->debug(sprintf(
                     'Exception in ExceptionMiddleware: %s (%s)',
-                    create_sane_exception_message($e),
+                    Url::createSaneExceptionMessage($e),
                     $status
                 ));
             } else {

@@ -1,5 +1,9 @@
 <?php
 
+use RSSBridge\Http\CloudFlareException;
+use RSSBridge\Http\HttpException;
+use RSSBridge\Utils\Url;
+
 /**
  * This template is used for rendering exceptions
  *
@@ -103,11 +107,11 @@
         </div>
 
         <div class="error-message">
-            <strong>Message:</strong> <?= e(sanitize_root($e->getMessage())) ?>
+            <strong>Message:</strong> <?= e(Url::sanitizeRoot($e->getMessage())) ?>
         </div>
 
         <div>
-            <strong>File:</strong> <?= e(sanitize_root($e->getFile())) ?>
+            <strong>File:</strong> <?= e(Url::sanitizeRoot($e->getFile())) ?>
         </div>
 
         <div>
@@ -117,9 +121,9 @@
 
     <h2>Trace</h2>
 
-    <?php foreach (trace_from_exception($e) as $i => $frame) : ?>
+    <?php foreach (Url::traceFromException($e) as $i => $frame) : ?>
         <code>
-            #<?= $i ?> <?= e(frame_to_call_point($frame)) ?>
+            #<?= $i ?> <?= e(Url::frameToCallPoint($frame)) ?>
         </code>
         <br>
     <?php endforeach; ?>

@@ -274,9 +274,8 @@ final class FeedParser
         $modules = [];
         foreach ($feedItem->childNodes as $child) {
             if ($child instanceof \Dom\Element && $child->namespaceURI !== null) {
-                $parts = explode(':', $child->nodeName, 2);
-                $prefix = $parts[0] ?? '';
-                $localName = $parts[1] ?? $child->nodeName;
+                $prefix = $child->prefix ?? '';
+                $localName = $child->localName;
 
                 if ($prefix === '' || $prefix === 'content') {
                     continue;
@@ -351,8 +350,7 @@ final class FeedParser
         foreach ($element->childNodes as $child) {
             if ($child instanceof \Dom\Element) {
                 $hasElements = true;
-                $parts = explode(':', $child->nodeName, 2);
-                $localName = $parts[1] ?? $child->nodeName;
+                $localName = $child->localName;
 
                 if ($child->hasChildNodes() === true && $child->childNodes->count() > 0) {
                     $result[$localName] = $this->parseDomModule($child);

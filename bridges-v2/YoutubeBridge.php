@@ -600,48 +600,66 @@ final class YoutubeBridge extends BridgeAbstract
     private function extractItemsFromXmlFeed(string $xmlString): void
     {
         libxml_use_internal_errors(true);
-        $xml = simplexml_load_string($xmlString);
+        $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
+        $xmlErrors = libxml_get_errors();
         libxml_use_internal_errors(false);
 
-        if ($xml === false) {
-            throwServerException('Failed to parse XML feed');
+        if ($doc->documentElement === null) {
+            $firstXmlErrorMessage = $xmlErrors !== [] ? $xmlErrors[0]->message : 'Unknown parsing error';
+            throwServerException('Failed to parse XML feed: ' . $firstXmlErrorMessage);
         }
 
-        $xml->registerXPathNamespace('media', 'http://search.yahoo.com/mrss/');
-        $xml->registerXPathNamespace('yt', 'http://www.youtube.com/xml/schemas/2015');
+        $root = $doc->documentElement;
 
-        $titleNodes = $xml->xpath('title');
-        if ($titleNodes !== false && count($titleNodes) > 0) {
-            $this->feedName = $this->decodeTitle((string) $titleNodes[0]);
+        $atomNs = 'http://www.w3.org/2005/Atom';
+        $mediaNs = 'http://search.yahoo.com/mrss/';
+
+        $titleNodes = $root->getElementsByTagNameNS($atomNs, 'title');
+        if (count($titleNodes) > 0) {
+            $this->feedName = $this->decodeTitle($titleNodes->item(0)->textContent);
         }
 
-        $entries = $xml->xpath('entry');
-        if ($entries === false) {
-            $entries = [];
-        }
+        $entries = $root->getElementsByTagNameNS($atomNs, 'entry');
 
         foreach ($entries as $element) {
-            $idStr = (string) $element->id;
+            $idNodes = $element->getElementsByTagNameNS($atomNs, 'id');
+            $idStr = count($idNodes) > 0 ? $idNodes->item(0)->textContent : '';
             $videoId = str_replace('yt:video:', '', $idStr);
 
             if (str_contains($videoId, 'googleads') === true) {
                 continue;
             }
 
-            $title = $this->decodeTitle((string) $element->title);
-            $author = (string) $element->author->name;
+            $titleNodes = $element->getElementsByTagNameNS($atomNs, 'title');
+            $title = count($titleNodes) > 0 ? $this->decodeTitle($titleNodes->item(0)->textContent) : 'Untitled';
 
-            $descNodes = $element->xpath('media:group/media:description');
+            $authorName = '';
+            $authorNodes = $element->getElementsByTagNameNS($atomNs, 'author');
+            if (count($authorNodes) > 0) {
+                $authorElement = $authorNodes->item(0);
+                $nameNodes = $authorElement->getElementsByTagNameNS($atomNs, 'name');
+                if (count($nameNodes) > 0) {
+                    $authorName = $nameNodes->item(0)->textContent;
+                }
+            }
+
             $desc = '';
-            if ($descNodes !== false && count($descNodes) > 0) {
-                $desc = (string) $descNodes[0];
+            $mediaGroupNodes = $element->getElementsByTagNameNS($mediaNs, 'group');
+            if (count($mediaGroupNodes) > 0) {
+                $mediaGroup = $mediaGroupNodes->item(0);
+                $descNodes = $mediaGroup->getElementsByTagNameNS($mediaNs, 'description');
+                if (count($descNodes) > 0) {
+                    $desc = $descNodes->item(0)->textContent;
+                }
             }
 
             $desc = htmlspecialchars($desc, ENT_QUOTES, 'UTF-8');
             $desc = nl2br($desc);
             $desc = preg_replace(self::URI_REGEX, '<a href="$1" target="_blank">$1</a> ', $desc) ?? $desc;
 
-            $published = (string) $element->published;
+            $publishedNodes = $element->getElementsByTagNameNS($atomNs, 'published');
+            $published = count($publishedNodes) > 0 ? $publishedNodes->item(0)->textContent : '';
+
             $time = time();
             if ($published !== '') {
                 $parsedTime = strtotime($published);
@@ -650,7 +668,7 @@ final class YoutubeBridge extends BridgeAbstract
                 }
             }
 
-            $this->addItem($videoId, $title, $author, $desc, $time);
+            $this->addItem($videoId, $title, $authorName, $desc, $time);
         }
     }
 

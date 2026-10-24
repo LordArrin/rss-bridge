@@ -387,24 +387,27 @@ final class ItchBridge extends BridgeAbstract
             throwServerException('Failed to fetch RSS feed from Itch.io. The feed might be empty or the developer/game does not exist.');
         }
 
-        libxml_use_internal_errors(true);
-        $rss = simplexml_load_string($xmlString, 'SimpleXMLElement', LIBXML_NOCDATA);
-        libxml_clear_errors();
+        $parser = new \RSSBridge\FeedParser();
+        try {
+            $feed = $parser->parseFeed($xmlString);
+        } catch (\Exception $e) {
+            throwServerException('Failed to parse Itch.io RSS feed: ' . $e->getMessage());
+        }
 
-        if ($rss === false || isset($rss->channel->item) === false) {
-            throwServerException('Failed to parse Itch.io RSS feed.');
+        if ($feed['items'] === []) {
+            throwServerException('Failed to parse Itch.io RSS feed or feed is empty.');
         }
 
         $count = 0;
-        foreach ($rss->channel->item as $item) {
+        foreach ($feed['items'] as $item) {
             if ($count >= $limit) {
                 break;
             }
 
-            $title = (string)$item->title;
-            $link = (string)$item->link;
-            $description = (string)$item->description;
-            $pubDate = strtotime((string)$item->pubDate);
+            $title = $item['title'] !== '' ? $item['title'] : 'Untitled';
+            $link = $item['uri'] ?? '';
+            $description = $item['content'] ?? '';
+            $pubDate = $item['timestamp'] !== '' ? (int) $item['timestamp'] : time();
 
             $content = $description;
 
@@ -419,11 +422,11 @@ final class ItchBridge extends BridgeAbstract
             $content = $this->processImages($content);
 
             $this->items[] = [
-                'title' => $title,
-                'uri' => $link,
-                'content' => $content,
-                'timestamp' => $pubDate !== false ? $pubDate : time(),
-                'uid' => hash('sha256', $link),
+                'title'     => $title,
+                'uri'       => $link,
+                'content'   => $content,
+                'timestamp' => $pubDate,
+                'uid'       => hash('sha256', $link),
             ];
 
             $count++;

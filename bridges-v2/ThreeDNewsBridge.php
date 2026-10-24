@@ -386,23 +386,13 @@ final class ThreeDNewsBridge extends BridgeAbstract
     public function collectData(): void
     {
         $categoryInput = $this->getInput('category');
-        if ($categoryInput !== null && $categoryInput !== '') {
-            $category = (string)$categoryInput;
-        } else {
-            $category = 'all';
-        }
+        $category = $categoryInput !== null && $categoryInput !== '' ? (string)$categoryInput : 'all';
 
         $fetchFull = (bool)$this->getInput('fetch_full');
-
         $maxLimit = $fetchFull === true ? self::LIMIT_FULL_MAX : self::LIMIT_PREVIEW_MAX;
 
         $limitInput = $this->getInput('limit');
-        if ($limitInput !== null && (int)$limitInput > 0) {
-            $requestedLimit = (int)$limitInput;
-        } else {
-            $requestedLimit = $maxLimit;
-        }
-
+        $requestedLimit = $limitInput !== null && (int)$limitInput > 0 ? (int)$limitInput : $maxLimit;
         $limit = min($requestedLimit, $maxLimit);
 
         $rssUrl = self::RSS_URLS[$category] ?? self::RSS_URLS['all'];
@@ -412,36 +402,38 @@ final class ThreeDNewsBridge extends BridgeAbstract
             throwServerException('Failed to fetch RSS feed from 3DNews.');
         }
 
-        libxml_use_internal_errors(true);
-        $rss = simplexml_load_string($xmlString, 'SimpleXMLElement', LIBXML_NOCDATA);
-        libxml_clear_errors();
+        $parser = new \RSSBridge\FeedParser();
+        try {
+            $feed = $parser->parseFeed($xmlString);
+        } catch (\Exception $e) {
+            throwServerException('Failed to parse 3DNews RSS feed: ' . $e->getMessage());
+        }
 
-        if ($rss === false || isset($rss->channel->item) === false) {
-            throwServerException('Failed to parse 3DNews RSS feed.');
+        if ($feed['items'] === []) {
+            throwServerException('Failed to parse 3DNews RSS feed or feed is empty.');
         }
 
         $count = 0;
 
-        foreach ($rss->channel->item as $item) {
+        foreach ($feed['items'] as $item) {
             if ($count >= $limit) {
                 break;
             }
 
-            $title = (string)$item->title;
-            $link = (string)$item->link;
-            $description = (string)$item->description;
-            $pubDate = strtotime((string)$item->pubDate);
+            $title = $item['title'] !== '' ? $item['title'] : 'Untitled';
+            $link = $item['uri'] ?? '';
+            $description = $item['content'] ?? '';
+            $timestamp = $item['timestamp'] !== '' ? (int)$item['timestamp'] : time();
 
-            $enclosureImage = '';
-            if (isset($item->enclosure) === true) {
-                $enclosureUrl = (string)$item->enclosure['url'];
+            $content = $description;
+
+            if (isset($item['enclosures']) === true && is_array($item['enclosures']) === true && $item['enclosures'] !== []) {
+                $enclosureUrl = $item['enclosures'][0];
                 if ($enclosureUrl !== '') {
                     $escapedUrl = htmlspecialchars($enclosureUrl, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-                    $enclosureImage = '<img src="' . $escapedUrl . '" style="' . self::IMG_STYLE . '" align="left" />';
+                    $content = '<img src="' . $escapedUrl . '" style="' . self::IMG_STYLE . '" align="left" />' . $content;
                 }
             }
-
-            $content = $enclosureImage . $description;
 
             if ($fetchFull === true && $link !== '') {
                 if ($count > 0) {
@@ -457,17 +449,12 @@ final class ThreeDNewsBridge extends BridgeAbstract
             $content = $this->processYouTubeIframes($content);
             $content = $this->processHtmlContent($content);
 
-            $timestamp = $pubDate;
-            if ($timestamp === false || $timestamp === 0) {
-                $timestamp = time();
-            }
-
             $this->items[] = [
-                'title' => $title,
-                'uri' => $link,
-                'content' => $content,
+                'title'     => $title,
+                'uri'       => $link,
+                'content'   => $content,
                 'timestamp' => $timestamp,
-                'uid' => hash('sha256', $link),
+                'uid'       => hash('sha256', $link),
             ];
 
             $count++;

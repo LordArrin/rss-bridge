@@ -36,25 +36,6 @@ final class ServerNewsBridge extends BridgeAbstract
         ]
     ];
 
-    private function fetchRss(): \SimpleXMLElement
-    {
-        $response = getContents(self::RSS_URL);
-
-        if ($response === '') {
-            throw new \Exception('Failed to fetch RSS feed from ServerNews');
-        }
-
-        libxml_use_internal_errors(true);
-        $rss = simplexml_load_string($response, 'SimpleXMLElement', LIBXML_NOCDATA);
-        libxml_clear_errors();
-
-        if ($rss === false) {
-            throw new \Exception('Failed to parse RSS feed from ServerNews');
-        }
-
-        return $rss;
-    }
-
     private function extractUrlFromGuid(string $guid): string
     {
         $url = trim($guid);
@@ -96,14 +77,19 @@ final class ServerNewsBridge extends BridgeAbstract
         }
 
         foreach ($wrapper->querySelectorAll('img') as $img) {
-            $img->removeAttribute('width');
-            $img->removeAttribute('height');
-            $img->removeAttribute('align');
-            $img->removeAttribute('style');
-            $img->setAttribute('style', self::CSS_IMG);
+            if ($img instanceof \Dom\Element === true) {
+                $img->removeAttribute('width');
+                $img->removeAttribute('height');
+                $img->removeAttribute('align');
+                $img->removeAttribute('style');
+                $img->setAttribute('style', self::CSS_IMG);
+            }
         }
 
         foreach ($wrapper->querySelectorAll('p, div, h1, h2, h3, h4, h5, h6') as $element) {
+            if ($element instanceof \Dom\Element === false) {
+                continue;
+            }
             $style = $element->getAttribute('style') ?? '';
             if ($style !== '') {
                 $newStyle = preg_replace('/text-align\s*:\s*center\s*;?/i', '', $style);
@@ -231,28 +217,37 @@ final class ServerNewsBridge extends BridgeAbstract
     public function collectData(): void
     {
         $limitInput = $this->getInput('limit');
-        $limit = (is_numeric($limitInput) === true) ? (int)$limitInput : self::DEFAULT_LIMIT;
+        $limit = is_numeric($limitInput) === true ? (int)$limitInput : self::DEFAULT_LIMIT;
 
         $fullContentInput = $this->getInput('full_content');
         $fullContent = $fullContentInput === true || (is_string($fullContentInput) === true && $fullContentInput !== '');
 
-        $rss = $this->fetchRss();
+        $xmlString = getContents(self::RSS_URL);
+        if ($xmlString === '') {
+            throw new \Exception('Failed to fetch RSS feed from ServerNews');
+        }
 
-        if (isset($rss->channel->item) === false) {
+        $parser = new \RSSBridge\FeedParser();
+        try {
+            $feed = $parser->parseFeed($xmlString);
+        } catch (\Exception $e) {
+            throw new \Exception('Failed to parse RSS feed from ServerNews: ' . $e->getMessage());
+        }
+
+        if ($feed['items'] === []) {
             throw new \Exception('No items found in RSS feed');
         }
 
         $count = 0;
-        foreach ($rss->channel->item as $item) {
+        foreach ($feed['items'] as $item) {
             if ($count >= $limit) {
                 break;
             }
 
-            $title = (string)($item->title ?? '');
-            $guid = (string)($item->guid ?? '');
-            $link = $this->extractUrlFromGuid($guid);
-            $description = (string)($item->description ?? '');
-            $pubDate = strtotime((string)($item->pubDate ?? ''));
+            $title = $item['title'] !== '' ? $item['title'] : 'Untitled';
+            $link = $this->extractUrlFromGuid($item['uri']);
+            $description = $item['content'] ?? '';
+            $pubDate = $item['timestamp'] !== '' ? (int)$item['timestamp'] : time();
 
             $tags = $this->extractHashtags($description);
             $cleanDescription = $this->cleanRssDescription($description);
@@ -281,13 +276,13 @@ final class ServerNewsBridge extends BridgeAbstract
             }
 
             $this->items[] = [
-                'title' => $title,
-                'uri' => $link,
-                'content' => $content,
-                'timestamp' => ($pubDate !== false) ? $pubDate : time(),
-                'uid' => hash('sha256', $link),
+                'title'      => $title,
+                'uri'        => $link,
+                'content'    => $content,
+                'timestamp'  => $pubDate,
+                'uid'        => hash('sha256', $link),
                 'categories' => $tags,
-                'author' => $author,
+                'author'     => $author,
             ];
 
             $count++;

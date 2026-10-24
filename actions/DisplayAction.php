@@ -6,6 +6,7 @@ namespace RSSBridge\Actions;
 
 use RSSBridge\Http\HttpException;
 use RSSBridge\Utils\Json;
+use RSSBridge\Utils\Url;
 use RSSBridge\Logger\Logger;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\BridgeFactory;
@@ -117,9 +118,9 @@ final class DisplayAction implements ActionInterface
             $items = $bridge->getItems();
         } catch (\Throwable $e) {
             if ($e instanceof ClientException) {
-                $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
+                $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
             } elseif ($e instanceof RateLimitException) {
-                $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
+                $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
                 return new Response(
                     render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]),
                     429,
@@ -128,7 +129,7 @@ final class DisplayAction implements ActionInterface
             } elseif ($e instanceof HttpException) {
                 $code = $e->getCode();
                 if ($code >= 400 && $code <= 599) {
-                    $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), create_sane_exception_message($e)));
+                    $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
 
                     $headers = [];
                     if ($e->retryAfter !== null && in_array($code, [429, 503], true) === true) {
@@ -243,7 +244,7 @@ final class DisplayAction implements ActionInterface
 
         $item = [
             'title' => $title,
-            'uri' => get_current_url(),
+            'uri' => Url::getCurrentUrl(),
             'timestamp' => time(),
             'uid' => $bridge->getName() . '_' . $uniqueIdentifier,
             'content' => render_template(__DIR__ . '/../templates/bridge-error.html.php', [
@@ -300,8 +301,8 @@ final class DisplayAction implements ActionInterface
             'title' => $bridge->getName() . ' failed with: ' . $e->getMessage(),
             'body' => sprintf(
                 "```\n%s\n\n%s\n\nQuery string: %s\nVersion: %s\nOs: %s\nPHP version: %s\n```\nMaintainer: @%s",
-                create_sane_exception_message($e),
-                implode("\n", trace_to_call_points(trace_from_exception($e))),
+                Url::createSaneExceptionMessage($e),
+                implode("\n", Url::traceToCallPoints(Url::traceFromException($e))),
                 $queryString,
                 Configuration::getVersion(),
                 PHP_OS_FAMILY,

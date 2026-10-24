@@ -38,41 +38,39 @@ final class TopWarBridge extends BridgeAbstract
         $url = sprintf('https://topwar.ru/%s.xml', $feedSlug);
 
         $xmlString = getContents($url);
-
         if ($xmlString === '') {
             return;
         }
 
-        libxml_use_internal_errors(true);
-        $xml = simplexml_load_string($xmlString);
-        libxml_clear_errors();
-
-        if ($xml === false || isset($xml->channel->item) === false) {
+        $parser = new \RSSBridge\FeedParser();
+        try {
+            $feed = $parser->parseFeed($xmlString);
+        } catch (\Exception $e) {
             return;
         }
 
-        foreach ($xml->channel->item as $entry) {
-            $articleUrl = (string) ($entry->link ?? '');
+        foreach ($feed['items'] as $item) {
+            $articleUrl = $item['uri'] ?? '';
             if ($articleUrl === '') {
                 continue;
             }
 
             $fullContent = $this->fetchFullArticle($articleUrl);
-
             if ($fullContent === '') {
                 continue;
             }
 
-            $namespaces = $entry->getNamespaces(true);
-            $dc = isset($namespaces['dc']) === true ? $entry->children($namespaces['dc']) : null;
+            $title = $item['title'] !== '' ? $item['title'] : 'Untitled';
+            $timestamp = $item['timestamp'] !== '' ? (int) $item['timestamp'] : time();
+            $author = $item['author'] !== '' ? $item['author'] : null;
 
             $this->items[] = [
-                'title' => (string) ($entry->title ?? 'Untitled'),
-                'uri' => $articleUrl,
-                'content' => $fullContent,
-                'timestamp' => isset($entry->pubDate) === true ? strtotime((string) $entry->pubDate) : time(),
-                'author' => $dc !== null ? (string) $dc->creator : null,
-                'uid' => (string) ($entry->guid ?? $entry->link),
+                'title'     => $title,
+                'uri'       => $articleUrl,
+                'content'   => $fullContent,
+                'timestamp' => $timestamp,
+                'author'    => $author,
+                'uid'       => $articleUrl,
             ];
         }
     }
@@ -104,7 +102,9 @@ final class TopWarBridge extends BridgeAbstract
         $this->processImagesAndCaptions($articleBody);
         $this->processHeadings($articleBody);
 
-        return $this->getInnerHTML($articleBody);
+        $content = $this->getInnerHTML($articleBody);
+
+        return $this->fixEscapedIframes($content);
     }
 
     private function getInnerHTML($element): string
@@ -121,6 +121,15 @@ final class TopWarBridge extends BridgeAbstract
         }
 
         return $innerHTML;
+    }
+
+    private function fixEscapedIframes(string $html): string
+    {
+        $html = preg_replace('/&lt;(iframe\s[^>]*)\s*&gt;/i', '<$1>', $html);
+        $html = preg_replace('/&lt;\/iframe\s*&gt;/i', '</iframe>', $html);
+        $html = preg_replace('/<[\x{200B}-\x{200D}\x{FEFF}\x{200C}]iframe/iu', '<iframe', $html);
+
+        return $html;
     }
 
     private function processImagesAndCaptions($articleBody): void
