@@ -25,7 +25,7 @@ final class AtomFormat extends FormatAbstract
 
     public function render(): string
     {
-        $document = new \DOMDocument('1.0', 'UTF-8');
+        $document = \Dom\XMLDocument::createEmpty('1.0', 'UTF-8');
         $document->formatOutput = true;
 
         $feedUrl = get_current_url();
@@ -37,29 +37,29 @@ final class AtomFormat extends FormatAbstract
         $feedArray = $this->getFeed();
         foreach ($feedArray as $feedKey => $feedValue) {
             if ($feedKey === 'name') {
-                $title = $document->createElement('title');
+                $title = $document->createElementNS(self::ATOM_NS, 'title');
                 $feed->appendChild($title);
                 $title->setAttribute('type', 'text');
                 $title->appendChild($document->createTextNode((string) $feedValue));
             } elseif ($feedKey === 'icon') {
                 if ((bool) $feedValue === true) {
-                    $icon = $document->createElement('icon');
+                    $icon = $document->createElementNS(self::ATOM_NS, 'icon');
                     $feed->appendChild($icon);
                     $icon->appendChild($document->createTextNode((string) $feedValue));
 
-                    $logo = $document->createElement('logo');
+                    $logo = $document->createElementNS(self::ATOM_NS, 'logo');
                     $feed->appendChild($logo);
                     $logo->appendChild($document->createTextNode((string) $feedValue));
                 }
             } elseif ($feedKey === 'uri') {
                 if ((bool) $feedValue === true) {
-                    $linkAlternate = $document->createElement('link');
+                    $linkAlternate = $document->createElementNS(self::ATOM_NS, 'link');
                     $feed->appendChild($linkAlternate);
                     $linkAlternate->setAttribute('rel', 'alternate');
                     $linkAlternate->setAttribute('type', 'text/html');
                     $linkAlternate->setAttribute('href', (string) $feedValue);
 
-                    $linkSelf = $document->createElement('link');
+                    $linkSelf = $document->createElementNS(self::ATOM_NS, 'link');
                     $feed->appendChild($linkSelf);
                     $linkSelf->setAttribute('rel', 'self');
                     $linkSelf->setAttribute('type', 'application/atom+xml');
@@ -73,25 +73,25 @@ final class AtomFormat extends FormatAbstract
                     $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
                 }
             } else {
-                $element = $document->createElement((string) $feedKey);
+                $element = $document->createElementNS(self::ATOM_NS, (string) $feedKey);
                 $feed->appendChild($element);
                 $element->appendChild($document->createTextNode((string) $feedValue));
             }
         }
 
-        $id = $document->createElement('id');
-        $feed->appendChild($id);
-        $id->appendChild($document->createTextNode($feedUrl));
+        $idNode = $document->createElementNS(self::ATOM_NS, 'id');
+        $feed->appendChild($idNode);
+        $idNode->appendChild($document->createTextNode($feedUrl));
 
-        $updated = $document->createElement('updated');
-        $feed->appendChild($updated);
-        $updated->appendChild($document->createTextNode(gmdate(\DATE_ATOM, $this->getLastModified())));
+        $updatedNode = $document->createElementNS(self::ATOM_NS, 'updated');
+        $feed->appendChild($updatedNode);
+        $updatedNode->appendChild($document->createTextNode(gmdate(\DATE_ATOM, $this->getLastModified())));
 
         $feedAuthor = 'RSS-Bridge';
-        $author = $document->createElement('author');
-        $feed->appendChild($author);
-        $authorName = $document->createElement('name');
-        $author->appendChild($authorName);
+        $authorNode = $document->createElementNS(self::ATOM_NS, 'author');
+        $feed->appendChild($authorNode);
+        $authorName = $document->createElementNS(self::ATOM_NS, 'name');
+        $authorNode->appendChild($authorName);
         $authorName->appendChild($document->createTextNode($feedAuthor));
 
         foreach ($this->getItems() as $item) {
@@ -119,7 +119,9 @@ final class AtomFormat extends FormatAbstract
                 $entryTitle = str_replace("\n", ' ', strip_tags((string) $entryContent));
                 if (strlen($entryTitle) > 140) {
                     $wrapPos = strpos(wordwrap($entryTitle, 140), "\n");
-                    $entryTitle = substr($entryTitle, 0, $wrapPos) . '...';
+                    if ($wrapPos !== false) {
+                        $entryTitle = substr($entryTitle, 0, $wrapPos) . '...';
+                    }
                 }
             }
 
@@ -127,10 +129,10 @@ final class AtomFormat extends FormatAbstract
                 $entryContent = ' ';
             }
 
-            $entry = $document->createElement('entry');
+            $entry = $document->createElementNS(self::ATOM_NS, 'entry');
             $feed->appendChild($entry);
 
-            $title = $document->createElement('title');
+            $title = $document->createElementNS(self::ATOM_NS, 'title');
             $entry->appendChild($title);
             $title->setAttribute('type', 'html');
             $title->appendChild($document->createTextNode((string) $entryTitle));
@@ -138,18 +140,18 @@ final class AtomFormat extends FormatAbstract
             if ((bool) $entryTimestamp === true) {
                 $timestamp = gmdate(\DATE_ATOM, $entryTimestamp);
 
-                $published = $document->createElement('published');
+                $published = $document->createElementNS(self::ATOM_NS, 'published');
                 $entry->appendChild($published);
                 $published->appendChild($document->createTextNode($timestamp));
 
-                $updated = $document->createElement('updated');
-                $entry->appendChild($updated);
-                $updated->appendChild($document->createTextNode($timestamp));
+                $entryUpdated = $document->createElementNS(self::ATOM_NS, 'updated');
+                $entry->appendChild($entryUpdated);
+                $entryUpdated->appendChild($document->createTextNode($timestamp));
             }
 
-            $id = $document->createElement('id');
-            $entry->appendChild($id);
-            $id->appendChild($document->createTextNode($entryID));
+            $idElem = $document->createElementNS(self::ATOM_NS, 'id');
+            $entry->appendChild($idElem);
+            $idElem->appendChild($document->createTextNode($entryID));
 
             if (isset($itemArray['itunes']) === true) {
                 $feed->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:itunes', self::ITUNES_NS);
@@ -159,14 +161,14 @@ final class AtomFormat extends FormatAbstract
                     $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
                 }
                 if (isset($itemArray['enclosure']) === true) {
-                    $itunesEnclosure = $document->createElement('enclosure');
+                    $itunesEnclosure = $document->createElementNS(self::ATOM_NS, 'enclosure');
                     $entry->appendChild($itunesEnclosure);
                     $itunesEnclosure->setAttribute('url', (string) $itemArray['enclosure']['url']);
                     $itunesEnclosure->setAttribute('length', (string) $itemArray['enclosure']['length']);
                     $itunesEnclosure->setAttribute('type', (string) $itemArray['enclosure']['type']);
                 }
             } elseif ($entryUri !== null && $entryUri !== '') {
-                $entryLinkAlternate = $document->createElement('link');
+                $entryLinkAlternate = $document->createElementNS(self::ATOM_NS, 'link');
                 $entry->appendChild($entryLinkAlternate);
                 $entryLinkAlternate->setAttribute('rel', 'alternate');
                 $entryLinkAlternate->setAttribute('type', 'text/html');
@@ -175,20 +177,20 @@ final class AtomFormat extends FormatAbstract
 
             $authorStr = $item->getAuthor();
             if ($authorStr !== null && $authorStr !== '') {
-                $author = $document->createElement('author');
-                $entry->appendChild($author);
-                $authorNameElem = $document->createElement('name');
-                $author->appendChild($authorNameElem);
+                $authorElem = $document->createElementNS(self::ATOM_NS, 'author');
+                $entry->appendChild($authorElem);
+                $authorNameElem = $document->createElementNS(self::ATOM_NS, 'name');
+                $authorElem->appendChild($authorNameElem);
                 $authorNameElem->appendChild($document->createTextNode((string) $authorStr));
             }
 
-            $content = $document->createElement('content');
+            $content = $document->createElementNS(self::ATOM_NS, 'content');
             $content->setAttribute('type', 'html');
             $content->appendChild($document->createTextNode((string) $entryContent));
             $entry->appendChild($content);
 
             foreach ($item->getEnclosures() as $enclosure) {
-                $entryEnclosure = $document->createElement('link');
+                $entryEnclosure = $document->createElementNS(self::ATOM_NS, 'link');
                 $entry->appendChild($entryEnclosure);
                 $entryEnclosure->setAttribute('rel', 'enclosure');
                 $entryEnclosure->setAttribute('type', parse_mime_type($enclosure));
@@ -196,7 +198,7 @@ final class AtomFormat extends FormatAbstract
             }
 
             foreach ($item->getCategories() as $category) {
-                $entryCategory = $document->createElement('category');
+                $entryCategory = $document->createElementNS(self::ATOM_NS, 'category');
                 $entry->appendChild($entryCategory);
                 $entryCategory->setAttribute('term', (string) $category);
             }
@@ -204,12 +206,12 @@ final class AtomFormat extends FormatAbstract
             $thumbnail = method_exists($item, 'getThumbnail') === true ? $item->getThumbnail() : ($itemArray['thumbnail'] ?? null);
 
             if ($thumbnail !== null && $thumbnail !== '') {
-                $thumbnailElement = $document->createElementNS(self::MRSS_NS, 'thumbnail');
+                $thumbnailElement = $document->createElementNS(self::MRSS_NS, 'media:thumbnail');
                 $entry->appendChild($thumbnailElement);
                 $thumbnailElement->setAttribute('url', (string) $thumbnail);
             }
         }
 
-        return $document->saveXML();
+        return $document->saveXml();
     }
 }

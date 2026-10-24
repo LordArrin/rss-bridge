@@ -28,7 +28,7 @@ final class MrssFormat extends FormatAbstract
 
     public function render(): string
     {
-        $document = new \DOMDocument('1.0', 'UTF-8');
+        $document = \Dom\XMLDocument::createEmpty('1.0', 'UTF-8');
         $document->formatOutput = true;
 
         $feed = $document->createElement('rss');
@@ -180,6 +180,6 @@ final class MrssFormat extends FormatAbstract
             }
         }
 
-        return $document->saveXML();
+        return $document->saveXml();
     }
 }

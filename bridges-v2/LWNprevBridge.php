@@ -71,10 +71,9 @@ EOD;
             libxml_clear_errors();
             libxml_use_internal_errors(false);
 
-            $edition = $html->getElementsByTagName('h1');
-            if ($edition->length !== 0) {
-                $firstH1 = $edition->item(0);
-                $text = $firstH1 !== null ? ($firstH1->textContent ?? '') : '';
+            $firstH1 = $html->querySelector('h1');
+            if ($firstH1 !== null) {
+                $text = trim((string) $firstH1->textContent);
                 $forPos = strpos($text, 'for ');
                 if ($forPos !== false) {
                     $dateString = trim(substr($text, $forPos + strlen('for ')));
@@ -117,16 +116,15 @@ EOD;
             return ['author' => $author, 'timestamp' => $timestamp];
         }
 
-        $boldTags = $node->getElementsByTagName('b');
-        if ($boldTags->length > 0) {
-            $firstBold = $boldTags->item(0);
-            $authorText = $firstBold !== null ? trim($firstBold->textContent ?? '') : '';
+        $firstBold = $node->querySelector('b');
+        if ($firstBold !== null) {
+            $authorText = trim((string) $firstBold->textContent);
             if ($authorText !== '') {
                 $author = $authorText;
             }
         }
 
-        $fullText = $node->textContent ?? '';
+        $fullText = (string) $node->textContent;
         $datePattern = '/(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}/';
         if (preg_match($datePattern, $fullText, $matches) === 1) {
             $parsedTime = strtotime($matches[0]);
@@ -151,7 +149,7 @@ EOD;
         $item['uri'] = self::URI;
 
         if ($link !== null && $link instanceof \Dom\Element && strtolower($link->tagName) === 'a') {
-            $href = $link->getAttribute('href') ?? '';
+            $href = (string) $link->getAttribute('href');
             if ($href !== '') {
                 $item['uri'] .= $href;
             }
@@ -177,7 +175,7 @@ EOD;
                     if (strtolower($node->tagName) === 'h3') {
                         $isEndTag = true;
                     } else {
-                        $classValue = $node->getAttribute('class') ?? '';
+                        $classValue = (string) $node->getAttribute('class');
                         if ($classValue === 'Cat1HL' || $classValue === 'Cat2HL') {
                             $isEndTag = true;
                         }
@@ -212,8 +210,7 @@ EOD;
         $this->fixImages($doc);
         $this->removeCommentsBlock($doc);
 
-        $bodies = $doc->getElementsByTagName('body');
-        $body = $bodies->item(0);
+        $body = $doc->querySelector('body');
         if ($body === null) {
             return $content;
         }
@@ -228,15 +225,10 @@ EOD;
 
     private function fixImages(\Dom\HTMLDocument $doc): void
     {
-        $images = $doc->getElementsByTagName('img');
-        $imageList = [];
+        $images = $doc->querySelectorAll('img');
 
         foreach ($images as $img) {
-            $imageList[] = $img;
-        }
-
-        foreach ($imageList as $img) {
-            $existingStyle = $img->getAttribute('style') ?? '';
+            $existingStyle = (string) $img->getAttribute('style');
             $newStyle = 'float: left; margin: 0 15px 10px 0; max-width: 300px;';
 
             if ($existingStyle !== '') {
@@ -244,21 +236,17 @@ EOD;
             }
 
             $img->setAttribute('style', $newStyle);
-        }
 
-        foreach ($imageList as $img) {
-            if ($img->parentNode === null) {
-                continue;
-            }
+            if ($img->parentNode !== null) {
+                $clearDiv = $doc->createElement('div');
+                $clearDiv->setAttribute('style', 'clear: both; height: 10px;');
+                $nextSibling = $img->nextSibling;
 
-            $clearDiv = $doc->createElement('div');
-            $clearDiv->setAttribute('style', 'clear: both; height: 10px;');
-            $nextSibling = $img->nextSibling;
-
-            if ($nextSibling !== null) {
-                $img->parentNode->insertBefore($clearDiv, $nextSibling);
-            } else {
-                $img->parentNode->appendChild($clearDiv);
+                if ($nextSibling !== null) {
+                    $img->parentNode->insertBefore($clearDiv, $nextSibling);
+                } else {
+                    $img->parentNode->appendChild($clearDiv);
+                }
             }
         }
     }
@@ -266,10 +254,10 @@ EOD;
     private function removeCommentsBlock(\Dom\HTMLDocument $doc): void
     {
         $toRemove = [];
+        $links = $doc->querySelectorAll('a');
 
-        $links = $doc->getElementsByTagName('a');
         foreach ($links as $link) {
-            $href = $link->getAttribute('href') ?? '';
+            $href = (string) $link->getAttribute('href');
             if (str_contains($href, '#Comments') === false) {
                 continue;
             }
@@ -304,12 +292,12 @@ EOD;
     {
         $items = [];
 
-        foreach ($html->getElementsByTagName('h3') as $title) {
-            if ($title->getAttribute('class') !== 'SummaryHL') {
+        foreach ($html->querySelectorAll('h3') as $title) {
+            if ((string) $title->getAttribute('class') !== 'SummaryHL') {
                 continue;
             }
 
-            $titleText = $title->textContent ?? '';
+            $titleText = trim((string) $title->textContent);
             if (str_contains($titleText, 'Welcome to the LWN.net') === true) {
                 continue;
             }
@@ -334,38 +322,38 @@ EOD;
         $cat2 = '';
         $cat3 = '';
 
-        $catClass = $cat instanceof \Dom\Element ? ($cat->getAttribute('class') ?? '') : '';
+        $catClass = $cat instanceof \Dom\Element ? (string) $cat->getAttribute('class') : '';
 
         if ($catClass === 'Cat3HL') {
-            $cat3 = $cat->textContent ?? '';
+            $cat3 = trim((string) $cat->textContent);
             $cat = $cat->previousSibling;
             $cat = $this->jumpToPreviousTag($cat);
             $cats[2] = $cat3;
 
-            if ($cat !== null && $cat instanceof \Dom\Element && ($cat->getAttribute('class') ?? '') === 'Cat2HL') {
-                $cat2 = $cat->textContent ?? '';
+            if ($cat !== null && $cat instanceof \Dom\Element && $cat->getAttribute('class') === 'Cat2HL') {
+                $cat2 = trim((string) $cat->textContent);
                 $cat = $cat->previousSibling;
                 $cat = $this->jumpToPreviousTag($cat);
                 $cats[1] = $cat2;
 
-                if ($cat !== null && $cat instanceof \Dom\Element && ($cat->getAttribute('class') ?? '') === 'Cat1HL') {
-                    $cat1 = $cat->textContent ?? '';
+                if ($cat !== null && $cat instanceof \Dom\Element && $cat->getAttribute('class') === 'Cat1HL') {
+                    $cat1 = trim((string) $cat->textContent);
                     $cats[0] = $cat1;
                 }
             }
         } elseif ($catClass === 'Cat2HL') {
-            $cat2 = $cat->textContent ?? '';
+            $cat2 = trim((string) $cat->textContent);
             $cat = $cat->previousSibling;
             $cat = $this->jumpToPreviousTag($cat);
             $cats[1] = $cat2;
             $cats[2] = '';
 
-            if ($cat !== null && $cat instanceof \Dom\Element && ($cat->getAttribute('class') ?? '') === 'Cat1HL') {
-                $cat1 = $cat->textContent ?? '';
+            if ($cat !== null && $cat instanceof \Dom\Element && $cat->getAttribute('class') === 'Cat1HL') {
+                $cat1 = trim((string) $cat->textContent);
                 $cats[0] = $cat1;
             }
         } elseif ($catClass === 'Cat1HL') {
-            $cat1 = $cat->textContent ?? '';
+            $cat1 = trim((string) $cat->textContent);
             $cats[0] = $cat1;
             $cats[2] = '';
             $cats[1] = '';
@@ -388,8 +376,8 @@ EOD;
         $items = [];
         $cats = ['', '', ''];
 
-        foreach ($html->getElementsByTagName('p') as $newsletters) {
-            if ($newsletters->getAttribute('class') !== 'Cat3HL') {
+        foreach ($html->querySelectorAll('p') as $newsletters) {
+            if ((string) $newsletters->getAttribute('class') !== 'Cat3HL') {
                 continue;
             }
 
@@ -403,9 +391,9 @@ EOD;
 
             if ($cat !== null) {
                 $prefix = $this->getItemPrefix($cat, $cats);
-                $item['title'] = $prefix . ' ' . ($newsletters->textContent ?? '');
+                $item['title'] = $prefix . ' ' . trim((string) $newsletters->textContent);
             } else {
-                $item['title'] = $newsletters->textContent ?? '';
+                $item['title'] = trim((string) $newsletters->textContent);
             }
 
             $node = $newsletters;
@@ -423,7 +411,7 @@ EOD;
                     $isEndTag = false;
 
                     if ($isTextNode === false && $node instanceof \Dom\Element) {
-                        $classValue = $node->getAttribute('class') ?? '';
+                        $classValue = (string) $node->getAttribute('class');
                         if ($classValue === 'Cat1HL' || $classValue === 'Cat2HL' || $classValue === 'Cat3HL') {
                             $isEndTag = true;
                         }
@@ -443,8 +431,8 @@ EOD;
             $items[] = $item;
         }
 
-        foreach ($html->getElementsByTagName('h2') as $title) {
-            if ($title->getAttribute('class') !== 'SummaryHL') {
+        foreach ($html->querySelectorAll('h2') as $title) {
+            if ((string) $title->getAttribute('class') !== 'SummaryHL') {
                 continue;
             }
 
@@ -458,12 +446,12 @@ EOD;
 
                 if ($cat !== null) {
                     $prefix = $this->getItemPrefix($cat, $cats);
-                    $item['title'] = $prefix . ' ' . ($title->textContent ?? '');
+                    $item['title'] = $prefix . ' ' . trim((string) $title->textContent);
                 } else {
-                    $item['title'] = $title->textContent ?? '';
+                    $item['title'] = trim((string) $title->textContent);
                 }
             } else {
-                $item['title'] = $title->textContent ?? '';
+                $item['title'] = trim((string) $title->textContent);
             }
 
             $items[] = array_merge($item, $this->getArticleContent($title));
@@ -477,8 +465,8 @@ EOD;
         $items = [];
         $cats = ['', '', ''];
 
-        foreach ($html->getElementsByTagName('h2') as $title) {
-            if ($title->getAttribute('class') !== 'SummaryHL') {
+        foreach ($html->querySelectorAll('h2') as $title) {
+            if ((string) $title->getAttribute('class') !== 'SummaryHL') {
                 continue;
             }
 
@@ -492,12 +480,12 @@ EOD;
 
                 if ($cat !== null) {
                     $prefix = $this->getItemPrefix($cat, $cats);
-                    $item['title'] = $prefix . ' ' . ($title->textContent ?? '');
+                    $item['title'] = $prefix . ' ' . trim((string) $title->textContent);
                 } else {
-                    $item['title'] = $title->textContent ?? '';
+                    $item['title'] = trim((string) $title->textContent);
                 }
             } else {
-                $item['title'] = $title->textContent ?? '';
+                $item['title'] = trim((string) $title->textContent);
             }
 
             $items[] = array_merge($item, $this->getArticleContent($title));
