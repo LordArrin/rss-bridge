@@ -2,6 +2,10 @@
 
 set -e
 
+# Load environment variables and generate service configs
+# This merges .env.default with /config/.env and creates override files
+eval "$(php /app/bin/load-env)"
+
 # Import custom config
 if [ -f /config/config.ini.php ]; then
     cp /config/config.ini.php /app/config.ini.php

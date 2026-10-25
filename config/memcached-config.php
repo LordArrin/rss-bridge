@@ -4,9 +4,17 @@
 declare(strict_types=1);
 
 // Memcached startup configuration resolver.
-// Lives in config/ together with the consolidated defaults file
-// config/memcached.conf, which is its single source of truth for default
-// values (user overrides come from [MemcachedCache] in config.ini.php).
+//
+// Architecture:
+// - Cache type is determined from config.ini.php (or config.default.ini.php)
+// - Internal memcached settings come from environment variables (MEMCACHED_*),
+//   already normalized to canonical form by /bin/load-env
+// - External memcached settings (host/port) come from config.ini.php [MemcachedCache]
+// - The Unix socket path is fixed and intentionally NOT user-configurable:
+//   the server and the PHP client must agree on it, changing it breaks the cache
+// - item_size_limit is computed dynamically as min(32M, 49% of memory)
+//   to satisfy memcached's hard safety rule: "Cannot set item size limit
+//   higher than 1/2 of memory max"
 
 $configFile = '/app/config.ini.php';
 
@@ -22,79 +30,79 @@ if ($config === false) {
     exit(1);
 }
 
-// Single source of truth for embedded memcached defaults.
-// Values from [MemcachedCache] in config.ini.php override these.
-$defaults = [];
-$defaultsFile = __DIR__ . '/memcached.conf';
-if (file_exists($defaultsFile) === true) {
-    // parse_ini_file() treats '#' as a literal character, so strip full-line
-    // comments before parsing the consolidated defaults file.
-    $rawDefaults = (string) file_get_contents($defaultsFile);
-    // Replace '#'-style comment lines with ';'-style ones, which PHP's INI
-    // parser understands natively (keeps line structure intact for errors).
-    $strippedDefaults = preg_replace('/^(\h*)#.*$/m', '$1;', $rawDefaults);
-    $parsedDefaults = parse_ini_string($strippedDefaults, true, INI_SCANNER_RAW);
-    if (is_array($parsedDefaults) === true) {
-        foreach ($parsedDefaults as $section => $values) {
-            if (is_array($values) === true && array_key_exists('value', $values) === true) {
-                $defaults[$section] = trim((string) $values['value']);
-            }
-        }
-    }
-}
-
-/**
- * Resolve a setting: user config > config/memcached.conf defaults > fallback.
- */
-function mcSetting(array $mc, array $defaults, string $key, string $fallback): string
-{
-    $userValue = $mc[$key] ?? null;
-    if ($userValue !== null && trim((string)$userValue) !== '') {
-        return trim((string)$userValue);
-    }
-    return $defaults[$key] ?? $fallback;
-}
-
 $mc = $config['MemcachedCache'] ?? [];
 
-$type = mcSetting($mc, $defaults, 'type', 'internal') === 'external' ? 'external' : 'internal';
-$socketPath = mcSetting($mc, $defaults, 'socket_path', '/var/run/memcached/memcached.sock');
-$host = mcSetting($mc, $defaults, 'host', '127.0.0.1');
-$port = (int)mcSetting($mc, $defaults, 'port', '11211');
+// Determine cache type from config.ini.php
+$type = (isset($mc['type']) === true && $mc['type'] === 'external') ? 'external' : 'internal';
 
 // Common output
 printf("MEMCACHED_TYPE=%s\n", escapeshellarg($type));
 
 if ($type === 'internal') {
-    // Internal mode: emit socket path and server tuning parameters
-    $memory = mcSetting($mc, $defaults, 'memory', '512m');
-    $maxConnections = (int)mcSetting($mc, $defaults, 'connections', '1024');
-    $threads = (int)mcSetting($mc, $defaults, 'threads', '4');
-    $itemSizeLimit = mcSetting($mc, $defaults, 'item_size_limit', '32M');
+    // Internal mode: read tuning settings from environment variables
+    $socketPath = '/var/run/memcached/memcached.sock';
 
-    $modern = in_array(mcSetting($mc, $defaults, 'modern', 'true'), ['true', '1'], true);
-    $prealloc = in_array(mcSetting($mc, $defaults, 'prealloc', 'true'), ['true', '1'], true);
-    $lockMemory = in_array(mcSetting($mc, $defaults, 'lock_memory', 'false'), ['true', '1'], true);
+    $envMemory = getenv('MEMCACHED_MEMORY');
+    $memory = ($envMemory !== false && $envMemory !== '') ? $envMemory : '512m';
 
-    $hashPower = (int)mcSetting($mc, $defaults, 'hash_power', '16');
-    $backlog = (int)mcSetting($mc, $defaults, 'backlog', '1024');
-    $idleTimeout = (int)mcSetting($mc, $defaults, 'idle_timeout', '0');
-    $verbosity = (int)mcSetting($mc, $defaults, 'verbosity', '0');
+    $envConnections = getenv('MEMCACHED_CONNECTIONS');
+    $maxConnections = ($envConnections !== false && $envConnections !== '') ? (int)$envConnections : 1024;
+
+    $envThreads = getenv('MEMCACHED_THREADS');
+    $threads = ($envThreads !== false && $envThreads !== '') ? (int)$envThreads : 4;
+
+    // Compute item_size_limit dynamically to satisfy memcached's 49% rule:
+    // "Cannot set item size limit higher than 1/2 of memory max"
+    // We use 45% to leave some headroom (32M is the safe upper cap).
+    $itemSizeLimitBytes = 32 * 1048576;
+
+    $matchResult = preg_match('/^(\d+)([mMgG]?)$/', $memory, $memMatch);
+    if ($matchResult === 1) {
+        $memValue = (int)$memMatch[1];
+        $rawSuffix = $memMatch[2] ?? '';
+        $memSuffix = $rawSuffix !== '' ? strtolower($rawSuffix) : 'm';
+
+        $memBytes = match ($memSuffix) {
+            'm' => $memValue * 1048576,
+            'g' => $memValue * 1073741824,
+            default => $memValue * 1048576,
+        };
+
+        $safeItemBytes = (int)floor($memBytes * 0.45);
+        if ($safeItemBytes > 0 && $safeItemBytes < $itemSizeLimitBytes) {
+            $itemSizeLimitBytes = $safeItemBytes;
+        }
+    }
+    // Round down to whole megabytes for readability (memcached accepts this)
+    $itemSizeLimitMb = max(1, (int)floor($itemSizeLimitBytes / 1048576));
+    $itemSizeLimit = $itemSizeLimitMb . 'M';
+
+    // Server tuning flags (fixed defaults, not user-configurable)
+    $modern = 'true';
+    $prealloc = 'true';
+    $lockMemory = 'false';
+    $hashPower = 16;
+    $backlog = 1024;
+    $idleTimeout = 0;
+    $verbosity = 0;
 
     printf("MEMCACHED_SOCKET_PATH=%s\n", escapeshellarg($socketPath));
     printf("MEMCACHED_MEMORY=%s\n", escapeshellarg($memory));
     printf("MEMCACHED_MAX_CONNECTIONS=%d\n", $maxConnections);
     printf("MEMCACHED_THREADS=%d\n", $threads);
     printf("MEMCACHED_ITEM_SIZE_LIMIT=%s\n", escapeshellarg($itemSizeLimit));
-    printf("MEMCACHED_MODERN=%s\n", $modern === true ? 'true' : 'false');
-    printf("MEMCACHED_PREALLOC=%s\n", $prealloc === true ? 'true' : 'false');
-    printf("MEMCACHED_LOCK_MEMORY=%s\n", $lockMemory === true ? 'true' : 'false');
+    printf("MEMCACHED_MODERN=%s\n", $modern);
+    printf("MEMCACHED_PREALLOC=%s\n", $prealloc);
+    printf("MEMCACHED_LOCK_MEMORY=%s\n", $lockMemory);
     printf("MEMCACHED_HASH_POWER=%d\n", $hashPower);
     printf("MEMCACHED_BACKLOG=%d\n", $backlog);
     printf("MEMCACHED_IDLE_TIMEOUT=%d\n", $idleTimeout);
     printf("MEMCACHED_VERBOSITY=%d\n", $verbosity);
 } else {
-    // External mode: only emit host and port
+    // External mode: read settings from config.ini.php
+    $host = (isset($mc['host']) === true) ? trim($mc['host']) : '127.0.0.1';
+    $port = (isset($mc['port']) === true) ? (int)$mc['port'] : 11211;
+
     printf("MEMCACHED_HOST=%s\n", escapeshellarg($host));
     printf("MEMCACHED_PORT=%d\n", $port);
 }

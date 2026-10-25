@@ -1,0 +1,624 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * RSS-Bridge Environment Loader
+ *
+ * Загружает и валидирует переменные окружения, генерирует конфигурационные
+ * файлы для системных сервисов. Вызывается из docker-entrypoint.sh при старте
+ * контейнера. Изменения применяются после перезапуска соответствующих сервисов
+ * (PHP-FPM, Memcached, Nginx), поэтому скрипт НЕ предназначен для вызова
+ * в уже запущенном контейнере без ручной перезаливки сервисов.
+ *
+ * Usage:
+ *   eval "$(php /app/bin/load-env)"
+ *
+ * Priority of configuration sources (highest first):
+ *   1. OS environment (docker run -e / docker-compose environment:)
+ *   2. /config/.env (user overrides, mounted volume)
+ *   3. /app/.env.default (shipped defaults, baked into image)
+ *
+ * Architecture:
+ *   - parseEnv()        : reads .env files
+ *   - mergeEnv()        : applies priority rules
+ *   - normalizeEnv()    : validates and canonicalizes values
+ *   - generate*()       : creates service-specific config files
+ *   - exportEnv()       : outputs bash-compatible export statements
+ */
+
+// ============================================================================
+// Configuration: paths, defaults, mapping rules
+// ============================================================================
+
+define('DEFAULT_ENV_FILE', '/app/.env.default');
+define('CUSTOM_ENV_FILE', '/config/.env');
+define('FPM_TEMPLATE_FILE', '/app/config/php-fpm-pool.conf.template');
+define('FPM_OUTPUT_FILE', '/etc/php85/php-fpm.d/php-fpm-pool.conf');
+define('PHP_INI_OUTPUT_FILE', '/etc/php85/conf.d/99-user-overrides.ini');
+
+/**
+ * Declarative rules for normalizing environment variables.
+ * Each rule describes: how to parse the value, how to canonicalize it,
+ * and what the hard-coded fallback is if all sources fail.
+ *
+ * Fields:
+ *   - type          : 'memory' | 'int' | 'bool' | 'string' | 'duration'
+ *   - canonicalize  : callable(string $raw, mixed $parsed) -> string
+ *   - fallback      : default value if parsing fails
+ *   - validate      : optional callable(mixed $parsed) -> bool
+ *   - containerCap  : optional fraction (0..1) of container RAM to clamp to
+ */
+$normalizationRules = [
+    // PHP-FPM pool sizing (integer counts, with optional 's' suffix for timeouts)
+    'PHP_FPM_PM_MAX_CHILDREN'         => ['type' => 'int',      'fallback' => '15',  'min' => 1,    'max' => 500],
+    'PHP_FPM_PM_START_SERVERS'        => ['type' => 'int',      'fallback' => '3',   'min' => 0,    'max' => 100],
+    'PHP_FPM_PM_MIN_SPARE_SERVERS'    => ['type' => 'int',      'fallback' => '2',   'min' => 0,    'max' => 100],
+    'PHP_FPM_PM_MAX_SPARE_SERVERS'    => ['type' => 'int',      'fallback' => '5',   'min' => 0,    'max' => 100],
+    'PHP_FPM_PM_MAX_REQUESTS'         => ['type' => 'int',      'fallback' => '450', 'min' => 0,    'max' => 100000],
+    'PHP_FPM_PM_PROCESS_IDLE_TIMEOUT' => ['type' => 'duration', 'fallback' => '30s', 'min' => 1,    'max' => 3600],
+
+    // PHP runtime
+    'PHP_MEMORY_LIMIT'       => ['type' => 'memory', 'fallback' => '-1',    'allowUnlimited' => true],
+    'PHP_MAX_EXECUTION_TIME' => ['type' => 'int',    'fallback' => '175',   'min' => 10,  'max' => 3600],
+    'PHP_DEBUG_MODE'         => ['type' => 'bool',   'fallback' => 'false'],
+
+    // OPcache (memory type, but with specific canonical forms)
+    'PHP_OPCACHE_MEMORY'     => [
+        'type' => 'memory',
+        'fallback' => '256',
+        'canonicalize' => static function (int $bytes): string {
+            return (string)max(8, (int)round($bytes / 1048576));
+        },
+    ],
+    'PHP_OPCACHE_JIT_BUFFER' => [
+        'type' => 'memory',
+        'fallback' => '256M',
+        'allowZero' => true,
+        'canonicalize' => static function (int $bytes): string {
+            return ($bytes <= 0) ? '0' : max(1, (int)ceil($bytes / 1048576)) . 'M';
+        },
+    ],
+
+    // Memcached (server tuning, not client settings)
+    'MEMCACHED_MEMORY' => [
+        'type' => 'memory',
+        'fallback' => '512m',
+        'containerCap' => 0.49,
+        'canonicalize' => static function (int $bytes): string {
+            return max(1, (int)round($bytes / 1048576)) . 'm';
+        },
+    ],
+    'MEMCACHED_CONNECTIONS' => ['type' => 'int', 'fallback' => '1024', 'min' => 10,   'max' => 100000],
+    'MEMCACHED_THREADS'     => ['type' => 'int', 'fallback' => '4',    'min' => 1,    'max' => 256],
+];
+
+// ============================================================================
+// Parsing
+// ============================================================================
+
+/**
+ * Parses a .env file into an associative array.
+ * Handles: comments (#), inline comments on unquoted values,
+ * quoted values (single and double), multi-line is NOT supported.
+ *
+ * Returns empty array if file is missing or unreadable (graceful).
+ */
+function parseEnvFile(string $file): array
+{
+    if (is_readable($file) === false) {
+        return [];
+    }
+
+    $lines = @file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if ($lines === false) {
+        return [];
+    }
+
+    $vars = [];
+    foreach ($lines as $line) {
+        $line = trim($line);
+
+        if ($line === '' || str_starts_with($line, '#') === true) {
+            continue;
+        }
+
+        if (preg_match('/^([A-Z0-9_]+)=(.*)$/i', $line, $matches) !== 1) {
+            continue;
+        }
+
+        $key = $matches[1];
+        $value = $matches[2];
+
+        // Unquoted values: strip inline comments
+        if (str_starts_with($value, '"') === false && str_starts_with($value, "'") === false) {
+            $commentPos = strpos($value, '#');
+            if ($commentPos !== false) {
+                $value = rtrim(substr($value, 0, $commentPos));
+            }
+        }
+
+        // Strip surrounding quotes
+        if (preg_match('/^"(.*)"$/', $value, $m) === 1) {
+            $value = $m[1];
+        } elseif (preg_match("/^'(.*)'$/", $value, $m) === 1) {
+            $value = $m[1];
+        }
+
+        $vars[$key] = $value;
+    }
+
+    return $vars;
+}
+
+// ============================================================================
+// Value parsers (pure functions, no side effects)
+// ============================================================================
+
+/**
+ * Parses a human-friendly memory size string into bytes.
+ *
+ * Accepted formats (case-insensitive, bare numbers = megabytes):
+ *   "256"       -> 256 MB      "512m"/"512M"/"512MB" -> 512 MB
+ *   "1g"/"1G"   -> 1024 MB     "64k"/"64kb"           -> 64 KB
+ *   "1.5g"      -> 1536 MB     "-1"                   -> -1 (unlimited)
+ *
+ * Returns null if the value cannot be parsed.
+ */
+function parseMemorySize(string $value): ?int
+{
+    $value = trim($value);
+
+    if ($value === '-1') {
+        return -1;
+    }
+
+    if (preg_match('/^(\d+(?:\.\d+)?)\s*(kb|k|mb|m|gb|g|b)?$/i', $value, $m) !== 1) {
+        return null;
+    }
+
+    $number = (float)$m[1];
+    $suffix = strtolower($m[2] ?? '');
+
+    $multiplier = match ($suffix) {
+        '', 'm', 'mb' => 1048576,
+        'k', 'kb'     => 1024,
+        'g', 'gb'     => 1073741824,
+        'b'           => 1,
+        default       => 0,
+    };
+
+    if ($multiplier === 0) {
+        return null;
+    }
+
+    return (int)round($number * $multiplier);
+}
+
+/**
+ * Parses an integer value. Returns null if not a valid integer.
+ */
+function parseIntValue(string $value): ?int
+{
+    if (preg_match('/^-?\d+$/', $value) !== 1) {
+        return null;
+    }
+    return (int)$value;
+}
+
+/**
+ * Parses a duration string like "30s", "5m", "1h" into seconds.
+ * Also accepts bare numbers (treated as seconds).
+ * Returns null on parse error.
+ */
+function parseDuration(string $value): ?int
+{
+    $value = trim($value);
+    if (preg_match('/^(\d+)([smh]?)$/i', $value, $m) !== 1) {
+        return null;
+    }
+
+    $number = (int)$m[1];
+    $suffix = strtolower($m[2]);
+
+    $multiplier = match ($suffix) {
+        's', '' => 1,
+        'm'     => 60,
+        'h'     => 3600,
+        default => 0,
+    };
+
+    if ($multiplier === 0) {
+        return null;
+    }
+
+    return $number * $multiplier;
+}
+
+/**
+ * Parses a boolean value. Accepts: true/false, 1/0, yes/no, on/off.
+ * Returns null on parse error.
+ */
+function parseBoolValue(string $value): ?bool
+{
+    $result = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+    return $result;
+}
+
+/**
+ * Detects container memory limit in megabytes via cgroups v2/v1,
+ * falling back to total system RAM via /proc/meminfo.
+ *
+ * Returns null if detection fails or no limit is configured.
+ */
+function getContainerMemoryMb(): ?int
+{
+    // cgroups v2
+    if (is_readable('/sys/fs/cgroup/memory.max') === true) {
+        $raw = trim((string)@file_get_contents('/sys/fs/cgroup/memory.max'));
+        if ($raw !== '' && $raw !== 'max') {
+            $bytes = (int)$raw;
+            if ($bytes > 0) {
+                return (int)round($bytes / 1048576);
+            }
+        }
+    }
+
+    // cgroups v1
+    if (is_readable('/sys/fs/cgroup/memory/memory.limit_in_bytes') === true) {
+        $raw = trim((string)@file_get_contents('/sys/fs/cgroup/memory/memory.limit_in_bytes'));
+        if ($raw !== '' && preg_match('/^\d+$/', $raw) === 1) {
+            $bytes = (int)$raw;
+            if ($bytes > 0 && $bytes < PHP_INT_MAX - 1048576) {
+                return (int)round($bytes / 1048576);
+            }
+        }
+    }
+
+    // Fallback: system total RAM
+    if (is_readable('/proc/meminfo') === true) {
+        $meminfo = (string)@file_get_contents('/proc/meminfo');
+        if (preg_match('/^MemTotal:\s+(\d+)\s+kB$/m', $meminfo, $m) === 1) {
+            return (int)round(((int)$m[1] * 1024) / 1048576);
+        }
+    }
+
+    return null;
+}
+
+// ============================================================================
+// Normalization
+// ============================================================================
+
+/**
+ * Normalizes environment variables according to the declared rules.
+ *
+ * Returns array of warnings generated during normalization.
+ * Modifies $env in-place, replacing raw values with canonical forms.
+ */
+function normalizeEnv(array &$env, array $rules, array $fileDefaults): array
+{
+    $warnings = [];
+    $containerMb = null; // lazy-loaded on first use
+
+    foreach ($rules as $var => $rule) {
+        if (isset($env[$var]) === false) {
+            continue;
+        }
+
+        $original = (string)$env[$var];
+        if ($original === '') {
+            continue;
+        }
+
+        $type = $rule['type'];
+        $parsed = null;
+
+        // Parse according to type
+        if ($type === 'memory') {
+            $parsed = parseMemorySize($original);
+
+            if ($parsed === null) {
+                // Invalid format — fall back
+                $fallback = $rule['fallback'] ?? '';
+                $parsed = parseMemorySize($fallback);
+                $warnings[] = "{$var}='{$original}': invalid memory format, using '{$fallback}'";
+            } else {
+                // Validate semantic constraints
+                $allowUnlimited = $rule['allowUnlimited'] ?? false;
+                $allowZero = $rule['allowZero'] ?? false;
+
+                $valid = true;
+                if ($parsed === -1 && $allowUnlimited !== true) {
+                    $valid = false;
+                }
+                if ($parsed === 0 && $allowZero !== true) {
+                    $valid = false;
+                }
+
+                if ($valid === false) {
+                    $fallback = $rule['fallback'] ?? '';
+                    $parsed = parseMemorySize($fallback);
+                    $warnings[] = "{$var}='{$original}': invalid value for this variable, using '{$fallback}'";
+                }
+
+                // Container memory cap (e.g. memcached 49% rule)
+                if ($parsed !== null && $parsed > 0 && isset($rule['containerCap']) === true) {
+                    if ($containerMb === null) {
+                        $containerMb = getContainerMemoryMb();
+                    }
+                    if ($containerMb !== null && $containerMb > 0) {
+                        $maxSafeMb = (int)floor($containerMb * $rule['containerCap']);
+                        $requestedMb = (int)round($parsed / 1048576);
+                        if ($maxSafeMb > 0 && $requestedMb > $maxSafeMb) {
+                            $parsed = $maxSafeMb * 1048576;
+                            $percent = (int)($rule['containerCap'] * 100);
+                            $warnings[] = "{$var}='{$original}' exceeds {$percent}% of container RAM "
+                                . "({$maxSafeMb}MB of {$containerMb}MB), clamping to '{$maxSafeMb}m'";
+                        }
+                    }
+                }
+            }
+
+            // Apply custom canonicalizer or default memory canonicalization
+            if ($parsed !== null) {
+                if (isset($rule['canonicalize']) === true) {
+                    $canonical = $rule['canonicalize']($parsed);
+                } else {
+                    // Default: "-1" or "NM" (uppercase M, safe for PHP ini)
+                    $canonical = ($parsed === -1)
+                        ? '-1'
+                        : max(1, (int)round($parsed / 1048576)) . 'M';
+                }
+                $env[$var] = $canonical;
+            }
+        } elseif ($type === 'int') {
+            $parsed = parseIntValue($original);
+            $min = $rule['min'] ?? PHP_INT_MIN;
+            $max = $rule['max'] ?? PHP_INT_MAX;
+
+            if ($parsed === null || $parsed < $min || $parsed > $max) {
+                $fallback = $rule['fallback'] ?? '0';
+                $env[$var] = $fallback;
+                $warnings[] = "{$var}='{$original}': out of range [{$min}, {$max}], using '{$fallback}'";
+            } else {
+                $env[$var] = (string)$parsed;
+            }
+        } elseif ($type === 'bool') {
+            $parsed = parseBoolValue($original);
+            if ($parsed === null) {
+                $fallback = $rule['fallback'] ?? 'false';
+                $env[$var] = $fallback;
+                $warnings[] = "{$var}='{$original}': invalid boolean, using '{$fallback}'";
+            } else {
+                $env[$var] = $parsed ? 'true' : 'false';
+            }
+        } elseif ($type === 'duration') {
+            $parsed = parseDuration($original);
+            $min = $rule['min'] ?? 0;
+            $max = $rule['max'] ?? PHP_INT_MAX;
+
+            if ($parsed === null || $parsed < $min || $parsed > $max) {
+                $fallback = $rule['fallback'] ?? '0';
+                $env[$var] = $fallback;
+                $warnings[] = "{$var}='{$original}': invalid duration, using '{$fallback}'";
+            } else {
+                // Preserve original format if valid, just sanitize
+                $env[$var] = preg_replace('/[^0-9a-zA-Z]/', '', $original);
+            }
+        } elseif ($type === 'string') {
+            // Just sanitize for INI/shell injection
+            $env[$var] = preg_replace('/[^a-zA-Z0-9_.\-\/]/', '', $original);
+        }
+    }
+
+    return $warnings;
+}
+
+// ============================================================================
+// Atomic file writing helpers
+// ============================================================================
+
+/**
+ * Writes content to a file atomically: writes to a temp file in the same
+ * directory, then renames. If rename fails, the target file is unchanged.
+ *
+ * Returns true on success, false on failure (with warning to STDERR).
+ */
+function atomicWrite(string $path, string $content): bool
+{
+    $dir = dirname($path);
+    if (is_dir($dir) === false) {
+        fwrite(STDERR, "ERROR: directory does not exist: {$dir}\n");
+        return false;
+    }
+
+    $tmp = $path . '.tmp.' . getmypid();
+
+    $bytes = @file_put_contents($tmp, $content);
+    if ($bytes === false) {
+        fwrite(STDERR, "ERROR: failed to write temp file: {$tmp}\n");
+        return false;
+    }
+
+    if (@rename($tmp, $path) === false) {
+        @unlink($tmp);
+        fwrite(STDERR, "ERROR: failed to atomically replace: {$path}\n");
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Safely removes a file, ignoring errors if it doesn't exist.
+ */
+function safeUnlink(string $path): void
+{
+    if (file_exists($path) === true) {
+        @unlink($path);
+    }
+}
+
+// ============================================================================
+// Config generators
+// ============================================================================
+
+/**
+ * Generates PHP-FPM pool config from template.
+ * Returns count of substitutions made.
+ */
+function generatePhpFpmConfig(array $env): int
+{
+    if (is_readable(FPM_TEMPLATE_FILE) === false) {
+        fwrite(STDERR, "PHP-FPM: template not found: " . FPM_TEMPLATE_FILE . "\n");
+        return 0;
+    }
+
+    $template = @file_get_contents(FPM_TEMPLATE_FILE);
+    if ($template === false) {
+        fwrite(STDERR, "PHP-FPM: failed to read template\n");
+        return 0;
+    }
+
+    $mapping = [
+        'PHP_FPM_PM_MAX_CHILDREN',
+        'PHP_FPM_PM_START_SERVERS',
+        'PHP_FPM_PM_MIN_SPARE_SERVERS',
+        'PHP_FPM_PM_MAX_SPARE_SERVERS',
+        'PHP_FPM_PM_MAX_REQUESTS',
+        'PHP_FPM_PM_PROCESS_IDLE_TIMEOUT',
+    ];
+
+    $count = 0;
+    foreach ($mapping as $envVar) {
+        if (isset($env[$envVar]) === false) {
+            continue;
+        }
+        $value = $env[$envVar];
+        // Values are already validated/normalized, but sanitize once more for defense-in-depth
+        $safeValue = preg_replace('/[^a-zA-Z0-9_.\-]/', '', (string)$value);
+        $placeholder = '{{' . $envVar . '}}';
+        if (str_contains($template, $placeholder) === true) {
+            $template = str_replace($placeholder, $safeValue, $template);
+            $count++;
+        }
+    }
+
+    if (atomicWrite(FPM_OUTPUT_FILE, $template) === true) {
+        fwrite(STDERR, "PHP-FPM: generated config with {$count} settings\n");
+    }
+
+    return $count;
+}
+
+/**
+ * Generates PHP runtime configuration overrides.
+ * Returns count of directives written.
+ */
+function generatePhpIniOverrides(array $env): int
+{
+    $lines = [
+        '; User-defined PHP configuration overrides',
+        '; Generated by /bin/load-env — do not edit manually',
+        '; This file is loaded after rss-bridge.ini and overrides its values',
+        ''
+    ];
+
+    $count = 0;
+
+    if (isset($env['PHP_MEMORY_LIMIT']) === true && $env['PHP_MEMORY_LIMIT'] !== '') {
+        $value = preg_replace('/[^0-9MGKm\-]/i', '', $env['PHP_MEMORY_LIMIT']);
+        $lines[] = "memory_limit = {$value}";
+        $count++;
+    }
+
+    if (isset($env['PHP_MAX_EXECUTION_TIME']) === true && $env['PHP_MAX_EXECUTION_TIME'] !== '') {
+        $value = (int)$env['PHP_MAX_EXECUTION_TIME'];
+        $lines[] = "max_execution_time = {$value}";
+        $count++;
+    }
+
+    if (isset($env['PHP_DEBUG_MODE']) === true && $env['PHP_DEBUG_MODE'] === 'true') {
+        $lines[] = "display_errors = On";
+        $lines[] = "error_reporting = E_ALL";
+        $count += 2;
+    }
+
+    if (isset($env['PHP_OPCACHE_MEMORY']) === true && $env['PHP_OPCACHE_MEMORY'] !== '') {
+        $value = (int)$env['PHP_OPCACHE_MEMORY'];
+        $lines[] = "opcache.memory_consumption = {$value}";
+        $count++;
+    }
+
+    if (isset($env['PHP_OPCACHE_JIT_BUFFER']) === true && $env['PHP_OPCACHE_JIT_BUFFER'] !== '') {
+        $value = preg_replace('/[^0-9MGKm]/i', '', $env['PHP_OPCACHE_JIT_BUFFER']);
+        $lines[] = "opcache.jit_buffer_size = {$value}";
+        $count++;
+    }
+
+    if ($count > 0) {
+        if (atomicWrite(PHP_INI_OUTPUT_FILE, implode("\n", $lines) . "\n") === true) {
+            fwrite(STDERR, "PHP: generated config override with {$count} settings\n");
+        }
+    } else {
+        safeUnlink(PHP_INI_OUTPUT_FILE);
+    }
+
+    return $count;
+}
+
+// ============================================================================
+// Main execution
+// ============================================================================
+
+// 1. Parse environment sources
+$defaultEnv = parseEnvFile(DEFAULT_ENV_FILE);
+$customEnv  = parseEnvFile(CUSTOM_ENV_FILE);
+
+// 2. Merge with priority: custom overrides default
+$finalEnv = array_merge($defaultEnv, $customEnv);
+
+// 3. OS environment wins over files (docker -e / compose environment:)
+$osCount = 0;
+foreach (array_keys($finalEnv) as $key) {
+    $osValue = getenv($key);
+    if ($osValue !== false) {
+        $finalEnv[$key] = $osValue;
+        $osCount++;
+    }
+}
+
+// 4. Normalize values (validates, canonicalizes, applies container caps)
+$warnings = normalizeEnv($finalEnv, $normalizationRules, $defaultEnv);
+foreach ($warnings as $w) {
+    fwrite(STDERR, "Env: WARNING {$w}\n");
+}
+
+// 5. Log statistics
+$defaultCount = count($defaultEnv);
+$customCount = count($customEnv);
+$finalCount = count($finalEnv);
+
+if ($finalCount > 0) {
+    $parts = ["{$defaultCount} defaults"];
+    if ($customCount > 0) {
+        $parts[] = "{$customCount} custom overrides";
+    }
+    if ($osCount > 0) {
+        $parts[] = "{$osCount} docker overrides";
+    }
+    fwrite(STDERR, "Env: loaded {$finalCount} variables (" . implode(', ', $parts) . ")\n");
+} else {
+    fwrite(STDERR, "Env: no variables loaded\n");
+}
+
+// 6. Generate service config files
+generatePhpFpmConfig($finalEnv);
+generatePhpIniOverrides($finalEnv);
+
+// 7. Export to shell (values are already normalized and safe)
+foreach ($finalEnv as $key => $value) {
+    $escaped = str_replace("'", "'\\''", (string)$value);
+    echo "export {$key}='{$escaped}'\n";
+}

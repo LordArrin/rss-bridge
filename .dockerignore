@@ -4,6 +4,23 @@
 cache/*
 docker-compose.yml
 Dockerfile
-docs/*
-pictures/*
+vendor/*
+tests/*
+# NOTE: .env.default is intentionally NOT ignored, as it is baked into the image
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Docs
 documentation/*
+README.md
+SECURITY.md
+
+# Pictures
+pictures/*

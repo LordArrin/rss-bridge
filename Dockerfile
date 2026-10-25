@@ -2,7 +2,7 @@ ARG ALPINE_VERSION=3.24
 FROM alpine:${ALPINE_VERSION} AS builder
 
 # Versions
-ARG CURL_VERSION=2.3.0
+ARG CURL_VERSION=2.3.1
 ARG NGINX_VERSION=1.31.4
 ARG OPENSSL_VERSION=4.1.0
 ARG PCRE_VERSION=10.49
@@ -263,7 +263,7 @@ RUN apk del .build-deps
 # ============================================================
 FROM alpine:${ALPINE_VERSION} AS runtime
 
-ARG IMAGE_VERSION=1.2.5
+ARG IMAGE_VERSION=1.2.6
 ENV RSSBRIDGE_SYSTEM_VERSION=${IMAGE_VERSION}
 ARG VERSION_PLACEHOLDER=__RSSBRIDGE_IMAGE_VERSION__
 ENV CURL_IMPERSONATE=firefox155
@@ -418,12 +418,10 @@ RUN MIMALLOC_LIB=$(find /usr/lib -maxdepth 1 \( -name 'libmimalloc*.so*' -type f
 # Copy application configs and source
 # ============================================================
 COPY ./config/php-fpm.conf /etc/php85/php-fpm.conf
-COPY ./config/php-fpm-pool.conf /etc/php85/php-fpm.d/rss-bridge.conf
-COPY ./config/php.ini /etc/php85/conf.d/90-rss-bridge.ini
+COPY ./config/php-fpm-pool.conf.template /app/config/php-fpm-pool.conf.template
+COPY ./config/php.ini /etc/php85/conf.d/rss-bridge.ini
 COPY ./config/nginx-main.conf /etc/nginx/nginx.conf
 COPY ./config/nginx.conf /etc/nginx/http.d/default.conf
-# Memcached consolidated defaults (parsed by memcached-config.php at runtime)
-COPY ./config/memcached.conf /app/config/memcached.conf
 
 COPY ./supervisor/supervisord.conf /etc/supervisord.conf
 COPY ./supervisor/nginx.conf /etc/supervisor/conf.d/nginx.conf
@@ -442,8 +440,8 @@ RUN composer install --optimize-autoloader --no-interaction --ignore-platform-re
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD curl -fsS --compressed "http://localhost/?action=health" || exit 1
 
-EXPOSE 80/tcp
+EXPOSE 80/tcp 80/udp
 
-RUN sed -i 's/\r$//' /app/*.sh /app/*.php /app/bin/*
+RUN find /app -type f \( -name '*.sh' -o -name '*.php' \) -exec sed -i 's/\r$//' {} +
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
