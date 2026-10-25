@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge\Proxies;
 
+use RSSBridge\Http\Response;
+
 /**
  * Default proxy - uses the standard getContents() with curl-impersonate.
  */
@@ -56,15 +58,18 @@ final class DirectProxy extends ProxyAbstract
         }
 
         try {
-            /** @var \Response $response */
             $response = getContents($url, [], $curlOptions, true);
+
+            if (is_string($response) === true) {
+                throw new \RuntimeException("Unexpected string response for {$url}");
+            }
 
             $body = $response->getBody();
             $headers = $response->getHeaders();
             $contentType = $headers['content-type'][0] ?? 'application/octet-stream';
             $type = trim(explode(';', $contentType)[0]);
 
-            if ($body === '' || $body === null) {
+            if ($body === '') {
                 throw new \RuntimeException("Empty response for {$url}");
             }
 

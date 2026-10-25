@@ -668,7 +668,7 @@ final class BlueskyBridge extends BridgeAbstract
                 $quotedAuthor = 'detached post';
             } else {
                 $quotedAuthorRecord = $post['post']['embed']['record']['record'] ?? $post['post']['embed']['record'];
-                $quotedAuthor = $this->fallbackAuthor($quotedAuthorRecord['author'] ?? $quotedAuthorRecord ?? [], 'display');
+                $quotedAuthor = $this->fallbackAuthor($quotedAuthorRecord['author'] ?? $quotedAuthorRecord, 'display');
             }
             $title .= ', quoting ' . $quotedAuthor;
         }

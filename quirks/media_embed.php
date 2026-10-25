@@ -25,6 +25,8 @@
 declare(strict_types=1);
 
 use RSSBridge\Caches\CacheInterface;
+use RSSBridge\Http\Response;
+use RSSBridge\Logger\Logger;
 
 /**
  * Map of file extensions to MIME types for media embedding.
@@ -63,7 +65,7 @@ const MEDIA_EMBED_MIME_TYPES = [
  * @param int $cacheTtl Cache lifetime in seconds (default 7 days).
  * @param int $maxSize Maximum allowed size in bytes (0 = unlimited).
  * @param string|null $proxyProfile Optional proxy profile name for protected fetch.
- * @param \Logger|null $logger Optional logger for warnings on fetch failures.
+ * @param Logger|null $logger Optional logger for warnings on fetch failures.
  * @param int $retries Number of retry attempts on transient failures.
  * @return string The data URI, or the original URL on failure/size limit.
  */
@@ -73,7 +75,7 @@ function media_embed_url_to_data_uri(
     int $cacheTtl = 604800,
     int $maxSize = 0,
     ?string $proxyProfile = null,
-    ?\Logger $logger = null,
+    ?Logger $logger = null,
     int $retries = 1
 ): string {
     if ($url === '') {
@@ -126,14 +128,14 @@ function media_embed_url_to_data_uri(
  *
  * @param string $url The URL to fetch.
  * @param string|null $proxyProfile Optional proxy profile name.
- * @param \Logger|null $logger Optional logger for warnings.
+ * @param Logger|null $logger Optional logger for warnings.
  * @param int $retries Number of retry attempts.
  * @return array{body: string, type: string}|null The fetched content or null on failure.
  */
 function media_embed_fetch_binary(
     string $url,
     ?string $proxyProfile = null,
-    ?\Logger $logger = null,
+    ?Logger $logger = null,
     int $retries = 1
 ): ?array {
     if ($retries < 1) {
@@ -155,6 +157,11 @@ function media_embed_fetch_binary(
 
             // Fall back to direct fetch
             $response = getContents($url, [], [], true);
+
+            if (is_string($response) === true) {
+                throw new \RuntimeException('Unexpected string response');
+            }
+
             $body = $response->getBody();
 
             if ($body === '') {
