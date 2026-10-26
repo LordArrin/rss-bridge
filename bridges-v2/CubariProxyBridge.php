@@ -7,8 +7,6 @@ namespace RSSBridge\Bridges;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\Utils\Json;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class CubariProxyBridge extends BridgeAbstract
 {
     public const NAME = 'Cubari Proxy';

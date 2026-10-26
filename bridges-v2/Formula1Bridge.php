@@ -6,8 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class Formula1Bridge extends BridgeAbstract
 {
     public const NAME = 'Formula1';

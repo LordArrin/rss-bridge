@@ -7,8 +7,6 @@ namespace RSSBridge\Bridges;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\Utils\Json;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 abstract class HoyoBase extends BridgeAbstract
 {
     public const LANGUAGE_DEFAULT = 'en-us';

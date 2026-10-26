@@ -7,9 +7,6 @@ namespace RSSBridge\Bridges;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\Utils\Json;
 
-use function RSSBridge\Exceptions\throwClientException;
-use function RSSBridge\Exceptions\throwServerException;
-
 abstract class MoebooruBase extends BridgeAbstract
 {
     public const CACHE_TIMEOUT = 1800;

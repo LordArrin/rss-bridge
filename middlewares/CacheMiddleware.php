@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RSSBridge\Middlewares;
 
-use RSSBridge\Http\HttpException;
+use HttpException;
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
 use RSSBridge\Caches\CacheInterface;
@@ -106,7 +106,7 @@ final class CacheMiddleware implements Middleware
 
             $ttl = 60 + random_int(0, 120);
 
-            $retryAfterHint = HttpException::parseRetryAfter($response->getHeader('retry-after'));
+            $retryAfterHint = \HttpException::parseRetryAfter($response->getHeader('retry-after'));
             // ИСПРАВЛЕНО: Удалена избыточная проверка `$code >= 400`, так как она всегда true в этом блоке
             if ($retryAfterHint !== null) {
                 $ttl = max(30, min(1800, $retryAfterHint));

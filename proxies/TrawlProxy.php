@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace RSSBridge\Proxies;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 /**
  * Trawl proxy integration.
  *

@@ -7,8 +7,6 @@ namespace RSSBridge\Bridges;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\FeedParser;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class NyaaTorrentsBridge extends BridgeAbstract
 {
     public const NAME = 'NyaaTorrents';

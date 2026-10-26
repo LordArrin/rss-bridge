@@ -13,79 +13,19 @@ declare(strict_types=1);
 
 namespace RSSBridge\Http;
 
-class HttpException extends \Exception
-{
-    public ?Response $response;
-
-    /**
-     * Delay hint parsed from the upstream Retry-After header (seconds).
-     */
-    public ?int $retryAfter = null;
-
-    public function __construct(string $message = '', int $statusCode = 0, ?Response $response = null)
-    {
-        parent::__construct($message, $statusCode);
-        $this->response = $response ?? new Response('', 0);
-        $this->retryAfter = self::parseRetryAfter($this->response->getHeader('retry-after'));
-    }
-
-    /**
-     * Parses a Retry-After header value per RFC 9110 section 10.2.3.
-     */
-    public static function parseRetryAfter(?string $value): ?int
-    {
-        if ($value === null || trim($value) === '') {
-            return null;
-        }
-        $value = trim($value);
-        if (ctype_digit($value) === true) {
-            return max(0, min(86400, (int) $value));
-        }
-        $timestamp = strtotime($value);
-        if ($timestamp === false) {
-            return null;
-        }
-        return max(0, min(86400, $timestamp - time()));
-    }
-
-    public static function fromResponse(Response $response, string $url): HttpException
-    {
-        $message = sprintf(
-            '%s resulted in %s %s',
-            $url,
-            $response->getCode(),
-            $response->getStatusLine()
-        );
-        if (CloudFlareException::isCloudFlareResponse($response) === true) {
-            return new CloudFlareException($message, $response->getCode(), $response);
-        }
-        return new HttpException(trim($message), $response->getCode(), $response);
-    }
-}
-
-final class CloudFlareException extends HttpException
-{
-    public static function isCloudFlareResponse(Response $response): bool
-    {
-        $cloudflareTitles = [
-            '<title>Just a moment...',
-            '<title>Please Wait...',
-            '<title>Attention Required!',
-            '<title>Security | Glassdoor',
-            '<title>Access denied</title>',
-        ];
-        $body = $response->getBody();
-        foreach ($cloudflareTitles as $title) {
-            if (str_contains($body, $title) === true) {
-                return true;
-            }
-        }
-        return false;
-    }
-}
+use HttpException;
+use CloudFlareException;
 
 interface HttpClient
 {
+    /**
+     * Performs an HTTP request and returns a Response.
+     *
+     * @param string $url The URL to request
+     * @param array<string, mixed> $config Optional configuration
+     * @return Response
+     * @throws \HttpException
+     */
     public function request(string $url, array $config = []): Response;
 }
 
@@ -124,11 +64,6 @@ final class IpResolver
     private static array $cache = [];
 
     private const CACHE_TTL = 60;
-    // Negative results are cached a bit longer than 10s: transient resolver
-    // failures (SERVFAIL/timeout under upstream load) would otherwise be
-    // re-tried on every request, hammering both the resolver and the origin
-    // while producing needless "could not resolve host" errors. 30s is still
-    // short enough to recover quickly once the name resolves again.
     private const NEGATIVE_CACHE_TTL = 30;
     private const MAX_CACHE_ENTRIES = 512;
 
@@ -228,7 +163,6 @@ final class IpResolver
         $ips = array_values(array_unique($ips));
         self::$cache[$host] = ['time' => time(), 'ips' => $ips];
 
-        // Bound the cache size for long-running processes.
         if (count(self::$cache) > self::MAX_CACHE_ENTRIES) {
             $now = time();
             foreach (self::$cache as $name => $entry) {
@@ -246,6 +180,9 @@ final class IpResolver
         return $ips;
     }
 
+    /**
+     * Clears the DNS cache for a specific host or all hosts.
+     */
     public static function clearCache(?string $host = null): void
     {
         if ($host === null) {
@@ -255,11 +192,17 @@ final class IpResolver
         unset(self::$cache[strtolower(rtrim($host, '.'))]);
     }
 
+    /**
+     * Checks if an IP is allowed (not blocked).
+     */
     public function isAllowed(string $ip): bool
     {
         return $this->isBlocked($ip) === false;
     }
 
+    /**
+     * Checks if an IP is blocked.
+     */
     public function isBlocked(string $ip): bool
     {
         if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
@@ -278,6 +221,9 @@ final class IpResolver
         return false;
     }
 
+    /**
+     * Checks if an IP is whitelisted.
+     */
     public function isWhitelisted(string $ip): bool
     {
         foreach ($this->allowedCidrs as $cidr) {
@@ -288,6 +234,9 @@ final class IpResolver
         return false;
     }
 
+    /**
+     * Checks if an IP matches a CIDR range.
+     */
     public static function matches(string $ip, string $cidr): bool
     {
         [$block, $bitsStr] = str_contains($cidr, '/') === true ? explode('/', $cidr, 2) : [$cidr, null];
@@ -320,6 +269,9 @@ final class IpResolver
         return (ord($ipBin[$fullBytes]) & $mask) === (ord($blockBin[$fullBytes]) & $mask);
     }
 
+    /**
+     * Unwraps IPv4-mapped IPv6 addresses to their IPv4 representation.
+     */
     private static function unwrapV4Mapped(string $bin): string
     {
         if (strlen($bin) === 16 && substr($bin, 0, 10) === str_repeat("\x00", 10) && substr($bin, 10, 2) === "\xff\xff") {
@@ -328,6 +280,9 @@ final class IpResolver
         return $bin;
     }
 
+    /**
+     * Validates a CIDR notation string.
+     */
     public static function isValidCidr(string $cidr): bool
     {
         [$ip, $bits] = str_contains($cidr, '/') === true ? explode('/', $cidr, 2) : [$cidr, null];
@@ -360,6 +315,9 @@ final class CurlHttpClient implements HttpClient
         return defined('CURLOPT_RESOLVE') === true ? (int)constant('CURLOPT_RESOLVE') : self::RESOLVE_OPT;
     }
 
+    /**
+     * Gets the CURL_IMPERSONATE environment variable target.
+     */
     public static function getImpersonateTarget(): ?string
     {
         $target = getenv('CURL_IMPERSONATE');
@@ -369,6 +327,9 @@ final class CurlHttpClient implements HttpClient
         return null;
     }
 
+    /**
+     * Checks if the impersonate option is set to opt-out (empty or 'none').
+     */
     private static function isOptOut(array $curlOptions): bool
     {
         $opt = self::impersonateOption();
@@ -381,13 +342,16 @@ final class CurlHttpClient implements HttpClient
 
     private static ?IpResolver $ipResolver = null;
 
+    /**
+     * Gets or creates the singleton IpResolver instance.
+     */
     private static function ipResolver(): IpResolver
     {
         if (self::$ipResolver instanceof IpResolver === false) {
             $blocked = null;
             $allowed = null;
             if (class_exists(\RSSBridge\Configuration::class) === true) {
-                $blocked = \RSSBridge\Configuration::getConfig('http', 'blocked_ip_ranges');
+                $blocked = \RSSBridge\Configuration::getConfig('http', 'blocked_ip_range');
                 $allowed = \RSSBridge\Configuration::getConfig('http', 'allowed_ip_ranges');
             }
             self::$ipResolver = new IpResolver($blocked, $allowed);
@@ -395,6 +359,9 @@ final class CurlHttpClient implements HttpClient
         return self::$ipResolver;
     }
 
+    /**
+     * Checks if SSRF protection is enabled.
+     */
     private static function isSsrfCheckEnabled(): bool
     {
         if (class_exists(\RSSBridge\Configuration::class) === false) {
@@ -464,7 +431,7 @@ final class CurlHttpClient implements HttpClient
 
         if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
             if (self::ipResolver()->isBlocked($host) === true) {
-                throw new HttpException(sprintf(
+                throw new \HttpException(sprintf(
                     'Access to %s is blocked: the IP falls into a private or reserved range (SSRF protection)',
                     $host
                 ));
@@ -485,7 +452,7 @@ final class CurlHttpClient implements HttpClient
         }
 
         if ($allowedIps === []) {
-            throw new HttpException(sprintf(
+            throw new \HttpException(sprintf(
                 'Access to %s is blocked: the host resolves only to private or reserved IP ranges (SSRF protection)',
                 $host
             ));
@@ -539,6 +506,9 @@ final class CurlHttpClient implements HttpClient
         return implode('.', array_slice($labels, -$suffixLength - 1));
     }
 
+    /**
+     * Checks if two hosts belong to the same effective domain.
+     */
     private static function isSameEffectiveDomain(string $host1, string $host2): bool
     {
         if ($host1 === $host2) {
@@ -558,6 +528,9 @@ final class CurlHttpClient implements HttpClient
         return false;
     }
 
+    /**
+     * Performs an HTTP request with SSRF protection and retry logic.
+     */
     public function request(string $url, array $config = []): Response
     {
         $ssrfCheck = $config['ssrf_check'] ?? null;
@@ -574,30 +547,26 @@ final class CurlHttpClient implements HttpClient
             putenv('CURL_IMPERSONATE');
         }
 
-        // The handle is a CurlHandle object (PHP >= 8.0); curl_close() must
-        // NOT be called - it was deprecated in 8.0 and errors in 8.4+. It is
-        // released automatically when $ch leaves scope, including on the
-        // exception paths below, so no fd/socket leak is possible.
         $ch = curl_init($url);
         if ($ch === false) {
             if ($savedEnv !== null) {
                 putenv('CURL_IMPERSONATE=' . $savedEnv);
             }
-            throw new HttpException('Failed to initialize cURL');
+            throw new \HttpException('Failed to initialize cURL');
         }
 
         try {
             return $this->doRequest($ch, $url, $config, $resolveEntries, $optOutRequested, $savedEnv);
         } finally {
-            // Restore the impersonate env var even when the request throws,
-            // so a failed bridge cannot leave other workers without TLS
-            // fingerprinting for the rest of their process lifetime.
             if ($savedEnv !== null) {
                 putenv('CURL_IMPERSONATE=' . $savedEnv);
             }
         }
     }
 
+    /**
+     * Internal method that performs the actual cURL request with retry logic.
+     */
     private function doRequest(
         \CurlHandle $ch,
         string $url,
@@ -691,7 +660,7 @@ final class CurlHttpClient implements HttpClient
         }
 
         if (curl_setopt_array($ch, $curlOptions) === false) {
-            throw new HttpException('Failed to set cURL options: tried to set an illegal curl option');
+            throw new \HttpException('Failed to set cURL options: tried to set an illegal curl option');
         }
 
         $responseHeaders = [];
@@ -723,7 +692,6 @@ final class CurlHttpClient implements HttpClient
         $lastErrno = 0;
         $body = false;
 
-        // Transient connection errors worth one immediate retry.
         $transientErrnos = [
             CURLE_COULDNT_CONNECT,
             CURLE_RECV_ERROR,
@@ -736,13 +704,13 @@ final class CurlHttpClient implements HttpClient
         if (defined('CURLE_HTTP2') === true) {
             $transientErrnos[] = (int) constant('CURLE_HTTP2');
         } else {
-            $transientErrnos[] = 16; // Fallback for CURLE_HTTP2
+            $transientErrnos[] = 16;
         }
 
         if (defined('CURLE_HTTP2_STREAM') === true) {
             $transientErrnos[] = (int) constant('CURLE_HTTP2_STREAM');
         } else {
-            $transientErrnos[] = 96; // Fallback for CURLE_HTTP2_STREAM
+            $transientErrnos[] = 96;
         }
         if ((int)$config['retries'] === 0) {
             $maxAttempts = 2;
@@ -752,7 +720,7 @@ final class CurlHttpClient implements HttpClient
             $remaining = $deadline - microtime(true);
             if ($remaining < 1) {
                 if ($attempt === 1) {
-                    throw new HttpException(sprintf(
+                    throw new \HttpException(sprintf(
                         'Refusing to request %s: no time left within the request deadline',
                         $url
                     ));
@@ -766,7 +734,6 @@ final class CurlHttpClient implements HttpClient
             );
             curl_setopt($ch, CURLOPT_TIMEOUT, $attemptTimeout);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $attemptConnectTimeout);
-            // Millisecond resolution to respect the fractional deadline budget.
             curl_setopt($ch, CURLOPT_TIMEOUT_MS, max(500, (int)round(min($remaining, $attemptTimeout) * 1000)));
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, max(500, $attemptConnectTimeout * 1000));
 
@@ -808,7 +775,6 @@ final class CurlHttpClient implements HttpClient
                 break;
             }
             if ($isTransient === true) {
-                // Retry transient errors quickly, without full backoff.
                 $delayUs = min(200_000, max(0, $remainingUs - 1_000_000));
                 if ($delayUs <= 0) {
                     $delayUs = 1;
@@ -827,7 +793,7 @@ final class CurlHttpClient implements HttpClient
             curl_reset($ch);
             curl_setopt($ch, CURLOPT_URL, $url);
             if (curl_setopt_array($ch, $curlOptions) === false) {
-                throw new HttpException('Failed to set cURL options: tried to set an illegal curl option');
+                throw new \HttpException('Failed to set cURL options: tried to set an illegal curl option');
             }
             if ($resolveEntries !== []) {
                 curl_setopt($ch, self::resolveOption(), $resolveEntries);
@@ -839,13 +805,11 @@ final class CurlHttpClient implements HttpClient
 
         if ($savedEnv !== null) {
             putenv('CURL_IMPERSONATE=' . $savedEnv);
-            // The finally block in request() restores it as well; clearing
-            // the marker here keeps the restore idempotent on the happy path.
             $savedEnv = null;
         }
 
         if ($body === false) {
-            throw new HttpException(sprintf(
+            throw new \HttpException(sprintf(
                 'cURL error %d: %s (see https://curl.se/libcurl/c/libcurl-errors.html) for %s',
                 $lastErrno,
                 $lastError,
@@ -858,7 +822,6 @@ final class CurlHttpClient implements HttpClient
             $originalParsed = self::parseHttpUrl($url);
 
             if ($originalParsed === null || $location === 'unknown') {
-                // No usable Location header: return the response as-is.
                 return new Response($body, $statusCode, $responseHeaders);
             }
 
@@ -883,8 +846,7 @@ final class CurlHttpClient implements HttpClient
             $redirectParsed = self::parseHttpUrl($location);
 
             if ($redirectParsed === null) {
-                // Refuse non-http(s) or unparsable redirect targets.
-                throw new HttpException(sprintf(
+                throw new \HttpException(sprintf(
                     'Refusing to follow invalid redirect to %s for %s (SSRF protection: unsupported redirect target)',
                     $location,
                     $url
@@ -894,7 +856,7 @@ final class CurlHttpClient implements HttpClient
             if (self::isSameEffectiveDomain($originalParsed['host'], $redirectParsed['host']) === true) {
                 $redirectCount = $config['_redirect_count'] ?? 0;
                 if ($redirectCount >= 5) {
-                    throw new HttpException(sprintf(
+                    throw new \HttpException(sprintf(
                         'Too many redirects for %s (SSRF protection: redirect loop detected)',
                         $url
                     ));
@@ -905,7 +867,7 @@ final class CurlHttpClient implements HttpClient
                 return $this->request($location, $config);
             }
 
-            throw new HttpException(sprintf(
+            throw new \HttpException(sprintf(
                 'Refusing to follow redirect to %s for %s (SSRF protection: cross-domain redirects are disabled to prevent bypasses)',
                 $location,
                 $url
@@ -926,6 +888,9 @@ final class Request
     {
     }
 
+    /**
+     * Creates a Request from PHP superglobals.
+     */
     public static function fromGlobals(): self
     {
         $self = new self();
@@ -935,6 +900,9 @@ final class Request
         return $self;
     }
 
+    /**
+     * Creates a Request from CLI arguments.
+     */
     public static function fromCli(array $cliArgs): self
     {
         $self = new self();
@@ -942,16 +910,25 @@ final class Request
         return $self;
     }
 
+    /**
+     * Gets a GET parameter value.
+     */
     public function get(string $key, mixed $default = null): mixed
     {
         return $this->get[$key] ?? $default;
     }
 
+    /**
+     * Gets a SERVER parameter value.
+     */
     public function server(string $key, ?string $default = null): ?string
     {
         return $this->server[$key] ?? $default;
     }
 
+    /**
+     * Returns a new Request with an added attribute.
+     */
     public function withAttribute(string $name, mixed $value = true): self
     {
         $clone = clone $this;
@@ -959,11 +936,17 @@ final class Request
         return $clone;
     }
 
+    /**
+     * Gets an attribute value.
+     */
     public function getAttribute(string $key, mixed $default = null): mixed
     {
         return $this->attributes[$key] ?? $default;
     }
 
+    /**
+     * Returns all GET parameters as an array.
+     */
     public function toArray(): array
     {
         return $this->get;
@@ -1038,26 +1021,41 @@ final class Response
         }
     }
 
+    /**
+     * Gets the response body.
+     */
     public function getBody(): string
     {
         return $this->body;
     }
 
+    /**
+     * Gets the HTTP status code.
+     */
     public function getCode(): int
     {
         return $this->code;
     }
 
+    /**
+     * Gets the HTTP status line text.
+     */
     public function getStatusLine(): string
     {
         return self::STATUS_CODES[$this->code] ?? '';
     }
 
+    /**
+     * Gets all response headers.
+     */
     public function getHeaders(): array
     {
         return $this->headers;
     }
 
+    /**
+     * Gets a specific header value.
+     */
     public function getHeader(string $name, bool $all = false): string|array|null
     {
         $name = mb_strtolower($name);
@@ -1072,6 +1070,9 @@ final class Response
         return is_string($last) === true ? $last : null;
     }
 
+    /**
+     * Returns a new Response with a modified header.
+     */
     public function withHeader(string $name, string $value): self
     {
         $clone = clone $this;
@@ -1079,6 +1080,9 @@ final class Response
         return $clone;
     }
 
+    /**
+     * Returns a new Response with a modified body.
+     */
     public function withBody(string $body): self
     {
         $clone = clone $this;
@@ -1086,6 +1090,9 @@ final class Response
         return $clone;
     }
 
+    /**
+     * Sends the response to the client.
+     */
     public function send(): void
     {
         http_response_code($this->code);

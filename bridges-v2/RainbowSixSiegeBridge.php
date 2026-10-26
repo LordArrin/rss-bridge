@@ -7,8 +7,6 @@ namespace RSSBridge\Bridges;
 use RSSBridge\Utils\Json;
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class RainbowSixSiegeBridge extends BridgeAbstract
 {
     public const NAME = 'Rainbow Six Siege News';

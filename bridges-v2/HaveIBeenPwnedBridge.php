@@ -6,8 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class HaveIBeenPwnedBridge extends BridgeAbstract
 {
     public const NAME = 'Have I Been Pwned (HIBP)';

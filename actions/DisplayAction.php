@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace RSSBridge\Actions;
 
-use RSSBridge\Http\HttpException;
 use RSSBridge\Utils\Json;
 use RSSBridge\Utils\Url;
 use RSSBridge\Logger\Logger;
@@ -12,8 +11,6 @@ use RSSBridge\BridgeAbstract;
 use RSSBridge\BridgeFactory;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
-use RSSBridge\Exceptions\ClientException;
-use RSSBridge\Exceptions\RateLimitException;
 use RSSBridge\FeedItem;
 use RSSBridge\Formats\FormatFactory;
 use RSSBridge\SafeBridgeLoader;
@@ -117,16 +114,16 @@ final class DisplayAction implements ActionInterface
             $bridge->collectData();
             $items = $bridge->getItems();
         } catch (\Throwable $e) {
-            if ($e instanceof ClientException) {
-                $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
-            } elseif ($e instanceof RateLimitException) {
+            if ($e instanceof \RateLimitException) {
                 $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
                 return new Response(
                     render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]),
                     429,
                     self::rateLimitHeaders($e)
                 );
-            } elseif ($e instanceof HttpException) {
+            } elseif ($e instanceof \ClientException) {
+                $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
+            } elseif ($e instanceof \HttpException) {
                 $code = $e->getCode();
                 if ($code >= 400 && $code <= 599) {
                     $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
@@ -154,7 +151,8 @@ final class DisplayAction implements ActionInterface
                 if ($errorOutput === 'feed') {
                     $items = [$this->createFeedItemFromException($e, $bridge)];
                 } elseif ($errorOutput === 'http') {
-                    return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), 500);
+                    $statusCode = $e instanceof \HttpException ? $e->getCode() : 500;
+                    return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $statusCode);
                 }
             }
         }
@@ -210,7 +208,7 @@ final class DisplayAction implements ActionInterface
     private static function rateLimitHeaders(\Throwable $e): array
     {
         $retryAfter = 3600;
-        if ($e instanceof HttpException && $e->retryAfter !== null) {
+        if ($e instanceof \HttpException && $e->retryAfter !== null) {
             $retryAfter = max(60, min(86400, $e->retryAfter));
         }
         return ['retry-after' => (string) $retryAfter];

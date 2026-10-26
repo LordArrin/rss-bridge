@@ -4,13 +4,10 @@ declare(strict_types=1);
 
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
-use RSSBridge\Http\HttpException;
 use RSSBridge\Http\Response;
 use RSSBridge\Utils\Json;
 use RSSBridge\Proxies\DirectProxy;
 use RSSBridge\Proxies\ProxyFactory;
-
-use function RSSBridge\Exceptions\throwClientException;
 
 function get_sitemap(string $url): array
 {
@@ -213,7 +210,7 @@ function getContents(
             }
             break;
         default:
-            $e = HttpException::fromResponse($response, $url);
+            $e = \HttpException::fromResponse($response, $url);
             throw $e;
     }
 

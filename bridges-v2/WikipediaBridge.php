@@ -6,8 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class WikipediaBridge extends BridgeAbstract
 {
     public const NAME = 'Wikipedia today';

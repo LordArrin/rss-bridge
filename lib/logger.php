@@ -18,7 +18,6 @@ declare(strict_types=1);
 
 namespace RSSBridge\Logger;
 
-use RSSBridge\Exceptions\RateLimitException;
 use RSSBridge\Utils\Json;
 use RSSBridge\Utils\Url;
 
@@ -56,7 +55,7 @@ final class LogFilter
             return true;
         }
 
-        if ($e instanceof RateLimitException === true) {
+        if ($e instanceof \RateLimitException === true) {
             return false;
         }
 

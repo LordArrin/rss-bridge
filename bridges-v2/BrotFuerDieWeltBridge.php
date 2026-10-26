@@ -6,7 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwServerException;
 use function urljoin;
 
 final class BrotFuerDieWeltBridge extends BridgeAbstract

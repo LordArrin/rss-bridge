@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace RSSBridge\Middlewares;
 
-use RSSBridge\Exceptions\ClientException;
-use RSSBridge\Exceptions\RateLimitException;
-use RSSBridge\Http\HttpException;
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
 use RSSBridge\Logger\Logger;
@@ -26,16 +23,10 @@ final class ExceptionMiddleware implements Middleware
         try {
             return $next($request);
         } catch (\Throwable $e) {
-            // Preserve the HTTP semantics of known exceptions instead of
-            // flattening everything to 500. RSS readers treat a hard 500 as
-            // "feed is broken" and back off aggressively; returning the real
-            // status (429/503 for rate limits and upstream outages) keeps
-            // transient failures recoverable.
             $code = $e->getCode();
-            if ($e instanceof HttpException || $e instanceof RateLimitException) {
+
+            if ($e instanceof \HttpException) {
                 $status = ($code >= 400 && $code <= 599) ? $code : 500;
-            } elseif ($e instanceof ClientException) {
-                $status = ($code >= 400 && $code < 500) ? $code : 400;
             } else {
                 $status = 500;
             }

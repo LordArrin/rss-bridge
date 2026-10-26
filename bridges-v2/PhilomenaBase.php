@@ -6,8 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwClientException;
-
 abstract class PhilomenaBase extends BridgeAbstract
 {
     public const NAME = 'Philomena';

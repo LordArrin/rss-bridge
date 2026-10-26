@@ -7,8 +7,6 @@ namespace RSSBridge\Bridges;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\GithubClient;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class GithubIssueBridge extends BridgeAbstract
 {
     public const NAME = 'GitHub Issues';

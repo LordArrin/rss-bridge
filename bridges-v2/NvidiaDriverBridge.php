@@ -6,8 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class NvidiaDriverBridge extends BridgeAbstract
 {
     public const NAME = 'NVIDIA Driver Releases';

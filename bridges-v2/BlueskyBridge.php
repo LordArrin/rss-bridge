@@ -6,8 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwClientException;
-
 final class BlueskyBridge extends BridgeAbstract
 {
     public const NAME = 'Bluesky';

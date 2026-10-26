@@ -6,9 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwClientException;
-use function RSSBridge\Exceptions\throwServerException;
-
 final class PlaySrfBridge extends BridgeAbstract
 {
     public const NAME = 'Play SRF / RTS / RSI / RTR';

@@ -7,8 +7,6 @@ namespace RSSBridge\Bridges;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\FeedParser;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class ArsTechnicaBridge extends BridgeAbstract
 {
     public const NAME = 'Ars Technica';

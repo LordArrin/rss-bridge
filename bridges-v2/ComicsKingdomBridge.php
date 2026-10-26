@@ -6,8 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class ComicsKingdomBridge extends BridgeAbstract
 {
     public const NAME = 'Comics Kingdom Unofficial RSS';

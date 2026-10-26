@@ -7,8 +7,6 @@ namespace RSSBridge\Bridges;
 use RSSBridge\Utils\Json;
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class EpicGamesFreeBridge extends BridgeAbstract
 {
     public const NAME = 'Epic Games Free Games';

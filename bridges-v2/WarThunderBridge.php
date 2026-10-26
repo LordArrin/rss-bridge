@@ -6,8 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class WarThunderBridge extends BridgeAbstract
 {
     public const NAME = 'War Thunder';

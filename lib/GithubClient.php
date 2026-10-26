@@ -7,8 +7,6 @@ namespace RSSBridge;
 use RSSBridge\Utils\Json;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
-use RSSBridge\Exceptions\RateLimitException;
-use RSSBridge\Http\HttpException;
 use RSSBridge\Http\Response;
 use RSSBridge\Logger\Logger;
 
@@ -115,7 +113,7 @@ final class GithubClient
         try {
             $response = $this->fetch(sprintf('/repos/%s/%s/commits/%s', $owner, $repo, rawurlencode($tagName)));
             return (string) ($response['commit']['message'] ?? '');
-        } catch (HttpException $e) {
+        } catch (\HttpException $e) {
             $this->logger->warning(sprintf('github: Failed to fetch commit message for tag %s: %s', $tagName, $e->getMessage()));
             return '';
         }
@@ -138,7 +136,7 @@ final class GithubClient
 
         if ($this->cache->get($cacheKey) === true) {
             $this->logger->info(sprintf('github: Internal rate limit (%s)', $this->token !== null ? 'authenticated' : 'anonymous'));
-            throw new RateLimitException(sprintf('Internal github rate limit (%s)', $this->token !== null ? 'authenticated' : 'anonymous'));
+            throw new \RateLimitException(sprintf('Internal github rate limit (%s)', $this->token !== null ? 'authenticated' : 'anonymous'));
         }
 
         $this->logger->info(sprintf('github: github_client->fetch(%s)', $url));
@@ -171,9 +169,9 @@ final class GithubClient
             if ($remaining === '0') {
                 $this->logger->info(sprintf('github: REAL rate limit (0 remaining) - %s', $this->token !== null ? 'authenticated' : 'anonymous'));
                 $this->cache->set($cacheKey, true, 60 * 60);
-                throw new RateLimitException(sprintf('REAL github rate limit (0 remaining) - %s', $this->token !== null ? 'authenticated' : 'anonymous'));
+                throw new \RateLimitException(sprintf('REAL github rate limit (0 remaining) - %s', $this->token !== null ? 'authenticated' : 'anonymous'));
             }
-        } catch (HttpException $e) {
+        } catch (\HttpException $e) {
             $code = $e->getCode();
 
             if ($code === 401) {
@@ -189,7 +187,7 @@ final class GithubClient
             if (in_array($code, [403, 429], true) === true) {
                 $this->logger->info(sprintf('github: REAL rate limit - %s', $this->token !== null ? 'authenticated' : 'anonymous'));
                 $this->cache->set($cacheKey, true, 60 * 60);
-                throw new RateLimitException(sprintf('REAL github rate limit - %s', $this->token !== null ? 'authenticated' : 'anonymous'));
+                throw new \RateLimitException(sprintf('REAL github rate limit - %s', $this->token !== null ? 'authenticated' : 'anonymous'));
             }
 
             throw $e;

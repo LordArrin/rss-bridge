@@ -6,8 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class SteamAppNewsBridge extends BridgeAbstract
 {
     public const NAME = 'Steam App News';

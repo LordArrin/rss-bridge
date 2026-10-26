@@ -6,9 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwClientException;
-use function RSSBridge\Exceptions\throwServerException;
-
 final class ModrinthBridge extends BridgeAbstract
 {
     public const NAME = 'Modrinth';

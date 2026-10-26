@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace RSSBridge\Proxies;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class FlareSolverrProxy extends ProxyAbstract
 {
     private ?string $apiUrl = null;

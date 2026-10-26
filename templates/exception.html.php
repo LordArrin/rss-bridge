@@ -1,7 +1,5 @@
 <?php
 
-use RSSBridge\Http\CloudFlareException;
-use RSSBridge\Http\HttpException;
 use RSSBridge\Utils\Url;
 
 /**
@@ -12,8 +10,8 @@ use RSSBridge\Utils\Url;
 ?>
 <div class="error">
 
-    <?php if ($e instanceof HttpException): ?>
-        <?php if ($e instanceof CloudFlareException): ?>
+    <?php if ($e instanceof \HttpException): ?>
+        <?php if ($e instanceof \CloudFlareException): ?>
             <h2>The website is protected by CloudFlare</h2>
             <p>
                 RSS-Bridge tried to fetch a website.

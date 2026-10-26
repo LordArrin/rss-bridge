@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace RSSBridge;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 /**
  * Configuration module for RSS-Bridge.
  *

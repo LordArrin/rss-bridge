@@ -7,11 +7,9 @@ namespace RSSBridge\Bridges;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\Configuration;
 use RSSBridge\FeedParser;
-use RSSBridge\Http\HttpException;
+use HttpException;
 use RSSBridge\Http\Response;
 use RSSBridge\Utils\Json;
-
-use function RSSBridge\Exceptions\throwServerException;
 
 final class FLZBridge extends BridgeAbstract
 {
@@ -413,7 +411,7 @@ final class FLZBridge extends BridgeAbstract
             try {
                 return $this->fetch($url);
             } catch (\Exception $e) {
-                if ($e instanceof HttpException === false || $e->getCode() !== 429) {
+                if ($e instanceof \HttpException === false || $e->getCode() !== 429) {
                     $this->logger->info(sprintf('FLZ: feed %s not available: %s', $path, $e->getMessage()));
                     return null;
                 }

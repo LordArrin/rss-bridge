@@ -7,9 +7,6 @@ namespace RSSBridge\Bridges;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\Utils\Json;
 
-use function RSSBridge\Exceptions\throwClientException;
-use function RSSBridge\Exceptions\throwServerException;
-
 final class TwitchBridge extends BridgeAbstract
 {
     public const NAME = 'Twitch';

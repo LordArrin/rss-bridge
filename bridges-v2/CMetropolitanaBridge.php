@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
-use RSSBridge\Http\HttpException;
-
-use function RSSBridge\Exceptions\throwServerException;
+use HttpException;
 
 final class CMetropolitanaBridge extends BridgeAbstract
 {
@@ -23,7 +21,7 @@ final class CMetropolitanaBridge extends BridgeAbstract
 
         try {
             $json = getContents($apiUrl);
-        } catch (HttpException $e) {
+        } catch (\HttpException $e) {
             throwServerException('Failed to fetch alerts: ' . $e->getMessage());
         }
 

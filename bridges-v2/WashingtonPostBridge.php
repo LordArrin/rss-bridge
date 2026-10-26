@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
-use RSSBridge\Http\HttpException;
+use HttpException;
 
 final class WashingtonPostBridge extends BridgeAbstract
 {
@@ -154,7 +154,7 @@ final class WashingtonPostBridge extends BridgeAbstract
             } catch (\Exception $e) {
                 // Keep original blurb if content fetch fails
                 // (e.g., HTTP 415 Unsupported Media Type for podcasts/interactive)
-                if (($e instanceof HttpException) === true && $e->getCode() === 415) {
+                if (($e instanceof \HttpException) === true && $e->getCode() === 415) {
                     // Do nothing, keep $item['content'] as short blurb
                 }
             }

@@ -5,12 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
-use RSSBridge\Http\HttpException;
 use RSSBridge\Utils\Json;
-
-use function RSSBridge\Exceptions\throwClientException;
-use function RSSBridge\Exceptions\throwServerException;
-use function RSSBridge\Exceptions\throwRateLimitException;
 
 final class LiveTennisApiBridge extends BridgeAbstract
 {
@@ -213,7 +208,7 @@ final class LiveTennisApiBridge extends BridgeAbstract
 
         try {
             $body = getContents($url, $headers);
-        } catch (HttpException $e) {
+        } catch (\HttpException $e) {
             throw self::apiException($e);
         }
 
@@ -229,7 +224,7 @@ final class LiveTennisApiBridge extends BridgeAbstract
         return array_values($json['data']);
     }
 
-    private static function apiException(HttpException $e): \Exception
+    private static function apiException(\HttpException $e): \Exception
     {
         $code = $e->getCode();
         $error = '';

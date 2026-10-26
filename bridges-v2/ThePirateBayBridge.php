@@ -7,8 +7,6 @@ namespace RSSBridge\Bridges;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\Utils\Url;
 
-use function RSSBridge\Exceptions\throwClientException;
-
 final class ThePirateBayBridge extends BridgeAbstract
 {
     public const NAME = 'The Pirate Bay';

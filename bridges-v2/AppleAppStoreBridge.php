@@ -6,8 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class AppleAppStoreBridge extends BridgeAbstract
 {
     public const NAME = 'Apple App Store';

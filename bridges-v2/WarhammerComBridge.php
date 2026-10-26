@@ -6,8 +6,6 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
-use function RSSBridge\Exceptions\throwServerException;
-
 final class WarhammerComBridge extends BridgeAbstract
 {
     public const NAME = 'Warhammer Community Blog';

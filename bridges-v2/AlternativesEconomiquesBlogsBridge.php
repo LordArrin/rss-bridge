@@ -8,10 +8,7 @@ use Dom\HTMLDocument;
 use Dom\Element;
 use Dom\Node;
 use RSSBridge\BridgeAbstract;
-use RSSBridge\Http\HttpException;
-
-use function RSSBridge\Exceptions\throwClientException;
-use function RSSBridge\Exceptions\throwServerException;
+use HttpException;
 
 final class AlternativesEconomiquesBlogsBridge extends BridgeAbstract
 {
@@ -68,7 +65,7 @@ final class AlternativesEconomiquesBlogsBridge extends BridgeAbstract
 
         try {
             $html = getContents($baseUrl);
-        } catch (HttpException $e) {
+        } catch (\HttpException $e) {
             throwServerException('Failed to fetch blog page: ' . $e->getMessage());
         }
 
@@ -130,7 +127,7 @@ final class AlternativesEconomiquesBlogsBridge extends BridgeAbstract
             if ($contentNode !== null) {
                 $contentHtml .= $this->getInnerHtml($contentNode, $articleDom);
             }
-        } catch (HttpException $e) {
+        } catch (\HttpException $e) {
             $contentHtml .= '<p>Failed to load article content.</p>';
         }
 
