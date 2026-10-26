@@ -1,11 +1,11 @@
 <?php
 
 /**
- * Logger module containing all logging-related classes.
+ * Logger module.
  *
- * This file contains multiple classes, interface and trait by design
- * (single-module approach). PSR-1 single-class-per-file rule is
- * intentionally disabled for this file.
+ * This file contains multiple classes by design (single-module approach).
+ * PSR-1 single-class-per-file rule is intentionally disabled for this file
+ * as per project's phpcs.xml configuration.
  *
  * @phpcs:disable PSR1.Classes.ClassDeclaration.MultipleClasses
  * @phpcs:disable PSR1.Files.SideEffects.FoundWithSymbols
@@ -42,15 +42,50 @@ interface Logger
     public function error(string $message, array $context = []): void;
 }
 
-trait FormatsLogRecords
+final class LogFilter
 {
-    private function formatRecord(array $record): array
+    public static function shouldLog(array $record): bool
     {
-        if (isset($record['context']['e']) === true) {
+        if (isset($record['context']['e']) === false) {
+            return true;
+        }
+
+        $e = $record['context']['e'];
+
+        if ($e instanceof \Throwable === false) {
+            return true;
+        }
+
+        if ($e instanceof RateLimitException === true) {
+            return false;
+        }
+
+        $ignoredMessages = [
+            'Format name invalid',
+            'Unknown format given',
+            'Unable to find',
+        ];
+
+        foreach ($ignoredMessages as $ignoredMessage) {
+            if (str_starts_with($e->getMessage(), $ignoredMessage) === true) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+
+final class LogFormatter
+{
+    public static function formatRecord(array $record): array
+    {
+        if (isset($record['context']['e']) === true && $record['context']['e'] instanceof \Throwable) {
             /** @var \Throwable $e */
             $e = $record['context']['e'];
             unset($record['context']['e']);
-            $record['context']['type'] = get_class($e);
+
+            $record['context']['type'] = $e::class;
             $record['context']['code'] = $e->getCode();
             $record['context']['message'] = Url::sanitizeRoot($e->getMessage());
             $record['context']['file'] = Url::sanitizeRoot($e->getFile());
@@ -58,19 +93,26 @@ trait FormatsLogRecords
             $record['context']['url'] = Url::getCurrentUrl();
             $record['context']['trace'] = Url::traceToCallPoints(Url::traceFromException($e));
         }
+
         return $record;
     }
 
-    private function encodeContext(array $record): string
+    public static function encodeContext(array $context): string
     {
-        if ($record['context'] === []) {
+        if ($context === []) {
             return '';
         }
+
         try {
-            return Json::encode($record['context']);
-        } catch (\JsonException $e) {
-            $record['context']['message'] = null;
-            return Json::encode($record['context']);
+            return Json::encode($context);
+        } catch (\JsonException) {
+            // If JSON encoding fails, try to remove potentially problematic payload
+            $context['message'] = null;
+            try {
+                return Json::encode($context);
+            } catch (\JsonException) {
+                return '{}';
+            }
         }
     }
 }
@@ -78,6 +120,8 @@ trait FormatsLogRecords
 final class SimpleLogger implements Logger
 {
     private string $name;
+
+    /** @var callable[] */
     private array $handlers;
 
     /**
@@ -116,42 +160,23 @@ final class SimpleLogger implements Logger
 
     private function log(int $level, string $message, array $context = []): void
     {
-        if (isset($context['e']) === true) {
-            /** @var \Throwable $e */
-            $e = $context['e'];
-
-            if ($e instanceof RateLimitException) {
-                return;
-            }
-            $ignoredMessages = [
-                'Format name invalid',
-                'Unknown format given',
-                'Unable to find',
-            ];
-            foreach ($ignoredMessages as $ignoredMessage) {
-                if (str_starts_with($e->getMessage(), $ignoredMessage) === true) {
-                    return;
-                }
-            }
-        }
+        $record = [
+            'name' => $this->name,
+            'created_at' => Url::now(),
+            'level' => $level,
+            'level_name' => self::LEVEL_NAMES[$level],
+            'message' => $message,
+            'context' => $context,
+        ];
 
         foreach ($this->handlers as $handler) {
-            $handler([
-                'name' => $this->name,
-                'created_at' => Url::now(),
-                'level' => $level,
-                'level_name' => self::LEVEL_NAMES[$level],
-                'message' => $message,
-                'context' => $context,
-            ]);
+            $handler($record);
         }
     }
 }
 
 final class StreamHandler
 {
-    use FormatsLogRecords;
-
     private string $stream;
     private int $level;
 
@@ -166,8 +191,14 @@ final class StreamHandler
         if ($record['level'] < $this->level) {
             return;
         }
-        $record = $this->formatRecord($record);
-        $context = $this->encodeContext($record);
+
+        if (LogFilter::shouldLog($record) === false) {
+            return;
+        }
+
+        $record = LogFormatter::formatRecord($record);
+        $context = LogFormatter::encodeContext($record['context']);
+
         $text = sprintf(
             "[%s] %s.%s %s %s\n",
             $record['created_at']->format('Y-m-d H:i:s'),
@@ -176,14 +207,13 @@ final class StreamHandler
             $record['message'],
             $context
         );
-        file_put_contents($this->stream, $text, FILE_APPEND);
+
+        file_put_contents($this->stream, $text, FILE_APPEND | LOCK_EX);
     }
 }
 
 final class ErrorLogHandler
 {
-    use FormatsLogRecords;
-
     private int $level;
 
     public function __construct(int $level = Logger::DEBUG)
@@ -196,8 +226,14 @@ final class ErrorLogHandler
         if ($record['level'] < $this->level) {
             return;
         }
-        $record = $this->formatRecord($record);
-        $context = $this->encodeContext($record);
+
+        if (LogFilter::shouldLog($record) === false) {
+            return;
+        }
+
+        $record = LogFormatter::formatRecord($record);
+        $context = LogFormatter::encodeContext($record['context']);
+
         $text = sprintf(
             '[%s] %s.%s %s %s',
             $record['created_at']->format('Y-m-d H:i:s'),
@@ -206,6 +242,7 @@ final class ErrorLogHandler
             $record['message'],
             $context
         );
+
         error_log($text);
     }
 }
@@ -215,15 +252,12 @@ final class NullLogger implements Logger
     public function debug(string $message, array $context = []): void
     {
     }
-
     public function info(string $message, array $context = []): void
     {
     }
-
     public function warning(string $message, array $context = []): void
     {
     }
-
     public function error(string $message, array $context = []): void
     {
     }
