@@ -474,13 +474,27 @@ $ok = is_safe_uri($uri);
 
 // Remove expression()/behavior:/@import/javascript: from inline CSS
 $css = sanitize_inline_css($rawCss);
+
+// Strip invisible Unicode characters (zero-width spaces, Bidi markers, non-breaking spaces,
+// ASCII control chars) that break text matching, title generation, or cause visual glitches.
+$cleanText = strip_invisible_unicode($rawText);
+
+// Truncate HTML to a max number of VISIBLE characters without breaking tags.
+// Unlike mb_substr(), this tokenizes the HTML, counts only text nodes, and safely
+// closes any open tags (e.g., <a>, <b>) to prevent layout breakage in feed readers.
+$summary = truncate_html_preserve_tags($articleHtml, 250, '...');
+
+// Render a poll as an ASCII progress bar list (safe and readable in all RSS readers).
+// Pass 'blocks' as $barStyle to use Unicode block characters (█░) instead of ASCII ([#...]).
+// $options must be an array of ['text' => string, 'votes' => int, 'percent' => float].
+$pollHtml = render_ascii_poll($pollOptions, $totalVoters, 'ascii');
 ```
 
 `html_tag()` only allows these attributes: `type`, `id`, `name`, `value`, `placeholder`, `title`, `pattern`, `class`, `for`, `oncontextmenu`, `data-for`, `formtarget` (string), and `checked`, `required`, `selected` (boolean). Anything else throws — this prevents injection of event handlers like `onclick`.
 
 ### String Extraction (`quirks/extract.php`)
 
-Extract data from HTML or inline JavaScript:
+Extract data from HTML, inline JavaScript, or CSS styles:
 
 ```php
 // Extract text between delimiters (returns false if start delimiter not found)
@@ -491,7 +505,19 @@ $clean = stripWithDelimiters($html, '<script>', '</script>');
 
 // Remove recursive HTML sections (handles nested tags of the same name)
 $clean = stripRecursiveHTMLSection($html, 'div', '<div class="ads">');
+
+// Extract a background image URL from an inline CSS style attribute.
+// Useful for modern SPAs using <div style="background-image: url('...')"> instead of <img>.
+// Returns null if no valid URL is found.
+$imageUrl = extract_css_background_image($element->getAttribute('style') ?? '');
+
+// Extract a global JSON variable from a SPA HTML page (e.g., ytInitialData).
+// Safely decodes the JSON payload into an associative array, returning null on failure.
+// This avoids writing custom regex for <script> tags and handles strict JSON decoding.
+$spaData = extract_spa_json_variable($html, 'ytInitialData');
 ```
+
+> **⚠️ Note for AI Agents:** When dealing with SPA sites (YouTube, Twitter, Boosty, etc.), **always** use `extract_spa_json_variable()` instead of trying to parse `<script>` tags with regex manually. It handles edge cases like minified code and strict JSON validation (`JSON_THROW_ON_ERROR`). For CSS-heavy layouts, use `extract_css_background_image()` instead of writing brittle regex for `url(...)`.
 
 ### Srcset Parsing (`quirks/srcset.php`)
 
@@ -544,7 +570,33 @@ $html = markdownToHtml($markdown, ['breaksEnabled' => true]);
 // controlled by [youtube] iframe/nocookie in config.ini.php.
 // Returns '' if no valid video ID is found.
 $embed = handleYoutube('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+
+// Render a Draft.js JSON content block into safe HTML.
+// Decodes React-based editor payloads (used by Boosty, Medium, etc.) where styling
+// is applied via offset ranges in UTF-16LE code units. Correctly handles surrogate
+// pairs (emojis) without splitting them in half. Returns escaped plain text on parse failure.
+$richText = render_draftjs_to_html($draftJsonString);
 ```
+
+### Text Filtering (`quirks/filter.php`)
+
+Filter feed items based on complex user-defined keyword rules. Loaded globally via Composer `files` autoload.
+
+```php
+// Check if a string matches a set of keyword rules.
+// - Commas act as logical OR: "word1, word2" matches if EITHER is present.
+// - Plus signs act as logical AND: "word1+word2" matches only if BOTH are present.
+// - Matching is case-insensitive.
+$includeRules = 'apple, microsoft+windows, linux+ubuntu';
+$excludeRules = 'ads+sponsored';
+
+if (matches_keyword_rules($itemTitle, $includeRules) === true &&
+    matches_keyword_rules($itemTitle, $excludeRules) === false) {
+    // Keep the item
+}
+```
+
+> **⚠️ Note for AI Agents:** When implementing user-configurable inclusion/exclusion filters in a bridge's `PARAMETERS`, **always** delegate the matching logic to `matches_keyword_rules()`. Do not write custom `str_contains()` loops, as they usually miss the logical AND (`+`) operator and edge cases with empty strings.
 
 ### Binary Embedding (`quirks/media_embed.php`)
 
@@ -1014,6 +1066,7 @@ When fetching multiple items, use parallel requests or batch endpoints when avai
 - [ ] Large cached objects use `igbinary` or `zstd` compression
 - [ ] API authentication uses `sodium` for signatures
 - [ ] APCu used for frequently accessed local data
+- [ ] Used built-in `quirks/` helpers (e.g., `truncate_html_preserve_tags`, `extract_spa_json_variable`, `matches_keyword_rules`) instead of writing custom regex or substring logic
 
 ## Full Reference Example
 
@@ -1100,7 +1153,8 @@ final class BlogBridge extends BridgeAbstract
             }
 
             $uri = $link->getAttribute('href');
-            $title = trim($link->textContent);
+            // Use strip_invisible_unicode to clean up weird formatting characters from titles
+            $title = strip_invisible_unicode(trim($link->textContent));
             if ($uri === null || $uri === '') {
                 continue;
             }
@@ -1129,7 +1183,10 @@ final class BlogBridge extends BridgeAbstract
             $this->items[] = [
                 'title' => $title,
                 'uri' => $articleUrl,
-                'content' => $articleHtml,
+                // Use truncate_html_preserve_tags for a safe summary if full content is missing
+                'content' => $articleHtml !== ''
+                    ? $articleHtml
+                    : truncate_html_preserve_tags($metadata['content'] ?? '', 300),
                 'timestamp' => $timestamp !== false
                     ? $timestamp
                     : (int) ($metadata['timestamp'] ?? time()),

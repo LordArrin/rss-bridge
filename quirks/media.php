@@ -122,3 +122,102 @@ EOD
 EOD, $videoUri, $webpSrcset, $jpegSrcset, $fallbackUri, $videoUri, $videoUri);
     }
 }
+
+/**
+ * Render a Draft.js JSON content block into safe HTML.
+ *
+ * Draft.js (and similar React-based editors like Boosty) store text as a JSON array
+ * where styling is applied via offset ranges in UTF-16LE code units. This function
+ * decodes the JSON, converts UTF-16 offsets to UTF-8 characters, and wraps the text
+ * in appropriate HTML tags.
+ *
+ * @param string $jsonContent The raw JSON string representing the Draft.js block content.
+ * @return string The rendered HTML. Returns escaped plain text on parse failure.
+ */
+function render_draftjs_to_html(string $jsonContent): string
+{
+    if ($jsonContent === '') {
+        return '';
+    }
+
+    try {
+        $data = json_decode($jsonContent, true, 512, JSON_THROW_ON_ERROR);
+        if (is_array($data) === false || isset($data[0]) === false) {
+            return e($jsonContent);
+        }
+
+        $text = $data[0];
+        if (is_string($text) === false) {
+            $text = is_array($text) === true ? implode('', $text) : (string) $text;
+        }
+        if ($text === '') {
+            return '';
+        }
+
+        $utf16 = mb_convert_encoding($text, 'UTF-16LE', 'UTF-8');
+        $units = str_split($utf16, 2);
+        $unitCount = count($units);
+        $styles = (isset($data[2]) === true && is_array($data[2]) === true) ? $data[2] : [];
+
+        $tagMap = [0 => 'strong', 1 => 'u', 2 => 'em', 3 => 's'];
+        $events = [];
+        $depth = 0;
+
+        foreach ($styles as $style) {
+            if (count($style) < 3) {
+                continue;
+            }
+            $tag = $tagMap[(int) ($style[0] ?? -1)] ?? null;
+            if ($tag === null) {
+                continue;
+            }
+
+            $start = (int) ($style[1] ?? 0);
+            $end = $start + (int) ($style[2] ?? 0);
+            if ($start < 0 || $end > $unitCount || $start >= $end) {
+                continue;
+            }
+
+            $depth++;
+            $events[] = ['pos' => $start, 'html' => sprintf('<%s>', $tag), 'type' => 0, 'depth' => $depth];
+            $events[] = ['pos' => $end, 'html' => sprintf('</%s>', $tag), 'type' => 1, 'depth' => $depth];
+        }
+
+        if ($events !== []) {
+            usort($events, function (array $a, array $b): int {
+                if ($a['pos'] !== $b['pos']) {
+                    return $a['pos'] <=> $b['pos'];
+                }
+                if ($a['type'] !== $b['type']) {
+                    return $a['type'] === 1 ? -1 : 1;
+                }
+                return $a['type'] === 1 ? ($b['depth'] <=> $a['depth']) : ($a['depth'] <=> $b['depth']);
+            });
+        }
+
+        $tagsByPos = array_fill(0, $unitCount + 1, '');
+        foreach ($events as $event) {
+            $tagsByPos[$event['pos']] .= $event['html'];
+        }
+
+        $output = '';
+        for ($i = 0; $i <= $unitCount; $i++) {
+            $output .= $tagsByPos[$i];
+            if ($i < $unitCount) {
+                $hi = unpack('v', $units[$i])[1] ?? 0;
+                if ($hi >= 0xD800 && $hi <= 0xDBFF && $i + 1 < $unitCount) {
+                    $converted = mb_convert_encoding($units[$i] . $units[$i + 1], 'UTF-8', 'UTF-16LE');
+                    $output .= e($converted !== false ? $converted : '');
+                    $output .= $tagsByPos[++$i] ?? '';
+                } else {
+                    $converted = mb_convert_encoding($units[$i], 'UTF-8', 'UTF-16LE');
+                    $output .= e($converted !== false ? $converted : '');
+                }
+            }
+        }
+
+        return str_replace("\n", '<br>', $output);
+    } catch (\Throwable $e) {
+        return e($jsonContent);
+    }
+}

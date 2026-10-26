@@ -56,3 +56,51 @@ function stripRecursiveHTMLSection(string $string, string $tag_name, string $tag
     }
     return $string;
 }
+
+/**
+ * Extract a CSS background image URL from an inline style attribute.
+ *
+ * Many modern SPAs and CSS-heavy websites use <div style="background-image: url('...')">
+ * instead of <img> tags. This function safely extracts the URL from such styles.
+ *
+ * @param string $style The raw style attribute value.
+ * @return string|null The extracted image URL, or null if not found.
+ */
+function extract_css_background_image(string $style): ?string
+{
+    if (preg_match('/background(?:-image)?\s*:\s*url\([\'"]?([^\'"()]+)[\'"]?\)/i', $style, $matches) === 1) {
+        return trim($matches[1]);
+    }
+
+    return null;
+}
+
+/**
+ * Extract a global JSON variable from a SPA HTML page.
+ *
+ * Modern single-page applications (YouTube, Twitter, etc.) often embed their initial
+ * state in a <script> tag as a global variable (e.g., `var ytInitialData = {...};`).
+ * This function extracts and decodes the JSON payload for a given variable name.
+ *
+ * @param string $html The raw HTML content.
+ * @param string $variableName The name of the JavaScript variable (e.g., 'ytInitialData').
+ * @return array<mixed>|null The decoded JSON as an associative array, or null on failure.
+ */
+function extract_spa_json_variable(string $html, string $variableName): ?array
+{
+    $safeVarName = preg_quote($variableName, '/');
+    $pattern = '/(?:var|let|const)\s+' . $safeVarName . '\s*=\s*(\{.+?\});/s';
+
+    if (preg_match($pattern, $html, $matches) === 1) {
+        try {
+            $decoded = json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
+            if (is_array($decoded) === true) {
+                return $decoded;
+            }
+        } catch (\JsonException $e) {
+            return null;
+        }
+    }
+
+    return null;
+}

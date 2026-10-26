@@ -295,3 +295,167 @@ function sanitize_inline_css(string $css): string
 
     return trim($css);
 }
+
+/**
+ * Strip invisible Unicode characters from a string.
+ *
+ * Removes zero-width spaces, bidirectional markers, non-breaking spaces, and
+ * ASCII control characters that can break text matching, title generation,
+ * or cause visual glitches in RSS readers.
+ *
+ * @param string $text The input text.
+ * @return string The cleaned text.
+ */
+function strip_invisible_unicode(string $text): string
+{
+    $pattern = '/[\x{200B}-\x{200D}\x{FEFF}\x{00AD}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{00A0}\x{1680}\x{2000}-\x{200A}\x{202F}\x{205F}\x{3000}\x{0000}-\x{0008}\x{000B}\x{000C}\x{000E}-\x{001F}\x{007F}]/u';
+    $cleaned = preg_replace($pattern, '', $text);
+
+    return is_string($cleaned) === true ? $cleaned : $text;
+}
+
+/**
+ * Truncate an HTML string to a maximum number of visible characters without breaking tags.
+ *
+ * Standard mb_substr() can split HTML tags in half (e.g., leaving an unclosed <a>),
+ * which breaks the layout in feed readers. This function tokenizes the HTML, counts
+ * only the visible text characters, and safely closes any open tags.
+ *
+ * @param string $html The input HTML.
+ * @param int $limit Maximum number of visible characters to keep.
+ * @param string $marker Suffix appended when truncation occurs (default '...').
+ * @return string The safely truncated HTML.
+ */
+function truncate_html_preserve_tags(string $html, int $limit, string $marker = '...'): string
+{
+    if ($limit <= 0 || trim($html) === '') {
+        return '';
+    }
+
+    $plainTextLength = mb_strlen(strip_tags($html), 'UTF-8');
+    if ($plainTextLength <= $limit) {
+        return $html;
+    }
+
+    $tokens = preg_split('/(<[^>]*>)/u', $html, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+    if ($tokens === false) {
+        return $html;
+    }
+
+    $consumed = 0;
+    $output = '';
+    $openTags = [];
+    $truncated = false;
+    $voidElements = ['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'];
+
+    foreach ($tokens as $token) {
+        if ($truncated === true) {
+            break;
+        }
+
+        if (str_starts_with($token, '<') === true) {
+            if (preg_match('/^<\s*\/\s*([a-zA-Z0-9]+)\b/u', $token, $m) === 1) {
+                $tag = strtolower($m[1]);
+                $output .= $token;
+                for ($i = count($openTags) - 1; $i >= 0; $i--) {
+                    if ($openTags[$i] === $tag) {
+                        unset($openTags[$i]);
+                        $openTags = array_values($openTags);
+                        break;
+                    }
+                }
+            } elseif (preg_match('/^<\s*([a-zA-Z0-9]+)\b/u', $token, $m) === 1) {
+                $tag = strtolower($m[1]);
+                $output .= $token;
+                $isSelfClosing = in_array($tag, $voidElements, true) === true || str_ends_with(rtrim($token, '>'), '/');
+                if ($isSelfClosing === false) {
+                    $openTags[] = $tag;
+                }
+            } else {
+                $output .= $token;
+            }
+        } else {
+            $textLength = mb_strlen($token, 'UTF-8');
+            if ($consumed + $textLength <= $limit) {
+                $consumed += $textLength;
+                $output .= $token;
+            } else {
+                $remaining = $limit - $consumed;
+                $cut = mb_substr($token, 0, $remaining, 'UTF-8');
+                $lastSpace = mb_strrpos($cut, ' ', 0, 'UTF-8');
+                if ($lastSpace !== false && $lastSpace > ($remaining * 0.5)) {
+                    $cut = mb_substr($cut, 0, $lastSpace, 'UTF-8');
+                }
+                $output .= rtrim($cut) . $marker;
+                $truncated = true;
+            }
+        }
+    }
+
+    while ($openTags !== []) {
+        $tag = array_pop($openTags);
+        $output .= sprintf('</%s>', $tag);
+    }
+
+    return $output;
+}
+
+/**
+ * Render a poll as an ASCII progress bar list.
+ *
+ * Generates a text-based representation of poll results using block characters,
+ * which is safe and readable in RSS feed readers that do not support complex HTML.
+ *
+ * @param array<int, array{text: string, votes: int, percent?: float}> $options Poll options.
+ * @param int $totalVoters Total number of votes. If 0, percent is calculated from sum of votes.
+ * @param string $barStyle Character style for the bar ('ascii' uses [#...], 'blocks' uses Unicode blocks).
+ * @return string The rendered HTML snippet containing the poll.
+ */
+function render_ascii_poll(array $options, int $totalVoters = 0, string $barStyle = 'ascii'): string
+{
+    if ($options === []) {
+        return '';
+    }
+
+    if ($totalVoters === 0) {
+        foreach ($options as $opt) {
+            $totalVoters += (int) ($opt['votes'] ?? 0);
+        }
+    }
+
+    $html = '<div class="rss-poll" style="font-family: monospace; line-height: 1.5;">';
+
+    foreach ($options as $opt) {
+        $text = e((string) ($opt['text'] ?? 'Unknown'));
+        $votes = (int) ($opt['votes'] ?? 0);
+
+        $percent = isset($opt['percent']) === true ? (float) $opt['percent'] : 0.0;
+        if ($percent === 0.0 && $totalVoters > 0) {
+            $percent = ($votes / $totalVoters) * 100.0;
+        }
+
+        $pctInt = max(0, min(100, (int) round($percent)));
+        $filled = (int) round($pctInt / 5);
+
+        if ($barStyle === 'blocks') {
+            $bar = str_repeat('█', (int) round($pctInt / 10)) . str_repeat('░', 10 - (int) round($pctInt / 10));
+        } else {
+            $bar = '[' . str_repeat('#', $filled) . str_repeat('.', 20 - $filled) . ']';
+        }
+
+        $html .= sprintf(
+            '<div style="margin: 4px 0;"><strong>%d%%</strong> %s <span style="color:#666; font-size:0.9em;">(%d)</span><br /><code>%s</code></div>',
+            $pctInt,
+            $text,
+            $votes,
+            $bar
+        );
+    }
+
+    if ($totalVoters > 0) {
+        $html .= sprintf('<p style="font-size: 0.85em; color: #888; margin-top: 8px;">Total voters: %d</p>', $totalVoters);
+    }
+
+    $html .= '</div>';
+    return $html;
+}

@@ -29,21 +29,22 @@
             "lib/SafeBridgeLoader.php"
         ],
         "files": [
-            "lib/json.php",
-            "lib/exceptions.php",
-            "lib/utils.php",
             "lib/contents.php",
+            "lib/exceptions.php",
             "lib/http.php",
+            "lib/json.php",
             "lib/logger.php",
             "lib/notifications.php",
-            "quirks/template.php",
-            "quirks/html.php",
-            "quirks/srcset.php",
+            "lib/utils.php",
             "quirks/extract.php",
+            "quirks/filter.php", 
+            "quirks/html.php",
             "quirks/json_path.php",
             "quirks/media.php",
             "quirks/media_embed.php",
-            "quirks/seo.php"
+            "quirks/seo.php",
+            "quirks/srcset.php",
+            "quirks/template.php"
         ]
     },
     "require": {
@@ -60,7 +61,7 @@
         "busybee/urljoin": "^1.0"
     },
     "require-dev": {
-        "phpstan/phpstan": "^2.2.16",
+        "phpstan/phpstan": "^2.3.2",
         "phpstan/phpstan-deprecation-rules": "^2.0.5",
         "phpstan/phpstan-strict-rules": "^2.1.0",
         "phpunit/phpunit": "^13.4.3",
