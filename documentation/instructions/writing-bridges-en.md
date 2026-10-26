@@ -32,12 +32,38 @@ Before submitting or generating any bridge code, ensure it passes the following 
 2. **PHPStan**: Performs static analysis to catch type errors, dead code, and potential bugs. **Level 5 is the minimum required standard.**
    - Configuration: [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon)
    - Command: `vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=5`
+   - Includes `phpstan-strict-rules` and `phpstan-deprecation-rules`
+   - Includes a custom rule `ForbidOldDomApiRule` that **forbids the legacy DOM API** (`DOMDocument`, `DOMNode`, `DOMElement`, `DOMXPath`, ...) and enforces the new `\Dom\*` API (`\Dom\HTMLDocument`, `\Dom\XMLDocument`, `\Dom\Element`, `\Dom\XPath`, ...)
 
-> **⚠️ Note for AI Agents:** When generating or modifying bridge code, you must proactively ensure the output complies with `phpcs.xml` rules (e.g., `declare(strict_types=1)`, proper namespaces, no unused variables) and passes PHPStan Level 5 (e.g., no redundant null checks, correct type hints, proper handling of `\Dom\Element` vs `\Dom\Node`). Do not output code that will fail these checks.
+Key PHPCS rules to keep in mind:
+- `declare(strict_types=1)` is required in every file
+- Only strict comparisons (`===`, `!==`); the house style is explicit boolean checks like `in_array($x, $y, true) === true`
+- Short array syntax `[]` only
+- Single-quoted strings unless interpolation or escapes are needed
+- One space around the `.` concatenation operator
+- Max line length: 240 characters
+- Forbidden functions: `sizeof`→`count`, `join`→`implode`, `print`→`echo`, `intval`/`floatval`/`strval`→casts, `is_null`→`=== null`, `create_function`→`Closure::fromCallable()`, `utf8_encode`/`utf8_decode`→`mb_convert_encoding`, `returnClientError`/`returnServerError`→`throwClientException`/`throwServerException`, plus all debug (`var_dump`, `print_r`, ...) and process-execution (`exec`, `shell_exec`, ...) functions
+
+Composer scripts are available as shortcuts:
+
+```bash
+composer lint       # phpcs on the whole project
+composer lint:fix   # phpcbf auto-fix
+composer stan       # phpstan (level from phpstan.neon)
+composer test       # phpunit
+```
+
+**CI behavior** (`.github/workflows/lint-bridges.yml`, runs on pull requests touching `bridges-v2/**`):
+- `phpcbf` auto-fixes style issues and commits them back to the PR branch
+- `phpcs` errors fail the build; warnings are reported but tolerated
+- PHPStan Level 5 runs on the changed bridge files
+- Bridge files must **not** have the executable bit set (`git update-index --chmod=-x bridges-v2/YourBridge.php`)
+
+> **⚠️ Note for AI Agents:** When generating or modifying bridge code, you must proactively ensure the output complies with `phpcs.xml` rules (e.g., `declare(strict_types=1)`, proper namespaces, no unused variables) and passes PHPStan Level 5. Fork-specific traps: `getContents()` returns `string|Response` (cast with `(string)` or guard with `is_string()`), `querySelectorAll()` iterates `\Dom\Node` (narrow with `instanceof \Dom\Element` before calling Element methods), and the legacy `DOM*` API is forbidden by `ForbidOldDomApiRule`. Do not output code that will fail these checks.
 
 ## Available PHP Extensions
 
-This fork also includes modern PHP extensions that enable advanced features:
+This fork also includes modern PHP extensions that enable advanced features (all preinstalled in the Docker image):
 
 | Extension | Purpose | Use Case |
 |---|---|---|
@@ -46,7 +72,9 @@ This fork also includes modern PHP extensions that enable advanced features:
 | `igbinary` | Fast serialization | Efficient caching of complex data |
 | `msgpack` | Alternative serialization | JSON-like binary format |
 | `zstd` | Compression | Compress large cached objects |
+| `brotli` | Compression | Alternative compression codec |
 | `apcu` | In-memory cache | Ultra-fast local caching |
+| `gd` | Image processing | Thumbnails, image manipulation |
 | `ffi` | C library integration | Direct calls to native libraries |
 
 ## Minimal Bridge
@@ -84,11 +112,11 @@ final class ExampleBridge extends BridgeAbstract
 }
 ```
 
-Save this as `bridges-v2/ExampleBridge.php` and restart the container. The bridge will appear on the main page.
+Save this as `bridges-v2/ExampleBridge.php` and restart the container. The bridge will appear on the main page (see [Testing Your Bridge](#testing-your-bridge) for Docker specifics).
 
 ## Required Constants
 
-Every bridge must define these five constants. All must have explicit `public` visibility:
+Every bridge should define these five constants. All must have explicit `public` visibility:
 
 ```php
 public const NAME = 'Display Name';
@@ -104,6 +132,8 @@ public const CACHE_TIMEOUT = 3600;
 - `MAINTAINER` — GitHub username or name, used in error reports
 - `CACHE_TIMEOUT` — default cache TTL in seconds
 
+`BridgeAbstract` provides fallbacks (`NAME`/`URI` default to `null`, `DESCRIPTION` to `'No description provided'`, `MAINTAINER` to `'No maintainer'`, `CACHE_TIMEOUT` to `3600`), but defining all five explicitly is the convention.
+
 ## Parameters
 
 Define user-configurable inputs via the `PARAMETERS` constant. The first key is the context name (use `''` for a single default context):
@@ -117,6 +147,7 @@ public const PARAMETERS = [
             'required' => true,
             'exampleValue' => 'alice',
             'title' => 'Enter the username',
+            'pattern' => '[A-Za-z0-9_]+',
         ],
         'limit' => [
             'name' => 'Item limit',
@@ -142,16 +173,37 @@ public const PARAMETERS = [
 ];
 ```
 
-Supported parameter types: `text`, `number`, `checkbox`, `list`.
+Supported parameter types: `text` (default), `number`, `checkbox`, `list`.
 
-Access parameter values inside `collectData()`:
+Supported parameter keys:
+
+| Key | Applies to | Description |
+|---|---|---|
+| `name` | all | Label shown in the UI |
+| `type` | all | `text`, `number`, `checkbox`, `list` |
+| `required` | all | Reject empty input |
+| `defaultValue` | all | Prefilled value |
+| `exampleValue` | all | Placeholder shown in the UI |
+| `title` | all | Tooltip text |
+| `pattern` | `text` | Regex **without delimiters**; validated as `/^pattern$/`, invalid input becomes `null` |
+| `values` | `list` | `'Label' => 'value'` map; nested arrays create option groups |
+
+`BridgeAbstract` also ships a ready-made limit parameter definition you can reuse:
 
 ```php
-$username = (string)$this->getInput('username');
-$limit = (int)($this->getInput('limit') ?: 10);
-$includeReplies = (bool)$this->getInput('include_replies');
-$category = (string)$this->getInput('category');
+'limit' => self::LIMIT,
 ```
+
+Access parameter values inside `collectData()`. `getInput()` returns `mixed|null`, so always cast explicitly:
+
+```php
+$username = (string) $this->getInput('username');
+$limit = (int) ($this->getInput('limit') ?: 10);
+$includeReplies = (bool) $this->getInput('include_replies');
+$category = (string) $this->getInput('category');
+```
+
+For `list` parameters, `$this->getKey('category')` returns the display label (array key) of the selected value.
 
 ### Multiple Contexts
 
@@ -209,30 +261,94 @@ $token = $this->getOption('api_token');
 $cookie = $this->getOption('session_cookie');
 ```
 
-If a required option is missing, `loadConfiguration()` throws an exception before `collectData()` runs.
+If a required option is missing, `loadConfiguration()` throws an exception before `collectData()` runs. Options may also declare a `defaultValue`.
 
 ## Fetching and Parsing HTML
 
-Use `getSimpleHTMLDOM()` for one-off HTML fetching. It handles caching internally and returns a native `\Dom\HTMLDocument`:
+Use `getSimpleHTMLDOM()` for one-off HTML fetching. It returns a native `\Dom\HTMLDocument` and throws if the response is empty:
 
 ```php
 $dom = getSimpleHTMLDOM('https://example.com/posts');
 $dom = getSimpleHTMLDOM($url, $headers, $curlOptions);
 ```
 
-For cached repeated fetches (e.g. images fetched for each item), use `getSimpleHTMLDOMCached()`:
-
-```php
-$dom = getSimpleHTMLDOMCached($articleUrl, 86400);
-```
-
 When you need the raw HTTP response (for JSON APIs, binary data, or custom parsing), use `getContents()`:
 
 ```php
-$html = getContents($url);
-$json = getContents($url, ['Accept: application/json']);
-$response = getContents($url, [], [], true);  // returns full Response object
+$html = (string) getContents($url);
+$json = (string) getContents($url, ['Accept: application/json']);
+$response = getContents($url, [], [], true);  // requests the full Response object
 ```
+
+> **⚠️ PHPStan trap:** `getContents()` is declared as returning `string|Response`. Passing the result directly into a `string` parameter (e.g. `\Dom\HTMLDocument::createFromString()`) **fails PHPStan Level 5**. In practice `getContents()` returns a string unless `$returnFull = true`, but static analysis needs help. Use one of the verified patterns:
+>
+> ```php
+> // Pattern 1: explicit cast (used by CodebergReleasesBridge)
+> $html = (string) getContents($url);
+>
+> // Pattern 2: is_string() guard (used by quirks/media_embed.php)
+> $response = getContents($url, [], [], true);
+> if (is_string($response) === true) {
+>     throwServerException('Unexpected string response');
+> }
+> $html = $response->getBody();
+> ```
+
+`RSSBridge\Http\Response` API (final class, **no `__toString()`**): `getBody(): string`, `getCode(): int`, `getStatusLine(): string`, `getHeader(string $name, bool $all = false): string|array|null`, `getHeaders(): array`, `withBody(string $body): self`.
+
+### How getContents() Caching Works
+
+- Successful responses (HTTP 200/201/202) are cached for **24 hours** (`86400` seconds), unless `Cache-Control: no-cache/no-store` is present
+- Cached responses are revalidated with `ETag` (`If-None-Match`) and `Last-Modified`; freshness honors `Cache-Control: max-age`, `Expires`, and `Age`
+- The cache key includes the POST body hash, so different POST payloads are cached separately
+- Non-2xx responses (except redirects and 304) throw `HttpException::fromResponse()` — Cloudflare challenge pages are automatically detected and thrown as `CloudFlareException`
+- Global settings apply: `[http] timeout` (60s default), `[error] retries`, `[error] max_filesize` (40 MB default)
+- **SSRF protection is on by default** (`[http] ssrf_check = true`): requests to internal/reserved IP ranges are blocked, with DNS pinning against rebinding
+
+For sitemaps there is a dedicated helper returning a list of `{loc, lastmod, changefreq, priority}` entries:
+
+```php
+$urls = get_sitemap('https://example.com/sitemap.xml');
+```
+
+### Caching HTML Manually
+
+`getSimpleHTMLDOMCached()` does not exist in this fork. For longer-lived caching (e.g. full article pages), use the bridge-level cache helpers with an `is_string()` guard (`loadCacheValue()` returns `mixed`):
+
+```php
+$cacheKey = 'article_' . md5($articleUrl);
+$cachedHtml = $this->loadCacheValue($cacheKey);
+
+if (is_string($cachedHtml) === false || $cachedHtml === '') {
+    $articleDom = getSimpleHTMLDOM($articleUrl);
+    $cachedHtml = $articleDom->saveHTML() ?: '';
+    $this->saveCacheValue($cacheKey, $cachedHtml, 86400);
+}
+
+$dom = \Dom\HTMLDocument::createFromString($cachedHtml);
+```
+
+### Parsing XML and Atom Feeds
+
+Use `\Dom\XMLDocument` for XML (suppressing libxml warnings is the house pattern):
+
+```php
+$feedXml = (string) getContents(self::URI . 'atom.xml');
+if ($feedXml === '') {
+    throwServerException('Failed to fetch Atom feed');
+}
+
+libxml_use_internal_errors(true);
+$xml = \Dom\XMLDocument::createFromString($feedXml);
+libxml_clear_errors();
+libxml_use_internal_errors(false);
+
+foreach ($xml->querySelectorAll('entry') as $entry) {
+    // ...
+}
+```
+
+If your goal is to *expand* an existing feed, prefer [`FeedExpander`](#expanding-existing-feeds-feedexpander) instead of manual XML parsing.
 
 ### Selectors
 
@@ -243,23 +359,38 @@ $response = getContents($url, [], [], true);  // returns full Response object
 $title = $dom->querySelector('h1.title');
 $author = $dom->querySelector('article .author a');
 
-// Multiple elements (returns iterable \Dom\NodeList)
+// Multiple elements (returns \Dom\NodeList)
 foreach ($dom->querySelectorAll('article.post') as $post) {
     // ...
 }
 ```
 
+> **⚠️ PHPStan trap:** `querySelectorAll()` returns a `\Dom\NodeList` whose items are typed `\Dom\Node`, but `querySelector()`/`getAttribute()`/`innerHTML` are members of `\Dom\Element` (via `ParentNode`). Narrow the type before using Element APIs — this is the pattern used by bridges that pass strict checks:
+>
+> ```php
+> foreach ($node->querySelectorAll('p, div') as $element) {
+>     if ($element instanceof \Dom\Element === false) {
+>         continue;
+>     }
+>     $style = $element->getAttribute('style') ?? '';
+> }
+> ```
+>
+> `querySelector()` (singular) already returns `?\Dom\Element` and needs no guard, only a null check (or `?->`).
+
+`\Dom\NodeList` also supports `->length` and `->item(0)` when you prefer index access.
+
 ### Accessing Data
 
-| Property / Method | Type | Description |
-|---|---|---|
-| `$node->textContent` | `string` | Plain text, HTML stripped |
-| `$node->innerHTML` | `string` | Inner HTML |
-| `$node->outerHTML` | `string` | Element with inner HTML |
-| `$node->getAttribute('href')` | `?string` | Attribute value |
-| `$node->tagName` | `string` | Tag name (lowercase) |
-| `$node->parentElement` | `?\Dom\Element` | Parent element |
-| `$node->childNodes` | `\Dom\NodeList` | Children |
+| Property / Method | Available on | Type | Description |
+|---|---|---|---|
+| `$node->textContent` | `\Dom\Node` | `string` | Plain text, HTML stripped |
+| `$node->innerHTML` | `\Dom\Element` | `string` | Inner HTML |
+| `$node->outerHTML` | `\Dom\Element` | `string` | Element with inner HTML |
+| `$node->getAttribute('href')` | `\Dom\Element` | `?string` | Attribute value |
+| `$node->tagName` | `\Dom\Element` | `string` | Tag name (lowercase) |
+| `$node->parentElement` | `\Dom\Node` | `?\Dom\Element` | Parent element |
+| `$node->childNodes` | `\Dom\Node` | `\Dom\NodeList` | Children |
 
 Use the null-safe operator `?->` for optional elements:
 
@@ -285,8 +416,7 @@ while ($current !== null && $current instanceof \Dom\Element) {
 Many websites generate malformed HTML (unclosed tags, broken attributes) that can break `\Dom\HTMLDocument`. Use the `tidy` extension to fix these issues:
 
 ```php
-// Clean HTML before parsing
-$html = getContents($url);
+$html = (string) getContents($url);
 $tidy = new \tidy();
 $tidy->parseString($html, [
     'clean' => true,
@@ -296,17 +426,13 @@ $tidy->parseString($html, [
 ], 'utf8');
 $tidy->cleanRepair();
 
-$dom = \Dom\HTMLDocument::createFromString((string)$tidy);
+$dom = \Dom\HTMLDocument::createFromString((string) $tidy);
 ```
 
-Or use the helper function (if available in `quirks/`):
-
-```php
-$cleanHtml = tidy_html($html);
-$dom = \Dom\HTMLDocument::createFromString($cleanHtml);
-```
+There is no `tidy_html()` helper in this fork — use the `\tidy` class directly as shown above.
 
 **When to use tidy:**
+
 - Site returns HTML with parsing errors
 - `\Dom\HTMLDocument` throws exceptions on valid pages
 - You need to normalize HTML from multiple sources
@@ -317,60 +443,85 @@ $dom = \Dom\HTMLDocument::createFromString($cleanHtml);
 
 The `quirks/` directory contains battle-tested helpers. All are loaded globally via Composer `files` autoload — no import needed.
 
-### HTML Generation (`quirks/html.php`)
+### HTML Generation & Sanitization (`quirks/html.php`)
 
 ```php
-// Escape user input (prevents XSS)
+// Escape user input (prevents XSS): htmlspecialchars with ENT_QUOTES | ENT_SUBSTITUTE
 $safe = e($userInput);
 
-// Truncate long strings
+// Semantic no-op marker: "this string is intentionally not escaped"
+$trusted = raw($safeHtml);
+
+// Truncate long strings (defaults: length 150, marker '...')
 $short = truncate($longText, 200, '...');
 
-// Generate HTML tags with attribute validation
+// Generate HTML tags with attribute whitelist validation
 $div = html_tag('div', 'Hello', ['class' => 'greeting']);
 $input = html_input(['type' => 'text', 'name' => 'q', 'value' => 'search']);
 $option = html_option('United States', 'us', true);
 
-// Neutralize dangerous tags (script, iframe, link) while keeping visible text
+// Neutralize dangerous tags (script, iframe, object, embed, applet, svg,
+// math, link, style, meta, base), strip on* event handlers and
+// javascript: URLs while keeping visible text
 $clean = break_annoying_html_tags($html);
+
+// DOM-level sanitization: strip all attributes except a strict whitelist,
+// validate href/src schemes, sanitize inline CSS
+sanitize_dom_element_attributes($element, ['a' => ['href', 'title']]);
+
+// URI scheme validation (http, https, mailto, ftp, data:image/*; anchors ok)
+$ok = is_safe_uri($uri);
+
+// Remove expression()/behavior:/@import/javascript: from inline CSS
+$css = sanitize_inline_css($rawCss);
 ```
 
-`html_tag()` validates attribute names against a whitelist, preventing injection of event handlers like `onclick`.
+`html_tag()` only allows these attributes: `type`, `id`, `name`, `value`, `placeholder`, `title`, `pattern`, `class`, `for`, `oncontextmenu`, `data-for`, `formtarget` (string), and `checked`, `required`, `selected` (boolean). Anything else throws — this prevents injection of event handlers like `onclick`.
 
 ### String Extraction (`quirks/extract.php`)
 
 Extract data from HTML or inline JavaScript:
 
 ```php
-// Extract text between delimiters
+// Extract text between delimiters (returns false if start delimiter not found)
 $data = extractFromDelimiters($html, 'window.data = ', ';');
 
 // Remove sections between delimiters
 $clean = stripWithDelimiters($html, '<script>', '</script>');
 
-// Remove recursive HTML sections
+// Remove recursive HTML sections (handles nested tags of the same name)
 $clean = stripRecursiveHTMLSection($html, 'div', '<div class="ads">');
 ```
 
 ### Srcset Parsing (`quirks/srcset.php`)
 
 ```php
-// Parse srcset attribute
+// Parse srcset attribute into size => URL map
 $entries = parseSrcset('image-320w.jpg 320w, image-1024w.jpg 1024w');
 // => ['320w' => 'image-320w.jpg', '1024w' => 'image-1024w.jpg']
 
-// Get the largest image URL
+// Get the largest image URL (null if no valid entries)
 $largest = parseSrcsetLargestImageUrl($srcset);
+```
+
+### JSON Path Traversal (`quirks/json_path.php`)
+
+```php
+// Safely traverse nested arrays/objects; returns null if any step is missing
+$title = read_json_path($data, 'response', 'items', 0, 'title');
 ```
 
 ### SEO Metadata (`quirks/seo.php`)
 
-Extract Open Graph, Twitter Cards, and JSON-LD metadata:
+Extract Open Graph, Twitter Cards, and JSON-LD metadata. Accepts **either** a raw HTML string **or** a parsed `\Dom\HTMLDocument`:
 
 ```php
 $metadata = html_find_seo_metadata($html);
-// Returns array with keys: uri, title, content, timestamp, enclosures, author
+```
 
+Returns an array containing **only the keys that were found**, among: `uri`, `title`, `content`, `timestamp` (int, already parsed via `strtotime`), `enclosures` (list of strings), `author`.
+
+```php
 $item = [
     'title' => $metadata['title'] ?? $fallbackTitle,
     'uri' => $metadata['uri'] ?? $articleUrl,
@@ -384,10 +535,14 @@ $item = [
 ### Media Processing (`quirks/media.php`)
 
 ```php
-// Convert Markdown to HTML
+// Convert Markdown to HTML via Parsedown.
+// Supported options: breaksEnabled, markupEscaped, urlsLinked.
+// An unknown option throws \InvalidArgumentException.
 $html = markdownToHtml($markdown, ['breaksEnabled' => true]);
 
-// Generate YouTube embed or thumbnail
+// Generate YouTube embed (iframe) or a clickable WebP/JPEG thumbnail,
+// controlled by [youtube] iframe/nocookie in config.ini.php.
+// Returns '' if no valid video ID is found.
 $embed = handleYoutube('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
 ```
 
@@ -396,23 +551,45 @@ $embed = handleYoutube('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
 Embed remote images and media as data URIs:
 
 ```php
-$dataUri = media_embed_url_to_data_uri($imageUrl, $options);
-$binary = media_embed_fetch_binary($url, $options);
-$mime = media_embed_mime_from_url($url);
-$mime = media_embed_mime_from_extension('png');
+// Main entry point. Returns the data URI, or the ORIGINAL URL as fallback
+// on fetch failure or when $maxSize is exceeded. Pass $this->cache for
+// persistent caching (key: 'embed_' . md5($url), default TTL 7 days).
+$dataUri = media_embed_url_to_data_uri(
+    $imageUrl,
+    $this->cache,                     // ?CacheInterface
+    604800,                           // cache TTL in seconds
+    media_embed_parse_size('2m'),     // max size in bytes, 0 = unlimited
+    null,                             // ?string proxy profile name
+    $this->logger,                    // ?Logger
+    1                                 // retry attempts
+);
+
+// Low-level fetch with retries/backoff; returns ['body' => ..., 'type' => ...] or null
+$media = media_embed_fetch_binary($url);
+
+// MIME detection
+$mime = media_embed_mime_from_url($url);          // '' if unknown
+$mime = media_embed_mime_from_extension('png');   // '' if unknown
+
+// Human-readable size parsing: '10m', '1.5g', '512k', '2GB' => bytes (0 if unparseable)
 $bytes = media_embed_parse_size('1.5MB');
 ```
 
+Note the signatures: the second parameter of `media_embed_url_to_data_uri()` is a `?CacheInterface` (not an options array), and `media_embed_fetch_binary()` returns `array{body: string, type: string}|null` (not a raw string).
+
 ## Working with JSON APIs
 
-For JSON-based sites, skip HTML entirely:
+For JSON-based sites, skip HTML entirely. The `Json` class lives in the `RSSBridge\Utils` namespace — import it explicitly:
+
+```php
+use RSSBridge\Utils\Json;
+```
 
 ```php
 public function collectData(): void
 {
     $url = 'https://api.example.com/posts';
-    $json = getContents($url, ['Accept: application/json']);
-    $data = Json::decode($json);
+    $data = Json::decode((string) getContents($url, ['Accept: application/json']));
 
     if (!is_array($data)) {
         throwServerException('Invalid JSON response');
@@ -424,13 +601,16 @@ public function collectData(): void
             'uri' => $entry['url'] ?? self::URI,
             'content' => $entry['body'] ?? '',
             'timestamp' => isset($entry['date']) ? strtotime($entry['date']) : time(),
-            'uid' => (string)($entry['id'] ?? uniqid()),
+            'uid' => (string) ($entry['id'] ?? uniqid()),
         ];
     }
 }
 ```
 
-`Json::decode()` and `Json::encode()` are provided by the `RSSBridge` namespace (loaded via Composer classmap). They throw `\JsonException` on invalid input.
+- `Json::decode(string $json, bool $assoc = true): mixed` and `Json::encode(mixed $value, bool $pretty = true, bool $asciiSafe = false): string` both throw `\JsonException` on invalid input (`JSON_THROW_ON_ERROR`)
+- Note the `(string)` cast on `getContents()` — required for PHPStan Level 5
+- An equally valid pattern used by bridges: `json_decode((string) getContents($url, $headers), true, 512, JSON_THROW_ON_ERROR)`
+- For deeply nested payloads, combine with `read_json_path()` (see [quirks](#json-path-traversal-quirksjson_pathphp))
 
 ## APCu In-Memory Cache
 
@@ -440,25 +620,26 @@ For ultra-fast local caching (faster than memcached), use APCu. Data persists ac
 public function collectData(): void
 {
     $cacheKey = 'api_config_' . $this->getInput('site');
-    
+
     // Try APCu first (fastest, local to this container)
     $config = apcu_fetch($cacheKey, $success);
-    
-    if (!$success) {
+
+    if ($success === false) {
         // Fetch from API
         $config = $this->fetchConfigFromAPI();
-        
+
         // Cache for 5 minutes (APCu is local, so use shorter TTL)
         apcu_store($cacheKey, $config, 300);
     }
-    
+
     // Use $config...
 }
 ```
 
 **APCu vs Memcached:**
+
 - **APCu**: In-memory, local to container, ~1µs access time, lost on container restart
-- **Memcached**: Network-based, shared across containers, ~100µs access time, persistent
+- **Memcached**: Network-based, shared across containers, ~100µs access time, persistent (this fork's default `[cache] type` is `memcached`)
 
 **Best practice:** Use APCu for frequently accessed, rarely changing data (config, metadata). Use memcached for shared data across multiple instances.
 
@@ -470,18 +651,22 @@ For caching large objects (full HTML pages, JSON responses), compress with `zstd
 public function collectData(): void
 {
     $cacheKey = 'full_page_' . md5($url);
-    
+
     $cached = $this->cache->get($cacheKey);
-    if ($cached !== null) {
-        $html = zstd_uncompress($cached);
+    if (is_string($cached) === true && $cached !== '') {
+        $uncompressed = zstd_uncompress($cached);
+        $html = is_string($uncompressed) ? $uncompressed : '';
     } else {
-        $html = getContents($url);
-        
+        $html = (string) getContents($url);
+
         // Compress before storing (level 3 = good balance)
-        $compressed = zstd_compress($html, 3);
-        $this->cache->set($cacheKey, $compressed, 86400);
+        $this->cache->set($cacheKey, zstd_compress($html, 3), 86400);
     }
-    
+
+    if ($html === '') {
+        throwServerException('Failed to load page');
+    }
+
     $dom = \Dom\HTMLDocument::createFromString($html);
     // ... process
 }
@@ -490,31 +675,42 @@ public function collectData(): void
 **Compression levels:** 1 (fastest) to 22 (smallest). Level 3-5 is optimal for most use cases.
 
 **When to use:**
+
 - Caching full HTML pages (>50KB)
 - Large JSON API responses
 - Binary data (images, archives)
 
 ## Error Handling
 
-Exception helper functions live in global namespace.
+All exception classes and helper functions live in the **global namespace** (`lib/exceptions.php`) — no imports needed:
 
-Use them inside `collectData()`:
+| Class | Extends | Default code |
+|---|---|---|
+| `HttpException` | `\Exception` | — (carries `?Response $response` and `?int $retryAfter`) |
+| `CloudFlareException` (final) | `HttpException` | — |
+| `ClientException` | `HttpException` | 400 |
+| `ServerException` | `HttpException` | 500 |
+| `RateLimitException` | `ClientException` | 429 |
+
+Use the helper functions inside `collectData()` (all return `never`):
 
 ```php
-// User provided bad input
-throwClientException('Invalid user ID');
+// User provided bad input (4xx)
+throwClientException('Invalid user ID');            // optional 2nd arg: status code
 
-// Server-side or upstream issue
+// Server-side or upstream issue (5xx)
 throwServerException('Failed to fetch data from API');
 
-// Rate limit hit upstream
-throwRateLimitException('API rate limit exceeded');
+// Rate limit hit upstream (429, Retry-After hint)
+throwRateLimitException('API rate limit exceeded'); // optional 2nd arg: retryAfter seconds (default 3600)
 
-// HTTP-level error with a specific code
-throw new \RSSBridge\Http\HttpException('Not Found', 404);
+// HTTP-level error with a specific code — note: GLOBAL class, not namespaced
+throw new \HttpException('Not Found', 404);
 ```
 
-All exceptions are caught by the framework and rendered according to the `error.output` setting in `config.ini.php`.
+`getContents()` throws `HttpException::fromResponse()` automatically on non-2xx responses; Cloudflare challenge pages are detected and raised as `CloudFlareException`. The `Retry-After` header is parsed into `HttpException::$retryAfter`.
+
+All exceptions are caught by the framework and rendered according to the `[error] output` setting in `config.ini.php` (`feed`, `http`, or `none`).
 
 ## Feed Item Structure
 
@@ -535,33 +731,41 @@ $this->items[] = [
 
 The `uid` field is used by feed readers to detect duplicates. If omitted, the framework generates one from the item content.
 
+Additional custom keys are allowed — `FeedItem::fromArray()` stores unknown keys in a `misc` bag and round-trips them back via `toArray()`. This is how `FeedExpander` bridges pass extra data (e.g. `apod` metadata) between `collectExpandableDatas()` and `parseItem()`.
+
 ## Caching
 
-HTTP responses are cached automatically by `getContents()` for up to 10 days, respecting `Cache-Control` headers. For caching parsed or processed data, use the bridge-level cache helpers:
+HTTP responses are cached automatically by `getContents()` for up to **24 hours**, with conditional revalidation via `ETag`/`Last-Modified` and respect for `Cache-Control` headers. For caching parsed or processed data, use the bridge-level cache helpers:
 
 ```php
 $cacheKey = 'example_' . md5($url);
 $cached = $this->loadCacheValue($cacheKey);
 
 if ($cached !== null) {
-    return $cached;
+    // loadCacheValue() returns mixed — narrow before use (PHPStan)
 }
 
 // ... fetch and process data ...
 
-$this->saveCacheValue($cacheKey, $processedData, 3600);
+$this->saveCacheValue($cacheKey, $processedData, 3600); // default TTL: 86400
 ```
 
-Alternatively, access the cache backend directly:
+`loadCacheValue()`/`saveCacheValue()` automatically prefix the key with the bridge's short name (e.g. `ExampleBridge_example_...`), so keys never collide between bridges.
+
+Alternatively, access the cache backend directly (no prefixing) and the logger:
 
 ```php
 $this->cache->get($cacheKey);
 $this->cache->set($cacheKey, $data, $ttl);
+$this->logger->warning('Upstream returned unexpected payload');
 ```
 
+Both `$this->cache` and `$this->logger` are injected by `BridgeFactory` through the constructor. Do not define your own constructor unless you forward `($cache, $logger)` to `parent::__construct()`.
+
 **Cache backend priority:**
+
 1. APCu (if enabled, fastest)
-2. Memcached (shared across instances)
+2. Memcached (shared across instances; the default in `config.default.ini.php`)
 3. File cache (fallback)
 
 ## Proxy Profiles
@@ -569,15 +773,22 @@ $this->cache->set($cacheKey, $data, $ttl);
 For Cloudflare-protected sites or sites requiring specific IPs, use the proxy system:
 
 ```php
-// Fetch raw HTML via a named proxy profile
+// Fetch raw HTML via a named proxy profile (throws ClientException on failure)
 $html = getProtectedContents($url, 'flaresolverr');
 
 // Fetch and parse into \Dom\HTMLDocument
 $dom = getProtectedSimpleHTMLDOM($url, 'tgws');
 
-// Fetch binary content (images, videos)
+// Fetch binary content (images, videos).
+// Returns ['body' => string, 'type' => string] or null on failure — NOT a raw string.
 $binary = getProtectedBinary($url, 'direct');
+if ($binary !== null) {
+    $bytes = $binary['body'];
+    $mime = $binary['type'];
+}
 ```
+
+All three accept an optional third parameter `array $options = []`.
 
 Proxy profiles are defined in `config/config.ini.php`:
 
@@ -595,11 +806,15 @@ socks_url = "socks5h://user:pass@192.168.1.1:14444"
 type = "Direct"
 ```
 
-If a profile is referenced but not defined, `getProtectedContents()` throws a `ClientException` with a hint about the missing configuration.
+`proxy_profile_direct` and `proxy_profile_tgws` are preconfigured in `config.default.ini.php`. If a profile is referenced but not defined, `getProtectedContents()` throws a `ClientException` with a hint about the missing configuration.
 
 ## Relative URLs
 
-For individual URLs, use `urljoin()` from the `busybee/urljoin` package:
+For individual URLs, use `urljoin()` from the `busybee/urljoin` package. Since bridges are namespaced, import the function explicitly (house style):
+
+```php
+use function urljoin;
+```
 
 ```php
 $absolute = urljoin('https://example.com/posts/', '/img/photo.jpg');
@@ -611,28 +826,76 @@ For processing many URLs inside an HTML fragment, combine `\Dom\HTMLDocument` se
 ```php
 $dom = getSimpleHTMLDOM($articleUrl);
 foreach ($dom->querySelectorAll('img[src]') as $img) {
+    if ($img instanceof \Dom\Element === false) {
+        continue;
+    }
     $src = $img->getAttribute('src');
-    if ($src !== null && !str_starts_with($src, 'http')) {
+    if ($src !== null && $src !== '' && str_starts_with($src, 'http') === false) {
         $img->setAttribute('src', urljoin($articleUrl, $src));
     }
 }
 $html = $dom->saveHTML();
 ```
 
-## Namespaced Core Classes
+## Expanding Existing Feeds (FeedExpander)
 
-Several core classes live in the `RSSBridge` namespace. Import them explicitly when needed:
+If a site already publishes an RSS/Atom feed and you only need to enrich its items (e.g. fetch full article bodies), extend `RSSBridge\FeedExpander` instead of parsing XML manually:
 
 ```php
-use RSSBridge\BridgeAbstract;
-use RSSBridge\Configuration;
-use RSSBridge\FeedItem;
-use RSSBridge\FeedParser;
-use RSSBridge\Http\HttpException;
-use RSSBridge\Http\Response;
+<?php
+
+declare(strict_types=1);
+
+namespace RSSBridge\Bridges;
+
+use RSSBridge\FeedExpander;
+
+final class MyBlogExpanderBridge extends FeedExpander
+{
+    public const NAME = 'My Blog (expanded)';
+    public const URI = 'https://blog.example.com/';
+    public const DESCRIPTION = 'Full-text version of the official feed';
+    public const MAINTAINER = 'yourname';
+    public const CACHE_TIMEOUT = 3600;
+
+    public function collectData(): void
+    {
+        $this->collectExpandableDatas(self::URI . 'feed.xml', 10);
+    }
+
+    protected function parseItem(array $item): array|false
+    {
+        // Enrich the item, or return false to drop it from the feed
+        $dom = getSimpleHTMLDOM($item['uri']);
+        $item['content'] = $dom->querySelector('article')?->innerHTML ?? $item['content'];
+        return $item;
+    }
+}
 ```
 
-`BridgeAbstract` is always required — every bridge extends it.
+- `collectExpandableDatas(string $url, int $maxItems = -1, array $headers = []): void` fetches and parses the feed (`-1` means up to 999 items)
+- `parseItem(array $item): array|false` is called for every item; return `false` or `[]` to drop it
+- `getName()`, `getURI()`, and `getIcon()` are automatically taken from the parsed feed
+- Custom keys survive the round-trip through the `misc` bag (see [Feed Item Structure](#feed-item-structure))
+
+## Namespaced Core Classes
+
+Core classes live in the `RSSBridge` namespace tree (loaded via Composer classmap / PSR-4). Import them explicitly when needed:
+
+```php
+use RSSBridge\BridgeAbstract;          // required — every bridge extends it
+use RSSBridge\FeedExpander;            // base class for feed-expanding bridges
+use RSSBridge\Configuration;           // static access to config.ini.php
+use RSSBridge\Utils\Json;              // JSON encode/decode (throws \JsonException)
+use RSSBridge\Utils\Url;               // URL/MIME/formatting helpers
+use RSSBridge\Http\Response;           // HTTP response object (no __toString)
+use RSSBridge\Caches\CacheInterface;   // type hints for cache parameters
+use RSSBridge\Logger\Logger;           // type hints for logger parameters
+```
+
+**Exceptions are the opposite:** `HttpException`, `ClientException`, `ServerException`, `RateLimitException`, `CloudFlareException` and the `throwClientException()`/`throwServerException()`/`throwRateLimitException()` helpers are all in the **global namespace** — do **not** import them. The same applies to `getContents()`, `getSimpleHTMLDOM()`, `getProtected*()`, `get_sitemap()` and all `quirks/` functions.
+
+`RSSBridge\FeedItem` and `RSSBridge\FeedParser` exist but are framework internals — bridges normally work with plain arrays.
 
 ## Running Quality Checks
 
@@ -645,23 +908,34 @@ vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php
 # Auto-fix style issues
 vendor/bin/phpcbf --standard=phpcs.xml bridges-v2/YourBridge.php
 
-# Static analysis (Level 5 is mandatory)
+# Static analysis (Level 5 is mandatory; phpstan.neon already sets it)
 vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=5
 ```
 
-From inside the Docker container:
+Or use the Composer shortcuts: `composer lint`, `composer lint:fix`, `composer stan`.
+
+From inside the Docker container (the Alpine image exposes PHP as `php85`; dev dependencies are installed in the image):
 
 ```bash
-docker exec rss-bridge php /app/vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php
+docker exec rss-bridge php85 /app/vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php
 ```
 
 ## Testing Your Bridge
 
-1. Place the bridge file in `config/bridges-v2/` (for custom bridges) or `bridges-v2/` (for built-in ones).
-2. Restart the container: `docker restart rss-bridge`.
-3. Open `http://localhost:3000/` in a browser.
-4. Find your bridge, fill in parameters, and click **Generate feed**.
-5. Inspect the resulting feed for correctness.
+1. Place the bridge file in `bridges-v2/` — this is the **only** directory `BridgeFactory` scans (non-recursively), and the file name must match `*Bridge.php`. There is no `config/bridges-v2/` loading path.
+2. Make sure the bridge is enabled: `config.default.ini.php` ships with `[system] enabled_bridges[] = *` (all bridges enabled). If your `config.ini.php` lists bridges explicitly, add yours (short name, e.g. `MyBridge` or `My`).
+3. For Docker deployments the image ships with built-in bridges baked in; to test a custom bridge without rebuilding, bind-mount the file into the container:
+
+   ```yaml
+   volumes:
+     - /home/user/rssbridge/config:/config
+     - ./MyBridge.php:/app/bridges-v2/MyBridge.php
+   ```
+
+4. Restart the container: `docker restart rss-bridge`.
+5. Open `http://localhost:3000/` in a browser (the compose file maps port 3000 to the container's port 80).
+6. Find your bridge, fill in parameters, and click **Generate feed**.
+7. Inspect the resulting feed for correctness.
 
 If the bridge fails to load, check the container logs:
 
@@ -669,7 +943,13 @@ If the bridge fails to load, check the container logs:
 docker logs rss-bridge | grep -i "YourBridge"
 ```
 
-The `SafeBridgeLoader` reports compile errors (e.g. signature mismatches) with the exact file and line.
+Bridges are first loaded inside a sandboxed PHP subprocess (`SafeBridgeLoader` / `BridgeFactory::loadBridgeInSandbox()`), so fatal compile errors (e.g. signature mismatches with the parent class) are reported with the exact file and line instead of crashing the whole application.
+
+Finally, make sure the file is not marked executable in git — CI rejects executable bridge files:
+
+```bash
+git update-index --chmod=-x bridges-v2/YourBridge.php
+```
 
 ## Performance Optimization Tips
 
@@ -686,9 +966,13 @@ $compressed = zstd_compress($html, 3); // Level 3 = good balance
 ```
 
 ### 3. Leverage APCu for Hot Data
-Cache frequently accessed config or metadata in APCu:
+Cache frequently accessed config or metadata in APCu (use the `$success` flag — `apcu_fetch()` returns `false` on miss):
 ```php
-$config = apcu_fetch($key) ?? $this->fetchConfig();
+$config = apcu_fetch($key, $ok);
+if ($ok === false) {
+    $config = $this->fetchConfig();
+    apcu_store($key, $config, 300);
+}
 ```
 
 ### 4. Clean Malformed HTML
@@ -709,19 +993,23 @@ When fetching multiple items, use parallel requests or batch endpoints when avai
 
 ## Checklist Before Committing
 
-- [ ] File is in `bridges-v2/`
+- [ ] File is in `bridges-v2/` and named `*Bridge.php`
+- [ ] File is **not** executable in git (`git update-index --chmod=-x` if needed)
 - [ ] `declare(strict_types=1)` at the top
 - [ ] `namespace RSSBridge\Bridges;` declared
-- [ ] Class is `final` and extends `BridgeAbstract`
+- [ ] Class is `final` and extends `BridgeAbstract` (or `FeedExpander`)
 - [ ] All five required constants defined with `public const`
-- [ ] No direct `simple_html_dom` calls (`str_get_html()`, `->find()`, `->plaintext`)
-- [ ] Uses `getSimpleHTMLDOM()` or `\Dom\HTMLDocument` for parsing
+- [ ] No `simple_html_dom` calls (`str_get_html()`, `->find()`, `->plaintext`) and no legacy `DOM*` classes (`DOMDocument`, `DOMXPath`, ...) — forbidden by `ForbidOldDomApiRule`
+- [ ] Uses `getSimpleHTMLDOM()`, `\Dom\HTMLDocument`, or `\Dom\XMLDocument` for parsing
+- [ ] `getContents()` results cast to `(string)` or guarded with `is_string()` (PHPStan Level 5)
+- [ ] `querySelectorAll()` items narrowed with `instanceof \Dom\Element` before Element methods
 - [ ] Null-safe operator `?->` used for optional elements
-- [ ] Exception helpers imported via `use function RSSBridge\Exceptions\...`
-- [ ] Relative URLs handled via `urljoin()` or manual DOM processing
+- [ ] Exception helpers (`throwClientException`, ...) used from the **global namespace** — no imports
+- [ ] `Json` imported as `use RSSBridge\Utils\Json;` if used
+- [ ] Relative URLs handled via `urljoin()` (with `use function urljoin;`)
 - [ ] Code passes `phpcs` checks (see [`phpcs.xml`](https://github.com/LordArrin/rss-bridge/blob/master/phpcs.xml))
 - [ ] Code passes `phpstan` analysis at Level 5 (see [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon))
-- [ ] Bridge tested with real data in Docker
+- [ ] Bridge tested with real data in Docker and enabled via `[system] enabled_bridges`
 - [ ] Malformed HTML sites use `tidy` cleanup
 - [ ] Large cached objects use `igbinary` or `zstd` compression
 - [ ] API authentication uses `sodium` for signatures
@@ -738,6 +1026,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function urljoin;
+
 final class BlogBridge extends BridgeAbstract
 {
     public const NAME = 'Example Blog';
@@ -745,6 +1035,8 @@ final class BlogBridge extends BridgeAbstract
     public const DESCRIPTION = 'Latest posts from Example Blog';
     public const MAINTAINER = 'yourname';
     public const CACHE_TIMEOUT = 1800;
+
+    private const ARTICLE_CACHE_TTL = 86400;
 
     public const PARAMETERS = [
         '' => [
@@ -768,13 +1060,18 @@ final class BlogBridge extends BridgeAbstract
 
     public function collectData(): void
     {
-        $category = (string)$this->getInput('category');
-        $limit = (int)($this->getInput('limit') ?: 20);
+        $category = (string) $this->getInput('category');
+        $limit = (int) ($this->getInput('limit') ?: 20);
 
-        $url = $category !== '' ? self::URI . "category/{$category}/" : self::URI;
-        
-        // Fetch and clean HTML with tidy
-        $html = getContents($url);
+        $url = $category !== ''
+            ? self::URI . 'category/' . rawurlencode($category) . '/'
+            : self::URI;
+
+        $html = (string) getContents($url);
+        if ($html === '') {
+            throwServerException('Empty response from ' . $url);
+        }
+
         $tidy = new \tidy();
         $tidy->parseString($html, [
             'clean' => true,
@@ -782,11 +1079,17 @@ final class BlogBridge extends BridgeAbstract
             'wrap' => 0,
         ], 'utf8');
         $tidy->cleanRepair();
-        
-        $dom = \Dom\HTMLDocument::createFromString((string)$tidy);
+
+        libxml_use_internal_errors(true);
+        $dom = \Dom\HTMLDocument::createFromString((string) $tidy);
+        libxml_clear_errors();
+        libxml_use_internal_errors(false);
 
         $count = 0;
         foreach ($dom->querySelectorAll('article.post') as $post) {
+            if ($post instanceof \Dom\Element === false) {
+                continue;
+            }
             if ($count >= $limit) {
                 break;
             }
@@ -802,29 +1105,36 @@ final class BlogBridge extends BridgeAbstract
                 continue;
             }
 
-            // Fetch full article with caching
-            $articleDom = getSimpleHTMLDOMCached($uri, 86400);
-            $articleHtml = $articleDom->querySelector('.entry-content')?->innerHTML ?? '';
+            $articleUrl = urljoin(self::URI, $uri);
 
-            // Neutralize dangerous tags
-            $articleHtml = break_annoying_html_tags($articleHtml);
+            $cacheKey = 'article_' . md5($articleUrl);
+            $articleHtml = $this->loadCacheValue($cacheKey);
+            if (is_string($articleHtml) === false || $articleHtml === '') {
+                $articleDom = getSimpleHTMLDOM($articleUrl);
+                $articleHtml = $articleDom->querySelector('.entry-content')?->innerHTML ?? '';
+                $articleHtml = break_annoying_html_tags($articleHtml);
+                $this->saveCacheValue($cacheKey, $articleHtml, self::ARTICLE_CACHE_TTL);
+            }
 
-            // Extract metadata for fallback values
             $metadata = html_find_seo_metadata($articleHtml);
 
             $dateStr = $post->querySelector('time')?->getAttribute('datetime');
-            $timestamp = $dateStr !== null ? strtotime($dateStr) : null;
-            $author = $post->querySelector('.author-name')?->textContent ?? null;
+            $timestamp = $dateStr !== null ? strtotime($dateStr) : false;
+
+            $authorName = $post->querySelector('.author-name')?->textContent;
+            $author = $authorName !== null && trim($authorName) !== ''
+                ? trim($authorName)
+                : (string) ($metadata['author'] ?? '');
 
             $this->items[] = [
                 'title' => $title,
-                'uri' => urljoin(self::URI, $uri),
+                'uri' => $articleUrl,
                 'content' => $articleHtml,
-                'timestamp' => $timestamp !== null && $timestamp !== false
+                'timestamp' => $timestamp !== false
                     ? $timestamp
-                    : ($metadata['timestamp'] ?? time()),
-                'author' => $author !== null ? trim($author) : ($metadata['author'] ?? null),
-                'uid' => $uri,
+                    : (int) ($metadata['timestamp'] ?? time()),
+                'author' => $author !== '' ? $author : null,
+                'uid' => $articleUrl,
                 'enclosures' => $metadata['enclosures'] ?? [],
             ];
 
