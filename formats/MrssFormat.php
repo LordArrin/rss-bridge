@@ -50,21 +50,21 @@ final class MrssFormat extends FormatAbstract
             if ($feedKey === 'name') {
                 $channelTitle = $document->createElement('title');
                 $channel->appendChild($channelTitle);
-                $channelTitle->appendChild($document->createTextNode((string) $title));
+                $channelTitle->appendChild($document->createTextNode($title));
 
                 $description = $document->createElement('description');
                 $channel->appendChild($description);
-                $description->appendChild($document->createTextNode((string) $title));
+                $description->appendChild($document->createTextNode($title));
             } elseif ($feedKey === 'uri') {
                 $link = $document->createElement('link');
                 $channel->appendChild($link);
-                $link->appendChild($document->createTextNode((string) $uri));
+                $link->appendChild($document->createTextNode($uri));
 
                 $linkAlternate = $document->createElementNS(self::ATOM_NS, 'link');
                 $channel->appendChild($linkAlternate);
                 $linkAlternate->setAttribute('rel', 'alternate');
                 $linkAlternate->setAttribute('type', 'text/html');
-                $linkAlternate->setAttribute('href', (string) $uri);
+                $linkAlternate->setAttribute('href', $uri);
 
                 $linkSelf = $document->createElementNS(self::ATOM_NS, 'link');
                 $channel->appendChild($linkSelf);
@@ -81,10 +81,10 @@ final class MrssFormat extends FormatAbstract
                     $iconUrl->appendChild($document->createTextNode((string) $icon));
                     $feedImage->appendChild($iconUrl);
                     $iconTitle = $document->createElement('title');
-                    $iconTitle->appendChild($document->createTextNode((string) $title));
+                    $iconTitle->appendChild($document->createTextNode($title));
                     $feedImage->appendChild($iconTitle);
                     $iconLink = $document->createElement('link');
-                    $iconLink->appendChild($document->createTextNode((string) $uri));
+                    $iconLink->appendChild($document->createTextNode($uri));
                     $feedImage->appendChild($iconLink);
                 }
             } elseif ($feedKey === 'itunes') {
@@ -125,7 +125,7 @@ final class MrssFormat extends FormatAbstract
             if ($itemTitle !== null && $itemTitle !== '') {
                 $entryTitle = $document->createElement('title');
                 $entry->appendChild($entryTitle);
-                $entryTitle->appendChild($document->createTextNode((string) $itemTitle));
+                $entryTitle->appendChild($document->createTextNode($itemTitle));
             }
 
             if (isset($itemArray['itunes']) === true) {
@@ -148,13 +148,13 @@ final class MrssFormat extends FormatAbstract
             if ($itemUri !== null && $itemUri !== '') {
                 $entryLink = $document->createElement('link');
                 $entry->appendChild($entryLink);
-                $entryLink->appendChild($document->createTextNode((string) $itemUri));
+                $entryLink->appendChild($document->createTextNode($itemUri));
             }
 
             $entryGuid = $document->createElement('guid');
             $entryGuid->setAttribute('isPermaLink', $isPermaLink);
             $entry->appendChild($entryGuid);
-            $entryGuid->appendChild($document->createTextNode((string) $itemUid));
+            $entryGuid->appendChild($document->createTextNode($itemUid));
 
             if ($itemTimestamp !== null) {
                 $entryPublished = $document->createElement('pubDate');

@@ -68,7 +68,7 @@ final class JsonFormat extends FormatAbstract
 
             $entry['id'] = $item->getUid();
 
-            if ($entry['id'] === null || $entry['id'] === '') {
+            if (($entry['id'] === null || $entry['id'] === '') && $entryUri !== null && $entryUri !== '') {
                 $entry['id'] = $entryUri;
             }
 
@@ -77,7 +77,6 @@ final class JsonFormat extends FormatAbstract
             }
 
             if ($entryAuthor !== null && $entryAuthor !== '') {
-                // JSON Feed 1.1 uses 'authors' array instead of 'author'
                 $entry['authors'] = [
                     ['name' => $entryAuthor]
                 ];

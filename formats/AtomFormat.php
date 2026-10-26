@@ -109,8 +109,8 @@ final class AtomFormat extends FormatAbstract
                 $entryID = 'urn:sha1:' . $uid;
             }
 
-            if ($entryID === '') {
-                $entryID = $entryUri;
+            if ($entryID === '' && $entryUri !== null && $entryUri !== '') {
+                $entryID = (string) $entryUri;
             }
 
             if ($entryID === '') {
