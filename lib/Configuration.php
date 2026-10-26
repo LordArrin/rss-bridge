@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RSSBridge;
 
+use function RSSBridge\Exceptions\throwServerException;
+
 /**
  * Configuration module for RSS-Bridge.
  *
@@ -24,50 +26,63 @@ final class Configuration
 
     public static function loadConfiguration(array $customConfig = [], array $env = []): void
     {
-        if (file_exists(__DIR__ . '/../config.default.ini.php') === false) {
-            throw new \Exception('The default configuration file is missing');
+        $defaultConfigPath = __DIR__ . '/../config.default.ini.php';
+        if (file_exists($defaultConfigPath) === false) {
+            throwServerException('The default configuration file is missing');
         }
 
-        $config = parse_ini_file(__DIR__ . '/../config.default.ini.php', true, INI_SCANNER_TYPED);
+        $config = parse_ini_file($defaultConfigPath, true, INI_SCANNER_TYPED);
         if ($config === false) {
-            throw new \Exception('Error parsing ini config');
+            throwServerException('Error parsing ini config');
         }
 
         foreach ($config as $header => $section) {
+            if (is_array($section) === false) {
+                continue;
+            }
             foreach ($section as $key => $value) {
-                self::setConfig((string)$header, (string)$key, $value);
+                self::setConfig((string) $header, (string) $key, $value);
             }
         }
 
         foreach ($customConfig as $header => $section) {
+            if (is_array($section) === false) {
+                continue;
+            }
             foreach ($section as $key => $value) {
-                self::setConfig((string)$header, (string)$key, $value);
+                self::setConfig((string) $header, (string) $key, $value);
             }
         }
 
         if (file_exists(__DIR__ . '/../DEBUG') === true) {
-            $debug = trim(file_get_contents(__DIR__ . '/../DEBUG'));
-            if ($debug === '') {
-                self::setConfig('system', 'env', 'dev');
-                self::setConfig('cache', 'type', 'array');
+            $debugContent = file_get_contents(__DIR__ . '/../DEBUG');
+            if ($debugContent !== false) {
+                $debug = trim($debugContent);
+                if ($debug === '') {
+                    self::setConfig('system', 'env', 'dev');
+                    self::setConfig('cache', 'type', 'array');
+                }
             }
         }
 
         if (file_exists(__DIR__ . '/../whitelist.txt') === true) {
-            $enabledBridges = trim(file_get_contents(__DIR__ . '/../whitelist.txt'));
-            if ($enabledBridges === '*') {
-                self::setConfig('system', 'enabled_bridges', ['*']);
-            } else {
-                self::setConfig('system', 'enabled_bridges', array_filter(
-                    array_map('trim', explode("\n", $enabledBridges)),
-                    fn(string $v): bool => $v !== ''
-                ));
+            $whitelistContent = file_get_contents(__DIR__ . '/../whitelist.txt');
+            if ($whitelistContent !== false) {
+                $enabledBridges = trim($whitelistContent);
+                if ($enabledBridges === '*') {
+                    self::setConfig('system', 'enabled_bridges', ['*']);
+                } else {
+                    self::setConfig('system', 'enabled_bridges', array_filter(
+                        array_map('trim', explode("\n", $enabledBridges)),
+                        fn(string $v): bool => $v !== ''
+                    ));
+                }
             }
         }
 
         foreach ($env as $envName => $envValue) {
-            $nameParts = explode('_', (string)$envName);
-            if ($nameParts[0] === 'RSSBRIDGE') {
+            $nameParts = explode('_', (string) $envName);
+            if (($nameParts[0] ?? '') === 'RSSBRIDGE') {
                 if (count($nameParts) < 3) {
                     // Invalid env name
                     continue;
@@ -86,7 +101,7 @@ final class Configuration
                     $envValue = array_map('trim', $envValue);
                 }
 
-                if ($envValue === 'true' || $envValue === 'false') {
+                if (is_string($envValue) === true && ($envValue === 'true' || $envValue === 'false')) {
                     $envValue = filter_var($envValue, FILTER_VALIDATE_BOOLEAN);
                 }
 
@@ -134,7 +149,7 @@ final class Configuration
         }
 
         $email = self::getConfig('admin', 'email');
-        if ($email !== null && $email !== '' && filter_var((string)$email, FILTER_VALIDATE_EMAIL) === false) {
+        if ($email !== null && $email !== '' && is_string($email) === true && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
             self::throwConfigError('admin', 'email', 'Is not a valid email address');
         }
 
@@ -147,7 +162,7 @@ final class Configuration
         }
 
         $reportLimit = self::getConfig('error', 'report_limit');
-        if (is_numeric($reportLimit) === false || (int)$reportLimit < 1) {
+        if (is_numeric($reportLimit) === false || (int) $reportLimit < 1) {
             self::throwConfigError('error', 'report_limit', 'Value is invalid');
         }
     }
@@ -155,7 +170,7 @@ final class Configuration
     public static function getConfig(string $section, string $key, mixed $default = null): mixed
     {
         if (self::$config === []) {
-            throw new \Exception('Config has not been loaded');
+            throwServerException('Config has not been loaded');
         }
         return self::$config[strtolower($section)][strtolower($key)] ?? $default;
     }
@@ -174,7 +189,7 @@ final class Configuration
         // exported as ENV RSSBRIDGE_SYSTEM_VERSION into the image.
         $envVersion = getenv('RSSBRIDGE_SYSTEM_VERSION');
         if ($envVersion !== false && $envVersion !== '') {
-            return (string)$envVersion;
+            return (string) $envVersion;
         }
 
         return self::VERSION;
@@ -182,9 +197,7 @@ final class Configuration
 
     private static function throwConfigError(string $section, string $key, string $message = ''): never
     {
-        http_response_code(500);
-        echo "Config [$section] => [$key] is invalid. $message";
-        exit(1);
+        throwServerException(sprintf('Config [%s] => [%s] is invalid. %s', $section, $key, $message));
     }
 
     /**
