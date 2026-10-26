@@ -104,7 +104,6 @@ TXT,
         ],
     ];
 
-    private const BG_IMG_RE = "/background-image:url\\('(.*)'\\)/";
     private const TG_HOSTS = '(?:[\w-]+\.)*(?:telegram\.org|t\.me|telesco\.pe)';
 
     private const MAX_PAGES = 100;
@@ -868,8 +867,9 @@ CSS,
         foreach ($messageDiv->querySelectorAll(self::SELECTORS['PHOTO_LINK']) as $wrap) {
             $style = $wrap->getAttribute('style') ?? '';
             $href = $wrap->getAttribute('href') ?? '';
-            if ($style !== '' && preg_match(self::BG_IMG_RE, $style, $m) === 1) {
-                $out .= sprintf('<a href="%s"><img src="%s" /></a>', $href, $m[1]);
+            $bg = extract_css_background_image($style);
+            if ($bg !== null) {
+                $out .= sprintf('<a href="%s"><img src="%s" /></a>', $href, $bg);
             }
         }
 
@@ -893,8 +893,9 @@ CSS,
             $el = $messageDiv->querySelector($sel);
             if ($el !== null) {
                 $style = $el->getAttribute('style') ?? '';
-                if ($style !== '' && preg_match(self::BG_IMG_RE, $style, $m) === 1) {
-                    $poster = $m[1];
+                $bg = extract_css_background_image($style);
+                if ($bg !== null) {
+                    $poster = $bg;
                     break;
                 }
             }
@@ -983,8 +984,9 @@ CSS,
         $el = $div->querySelector('i');
         if ($el !== null) {
             $style = $el->getAttribute('style') ?? '';
-            if ($style !== '' && preg_match(self::BG_IMG_RE, $style, $m) === 1) {
-                return sprintf('<img src="%s" />', $m[1]);
+            $bg = extract_css_background_image($style);
+            if ($bg !== null) {
+                return sprintf('<img src="%s" />', $bg);
             }
         }
 
@@ -1062,8 +1064,9 @@ CSS,
         $el = $preview->querySelector('i');
         if ($el !== null) {
             $style = $el->getAttribute('style') ?? '';
-            if ($style !== '' && preg_match(self::BG_IMG_RE, $style, $m) === 1) {
-                $img = sprintf('<img src="%s" />', $m[1]);
+            $bg = extract_css_background_image($style);
+            if ($bg !== null) {
+                $img = sprintf('<img src="%s" />', $bg);
             }
         }
 
@@ -1114,12 +1117,7 @@ CSS,
 
         $style = $el->getAttribute('style') ?? '';
         $linkHref = $link->getAttribute('href') ?? '';
-        $m = [];
-        if ($style !== '') {
-            preg_match(self::BG_IMG_RE, $style, $m);
-        }
-
-        $imgSrc = $m[1] ?? '';
+        $imgSrc = extract_css_background_image($style) ?? '';
 
         return sprintf('<a href="%s"><img src="%s" /></a>', $linkHref, $imgSrc);
     }
@@ -1275,14 +1273,8 @@ CSS,
         $html = preg_replace('/<tg-emoji[^>]*>(.*?)<\/tg-emoji>/is', '$1', $html);
         $html = preg_replace('/<i\s[^>]*class="emoji"[^>]*>(.*?)<\/i>/is', '$1', $html);
 
-        $html = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}\x{00AD}]/u', '', $html);
-        $html = preg_replace('/[\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '', $html);
-        $html = preg_replace(
-            '/[\x{00A0}\x{1680}\x{2000}-\x{200A}\x{202F}\x{205F}\x{3000}]/u',
-            ' ',
-            $html
-        );
-        $html = preg_replace('/[\x{0000}-\x{0008}\x{000B}\x{000C}\x{000E}-\x{001F}\x{007F}]/u', '', $html);
+        $html = preg_replace('/[\x{00A0}\x{1680}\x{2000}-\x{200A}\x{202F}\x{205F}\x{3000}]/u', ' ', $html);
+        $html = strip_invisible_unicode($html);
 
         if (class_exists(\Normalizer::class) === true) {
             $normalized = \Normalizer::normalize($html, \Normalizer::FORM_KD);
@@ -1439,12 +1431,12 @@ CSS,
         $haystack = $this->buildSearchHaystack($item);
 
         $exclude = trim((string) ($this->getInput('exclude_keywords') ?? ''));
-        if ($exclude !== '' && $this->matchesKeywordRules($haystack, $exclude) === true) {
+        if ($exclude !== '' && matches_keyword_rules($haystack, $exclude) === true) {
             return true;
         }
 
         $include = trim((string) ($this->getInput('include_keywords') ?? ''));
-        if ($include !== '' && $this->matchesKeywordRules($haystack, $include) === false) {
+        if ($include !== '' && matches_keyword_rules($haystack, $include) === false) {
             return true;
         }
 
@@ -1457,39 +1449,6 @@ CSS,
             string: trim(($item['title'] ?? '') . ' ' . strip_tags($item['content'] ?? '')),
             encoding: 'UTF-8'
         );
-    }
-
-    private function matchesKeywordRules(string $haystack, string $rules): bool
-    {
-        if ($haystack === '' || $rules === '') {
-            return false;
-        }
-
-        foreach (explode(separator: ',', string: $rules) as $rule) {
-            $rule = trim(string: $rule);
-            if ($rule === '') {
-                continue;
-            }
-
-            if (str_contains(haystack: $rule, needle: '+') === true) {
-                $parts = array_map(
-                    callback: fn(string $p): string => mb_strtolower(string: trim(string: $p), encoding: 'UTF-8'),
-                    array: preg_split(pattern: '/\+/', subject: $rule, flags: PREG_SPLIT_NO_EMPTY)
-                );
-
-                if ($parts === []) {
-                    continue;
-                }
-
-                if (array_all(array: $parts, callback: fn($part) => str_contains(haystack: $haystack, needle: $part)) === true) {
-                    return true;
-                }
-            } elseif (str_contains(haystack: $haystack, needle: mb_strtolower(string: $rule, encoding: 'UTF-8')) === true) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private function isAd(\Dom\Element $message): bool

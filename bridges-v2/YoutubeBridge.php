@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function urljoin;
+
 final class YoutubeBridge extends BridgeAbstract
 {
     public const NAME = 'YouTube';
@@ -145,13 +147,7 @@ final class YoutubeBridge extends BridgeAbstract
     private function shouldSkipDescription(): bool
     {
         $input = $this->getInput('skip_description');
-        if ($input === true) {
-            return true;
-        }
-        if ($input === 'on') {
-            return true;
-        }
-        return false;
+        return $input === true || $input === 'on';
     }
 
     private function collectDataInternal(): void
@@ -179,28 +175,11 @@ final class YoutubeBridge extends BridgeAbstract
             $durationMax = (int) $durationMaxInput;
         }
 
-        $filterByDuration = false;
-        if ($durationMin > 0) {
-            $filterByDuration = true;
-        }
-        if ($durationMax > 0) {
-            $filterByDuration = true;
-        }
+        $filterByDuration = $durationMin > 0 || $durationMax > 0;
 
-        $hasUsername = false;
-        if ($username !== null && $username !== '') {
-            $hasUsername = true;
-        }
-
-        $hasChannel = false;
-        if ($channel !== null && $channel !== '') {
-            $hasChannel = true;
-        }
-
-        $hasCustom = false;
-        if ($custom !== null && $custom !== '') {
-            $hasCustom = true;
-        }
+        $hasUsername = $username !== null && $username !== '';
+        $hasChannel = $channel !== null && $channel !== '';
+        $hasCustom = $custom !== null && $custom !== '';
 
         if ($hasUsername === true) {
             $url_feed = self::URI . '/feeds/videos.xml?user=' . urlencode((string) $username);
@@ -342,6 +321,7 @@ final class YoutubeBridge extends BridgeAbstract
     {
         libxml_use_internal_errors(true);
         $dom = \Dom\HTMLDocument::createFromString($htmlString);
+        libxml_clear_errors();
         libxml_use_internal_errors(false);
 
         $titleNode = $dom->querySelector('title');
@@ -360,6 +340,7 @@ final class YoutubeBridge extends BridgeAbstract
 
         libxml_use_internal_errors(true);
         $dom = \Dom\HTMLDocument::createFromString($htmlString);
+        libxml_clear_errors();
         libxml_use_internal_errors(false);
 
         $bodyHtml = '';
@@ -417,13 +398,10 @@ final class YoutubeBridge extends BridgeAbstract
             throwServerException('Could not find videoSecondaryInfoRenderer. Error at: ' . $videoId);
         }
 
-        // Some watch page variants lack the microdata, fall back to ytInitialData
         if ($author === null || $author === '') {
             $author = $videoSecondaryInfo->owner->videoOwnerRenderer->title->runs[0]->text ?? null;
         }
         if ($timestamp === null) {
-            // Contains date only, no exact time
-            // Examples: Oct 22, 2026 | Premiered Oct 22, 2026 | Streamed live on Oct 22, 2026
             $dateText = $videoPrimaryInfo->dateText->simpleText ?? '';
             if (preg_match('/[A-Z][a-z]{2} \d{1,2}, \d{4}/', (string) $dateText, $matches) === 1) {
                 $parsed = strtotime($matches[0]);
@@ -445,9 +423,9 @@ final class YoutubeBridge extends BridgeAbstract
 
         foreach ($descEnhancements as $descEnhancement) {
             if (isset($descEnhancement['url']) === true) {
-                $descBefore = mb_substr((string) $description, 0, $descEnhancement['pos']);
-                $descValue = mb_substr((string) $description, $descEnhancement['pos'], $descEnhancement['len']);
-                $descAfter = mb_substr((string) $description, $descEnhancement['pos'] + $descEnhancement['len']);
+                $descBefore = strip_invisible_unicode(mb_substr((string) $description, 0, $descEnhancement['pos']));
+                $descValue = strip_invisible_unicode(mb_substr((string) $description, $descEnhancement['pos'], $descEnhancement['len']));
+                $descAfter = strip_invisible_unicode(mb_substr((string) $description, $descEnhancement['pos'] + $descEnhancement['len']));
 
                 $descValue = trim($descValue, $whitespaceChars . '•/');
 
@@ -468,7 +446,7 @@ final class YoutubeBridge extends BridgeAbstract
         $parsed = parse_url($rawUrl);
 
         if ($parsed === false) {
-            return $baseUrl . $rawUrl;
+            return urljoin($baseUrl, $rawUrl);
         }
 
         $isRedirect = false;
@@ -485,7 +463,7 @@ final class YoutubeBridge extends BridgeAbstract
             return $rawUrl;
         }
 
-        return $baseUrl . $rawUrl;
+        return urljoin($baseUrl, $rawUrl);
     }
 
     private function ytBridgeGetVideoDescriptionEnhancements(
@@ -617,6 +595,7 @@ final class YoutubeBridge extends BridgeAbstract
         libxml_use_internal_errors(true);
         $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
         $xmlErrors = libxml_get_errors();
+        libxml_clear_errors();
         libxml_use_internal_errors(false);
 
         if ($doc->documentElement === null) {
@@ -694,13 +673,13 @@ final class YoutubeBridge extends BridgeAbstract
 
         if ($cache === true) {
             $cached = $this->cache->get($cacheKey);
-            if ($cached !== null) {
-                return (string) $cached;
+            if (is_string($cached) === true && $cached !== '') {
+                return $cached;
             }
         }
 
         $headers = ['Accept-Language: en-US', 'Cookie: SOCS=CAI'];
-        $html = getContents($url, $headers);
+        $html = (string) getContents($url, $headers);
 
         if ($cache === true && $html !== '') {
             $this->cache->set($cacheKey, $html, $ttl);
@@ -712,7 +691,9 @@ final class YoutubeBridge extends BridgeAbstract
     private function extractJsonFromHtml(string $html): ?object
     {
         $previousBacktrackLimit = @ini_get('pcre.backtrack_limit');
-        @ini_set('pcre.backtrack_limit', '10000000');
+        if ($previousBacktrackLimit !== false) {
+            @ini_set('pcre.backtrack_limit', '10000000');
+        }
 
         $scriptRegex = '/var ytInitialData = (.*?);<\/script>/';
         $result = preg_match($scriptRegex, $html, $matches);
@@ -725,7 +706,11 @@ final class YoutubeBridge extends BridgeAbstract
             return null;
         }
 
-        $data = json_decode($matches[1], false);
+        try {
+            $data = json_decode($matches[1], false, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            return null;
+        }
 
         if (is_object($data) === false) {
             return null;
@@ -790,7 +775,6 @@ final class YoutubeBridge extends BridgeAbstract
             }
 
             $lengthText = $wrapper->lengthText->simpleText ?? null;
-            $viewCount = $wrapper->viewCountText->simpleText ?? null;
             $videoId = $wrapper->videoId ?? null;
 
             if ($videoId === null || $videoId === '') {
@@ -885,13 +869,7 @@ final class YoutubeBridge extends BridgeAbstract
         }
 
         $skipMembersOnlyInput = $this->getInput('skip_members_only');
-        $skipMembersOnly = false;
-        if ($skipMembersOnlyInput === true) {
-            $skipMembersOnly = true;
-        }
-        if ($skipMembersOnlyInput === 'on') {
-            $skipMembersOnly = true;
-        }
+        $skipMembersOnly = $skipMembersOnlyInput === true || $skipMembersOnlyInput === 'on';
 
         if ($skipMembersOnly === true) {
             $rows = $lockup->metadata->lockupMetadataViewModel->metadata->contentMetadataViewModel->metadataRows ?? [];
@@ -945,6 +923,8 @@ final class YoutubeBridge extends BridgeAbstract
         int $timestamp,
         string $thumbnail = ''
     ): void {
+        $title = strip_invisible_unicode($title);
+        $description = strip_invisible_unicode($description);
         $description = nl2br($description);
 
         $item = [];
