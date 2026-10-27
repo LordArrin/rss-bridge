@@ -56,8 +56,6 @@ register_shutdown_function(function () use ($logger) {
     }
 });
 
-date_default_timezone_set(Configuration::getConfig('system', 'timezone'));
-
 $argv = $argv ?? null;
 if (is_array($argv) === true) {
     parse_str(implode('&', array_slice($argv, 1)), $cliArgs);

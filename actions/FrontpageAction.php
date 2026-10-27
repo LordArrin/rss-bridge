@@ -86,8 +86,6 @@ final class FrontpageAction implements ActionInterface
             );
         }
         $response = new Response(render(__DIR__ . '/../templates/frontpage.html.php', [
-        'admin_email'       => Configuration::getConfig('admin', 'email'),
-        'admin_telegram'    => Configuration::getConfig('admin', 'telegram'),
         'bridges'           => $body,
         'active_bridges'    => $activeBridges,
         'total_bridges'     => count($bridgeClassNames),

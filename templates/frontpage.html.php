@@ -1,11 +1,11 @@
 <?php
 
 /**
+ * Frontpage template
+ *
  * @var string $bridges
  * @var int $active_bridges
  * @var int $total_bridges
- * @var string|null $admin_email
- * @var string|null $admin_telegram
  */
 
 ?>
@@ -30,15 +30,21 @@
         $encodedVersion = rawurlencode($version);
         $dockerUrl = "https://hub.docker.com/repository/docker/lordarrin/rss-bridge";
         $badgeText = 'lordarrin/rss-bridge:' . $version;
-        $adminEmail = $admin_email ?? '';
-        $adminTelegram = $admin_telegram ?? '';
 
-        // Normalize Telegram handle to URL
+        // Read admin contacts directly from environment variables
+        // (validated at container startup by /bin/load-env)
+        $adminEmailRaw = getenv('ADMIN_EMAIL');
+        $adminEmail = ($adminEmailRaw === false) ? '' : trim((string) $adminEmailRaw);
+
+        $adminTelegramRaw = getenv('ADMIN_TELEGRAM');
+        $adminTelegram = ($adminTelegramRaw === false) ? '' : trim((string) $adminTelegramRaw);
+
+        // Normalize Telegram handle to URL and display form
         $telegramUrl = '';
         $telegramDisplay = '';
         if ($adminTelegram !== '') {
-            $tg = trim($adminTelegram);
-            
+            $tg = $adminTelegram;
+
             // Already a full URL
             if (str_starts_with($tg, 'http://') || str_starts_with($tg, 'https://')) {
                 $telegramUrl = $tg;

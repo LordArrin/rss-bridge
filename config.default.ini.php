@@ -4,7 +4,6 @@
 
 env = "prod"
 enabled_bridges[] = *
-timezone = "UTC"
 enable_maintenance_mode = false
 
 ; Admin-defined system message, shown on every page as a unified notification

@@ -5,11 +5,11 @@ declare(strict_types=1);
 /**
  * RSS-Bridge Environment Loader
  *
- * Загружает и валидирует переменные окружения, генерирует конфигурационные
- * файлы для системных сервисов. Вызывается из docker-entrypoint.sh при старте
- * контейнера. Изменения применяются после перезапуска соответствующих сервисов
- * (PHP-FPM, Memcached, Nginx), поэтому скрипт НЕ предназначен для вызова
- * в уже запущенном контейнере без ручной перезаливки сервисов.
+ * Loads and validates environment variables, generates configuration
+ * files for system services. Called from docker-entrypoint.sh at container
+ * startup. Changes require restart of affected services (PHP-FPM, Memcached, Nginx),
+ * so this script is NOT intended for use in a running container without manual
+ * service reloads.
  *
  * Usage:
  *   eval "$(php /app/bin/load-env)"
@@ -48,6 +48,7 @@ define('PHP_INI_OUTPUT_FILE', '/etc/php85/conf.d/99-user-overrides.ini');
  *   - fallback      : default value if parsing fails
  *   - validate      : optional callable(mixed $parsed) -> bool
  *   - containerCap  : optional fraction (0..1) of container RAM to clamp to
+ *   - sanitize      : optional bool, whether to apply default string sanitization
  */
 $normalizationRules = [
     // PHP-FPM pool sizing (integer counts, with optional 's' suffix for timeouts)
@@ -91,6 +92,34 @@ $normalizationRules = [
     ],
     'MEMCACHED_CONNECTIONS' => ['type' => 'int', 'fallback' => '1024', 'min' => 10,   'max' => 100000],
     'MEMCACHED_THREADS'     => ['type' => 'int', 'fallback' => '4',    'min' => 1,    'max' => 256],
+
+    // Application-level settings
+    'DOMAIN' => [
+        'type' => 'string',
+        'fallback' => 'http://localhost',
+        'validate' => 'validateDomain',
+        'sanitize' => false,
+    ],
+    'TZ' => [
+        'type' => 'string',
+        'fallback' => 'UTC',
+        'validate' => 'validateTimezone',
+        'sanitize' => false,
+    ],
+
+    // Admin contact information
+    'ADMIN_EMAIL' => [
+        'type' => 'string',
+        'fallback' => '',
+        'validate' => 'validateEmail',
+        'sanitize' => false,
+    ],
+    'ADMIN_TELEGRAM' => [
+        'type' => 'string',
+        'fallback' => '',
+        'validate' => 'validateTelegram',
+        'sanitize' => false,
+    ],
 ];
 
 // ============================================================================
@@ -287,6 +316,218 @@ function getContainerMemoryMb(): ?int
 }
 
 // ============================================================================
+// Domain, Timezone, Email, and Telegram validators
+// ============================================================================
+
+/**
+ * Validates a DOMAIN value.
+ * Must be http:// or https:// followed by:
+ *   - hostname (alphanumeric + hyphens, dots for subdomains)
+ *   - or IPv4 address
+ * Optionally followed by :port (1-65535)
+ * Returns the validated/normalized value, or null on failure.
+ */
+function validateDomain(string $value): ?string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return null;
+    }
+
+    // Must start with http:// or https://
+    if (preg_match('#^(https?)://(.+)$#i', $value, $m) !== 1) {
+        return null;
+    }
+
+    $protocol = strtolower($m[1]);
+    $rest = $m[2];
+
+    // Split host:port
+    $host = $rest;
+    $port = null;
+
+    // Handle IPv4 or hostname with port
+    if (preg_match('#^(.+):(\d{1,5})$#', $rest, $pm) === 1) {
+        $host = $pm[1];
+        $port = (int)$pm[2];
+        if ($port < 1 || $port > 65535) {
+            return null;
+        }
+    }
+
+    // Validate host: hostname or IPv4
+    $isValidHost = false;
+
+    // Check IPv4
+    if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        $isValidHost = true;
+    }
+    // Check hostname: labels separated by dots
+    elseif (preg_match('/^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]{2,63}$/', $host) === 1) {
+        $isValidHost = true;
+    }
+
+    if ($isValidHost === false) {
+        return null;
+    }
+
+    // Reconstruct canonical form
+    $canonical = $protocol . '://' . $host;
+    if ($port !== null) {
+        $canonical .= ':' . $port;
+    }
+
+    return $canonical;
+}
+
+/**
+ * Validates a TZ (timezone) value.
+ * Accepts either:
+ *   - IANA timezone name (e.g. "Europe/Moscow", "America/New_York")
+ *   - UTC offset format (e.g. "UTC", "UTC+3", "UTC-5", "UTC+03:30")
+ * Returns the validated value or null on failure.
+ */
+function validateTimezone(string $value): ?string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return null;
+    }
+
+    // Try as IANA identifier
+    if (in_array($value, \DateTimeZone::listIdentifiers(), true) === true) {
+        return $value;
+    }
+
+    // Try UTC offset: UTC, UTC+N, UTC-N, UTC+HH:MM
+    if (preg_match('/^UTC([+-])(\d{1,2})(:(\d{2}))?$/', $value, $m) === 1) {
+        $hours = (int)$m[2];
+        $minutes = isset($m[4]) ? (int)$m[4] : 0;
+        if ($hours > 14 || $minutes > 59) {
+            return null;
+        }
+        return $value;
+    }
+
+    // Plain "UTC"
+    if (strtoupper($value) === 'UTC') {
+        return 'UTC';
+    }
+
+    return null;
+}
+
+/**
+ * Validates an email address.
+ * Accepts:
+ *   - Simple format: "user@example.com"
+ *   - RFC 5322 format: "John Doe <user@example.com>"
+ * Returns the validated value or null on failure.
+ * Empty string is valid (optional field).
+ */
+function validateEmail(string $value): ?string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    // Try simple email format
+    if (filter_var($value, FILTER_VALIDATE_EMAIL) !== false) {
+        return $value;
+    }
+
+    // Try RFC 5322 format: "Name <email>"
+    if (preg_match('/^(.+?)\s*<([^>]+)>$/', $value, $m) === 1) {
+        $email = trim($m[2]);
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) !== false) {
+            return $value;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Validates a Telegram username or link.
+ * Accepts:
+ *   - Username: "username" (alphanumeric + underscore, 5+ chars)
+ *   - Link: "https://t.me/username" or "https://t.me/channel_name"
+ * Returns the validated value or null on failure.
+ * Empty string is valid (optional field).
+ */
+function validateTelegram(string $value): ?string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    // Check if it's a Telegram link
+    if (preg_match('#^https?://t\.me/([a-zA-Z0-9_]{5,})$#', $value, $m) === 1) {
+        return $value;
+    }
+
+    // Check if it's just a username (without @)
+    if (preg_match('/^[a-zA-Z0-9_]{5,}$/', $value) === 1) {
+        return $value;
+    }
+
+    return null;
+}
+
+/**
+ * Applies the timezone to the entire system using multiple mechanisms:
+ *   1. PHP default timezone (current process)
+ *   2. /etc/localtime (libc uses this)
+ *   3. /etc/TZ (Alpine-specific)
+ *   4. /etc/environment (PAM reads this)
+ *   5. /etc/profile.d/timezone.sh (login shells)
+ *
+ * Returns true on success.
+ */
+function applyTimezone(string $tz): bool
+{
+    // 1. PHP timezone for current process
+    @date_default_timezone_set($tz);
+
+    // 2. Update /etc/localtime (libc uses this for time functions)
+    //    Copy the zoneinfo file (safer than symlink, works everywhere)
+    $zoneinfo = '/usr/share/zoneinfo/' . $tz;
+    if (is_readable($zoneinfo) === true) {
+        @unlink('/etc/localtime');
+        @copy($zoneinfo, '/etc/localtime');
+    }
+
+    // 3. Write to /etc/TZ (Alpine reads this)
+    $tzFile = '/etc/TZ';
+    if (is_writable(dirname($tzFile)) === true) {
+        @file_put_contents($tzFile, $tz . "\n");
+    }
+
+    // 4. Write to /etc/environment (PAM reads this)
+    $envFile = '/etc/environment';
+    if (is_writable($envFile) === true) {
+        $content = (string)@file_get_contents($envFile);
+        $content = preg_replace('/^TZ=.*$/m', '', $content);
+        $content = rtrim($content) . "\nTZ=" . $tz . "\n";
+        @file_put_contents($envFile, $content);
+    }
+
+    // 5. Write to /etc/profile.d/timezone.sh (login shells source this)
+    $profileDir = '/etc/profile.d';
+    if (is_dir($profileDir) === true && is_writable($profileDir) === true) {
+        $profileFile = $profileDir . '/timezone.sh';
+        $content = "#!/bin/sh\nexport TZ=" . $tz . "\n";
+        @file_put_contents($profileFile, $content);
+        @chmod($profileFile, 0644);
+    }
+
+    fwrite(STDERR, "TZ: applied '" . $tz . "'\n");
+    return true;
+}
+
+// ============================================================================
 // Normalization
 // ============================================================================
 
@@ -407,8 +648,25 @@ function normalizeEnv(array &$env, array $rules, array $fileDefaults): array
                 $env[$var] = preg_replace('/[^0-9a-zA-Z]/', '', $original);
             }
         } elseif ($type === 'string') {
-            // Just sanitize for INI/shell injection
-            $env[$var] = preg_replace('/[^a-zA-Z0-9_.\-\/]/', '', $original);
+            $applySanitize = $rule['sanitize'] ?? true;
+
+            // Custom validator
+            if (isset($rule['validate']) === true && is_callable($rule['validate'])) {
+                $validated = ($rule['validate'])($original);
+                if ($validated === null) {
+                    $fallback = $rule['fallback'] ?? '';
+                    $env[$var] = $fallback;
+                    $warnings[] = "{$var}='{$original}': invalid format, using '{$fallback}'";
+                } else {
+                    $env[$var] = $validated;
+                }
+            } elseif ($applySanitize === true) {
+                // Default sanitization for INI/shell injection protection
+                $env[$var] = preg_replace('/[^a-zA-Z0-9_.\-\/]/', '', $original);
+            } else {
+                // No sanitization, use as-is
+                $env[$var] = $original;
+            }
         }
     }
 
@@ -595,7 +853,12 @@ foreach ($warnings as $w) {
     fwrite(STDERR, "Env: WARNING {$w}\n");
 }
 
-// 5. Log statistics
+// 5. Apply timezone if TZ was successfully normalized
+if (isset($finalEnv['TZ']) === true && $finalEnv['TZ'] !== '') {
+    applyTimezone($finalEnv['TZ']);
+}
+
+// 6. Log statistics
 $defaultCount = count($defaultEnv);
 $customCount = count($customEnv);
 $finalCount = count($finalEnv);
@@ -613,11 +876,11 @@ if ($finalCount > 0) {
     fwrite(STDERR, "Env: no variables loaded\n");
 }
 
-// 6. Generate service config files
+// 7. Generate service config files
 generatePhpFpmConfig($finalEnv);
 generatePhpIniOverrides($finalEnv);
 
-// 7. Export to shell (values are already normalized and safe)
+// 8. Export to shell (values are already normalized and safe)
 foreach ($finalEnv as $key => $value) {
     $escaped = str_replace("'", "'\\''", (string)$value);
     echo "export {$key}='{$escaped}'\n";

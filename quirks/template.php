@@ -198,8 +198,11 @@ function get_admin_system_messages(): array
 }
 
 /**
- * Build contact links for the admin from configuration, for use with the
- * unified notification system's $links parameter.
+ * Build contact links for the admin from environment variables, for use with
+ * the unified notification system's $links parameter.
+ *
+ * Admin contacts (ADMIN_EMAIL and ADMIN_TELEGRAM) are validated at container
+ * startup by /bin/load-env and stored as environment variables.
  *
  * @return array<int, array{label: string, url: string}>
  */
@@ -207,14 +210,20 @@ function get_admin_contact_links(): array
 {
     $links = [];
 
-    $email = Configuration::getConfig('admin', 'email');
-    if ($email !== null && $email !== '' && is_string($email) === true) {
+    $adminEmailRaw = getenv('ADMIN_EMAIL');
+    $email = ($adminEmailRaw === false) ? '' : trim((string) $adminEmailRaw);
+
+    if ($email !== '') {
         $links[] = ['label' => 'Contact admin', 'url' => 'mailto:' . $email];
     }
 
-    $telegram = Configuration::getConfig('admin', 'telegram');
-    if ($telegram !== null && $telegram !== '' && is_string($telegram) === true) {
-        $links[] = ['label' => 'Telegram admin', 'url' => 'https://t.me/' . ltrim($telegram, '@')];
+    $adminTelegramRaw = getenv('ADMIN_TELEGRAM');
+    $telegram = ($adminTelegramRaw === false) ? '' : trim((string) $adminTelegramRaw);
+
+    if ($telegram !== '') {
+        // Normalize: remove @ if present, then construct t.me URL
+        $username = ltrim($telegram, '@');
+        $links[] = ['label' => 'Telegram admin', 'url' => 'https://t.me/' . $username];
     }
 
     return $links;

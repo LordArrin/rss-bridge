@@ -8,6 +8,13 @@ namespace RSSBridge;
  * Configuration module for RSS-Bridge.
  *
  * This class implements a configuration module for RSS-Bridge.
+ *
+ * NOTE: Timezone configuration was removed from this class. The TZ is now
+ * managed system-wide by /bin/load-env at container startup, which applies
+ * the timezone to PHP runtime, libc, and shell environments simultaneously.
+ *
+ * NOTE: Admin contact information (email, telegram) is managed by /bin/load-env
+ * and accessed directly from environment variables in the web interface renderer.
  */
 final class Configuration
 {
@@ -115,13 +122,6 @@ final class Configuration
             self::throwConfigError('system', 'enabled_bridges', 'Is not an array');
         }
 
-        $timezone = self::getConfig('system', 'timezone');
-        $timezoneList = timezone_identifiers_list(\DateTimeZone::ALL_WITH_BC);
-
-        if (is_string($timezone) === false || in_array($timezone, $timezoneList, true) === false) {
-            self::throwConfigError('system', 'timezone', 'Is not a valid timezone');
-        }
-
         if (is_string(self::getConfig('cache', 'type')) === false) {
             self::throwConfigError('cache', 'type', 'Is not a valid string');
         }
@@ -144,11 +144,6 @@ final class Configuration
 
         if (is_string(self::getConfig('authentication', 'password_hash')) === false) {
             self::throwConfigError('authentication', 'password_hash', 'Is not a valid string');
-        }
-
-        $email = self::getConfig('admin', 'email');
-        if ($email !== null && $email !== '' && is_string($email) === true && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-            self::throwConfigError('admin', 'email', 'Is not a valid email address');
         }
 
         $errorOutput = self::getConfig('error', 'output');
