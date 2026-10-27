@@ -99,11 +99,6 @@ connect_timeout = 5
 request_timeout = 20
 retries = 1
 
-[admin]
-
-email = ""
-telegram = ""
-
 [authentication]
 
 enable = false
@@ -135,7 +130,7 @@ timeout = 5000
 ; All memcached settings (mode, socket/TCP address, server tuning flags and
 ; PHP client chunking parameters) live in config/memcached.conf. Any key set
 ; below overrides the corresponding default there. Examples:
-;   type = external          ; "internal" (Unix socket) or "external" (TCP)
+;   type = external          ; "internal" (right inside container) or "external" (TCP)
 ;   host = "10.0.0.5"        ; external mode only
 ;   port = 11211             ; external mode only
 ;   memory = 1g              ; server tuning: -m flag
