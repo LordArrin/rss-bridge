@@ -117,9 +117,12 @@ function getContents(
     /** @var CacheInterface $cache */
     $cache = $container['cache'];
 
+    $timeout = getenv('HTTP_TIMEOUT');
+    $retries = getenv('HTTP_RETRIES');
+
     $config = [
-        'timeout'      => Configuration::getConfig('http', 'timeout'),
-        'retries'      => Configuration::getConfig('http', 'retries'),
+        'timeout'      => $timeout !== false ? (int) $timeout : 60,
+        'retries'      => $retries !== false ? (int) $retries : 2,
         'curl_options' => $curlOptions + [CURLOPT_ENCODING => ''],
     ];
 
@@ -176,8 +179,8 @@ function getContents(
 
     $config['headers'] = $httpHeadersNormalized;
 
-    $maxFileSize = Configuration::getConfig('http', 'max_filesize');
-    if ($maxFileSize !== null && $maxFileSize !== false && (int)$maxFileSize > 0) {
+    $maxFileSize = getenv('HTTP_MAX_FILESIZE');
+    if ($maxFileSize !== false && $maxFileSize !== '' && (int)$maxFileSize > 0) {
         $config['max_filesize'] = (int)$maxFileSize * 2 ** 20;
     }
 

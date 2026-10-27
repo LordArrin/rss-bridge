@@ -348,12 +348,10 @@ final class CurlHttpClient implements HttpClient
     private static function ipResolver(): IpResolver
     {
         if (self::$ipResolver instanceof IpResolver === false) {
-            $blocked = null;
-            $allowed = null;
-            if (class_exists(\RSSBridge\Configuration::class) === true) {
-                $blocked = \RSSBridge\Configuration::getConfig('http', 'blocked_ip_range');
-                $allowed = \RSSBridge\Configuration::getConfig('http', 'allowed_ip_ranges');
-            }
+            $blocked = getenv('HTTP_BLOCKED_IP_RANGES');
+            $blocked = $blocked !== false && $blocked !== '' ? $blocked : null;
+            $allowed = getenv('HTTP_ALLOWED_IP_RANGES');
+            $allowed = $allowed !== false && $allowed !== '' ? $allowed : null;
             self::$ipResolver = new IpResolver($blocked, $allowed);
         }
         return self::$ipResolver;
@@ -364,10 +362,8 @@ final class CurlHttpClient implements HttpClient
      */
     private static function isSsrfCheckEnabled(): bool
     {
-        if (class_exists(\RSSBridge\Configuration::class) === false) {
-            return true;
-        }
-        return \RSSBridge\Configuration::getConfig('http', 'ssrf_check') !== false;
+        $value = getenv('HTTP_SSRF_CHECK');
+        return $value === false || strtolower($value) !== 'false';
     }
 
     /**

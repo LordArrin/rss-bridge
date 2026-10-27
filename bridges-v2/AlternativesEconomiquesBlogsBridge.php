@@ -8,7 +8,6 @@ use Dom\HTMLDocument;
 use Dom\Element;
 use Dom\Node;
 use RSSBridge\BridgeAbstract;
-use HttpException;
 
 final class AlternativesEconomiquesBlogsBridge extends BridgeAbstract
 {

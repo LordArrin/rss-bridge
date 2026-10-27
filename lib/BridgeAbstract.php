@@ -7,6 +7,7 @@ namespace RSSBridge;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
 use RSSBridge\ParameterValidator;
+use RSSBridge\Http\Response;
 
 abstract class BridgeAbstract
 {
@@ -31,6 +32,7 @@ abstract class BridgeAbstract
 
     protected $cache;
     protected $logger;
+    protected ?Response $rawOutput = null;
 
     public function __construct($cache = null, $logger = null)
     {
@@ -95,6 +97,16 @@ abstract class BridgeAbstract
     public function getCacheTimeout()
     {
         return static::CACHE_TIMEOUT;
+    }
+
+    public function getRawOutput(): ?Response
+    {
+        return $this->rawOutput;
+    }
+
+    protected function setRawOutput(Response $response): void
+    {
+        $this->rawOutput = $response;
     }
 
     public function loadConfiguration()

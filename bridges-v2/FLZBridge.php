@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
-use RSSBridge\Configuration;
 use RSSBridge\FeedParser;
-use HttpException;
 use RSSBridge\Http\Response;
 use RSSBridge\Utils\Json;
 
@@ -726,7 +724,8 @@ final class FLZBridge extends BridgeAbstract
 
     private function requestOptions(): array
     {
-        $timeout = Configuration::getConfig('http', 'timeout');
+        $timeoutEnv = getenv('HTTP_TIMEOUT');
+        $timeout = $timeoutEnv !== false && $timeoutEnv !== '' ? (int) $timeoutEnv : 60;
         return [CURLOPT_TIMEOUT => max(1, $timeout)];
     }
 

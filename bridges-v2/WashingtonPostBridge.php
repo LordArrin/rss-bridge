@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
-use HttpException;
 
 final class WashingtonPostBridge extends BridgeAbstract
 {

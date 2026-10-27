@@ -120,6 +120,24 @@ $normalizationRules = [
         'validate' => 'validateTelegram',
         'sanitize' => false,
     ],
+
+    // HTTP client settings
+    'HTTP_TIMEOUT' => ['type' => 'int', 'fallback' => '60', 'min' => 1, 'max' => 3600],
+    'HTTP_RETRIES' => ['type' => 'int', 'fallback' => '2', 'min' => 0, 'max' => 10],
+    'HTTP_MAX_FILESIZE' => ['type' => 'int', 'fallback' => '40', 'min' => 0, 'max' => 1000],
+    'HTTP_SSRF_CHECK' => ['type' => 'bool', 'fallback' => 'true'],
+    'HTTP_BLOCKED_IP_RANGES' => [
+        'type' => 'string',
+        'fallback' => '',
+        'validate' => 'validateCidrList',
+        'sanitize' => false,
+    ],
+    'HTTP_ALLOWED_IP_RANGES' => [
+        'type' => 'string',
+        'fallback' => '',
+        'validate' => 'validateCidrList',
+        'sanitize' => false,
+    ],
 ];
 
 // ============================================================================
@@ -316,7 +334,7 @@ function getContainerMemoryMb(): ?int
 }
 
 // ============================================================================
-// Domain, Timezone, Email, and Telegram validators
+// Domain, Timezone, Email, Telegram, and CIDR validators
 // ============================================================================
 
 /**
@@ -474,6 +492,61 @@ function validateTelegram(string $value): ?string
     }
 
     return null;
+}
+
+/**
+ * Validates a comma-separated list of CIDR ranges.
+ * Accepts:
+ *   - IPv4 addresses: "192.168.1.1"
+ *   - IPv4 CIDR: "192.168.1.0/24"
+ *   - IPv6 addresses: "2001:db8::1"
+ *   - IPv6 CIDR: "2001:db8::/32"
+ *   - Comma-separated list: "192.168.1.0/24,10.0.0.50,2001:db8::/32"
+ * Returns the validated/normalized value or null on failure.
+ * Empty string is valid (optional field).
+ */
+function validateCidrList(string $value): ?string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    $cidrs = explode(',', $value);
+    $validated = [];
+
+    foreach ($cidrs as $cidr) {
+        $cidr = trim($cidr);
+        if ($cidr === '') {
+            continue;
+        }
+
+        // Split into IP and prefix
+        $parts = explode('/', $cidr, 2);
+        $ip = $parts[0];
+        $prefix = $parts[1] ?? null;
+
+        // Validate IP
+        if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+            return null;
+        }
+
+        // Validate prefix (if present)
+        if ($prefix !== null) {
+            if (ctype_digit($prefix) === false) {
+                return null;
+            }
+            $maxPrefix = (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) ? 128 : 32;
+            $prefixInt = (int)$prefix;
+            if ($prefixInt < 0 || $prefixInt > $maxPrefix) {
+                return null;
+            }
+        }
+
+        $validated[] = $cidr;
+    }
+
+    return implode(',', $validated);
 }
 
 /**

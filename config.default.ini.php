@@ -19,40 +19,6 @@ message_level = "info"
 ; messages[] = { text = "Second notice", title = "Alert", level = "error" }
 ; messages[] = "Plain info message"
 
-[http]
-; 60s matches upstream rss-bridge. Slow-but-alive sites (news portals, CDN
-; edge misses) regularly need >20s for the first byte; 
-timeout = 60
-
-; SSRF protection. Before every outbound request the target hostname is
-; resolved and each returned IP is screened against the blocked CIDR ranges.
-; Resolutions go through a process-wide DNS cache (60s TTL, 10s for negative
-; results) so "resolve -> check -> connect" always uses one single immutable
-; lookup result. The whole vetted IP set is pinned via CURLOPT_RESOLVE to
-; prevent DNS-rebinding attacks between the check and the actual connect
-; (a TTL-0 record can no longer flip the name to an internal address).
-; Redirects are refused to prevent bypasses via Location headers pointing at
-; internal addresses.
-; Set to false only if you deliberately need bridges to reach internal services.
-ssrf_check = true
-
-; Blocked CIDR ranges (IPv4 and IPv6). The built-in secure defaults are ALWAYS
-; active and cannot be disabled. Entries below are ADDITIONAL ranges appended
-; to the defaults. Single IPs are accepted and converted to /32 or /128.
-; Defaults include: RFC 1918 (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16),
-; loopback (127.0.0.0/8), link-local (169.254.0.0/16), CGNAT (100.64.0.0/10),
-; multicast/reserved, and IPv6 ULA/loopback/link-local equivalents.
-; blocked_ip_ranges[] = "203.0.113.0/24"
-; blocked_ip_ranges[] = "198.51.100.50"
-
-; Allowed CIDR ranges (whitelist). Entries here take precedence over the
-; blocked ranges above. Use this to permit access to specific internal hosts
-; or subnets that would otherwise be blocked by the defaults.
-; Single IPs are accepted and converted to /32 or /128.
-; allowed_ip_ranges[] = "192.168.1.222"
-; allowed_ip_ranges[] = "10.0.0.50"
-; allowed_ip_ranges[] = "192.168.100.0/24"
-
 [error]
 
 ; Defines how error messages are returned by RSS-Bridge
