@@ -850,7 +850,7 @@ final class YoutubeBridge extends BridgeAbstract
                 (string) ($title ?? 'Untitled'),
                 $author,
                 (string) ($description ?? ''),
-                (int) $timestamp
+                $timestamp
             );
 
             if (count($this->items) >= 99) {
