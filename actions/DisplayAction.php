@@ -114,12 +114,19 @@ final class DisplayAction implements ActionInterface
             $bridge->collectData();
             $items = $bridge->getItems();
         } catch (\Throwable $e) {
+            // Map the exception onto a FreshRSS-friendly status: 429 with
+            // Retry-After for rate limits, 503 with Retry-After for
+            // temporary problems (timeouts, Cloudflare challenges), the
+            // upstream code otherwise. Never report transient failures as
+            // permanent ones or as 304 Not Modified.
+            [$statusCode, $headers] = \httpStatusFromException($e);
+
             if ($e instanceof \RateLimitException) {
                 $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
                 return new Response(
                     render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]),
-                    429,
-                    self::rateLimitHeaders($e)
+                    $statusCode,
+                    $headers
                 );
             } elseif ($e instanceof \ClientException) {
                 $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
@@ -128,12 +135,7 @@ final class DisplayAction implements ActionInterface
                 if ($code >= 400 && $code <= 599) {
                     $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
 
-                    $headers = [];
-                    if ($e->retryAfter !== null && in_array($code, [429, 503], true) === true) {
-                        $headers['retry-after'] = (string) $e->retryAfter;
-                    }
-
-                    return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $code, $headers);
+                    return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $statusCode, $headers);
                 }
             } else {
                 $this->logger->error(sprintf('Exception in DisplayAction(%s)', $bridge->getShortName()), ['e' => $e]);
@@ -151,8 +153,7 @@ final class DisplayAction implements ActionInterface
                 if ($errorOutput === 'feed') {
                     $items = [$this->createFeedItemFromException($e, $bridge)];
                 } elseif ($errorOutput === 'http') {
-                    $statusCode = $e instanceof \HttpException ? $e->getCode() : 500;
-                    return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $statusCode);
+                    return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $statusCode, $headers);
                 }
             }
         }
@@ -195,23 +196,6 @@ final class DisplayAction implements ActionInterface
         ];
 
         return new Response($body, 200, $headers);
-    }
-
-    /**
-     * Builds the headers for a 429 response. Rate-limiting readers
-     * back off when Retry-After is present; the
-     * default window matches the negative-caching TTL in CacheMiddleware so
-     * what the reader sees and what we actually cache stay in sync.
-     *
-     * @return array<string,string>
-     */
-    private static function rateLimitHeaders(\Throwable $e): array
-    {
-        $retryAfter = 3600;
-        if ($e instanceof \HttpException && $e->retryAfter !== null) {
-            $retryAfter = max(60, min(86400, $e->retryAfter));
-        }
-        return ['retry-after' => (string) $retryAfter];
     }
 
     /**
