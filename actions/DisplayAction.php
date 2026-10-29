@@ -11,7 +11,6 @@ use RSSBridge\BridgeAbstract;
 use RSSBridge\BridgeFactory;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Configuration;
-use RSSBridge\FeedItem;
 use RSSBridge\Formats\FormatFactory;
 use RSSBridge\SafeBridgeLoader;
 use RSSBridge\Http\Request;
@@ -114,11 +113,6 @@ final class DisplayAction implements ActionInterface
             $bridge->collectData();
             $items = $bridge->getItems();
         } catch (\Throwable $e) {
-            // Map the exception onto a FreshRSS-friendly status: 429 with
-            // Retry-After for rate limits, 503 with Retry-After for
-            // temporary problems (timeouts, Cloudflare challenges), the
-            // upstream code otherwise. Never report transient failures as
-            // permanent ones or as 304 Not Modified.
             [$statusCode, $headers] = \httpStatusFromException($e);
 
             if ($e instanceof \RateLimitException) {
@@ -128,13 +122,12 @@ final class DisplayAction implements ActionInterface
                     $statusCode,
                     $headers
                 );
-            } elseif ($e instanceof \ClientException) {
-                $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
-            } elseif ($e instanceof \HttpException) {
-                $code = $e->getCode();
-                if ($code >= 400 && $code <= 599) {
-                    $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
+            }
 
+            if ($e instanceof \HttpException) {
+                $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
+                $code = (int) $e->getCode();
+                if ($code >= 400 && $code <= 599) {
                     return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $statusCode, $headers);
                 }
             } else {
@@ -146,7 +139,7 @@ final class DisplayAction implements ActionInterface
             $errorCount = 1;
 
             if ($reportLimit > 1) {
-                $errorCount = $this->logBridgeError($bridge->getName(), $e->getCode());
+                $errorCount = $this->logBridgeError($bridge->getName(), (int) $e->getCode());
             }
 
             if ($errorCount >= $reportLimit) {
@@ -190,7 +183,7 @@ final class DisplayAction implements ActionInterface
         }
 
         $headers = [
-            'last-modified' => gmdate('D, d M Y H:i:s ', $lastModifiedTimestamp) . 'GMT',
+            'last-modified' => gmdate('D, d M Y H:i:s \G\M\T', $lastModifiedTimestamp),
             'etag' => $etag,
             'content-type'  => $formatObj->getMimeType() . '; charset=UTF-8',
         ];
@@ -198,19 +191,11 @@ final class DisplayAction implements ActionInterface
         return new Response($body, 200, $headers);
     }
 
-    /**
-     * Builds a strong ETag (RFC 9110 section 8.8.3) from the response body:
-     * md5 keeps the tag short and fixed-size regardless of feed length.
-     */
     private static function createETag(string $body): string
     {
         return '"' . md5($body) . '"';
     }
 
-    /**
-     * Cache key for the request parameters. Must stay in sync with the key
-     * built in __invoke() and with CacheMiddleware::createCacheKey().
-     */
     private function createCacheKey(Request $request): string
     {
         $params = $request->toArray();

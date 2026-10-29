@@ -22,7 +22,6 @@ final class CacheMiddleware implements Middleware
     private const REGENERATION_LOCK_TTL = 120;
     private const STALE_RETRY_AFTER = 60;
     private const DEFAULT_MAX_AGE = 3600;
-    /** Default Retry-After (seconds) advertised with 503 responses. */
     private const SERVICE_UNAVAILABLE_RETRY_AFTER = 600;
 
     public function __invoke(Request $request, callable $next): Response
@@ -40,10 +39,6 @@ final class CacheMiddleware implements Middleware
         $cachedResponse = $this->cache->get($cacheKey);
 
         if ($cachedResponse instanceof Response) {
-            // Conditional requests are only answered for cached *successful*
-            // feeds. A 304 must never be returned for an error entry: feed
-            // readers such as FreshRSS would interpret it as "no new items"
-            // and hide the fact that the bridge is failing.
             if ($cachedResponse->getCode() === 200) {
                 $notModified = $this->createNotModifiedResponse($request, $cachedResponse);
                 if ($notModified !== null) {
@@ -57,9 +52,6 @@ final class CacheMiddleware implements Middleware
         $staleResponse = $staleEntry['stale'] ?? null;
         if ($staleResponse instanceof Response && $staleResponse->getCode() === 200) {
             if ($this->cache->acquireLock($cacheKey, self::REGENERATION_LOCK_TTL) === false) {
-                // Another process is already regenerating this feed: serve the
-                // stale-but-valid copy immediately instead of stampeding the
-                // upstream site (which would invite real 429 rate limits).
                 return $this->attachStaleHeaders($staleResponse);
             }
         }
@@ -80,11 +72,6 @@ final class CacheMiddleware implements Middleware
         }
 
         if ($this->isTransientStatus($code) === true || $this->isTimeoutResponse($response) === true) {
-            // Temporary problem (rate limit, timeout, upstream 5xx): never
-            // surface it as a permanent error or as 304. Prefer serving a
-            // stale copy of the feed; otherwise normalize the response to
-            // HTTP 429/503 with Retry-After so readers like FreshRSS back off
-            // and retry on the next polling cycle.
             $stale = $this->serveStale($cacheKey, $response);
             if ($stale !== null) {
                 $retryAfter = min(max(self::STALE_RETRY_AFTER, $this->resolveMaxAge($request)), 3600);
@@ -117,23 +104,11 @@ final class CacheMiddleware implements Middleware
         return $response;
     }
 
-    /**
-     * Status codes that indicate a *temporary* failure which readers such as
-     * FreshRSS should retry later, rather than a permanent bridge breakage.
-     */
     private function isTransientStatus(int $code): bool
     {
         return in_array($code, [0, 408, 429, 500, 502, 503, 504], true) === true;
     }
 
-    /**
-     * Rewrites a transient failure response into a spec-compliant one:
-     *  - 429 Too Many Requests keeps its (clamped) Retry-After
-     *  - timeouts / 5xx become 503 Service Unavailable with Retry-After
-     *  - negative caching uses Cache-Control: no-store (the middleware's own
-     *    cache layer decides how long to remember the failure; HTTP caches
-     *    must not extend it)
-     */
     private function normalizeTransientResponse(Response $response, Request $request): Response
     {
         $code = $response->getCode();
@@ -153,13 +128,10 @@ final class CacheMiddleware implements Middleware
         }
         $retryAfter = max(1, min(86400, $retryAfter));
 
-        // A code of 0 carries no meaningful status line/body for the client.
         if ($code === 0 || str_contains($response->getBody(), 'cURL error') === true) {
             $body = render(__DIR__ . '/../templates/error.html.php', [
-                'title' => sprintf('%d %s', $status, \RSSBridge\Http\Response::STATUS_CODES[$status] ?? ''),
-                'message' => $isRateLimited === true
-                    ? 'The bridge was rate limited by the upstream service. Please retry later.'
-                    : 'The requested feed is temporarily unavailable. Please retry later.',
+                'title' => sprintf('%d %s', $status, \RSSBridge\Http\Response::STATUS_CODES[$status]),
+                'message' => $isRateLimited === true ? 'The bridge was rate limited by the upstream service. Please retry later.' : 'The requested feed is temporarily unavailable. Please retry later.',
             ]);
         } else {
             $body = $response->getBody();
@@ -169,12 +141,9 @@ final class CacheMiddleware implements Middleware
             'retry-after' => (string) $retryAfter,
             'cache-control' => 'no-store, no-cache, must-revalidate, max-age=0',
             'pragma' => 'no-cache',
-            'expires' => gmdate('D, d M Y H:i:s') . ' GMT',
+            'expires' => gmdate('D, d M Y H:i:s \G\M\T'),
         ]);
 
-        // Validators from the original response are meaningless for a
-        // rewritten error status; drop them so clients never revalidate an
-        // error as if it were a feed document.
         foreach (['etag', 'last-modified'] as $name) {
             $normalized = $normalized->withoutHeader($name);
         }
@@ -187,11 +156,6 @@ final class CacheMiddleware implements Middleware
         return $normalized;
     }
 
-    /**
-     * Evaluates If-None-Match / If-Modified-Since against a cached 200
-     * response and returns a RFC 9110 compliant 304 (no body, no content
-     * headers) when the client copy is still valid. Returns null otherwise.
-     */
     private function createNotModifiedResponse(Request $request, Response $cached): ?Response
     {
         $etag = $cached->getHeader('etag');
@@ -208,8 +172,6 @@ final class CacheMiddleware implements Middleware
         }
 
         $ifModifiedSince = $request->server('HTTP_IF_MODIFIED_SINCE');
-        // Per RFC 9110, If-Modified-Since must be ignored when If-None-Match
-        // was sent but did not match (the strong validator wins).
         if ($ifNoneMatch !== null) {
             return null;
         }
@@ -218,7 +180,7 @@ final class CacheMiddleware implements Middleware
             $lastModifiedTimestamp = strtotime($lastModified);
             $modifiedSince = strtotime($ifModifiedSince);
             if ($lastModifiedTimestamp !== false && $modifiedSince !== false && $lastModifiedTimestamp <= $modifiedSince) {
-                $modificationTimeGMT = gmdate('D, d M Y H:i:s ', $lastModifiedTimestamp) . 'GMT';
+                $modificationTimeGMT = gmdate('D, d M Y H:i:s \G\M\T', $lastModifiedTimestamp);
                 return new Response('', 304, self::createNotModifiedHeaders([
                     'last-modified' => $modificationTimeGMT,
                     'etag' => $etag,
@@ -254,8 +216,6 @@ final class CacheMiddleware implements Middleware
         $headers = [
             'x-feed-stale' => '1',
             'age' => (string) self::estimateStaleAge($stale),
-            // A stale copy is only good for a short window: after max-age the
-            // client must revalidate, which keeps FreshRSS polls honest.
             'cache-control' => sprintf(
                 'public, max-age=%d, stale-while-revalidate=%d',
                 $maxAge,
@@ -267,8 +227,7 @@ final class CacheMiddleware implements Middleware
         if ($lmTimestamp === false) {
             $lmTimestamp = time();
         }
-        // Expires must always accompany Cache-Control for HTTP/1.0 caches.
-        $headers['expires'] = gmdate('D, d M Y H:i:s ', $lmTimestamp + $maxAge) . 'GMT';
+        $headers['expires'] = gmdate('D, d M Y H:i:s \G\M\T', $lmTimestamp + $maxAge);
 
         foreach ($headers as $name => $value) {
             $stale = $stale->withHeader($name, $value);
@@ -351,19 +310,14 @@ final class CacheMiddleware implements Middleware
             return $response
                 ->withHeader('etag', $etag)
                 ->withHeader('cache-control', sprintf('public, max-age=%d, stale-while-revalidate=%d', $maxAge, $staleWhileRevalidate))
-                ->withHeader('expires', gmdate('D, d M Y H:i:s ', time() + $maxAge) . 'GMT')
+                ->withHeader('expires', gmdate('D, d M Y H:i:s \G\M\T', time() + $maxAge))
                 ->withHeader('vary', 'Accept-Encoding');
         }
 
-        // Error responses (4xx/5xx) must never be cached by shared caches or
-        // clients: FreshRSS needs to see the real status code (429/503 with
-        // Retry-After) on its very next poll, not a copy replayed by an
-        // intermediate cache. Negative caching is handled exclusively by the
-        // bridge's own cache layer.
         return $response
             ->withHeader('cache-control', 'no-store, no-cache, must-revalidate, max-age=0')
             ->withHeader('pragma', 'no-cache')
-            ->withHeader('expires', gmdate('D, d M Y H:i:s') . ' GMT');
+            ->withHeader('expires', gmdate('D, d M Y H:i:s \G\M\T'));
     }
 
     private static function etagMatches(string $ifNoneMatch, string $etag): bool
@@ -418,7 +372,7 @@ final class CacheMiddleware implements Middleware
     private static function addDateHeader(array $headers): array
     {
         if (isset($headers['date']) === false) {
-            $headers['date'] = gmdate('D, d M Y H:i:s') . ' GMT';
+            $headers['date'] = gmdate('D, d M Y H:i:s \G\M\T');
         }
         return $headers;
     }

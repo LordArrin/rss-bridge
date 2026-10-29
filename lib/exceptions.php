@@ -208,7 +208,7 @@ function httpStatusFromException(\Throwable $e): array
 {
     if ($e instanceof \RateLimitException) {
         $retryAfter = $e->retryAfter ?? 3600;
-        return [429, ['retry-after' => (string) max(1, min(86400, (int) $retryAfter))]];
+        return [429, ['retry-after' => (string) max(1, min(86400, $retryAfter))]];
     }
 
     if ($e instanceof \CloudFlareException) {
@@ -218,7 +218,7 @@ function httpStatusFromException(\Throwable $e): array
 
     if ($e instanceof \ServiceUnavailableException) {
         $retryAfter = $e->retryAfter ?? 600;
-        return [503, ['retry-after' => (string) max(1, min(86400, (int) $retryAfter))]];
+        return [503, ['retry-after' => (string) max(1, min(86400, $retryAfter))]];
     }
 
     if ($e instanceof \HttpException) {
@@ -234,7 +234,7 @@ function httpStatusFromException(\Throwable $e): array
         if (($code >= 400 && $code <= 599) === true) {
             $headers = [];
             if ($e->retryAfter !== null && in_array($code, [429, 503], true) === true) {
-                $headers['retry-after'] = (string) max(1, min(86400, (int) $e->retryAfter));
+                $headers['retry-after'] = (string) max(1, min(86400, $e->retryAfter));
             }
             return [$code, $headers];
         }
