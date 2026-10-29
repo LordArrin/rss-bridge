@@ -1077,6 +1077,16 @@ final class Response
     }
 
     /**
+     * Returns a new Response without the given header.
+     */
+    public function withoutHeader(string $name): self
+    {
+        $clone = clone $this;
+        unset($clone->headers[mb_strtolower($name)]);
+        return $clone;
+    }
+
+    /**
      * Returns a new Response with a modified body.
      */
     public function withBody(string $body): self

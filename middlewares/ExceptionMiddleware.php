@@ -23,13 +23,11 @@ final class ExceptionMiddleware implements Middleware
         try {
             return $next($request);
         } catch (\Throwable $e) {
-            $code = $e->getCode();
-
-            if ($e instanceof \HttpException) {
-                $status = ($code >= 400 && $code <= 599) ? $code : 500;
-            } else {
-                $status = 500;
-            }
+            // Map transient failures onto HTTP codes that feed readers such
+            // as FreshRSS understand: 429 (rate limit) and 503 (temporary
+            // unavailability), always with Retry-After. Permanent problems
+            // keep their original status; anything unexpected is a 500.
+            [$status, $headers] = \httpStatusFromException($e);
 
             if ($status < 500) {
                 $this->logger->debug(sprintf(
@@ -41,7 +39,7 @@ final class ExceptionMiddleware implements Middleware
                 $this->logger->error('Exception in ExceptionMiddleware', ['e' => $e]);
             }
 
-            return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $status);
+            return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $status, $headers);
         }
     }
 }
