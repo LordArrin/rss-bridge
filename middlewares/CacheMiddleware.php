@@ -23,6 +23,10 @@ final class CacheMiddleware implements Middleware
     private const STALE_RETRY_AFTER = 60;
     private const DEFAULT_MAX_AGE = 3600;
     private const SERVICE_UNAVAILABLE_RETRY_AFTER = 600;
+    // A slow (timed-out) feed is a temporary problem: FreshRSS honours
+    // Retry-After and comes back in 10 minutes instead of marking the feed
+    // broken or hammering the upstream service on every polling cycle.
+    private const TIMEOUT_RETRY_AFTER = 600;
 
     public function __invoke(Request $request, callable $next): Response
     {
@@ -72,10 +76,25 @@ final class CacheMiddleware implements Middleware
         }
 
         if ($this->isTransientStatus($code) === true || $this->isTimeoutResponse($response) === true) {
+            $isTimeout = $this->isTimeoutResponse($response) === true;
             $stale = $this->serveStale($cacheKey, $response);
             if ($stale !== null) {
-                $retryAfter = min(max(self::STALE_RETRY_AFTER, $this->resolveMaxAge($request)), 3600);
-                return $stale->withHeader('retry-after', (string) $retryAfter);
+                // Slow/timed-out feed with a cached copy available: hand the
+                // reader the last good version and ask it to come back in 10
+                // minutes. FreshRSS imports it as a normal (slightly older)
+                // feed instead of flagging an error on every refresh.
+                $retryAfter = $isTimeout === true
+                    ? self::TIMEOUT_RETRY_AFTER
+                    : min(max(self::STALE_RETRY_AFTER, $this->resolveMaxAge($request)), 3600);
+                // Keep the cached validators in sync with the re-served body:
+                // a stale representation is no longer the one identified by
+                // the old ETag, and serving a new ETag together with the old
+                // Last-Modified would make If-None-Match/If-Modified-Since
+                // contradict each other for clients like FreshRSS.
+                return $stale
+                    ->withoutHeader('etag')
+                    ->withoutHeader('last-modified')
+                    ->withHeader('retry-after', (string) $retryAfter);
             }
             return $this->normalizeTransientResponse($response, $request);
         }
@@ -113,6 +132,11 @@ final class CacheMiddleware implements Middleware
     {
         $code = $response->getCode();
         $isRateLimited = $code === 429;
+        // "Тормозная" лента: апстрим не ответил до истечения таймаута запроса.
+        // Это временная проблема, поэтому всегда просим читателя вернуться
+        // через 10 минут (FreshRSS учитывает Retry-After у 5xx и откладывает
+        // следующую попытку, не помечая ленту сломанной).
+        $isTimeout = $this->isTimeoutResponse($response) === true;
 
         if ($isRateLimited === true) {
             $status = 429;
@@ -125,6 +149,9 @@ final class CacheMiddleware implements Middleware
         $retryAfter = \HttpException::parseRetryAfter($response->getHeader('retry-after'));
         if ($retryAfter === null || $retryAfter < 1) {
             $retryAfter = $defaultRetry;
+        }
+        if ($isTimeout === true && $retryAfter < self::TIMEOUT_RETRY_AFTER) {
+            $retryAfter = self::TIMEOUT_RETRY_AFTER;
         }
         $retryAfter = max(1, min(86400, $retryAfter));
 
@@ -251,6 +278,12 @@ final class CacheMiddleware implements Middleware
 
     private function isTimeoutResponse(Response $response): bool
     {
+        // ExceptionMiddleware tags responses that were produced from a
+        // connection/read timeout (cURL error, 408, 504) with this header.
+        if ($response->getHeader('x-feed-timeout') !== null) {
+            return true;
+        }
+
         if ($response->getCode() !== 0) {
             return false;
         }
