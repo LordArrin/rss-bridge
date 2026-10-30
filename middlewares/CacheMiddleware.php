@@ -351,6 +351,58 @@ final class CacheMiddleware implements Middleware
             ->withHeader('expires', gmdate('D, d M Y H:i:s \G\M\T'));
     }
 
+    /**
+     * Splits an If-None-Match header value into individual etag candidates.
+     *
+     * Quoted etags may themselves contain commas ("a,b"), so a plain
+     * explode(',') would corrupt the list and make valid conditional
+     * requests from clients like FreshRSS fail to match - the reader would
+     * silently re-download unchanged feeds every cycle instead of getting
+     * a cheap 304. This parser walks the value respecting quoted strings
+     * per RFC 9110 section 8.8.3.
+     *
+     * @return string[]
+     */
+    private static function parseIfNoneMatch(string $value): array
+    {
+        $candidates = [];
+        $length = strlen($value);
+        $i = 0;
+
+        while ($i < $length) {
+            // Skip whitespace and commas between list items.
+            while ($i < $length && ($value[$i] === ' ' || $value[$i] === "\t" || $value[$i] === ',')) {
+                $i++;
+            }
+            if ($i >= $length) {
+                break;
+            }
+
+            if ($value[$i] === '"') {
+                $start = ++$i;
+                while ($i < $length && $value[$i] !== '"') {
+                    // Skip quoted-pair escapes inside the etag (RFC 9110 5.6.4).
+                    if ($value[$i] === '\\' && ($i + 1) < $length) {
+                        $i++;
+                    }
+                    $i++;
+                }
+                $candidates[] = substr($value, $start, $i - $start);
+                if ($i < $length) {
+                    $i++; // skip closing quote
+                }
+            } else {
+                $start = $i;
+                while ($i < $length && $value[$i] !== ',') {
+                    $i++;
+                }
+                $candidates[] = trim(substr($value, $start, $i - $start));
+            }
+        }
+
+        return $candidates;
+    }
+
     private static function etagMatches(string $ifNoneMatch, string $etag): bool
     {
         $ifNoneMatch = trim($ifNoneMatch);
@@ -360,8 +412,8 @@ final class CacheMiddleware implements Middleware
 
         $target = self::normalizeEtag($etag);
 
-        foreach (explode(',', $ifNoneMatch) as $candidate) {
-            $candidate = self::normalizeEtag(trim($candidate));
+        foreach (self::parseIfNoneMatch($ifNoneMatch) as $candidate) {
+            $candidate = self::normalizeEtag($candidate);
             if ($candidate !== '' && $candidate === $target) {
                 return true;
             }
