@@ -304,6 +304,7 @@ final class CurlHttpClient implements HttpClient
 {
     private const RESOLVE_OPT = 10203;
     private const IMPERSONATE_OPT = 10240;
+    private const TIMEVALUE_CRITICAL_OPT = 307;
 
     private static function impersonateOption(): int
     {
@@ -313,6 +314,11 @@ final class CurlHttpClient implements HttpClient
     private static function resolveOption(): int
     {
         return defined('CURLOPT_RESOLVE') === true ? (int)constant('CURLOPT_RESOLVE') : self::RESOLVE_OPT;
+    }
+
+    private static function timevalueCriticalOption(): int
+    {
+        return defined('CURLOPT_TIMEVALUE_CRITICAL') === true ? (int)constant('CURLOPT_TIMEVALUE_CRITICAL') : self::TIMEVALUE_CRITICAL_OPT;
     }
 
     /**
@@ -631,11 +637,9 @@ final class CurlHttpClient implements HttpClient
             $curlOptions[CURLOPT_USERAGENT] = $configuredUa;
         }
 
-        // Conditional requests (RFC 9110): If-Modified-Since / If-Unmodified-Since.
-        // Note: libcurl sends these dates in GMT, which is what HTTP requires.
         if ($config['if_not_modified_since'] !== null) {
             $curlOptions[CURLOPT_TIMEVALUE] = $config['if_not_modified_since'];
-            $curlOptions[CURLOPT_TIMEVALUE_CRITICAL] = 1;
+            $curlOptions[self::timevalueCriticalOption()] = 1;
             $curlOptions[CURLOPT_TIMECONDITION] = CURL_TIMECOND_IFMODSINCE;
         } elseif (($config['if_modified_since'] ?? null) !== null) {
             $curlOptions[CURLOPT_TIMEVALUE] = $config['if_modified_since'];

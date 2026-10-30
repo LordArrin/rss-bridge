@@ -117,10 +117,6 @@ function getContents(
     /** @var CacheInterface $cache */
     $cache = $container['cache'];
 
-    // Deliberately no timeout tuning here: some bridges are slow by nature and
-    // must keep using whatever HTTP_TIMEOUT / HTTP_RETRIES the operator set.
-    // Slow feeds are handled further down (stale cache / Retry-After), not by
-    // cutting their upstream requests short.
     $timeout = getenv('HTTP_TIMEOUT');
     $retries = getenv('HTTP_RETRIES');
 
@@ -133,10 +129,8 @@ function getContents(
     $httpHeadersNormalized = [];
     foreach ($httpHeaders as $key => $value) {
         if (is_string($key) === true) {
-            // Modern associative array format: ['Header-Name' => 'Value']
             $httpHeadersNormalized[$key] = (string) $value;
         } else {
-            // Legacy list format fallback: ['Header-Name: Value']
             $parts = explode(':', (string) $value, 2);
             if (count($parts) === 2) {
                 $httpHeadersNormalized[trim($parts[0])] = trim($parts[1]);
@@ -164,12 +158,6 @@ function getContents(
             return $cachedResponse->getBody();
         }
 
-        // Conditional GET (RFC 9110 section 13.1.4): If-None-Match takes
-        // precedence over If-Modified-Since when both validators exist.
-        // Send the raw Last-Modified string instead of re-encoding a parsed
-        // timestamp - some servers reject dates that differ from what they
-        // originally emitted, which would silently defeat the conditional
-        // request and force full downloads on every polling cycle.
         $etag = $cachedResponse->getHeader('etag');
         if (($etag !== null && $etag !== '') === true) {
             $httpHeadersNormalized['if-none-match'] = $etag;
@@ -190,11 +178,7 @@ function getContents(
 
     $response = $httpClient->request($url, $config);
 
-    // A 304 is only meaningful if we still hold the validated representation.
-    // If it is gone (cache eviction/expiry), an empty 304 body must never be
-    // handed to the bridge as if it were the document - re-fetch unconditionally.
     if ($response->getCode() === 304 && ($cachedResponse instanceof Response) === false) {
-        unset($config['if_not_modified_since'], $config['last_modified']);
         foreach (['if-none-match', 'if-modified-since'] as $staleValidator) {
             unset($httpHeadersNormalized[$staleValidator]);
         }
@@ -225,8 +209,6 @@ function getContents(
             break;
         case 304:
             if ($cachedResponse instanceof Response) {
-                // Re-validate the stored freshness window against the new
-                // response headers so Date/Expires/max-age are honoured.
                 $freshUntil = responseFreshUntil($response);
                 if ($freshUntil === null) {
                     $freshUntil = time() + 3600;

@@ -83,9 +83,7 @@ final class CacheMiddleware implements Middleware
                 // reader the last good version and ask it to come back in 10
                 // minutes. FreshRSS imports it as a normal (slightly older)
                 // feed instead of flagging an error on every refresh.
-                $retryAfter = $isTimeout === true
-                    ? self::TIMEOUT_RETRY_AFTER
-                    : min(max(self::STALE_RETRY_AFTER, $this->resolveMaxAge($request)), 3600);
+                $retryAfter = $isTimeout === true ? self::TIMEOUT_RETRY_AFTER : min(max(self::STALE_RETRY_AFTER, $this->resolveMaxAge($request)), 3600);
                 // Keep the cached validators in sync with the re-served body:
                 // a stale representation is no longer the one identified by
                 // the old ETag, and serving a new ETag together with the old
