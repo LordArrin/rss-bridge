@@ -113,7 +113,7 @@ final class DisplayAction implements ActionInterface
             $bridge->collectData();
             $items = $bridge->getItems();
         } catch (\Throwable $e) {
-            [$statusCode, $headers] = \httpStatusFromException($e);
+            [$statusCode, $headers] = \httpStatusFromException($e, (int) $ttl);
 
             if ($e instanceof \RateLimitException) {
                 $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
