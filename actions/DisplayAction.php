@@ -94,12 +94,6 @@ final class DisplayAction implements ActionInterface
     {
         $items = [];
 
-        // Retry-After hints for transient failures are derived from the
-        // effective cache timeout (1/10 of it), so pass the TTL resolved
-        // by __invoke() through to the exception-to-status mapper.
-        $ttl = $request->getAttribute('_resolved_cache_timeout');
-        $ttl = $ttl !== null ? (int) $ttl : $bridge->getCacheTimeout();
-
         try {
             $bridge->loadConfiguration();
 
@@ -119,7 +113,7 @@ final class DisplayAction implements ActionInterface
             $bridge->collectData();
             $items = $bridge->getItems();
         } catch (\Throwable $e) {
-            [$statusCode, $headers] = \httpStatusFromException($e, (int) $ttl);
+            [$statusCode, $headers] = \httpStatusFromException($e);
 
             if ($e instanceof \RateLimitException) {
                 $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));

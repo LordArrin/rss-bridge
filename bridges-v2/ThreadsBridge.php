@@ -9,7 +9,7 @@ use RSSBridge\BridgeAbstract;
 final class ThreadsBridge extends BridgeAbstract
 {
     public const NAME = 'Threads';
-    public const URI = 'https://www.threads.net/';
+    public const URI = 'https://www.threads.com/';
     public const DESCRIPTION = 'Say more with Threads — Instagram\'s new text app.';
     public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 3600;
@@ -33,7 +33,7 @@ final class ThreadsBridge extends BridgeAbstract
     ];
 
     private const THREAD_CODE_LENGTH = 11;
-    private const USERNAME_REGEX = '/^(https?:\/\/)?(www\.)?threads\.net\/(@)?([^\/?\n]+)/';
+    private const USERNAME_REGEX = '/^(https?:\/\/)?(www\.)?threads\.com\/(@)?([^\/?\n]+)/';
 
     private ?string $feedName = null;
 

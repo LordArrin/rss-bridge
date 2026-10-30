@@ -131,31 +131,10 @@ class ServerException extends HttpException
  */
 class RateLimitException extends ClientException
 {
-    /**
-     * @param int|null $retryAfter Delay hint in seconds. Null means "derive
-     * it from the effective cache timeout" (1/10 of it, see
-     * defaultRetryAfterSeconds()); an explicit upstream Retry-After hint
-     * parsed from the response always takes precedence over that default.
-     */
-    public function __construct(string $message = '', ?int $retryAfter = null, ?Response $response = null)
+    public function __construct(string $message = '', int $retryAfter = 3600, ?Response $response = null)
     {
         parent::__construct($message, 429, $response);
-        // An explicit upstream Retry-After header wins over the caller's
-        // value and over the derived default.
-        if ($this->retryAfter === null) {
-            $this->retryAfter = $retryAfter;
-        }
-    }
-
-    /**
-     * Resolves the final retry delay once the effective cache timeout of
-     * the request is known (bridge CACHE_TIMEOUT or ?_cache_timeout).
-     */
-    public function resolveRetryAfter(?int $effectiveCacheTimeout = null): void
-    {
-        if (($this->response->getHeader('retry-after')) === null && $this->retryAfter === null) {
-            $this->retryAfter = defaultRetryAfterSeconds($effectiveCacheTimeout);
-        }
+        $this->retryAfter = $retryAfter;
     }
 }
 
@@ -178,7 +157,7 @@ function throwServerException(string $message = '', int $code = 500): never
 /**
  * Helper function to throw RateLimitException.
  */
-function throwRateLimitException(string $message = '', ?int $retryAfter = null): never
+function throwRateLimitException(string $message = '', int $retryAfter = 3600): never
 {
     throw new RateLimitException($message, $retryAfter);
 }
@@ -193,56 +172,19 @@ function throwRateLimitException(string $message = '', ?int $retryAfter = null):
  */
 class ServiceUnavailableException extends ServerException
 {
-    /**
-     * @param int|null $retryAfter Delay hint in seconds. Null means "derive
-     * it from the effective cache timeout" (1/10 of it, see
-     * defaultRetryAfterSeconds()); an explicit upstream Retry-After hint
-     * parsed from the response always takes precedence over that default.
-     */
-    public function __construct(string $message = '', ?int $retryAfter = null, ?Response $response = null)
+    public function __construct(string $message = '', int $retryAfter = 600, ?Response $response = null)
     {
         parent::__construct($message, 503, $response);
-        if ($this->retryAfter === null && $retryAfter !== null) {
-            $this->retryAfter = max(0, min(86400, $retryAfter));
-        }
-    }
-
-    /**
-     * Resolves the final retry delay once the effective cache timeout of
-     * the request is known (bridge CACHE_TIMEOUT or ?_cache_timeout).
-     */
-    public function resolveRetryAfter(?int $effectiveCacheTimeout = null): void
-    {
-        if (($this->response->getHeader('retry-after')) === null && $this->retryAfter === null) {
-            $this->retryAfter = defaultRetryAfterSeconds($effectiveCacheTimeout);
-        }
+        $this->retryAfter = max(0, min(86400, $retryAfter));
     }
 }
 
 /**
  * Helper function to throw ServiceUnavailableException.
  */
-function throwServiceUnavailableException(string $message = '', ?int $retryAfter = null): never
+function throwServiceUnavailableException(string $message = '', int $retryAfter = 600): never
 {
     throw new ServiceUnavailableException($message, $retryAfter);
-}
-
-/**
- * Default Retry-After delay (seconds) for transient failures.
- *
- * Computed as one tenth of the effective cache timeout so that feed
- * readers such as FreshRSS retry shortly after the bridge's own cached
- * entry would have expired anyway: the reader comes back exactly when
- * the bridge is likely to have fresh data again. Falls back to the
- * default bridge CACHE_TIMEOUT when no per-request value is available.
- */
-function defaultRetryAfterSeconds(?int $effectiveCacheTimeout = null): int
-{
-    $ttl = $effectiveCacheTimeout;
-    if ($ttl === null || $ttl <= 0) {
-        $ttl = \BridgeAbstract::CACHE_TIMEOUT;
-    }
-    return max(1, min(86400, intdiv($ttl, 10)));
 }
 
 /**
@@ -253,19 +195,8 @@ function defaultRetryAfterSeconds(?int $effectiveCacheTimeout = null): int
  *  - HTTP 429 Too Many Requests with Retry-After for rate limiting
  *  - HTTP 503 Service Unavailable with Retry-After for temporary problems
  *    (Cloudflare challenges, upstream timeouts, cURL timeouts)
- *  - HTTP 502 Bad Gateway with Retry-After when the upstream itself
- *    answered 502 (upstream 504 is reported as a timeout, see above):
- *    it keeps the 5xx class FreshRSS treats as a retryable error, while
- *    making clear the failure came from upstream rather than from this
- *    bridge instance
  *  - The original status code for other HttpExceptions
  *  - HTTP 500 for everything unexpected
- *
- * Unless an explicit delay was given (by the bridge or parsed from an
- * upstream Retry-After header), the Retry-After hint defaults to one
- * tenth of $effectiveCacheTimeout (the bridge's CACHE_TIMEOUT or the
- * resolved ?_cache_timeout), so readers retry right around the time the
- * cached entry would have expired anyway.
  *
  * Transient failures must never be reported as permanent errors (and in
  * particular never as 304 Not Modified), because FreshRSS would mark the
@@ -273,29 +204,20 @@ function defaultRetryAfterSeconds(?int $effectiveCacheTimeout = null): int
  *
  * @return array{0: int, 1: array<string,string>} Status code + headers
  */
-function httpStatusFromException(\Throwable $e, ?int $effectiveCacheTimeout = null): array
+function httpStatusFromException(\Throwable $e): array
 {
-    // When the effective cache timeout is known, let transient exceptions
-    // derive their default Retry-After from it (1/10 of the TTL).
-    if ($effectiveCacheTimeout !== null) {
-        if ($e instanceof \RateLimitException || $e instanceof \ServiceUnavailableException) {
-            $e->resolveRetryAfter($effectiveCacheTimeout);
-        }
-    }
-
     if ($e instanceof \RateLimitException) {
-        $retryAfter = $e->retryAfter ?? defaultRetryAfterSeconds($effectiveCacheTimeout);
+        $retryAfter = $e->retryAfter ?? 3600;
         return [429, ['retry-after' => (string) max(1, min(86400, $retryAfter))]];
     }
 
     if ($e instanceof \CloudFlareException) {
         // Cloudflare challenges are temporary: ask the reader to come back later.
-        $retryAfter = $e->retryAfter ?? defaultRetryAfterSeconds($effectiveCacheTimeout);
-        return [503, ['retry-after' => (string) max(1, min(86400, $retryAfter))]];
+        return [503, ['retry-after' => '600']];
     }
 
     if ($e instanceof \ServiceUnavailableException) {
-        $retryAfter = $e->retryAfter ?? defaultRetryAfterSeconds($effectiveCacheTimeout);
+        $retryAfter = $e->retryAfter ?? 600;
         return [503, ['retry-after' => (string) max(1, min(86400, $retryAfter))]];
     }
 
@@ -306,16 +228,7 @@ function httpStatusFromException(\Throwable $e, ?int $effectiveCacheTimeout = nu
 
         if ($isTimeout === true) {
             // Upstream timeout: a temporary problem, not a permanent failure.
-            $retryAfter = $e->retryAfter ?? defaultRetryAfterSeconds($effectiveCacheTimeout);
-            return [503, ['retry-after' => (string) max(1, min(86400, $retryAfter))]];
-        }
-
-        if (in_array($code, [502], true) === true) {
-            // The upstream itself failed. Keep the retryable 5xx class but
-            // report it as Bad Gateway with Retry-After, so FreshRSS backs
-            // off instead of treating it as a permanent 500.
-            $retryAfter = $e->retryAfter ?? defaultRetryAfterSeconds($effectiveCacheTimeout);
-            return [502, ['retry-after' => (string) max(1, min(86400, $retryAfter))]];
+            return [503, ['retry-after' => '600']];
         }
 
         if (($code >= 400 && $code <= 599) === true) {
