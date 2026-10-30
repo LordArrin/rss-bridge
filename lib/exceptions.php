@@ -233,26 +233,14 @@ function throwServiceUnavailableException(string $message = '', ?int $retryAfter
  * Computed as one tenth of the effective cache timeout so that feed
  * readers such as FreshRSS retry shortly after the bridge's own cached
  * entry would have expired anyway: the reader comes back exactly when
- * the bridge is likely to have fresh data again. When no per-request
- * value is available (e.g. an exception escaping outside the display
- * action), falls back to the cache timeout of the default bridge class
- * (\RSSBridge\BridgeAbstract::CACHE_TIMEOUT, i.e. 3600s => 360s).
+ * the bridge is likely to have fresh data again. Falls back to the
+ * default bridge CACHE_TIMEOUT when no per-request value is available.
  */
 function defaultRetryAfterSeconds(?int $effectiveCacheTimeout = null): int
 {
     $ttl = $effectiveCacheTimeout;
     if ($ttl === null || $ttl <= 0) {
-        // The constant lives on the namespaced bridge class, which is not
-        // resolvable from this global-scope file, so look it up via the
-        // reflection API instead of a hard class reference.
-        try {
-            $ttl = (int) (new \ReflectionClassConstant(\RSSBridge\BridgeAbstract::class, 'CACHE_TIMEOUT'))->getValue();
-        } catch (\ReflectionException $e) {
-            $ttl = 3600;
-        }
-    }
-    if ($ttl <= 0) {
-        $ttl = 3600;
+        $ttl = \BridgeAbstract::CACHE_TIMEOUT;
     }
     return max(1, min(86400, intdiv($ttl, 10)));
 }
