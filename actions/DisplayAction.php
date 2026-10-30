@@ -94,6 +94,12 @@ final class DisplayAction implements ActionInterface
     {
         $items = [];
 
+        // Retry-After hints for transient failures are derived from the
+        // effective cache timeout (1/10 of it), so pass the TTL resolved
+        // by __invoke() through to the exception-to-status mapper.
+        $ttl = $request->getAttribute('_resolved_cache_timeout');
+        $ttl = $ttl !== null ? (int) $ttl : $bridge->getCacheTimeout();
+
         try {
             $bridge->loadConfiguration();
 
