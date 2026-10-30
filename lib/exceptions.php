@@ -40,6 +40,12 @@ class HttpException extends \Exception
 
     /**
      * Parses a Retry-After header value per RFC 9110 section 10.2.3.
+     *
+     * Accepts either delta-seconds ("120") or an HTTP-date. Negative or
+     * otherwise invalid delays are rejected (null) so that callers fall back
+     * to their own defaults instead of forwarding a bogus value such as
+     * "Retry-After: -5", which some feed readers misinterpret as an expired
+     * date and answer with immediate retry storms against the upstream.
      */
     public static function parseRetryAfter(?string $value): ?int
     {
@@ -47,14 +53,24 @@ class HttpException extends \Exception
             return null;
         }
         $value = trim($value);
+        if ($value[0] === '-') {
+            return null;
+        }
         if (ctype_digit($value) === true) {
-            return max(0, min(86400, (int) $value));
+            $seconds = (int) $value;
+            return $seconds > 0 ? min(86400, $seconds) : null;
         }
         $timestamp = strtotime($value);
         if ($timestamp === false) {
             return null;
         }
-        return max(0, min(86400, $timestamp - time()));
+        $delay = $timestamp - time();
+        if ($delay < 1) {
+            // Past or "now" dates mean "retry immediately", which we do not
+            // want to advertise: let the caller pick its default instead.
+            return null;
+        }
+        return min(86400, $delay);
     }
 
     /**
