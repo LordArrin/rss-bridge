@@ -50,6 +50,15 @@ custom_timeout = false
 ; They also expose a strong ETag validator, so readers and intermediaries
 ; can revalidate with If-None-Match (or If-Modified-Since) and receive a
 ; body-less 304 Not Modified whenever the feed content has not changed.
+;
+; Transient failures (rate limits, upstream timeouts, Cloudflare
+; challenges) are reported as HTTP 429/502/503 with a Retry-After hint
+; equal to one tenth of that same effective cache timeout (the bridge's
+; CACHE_TIMEOUT, or ?_cache_timeout when custom_timeout = true), clamped
+; to 1..86400 seconds — unless the bridge or the upstream response
+; provides an explicit delay, which always takes precedence. Feed readers
+; such as FreshRSS then come back right around the time the cached entry
+; would have expired anyway.
 
 [proxy_profile_direct]
 

@@ -36,23 +36,40 @@ final class CacheMiddleware implements Middleware
         }
 
         $cacheKey = $this->createCacheKey($request);
-        $cachedResponse = $this->cache->get($cacheKey);
 
-        if ($cachedResponse instanceof Response) {
-            if ($cachedResponse->getCode() === 200) {
-                $notModified = $this->createNotModifiedResponse($request, $cachedResponse);
-                if ($notModified !== null) {
-                    return $notModified;
+        // ?_cache_timeout=0 is the documented cache-bypass: it must always
+        // hit the bridge. Serving cached or stale content here would
+        // silently ignore the freshness contract FreshRSS (and
+        // intermediaries revalidating with max-stale=0) rely on.
+        $bypassCache = (int) $request->get('_cache_timeout', -1) === 0;
+
+        if ($bypassCache === false) {
+            $cachedResponse = $this->cache->get($cacheKey);
+
+            if ($cachedResponse instanceof Response) {
+                if ($cachedResponse->getCode() === 200) {
+                    $notModified = $this->createNotModifiedResponse($request, $cachedResponse);
+                    if ($notModified !== null) {
+                        return $notModified;
+                    }
                 }
+                return $this->attachCacheHeaders($cachedResponse, $this->resolveMaxAge($request), $cachedResponse->getHeader('etag'));
             }
-            return $this->attachCacheHeaders($cachedResponse, $this->resolveMaxAge($request), $cachedResponse->getHeader('etag'));
         }
 
-        $staleEntry = $this->cache->getWithStale($cacheKey);
-        $staleResponse = $staleEntry['stale'] ?? null;
-        if ($staleResponse instanceof Response && $staleResponse->getCode() === 200) {
-            if ($this->cache->acquireLock($cacheKey, self::REGENERATION_LOCK_TTL) === false) {
-                return $this->attachStaleHeaders($staleResponse);
+        if ($bypassCache === false) {
+            $staleEntry = $this->cache->getWithStale($cacheKey);
+            $staleResponse = $staleEntry['stale'] ?? null;
+            if ($staleResponse instanceof Response && $staleResponse->getCode() === 200) {
+                // Single-flight regeneration: only one process may refresh an
+                // expired entry at a time. If the lease is held by another
+                // process, serve stale (marked with X-Feed-Stale) instead of
+                // stampeding upstream. acquireLock() fails open (returns true)
+                // when the lock layer itself is broken, so feeds keep
+                // regenerating even if memcached is down.
+                if ($this->cache->acquireLock($cacheKey, self::REGENERATION_LOCK_TTL) === false) {
+                    return $this->attachStaleHeaders($staleResponse);
+                }
             }
         }
 
@@ -72,10 +89,12 @@ final class CacheMiddleware implements Middleware
         }
 
         if ($this->isTransientStatus($code) === true || $this->isTimeoutResponse($response) === true) {
-            $stale = $this->serveStale($cacheKey, $response);
-            if ($stale !== null) {
-                $retryAfter = min(max(self::STALE_RETRY_AFTER, $this->resolveMaxAge($request)), 3600);
-                return $stale->withHeader('retry-after', (string) $retryAfter);
+            if ($bypassCache === false) {
+                $stale = $this->serveStale($cacheKey, $response);
+                if ($stale !== null) {
+                    $retryAfter = min(max(self::STALE_RETRY_AFTER, $this->resolveMaxAge($request)), 3600);
+                    return $stale->withHeader('retry-after', (string) $retryAfter);
+                }
             }
             return $this->normalizeTransientResponse($response, $request);
         }
