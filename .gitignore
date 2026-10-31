@@ -1,1 +1,8 @@
-node_modules/
+/vendor/*
+composer.phar
+
+# Certificates and passwords
+*.pem
+*.key
+*.crt
+.htpasswd

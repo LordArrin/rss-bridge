@@ -647,15 +647,12 @@ input:focus::placeholder { opacity: 0; }
 .info {
     cursor: pointer;
     opacity: 0.7;
-    width: 22px;
-    height: 22px;
-    /* Keep the info buttons on top of sibling grid cells so their tooltips
-       are not painted over by neighbouring form controls. */
-    z-index: 50;
+    width: 18px;
+    height: 18px;
     font-size: 11px;
     font-weight: bold;
     font-style: normal;
-    line-height: 22px;
+    line-height: 18px;
     text-align: center;
     color: var(--md-on-primary-container);
     background: var(--md-primary-container);
@@ -665,6 +662,7 @@ input:focus::placeholder { opacity: 0; }
     align-items: center;
     justify-content: center;
     position: relative;
+    z-index: 1;
     margin-left: 6px;
     flex-shrink: 0;
 }
@@ -677,19 +675,8 @@ input:focus::placeholder { opacity: 0; }
     z-index: 1000;
 }
 
-/* Keep the active (tapped/hovered) info button above its neighbours so the
-   tooltip it spawns is never covered by other form controls. */
-.info.active,
-.info:focus-visible {
-    opacity: 1;
-    background: var(--md-primary);
-    color: var(--md-on-primary);
-    outline: none;
-    z-index: 1000;
-}
-
 /* Tooltip popup */
-.podskazka {
+.tooltip {
     position: absolute;
     bottom: calc(100% + 8px);
     left: 50%;
@@ -705,7 +692,7 @@ input:focus::placeholder { opacity: 0; }
     white-space: normal;
     word-wrap: break-word;
     overflow-wrap: break-word;
-    max-width: min(280px, calc(100vw - 32px));
+    max-width: 280px;
     min-width: 120px;
     width: max-content;
     opacity: 0;
@@ -715,31 +702,27 @@ input:focus::placeholder { opacity: 0; }
     z-index: 9999;
 }
 
-.podskazka.visible {
+.tooltip.visible {
     opacity: 1;
-    /* On touch devices the tooltip must be tappable/dismissible,
-       so allow pointer events while it is visible. */
-    pointer-events: auto;
 }
 
 /* Tooltip position modifiers (handled via JS) */
-.podskazka.podskazka-bottom {
+.tooltip.tooltip-bottom {
     bottom: auto;
     top: calc(100% + 8px);
 }
 
-.podskazka.podskazka-top {
+.tooltip.tooltip-top {
     bottom: calc(100% + 8px);
     top: auto;
 }
 
-.podskazka.podskazka-left {
+.tooltip.tooltip-left {
     left: 0;
-    right: auto;
     transform: none;
 }
 
-.podskazka.podskazka-right {
+.tooltip.tooltip-right {
     left: auto;
     right: 0;
     transform: none;
@@ -873,9 +856,7 @@ input:focus::placeholder { opacity: 0; }
     /* Performance optimization for large lists */
     content-visibility: auto;
     contain-intrinsic-size: auto 300px;
-    /* Note: no `contain: paint` here — it would clip tooltips/popups that
-       intentionally overflow the card bounds (see .tooltip below). */
-    contain: style;
+    contain: style paint;
 }
 
 .bridge-card > h2,
@@ -1217,7 +1198,13 @@ section.feeditem h2 a:hover {
     text-decoration: underline;
 }
 
-section.feeditem .item-content img {\n    max-width: 100%;\n    height: auto;\n    border-radius: var(--md-shape-sm);\n    margin: 8px 0;\n}\n\n/* Embedded media and wide content inside feed items must never overflow\n   the viewport on narrow (smartphone) screens. */\nsection.feeditem .item-content iframe,\nsection.feeditem .item-content video,\nsection.feeditem .item-content embed,\nsection.feeditem .item-content object {\n    max-width: 100%;\n    width: 100%;\n    height: auto;\n    aspect-ratio: 16 / 9;\n}\n\nsection.feeditem .item-content table {\n    display: block;\n    overflow-x: auto;\n    -webkit-overflow-scrolling: touch;\n    max-width: 100%;\n}\n\nsection.feeditem .item-content pre,\nsection.feeditem .item-content code {\n    white-space: pre-wrap;\n    overflow-wrap: anywhere;\n    max-width: 100%;\n}\n\nsection.feeditem .item-content p,\nsection.feeditem .item-content a {\n    overflow-wrap: anywhere;\n}\n
+section.feeditem .item-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--md-shape-sm);
+    margin: 8px 0;
+}
+
 section.feeditem .item-categories ul,
 section.feeditem .item-attachments ul {
     display: flex;
@@ -1303,7 +1290,6 @@ form {
     font-size: 0.7rem;
     line-height: 1;
     vertical-align: middle;
-    max-width: 100%;
     transition: opacity var(--md-motion-duration-short) var(--md-motion-easing-standard);
 }
 
@@ -1342,12 +1328,6 @@ form {
     background: var(--md-primary);
     color: var(--md-on-primary);
     vertical-align: middle;
-    /* Long values (e.g. docker image tags, e-mail addresses) must wrap
-       instead of pushing the badge outside the viewport on phones */
-    max-width: calc(100vw - 120px);
-    white-space: normal;
-    word-break: break-all;
-    overflow-wrap: anywhere;
 }
 
 .footer-counter {
@@ -1690,25 +1670,6 @@ html.has-favorites.favorites-loaded .bridge-card {
     .container {
         width: 100%;
         padding: 8px;
-        /* Prevent wide children (long URLs, badges, code blocks) from
-           creating horizontal overflow on narrow screens */
-        max-width: 100vw;
-        box-sizing: border-box;
-        overflow-x: clip;
-    }
-
-    header {
-        padding: 16px 8px;
-    }
-
-    header img {
-        max-height: 56px;
-        padding: 10px 16px;
-    }
-
-    .footer-badges {
-        padding: 12px 8px;
-        max-width: 100%;
     }
 
     .searchbar {
@@ -1735,53 +1696,15 @@ html.has-favorites.favorites-loaded .bridge-card {
         margin: 6px 2px;
     }
 
-    /* Info (help) buttons MUST stay visible on mobile — tapping them is the
-       only way to read parameter hints on touch devices. Make them bigger
-       instead of hiding them. */
     .info, .no-info {
-        display: inline-flex;
-    }
-
-    .info {
-        width: 32px;
-        height: 32px;
-        line-height: 32px;
-        font-size: 13px;
-        margin-left: 0;
+        display: none;
     }
 
     /* Stack parameters grid vertically on mobile */
     .parameters {
-        grid-template-columns: minmax(0, 1fr) 40px;
-        grid-column-gap: 8px;
+        grid-template-columns: 1fr;
+        grid-column-gap: 4px;
         grid-row-gap: 4px;
-    }
-
-    /* Label spans the full row, input takes column 1, info button column 2 */
-    .parameters label {
-        grid-column: 1 / -1;
-    }
-
-    .parameters .info,
-    .parameters .no-info {
-        justify-self: center;
-    }
-
-    /* On narrow screens tooltips are positioned via fixed coordinates by JS,
-       so drop the class-based offsets to avoid conflicts. */
-    .tooltip.tooltip-top,
-    .tooltip.tooltip-bottom,
-    .tooltip.tooltip-left,
-    .tooltip.tooltip-right {
-        position: fixed;
-        bottom: auto;
-        top: auto;
-        left: auto;
-        right: auto;
-        transform: none;
-        max-width: calc(100vw - 24px);
-        min-width: 0;
-        width: auto;
     }
 
     .parameters label {
@@ -1821,28 +1744,6 @@ html.has-favorites.favorites-loaded .bridge-card {
 
     .bridge-card {
         animation-duration: 0.4s;
-    }
-
-    /* Notifications stack vertically on narrow screens so action buttons
-       never get pushed beyond the screen edge */
-    .notification {
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-
-    .notification-actions {
-        flex: 1 1 100%;
-    }
-
-    .notification-button {
-        flex: 0 1 auto;
-        min-height: 44px;
-    }
-
-    /* Inline validation toasts must stay inside the viewport */
-    .inline-toast {
-        max-width: calc(100vw - 48px);
-        overflow-wrap: anywhere;
     }
     
     .favorite-btn,

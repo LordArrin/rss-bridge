@@ -150,248 +150,47 @@ const RssBridge = (() => {
     };
 
     const TooltipManager = {
-        isTouch() {
-            return window.matchMedia('(hover: none)').matches || 'ontouchstart' in window;
-        },
-
         init() {
-            // Move every native `title` attribute into `data-hint` and delete
-            // it. Without `title` the browser cannot render its own tooltip.
-            document.querySelectorAll('[title]').forEach(el => {
-                if (!el.matches('.info')) return;
-                if (!el.getAttribute('data-hint')) {
-                    el.setAttribute('data-hint', el.getAttribute('title'));
+            document.querySelectorAll('.info[data-title], .info[title]').forEach(el => {
+                if (el.getAttribute('title') && !el.getAttribute('data-title')) {
+                    el.setAttribute('data-title', el.getAttribute('title'));
+                    el.removeAttribute('title');
                 }
-                el.removeAttribute('title');
-            });
-
-            document.querySelectorAll('.info[data-hint]').forEach(el => this.initElement(el));
-
-            // Dismiss any open hint when tapping/clicking outside of it.
-            // Using 'pointerdown' makes dismissal instant on touch devices,
-            // but we must ignore pointers that land on an info button or on
-            // a hint we have just opened — otherwise the same tap that opens
-            // the popup would immediately close it again.
-            document.addEventListener('pointerdown', (e) => {
-                const target = e.target instanceof Element ? e.target : null;
-                if (target && (target.closest('.info') || target.closest(this.HINT_SELECTOR))) return;
-                if (Date.now() - this.justToggledAt < 500) return;
-                this.hideAll();
-            });
-
-            // Fallback for environments without Pointer Events: plain clicks.
-            if (!('PointerEvent' in window)) {
-                document.addEventListener('click', (e) => {
-                    const target = e.target instanceof Element ? e.target : null;
-                    if (target && (target.closest('.info') || target.closest(this.HINT_SELECTOR))) return;
-                    if (Date.now() - this.justToggledAt < 500) return;
-                    this.hideAll();
-                });
-            }
-
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') this.hideAll();
-            });
-
-            // Reposition fixed hints on scroll/resize so they never
-            // get cut off by the viewport edges.
-            window.addEventListener('scroll', () => this.repositionVisible(), { passive: true, capture: true });
-            window.addEventListener('resize', () => this.repositionVisible());
-        },
-
-        toggle(infoEl) {
-            const hint = infoEl.querySelector(this.HINT_SELECTOR);
-            this.justToggledAt = Date.now();
-            if (this.activeInfoEl === infoEl && hint && hint.classList.contains('visible')) {
-                this.hide(infoEl);
-            } else {
-                this.hideAll();
-                this.show(infoEl);
-            }
-        },
-
-        initElement(el) {
-            if (el.dataset.podskazkaInit) return;
-            el.dataset.podskazkaInit = '1';
-
-            // Belt & braces: never let the browser spawn its own bubble.
-            el.removeAttribute('title');
-
-            // Make the icon keyboard-accessible
-            if (!el.hasAttribute('tabindex')) {
-                el.setAttribute('tabindex', '0');
-                el.setAttribute('role', 'button');
-                el.setAttribute('aria-label', 'Show help');
-                el.setAttribute('aria-expanded', 'false');
-            }
-
-            // Hover devices: classic mouseenter/mouseleave behaviour.
-            // Guarded against sticky hover states on touch screens where
-            // some mobile browsers fire synthetic mouse events after a tap.
-            el.addEventListener('mouseenter', () => {
-                if (this.isTouch()) return;
-                this.show(el);
-            });
-            el.addEventListener('mouseleave', () => {
-                if (this.isTouch()) return;
-                this.hide(el);
-            });
-
-            // Touch devices / keyboard: tap toggles the hint.
-            // Bound on the element itself so it works regardless of
-            // whether a real "click" event is synthesized after touchend.
-            el.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.toggle(el);
-            });
-
-            el.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    this.toggle(el);
-                } else if (e.key === 'Escape') {
-                    this.hide(el);
-                }
-            });
-        },
-
-        repositionVisible() {
-            document.querySelectorAll(`${this.HINT_SELECTOR}.visible`).forEach(hint => {
-                const infoEl = hint.parentElement;
-                if (infoEl && infoEl.classList.contains('info')) {
-                    this.place(infoEl, hint);
-                }
-
-                // Make the icon keyboard-accessible
-                if (!el.hasAttribute('tabindex')) {
-                    el.setAttribute('tabindex', '0');
-                    el.setAttribute('role', 'button');
-                    el.setAttribute('aria-label', 'Show help');
-                }
-
-                // Hover devices: classic mouseenter/mouseleave behaviour
+                
                 el.addEventListener('mouseenter', (e) => this.show(e.target));
                 el.addEventListener('mouseleave', (e) => this.hide(e.target));
-
-                // Touch devices / keyboard: tap toggles the tooltip
-                el.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const tooltip = el.querySelector('.tooltip');
-                    if (tooltip && tooltip.classList.contains('visible')) {
-                        this.hide(el);
-                    } else {
-                        this.hideAll();
-                        this.show(el);
-                    }
-                });
-
-                el.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        el.click();
-                    } else if (e.key === 'Escape') {
-                        this.hide(el);
-                    }
-                });
             });
-
-            // Dismiss any open tooltip when tapping outside of it
-            document.addEventListener('click', (e) => {
-                if (!e.target.closest('.info')) this.hideAll();
-            });
-
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') this.hideAll();
-            });
-
-            // Reposition fixed tooltips on scroll/resize so they never
-            // get cut off by the viewport edges.
-            window.addEventListener('scroll', () => this.repositionVisible(), { passive: true, capture: true });
-            window.addEventListener('resize', () => this.repositionVisible());
-        },
-
-        repositionVisible() {
-            document.querySelectorAll('.tooltip.visible').forEach(tooltip => {
-                const infoEl = tooltip.parentElement;
-                if (infoEl && infoEl.classList.contains('info')) {
-                    this.place(infoEl, tooltip);
-                }
-            });
-        },
-
-        hideAll() {
-            document.querySelectorAll('.info.active').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.tooltip.visible').forEach(t => t.classList.remove('visible'));
         },
 
         show(infoEl) {
             const tooltip = infoEl.querySelector('.tooltip') || this.createTooltip(infoEl);
-            infoEl.classList.add('active');
+            const card = infoEl.closest('.bridge-card');
+            if (!card) return;
 
             tooltip.classList.remove('tooltip-top', 'tooltip-bottom', 'tooltip-left', 'tooltip-right');
             tooltip.style.left = '';
             tooltip.style.right = '';
-            tooltip.style.top = '';
             tooltip.style.transform = '';
             tooltip.classList.add('visible');
-
-            this.place(infoEl, tooltip);
-        },
-
-        place(infoEl, tooltip) {
-            const narrow = window.innerWidth < 768;
-            const gap = 8;
-            const margin = 12;
-
+            
             const infoRect = infoEl.getBoundingClientRect();
-            const tooltipRect = tooltip.getBoundingClientRect();
-            const vw = window.innerWidth;
-            const vh = window.innerHeight;
-
-            if (narrow) {
-                // On small screens position with fixed viewport coordinates
-                // so the tooltip can never overflow the card or the screen.
-                tooltip.style.position = 'fixed';
-
-                let left = infoRect.left + infoRect.width / 2 - tooltipRect.width / 2;
-                left = Math.min(Math.max(left, margin), vw - tooltipRect.width - margin);
-                tooltip.style.left = `${left}px`;
-
-                let top = infoRect.top - tooltipRect.height - gap;
-                if (top < margin) {
-                    // Not enough space above → show below
-                    top = infoRect.bottom + gap;
-                }
-                if (top + tooltipRect.height > vh - margin) {
-                    // Also doesn't fit below → pin to the bottom edge
-                    top = Math.max(margin, vh - tooltipRect.height - margin);
-                }
-                tooltip.style.top = `${top}px`;
-                return;
-            }
-
-            tooltip.style.position = '';
-
-            const card = infoEl.closest('.bridge-card');
-            if (!card) return;
-
             const cardRect = card.getBoundingClientRect();
+            const tooltipRect = tooltip.getBoundingClientRect();
+
             const relTop = infoRect.top - cardRect.top;
             const relLeft = infoEl.offsetLeft;
             const cardHeight = cardRect.height;
             const cardWidth = cardRect.width;
 
             if (relTop < cardHeight / 3) {
-                hint.classList.add('podskazka-bottom');
+                tooltip.classList.add('tooltip-bottom');
             } else {
-                hint.classList.add('podskazka-top');
+                tooltip.classList.add('tooltip-top');
             }
 
-            const tooltipWidth = tooltip.getBoundingClientRect().width;
+            const tooltipWidth = tooltipRect.width;
             const iconCenterX = relLeft + infoEl.offsetWidth / 2;
-
+            
             if (iconCenterX - tooltipWidth / 2 < 0) {
                 tooltip.classList.add('tooltip-left');
             } else if (iconCenterX + tooltipWidth / 2 > cardWidth) {
@@ -402,44 +201,15 @@ const RssBridge = (() => {
         hide(infoEl) {
             const tooltip = infoEl.querySelector('.tooltip');
             if (tooltip) tooltip.classList.remove('visible');
-            infoEl.classList.remove('active');
         },
 
         createTooltip(infoEl) {
             const tooltip = document.createElement('div');
             tooltip.className = 'tooltip';
-            tooltip.setAttribute('role', 'tooltip');
             tooltip.textContent = infoEl.getAttribute('data-title');
             infoEl.appendChild(tooltip);
             return tooltip;
         }
-    };
-
-    // Watch for dynamically added help buttons (e.g. injected bridge forms)
-    // and wire them up the same way as the ones present at page load.
-    const observeDynamicInfoButtons = () => {
-        if (!('MutationObserver' in window)) return;
-        const processNode = (node) => {
-            if (!(node instanceof HTMLElement)) return;
-            const els = [];
-            if (node.matches && node.matches('.info')) els.push(node);
-            if (node.querySelectorAll) els.push(...node.querySelectorAll('.info'));
-            els.forEach(el => {
-                if (!el.hasAttribute('data-hint') && el.hasAttribute('title')) {
-                    el.setAttribute('data-hint', el.getAttribute('title'));
-                    el.removeAttribute('title');
-                }
-                if (el.getAttribute('data-hint')) {
-                    PodskazkaManager.initElement(el);
-                }
-            });
-        };
-        const observer = new MutationObserver((mutations) => {
-            for (const m of mutations) {
-                m.addedNodes.forEach(processNode);
-            }
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
     };
 
     const Search = {
@@ -590,14 +360,9 @@ const RssBridge = (() => {
     const PlaceholderHelper = {
         init() {
             document.addEventListener('contextmenu', e => {
-                // Ignore right-clicks on the hint popup itself (it is a
-                // child of the .info button) — only the button matters.
-                if (!(e.target instanceof Element)) return;
-                if (e.target.closest('.podskazka')) return;
-                const infoBtn = e.target.closest('.info');
-                if (!infoBtn) return;
+                if (!e.target.classList.contains('info')) return;
                 e.preventDefault();
-                const input = document.getElementById(infoBtn.getAttribute('data-for'));
+                const input = document.getElementById(e.target.getAttribute('data-for'));
                 if (input) {
                     input.value = input.getAttribute('placeholder') ?? '';
                     input.focus();
@@ -845,16 +610,9 @@ const RssBridge = (() => {
             Search.init();
             CardManager.init();
             PlaceholderHelper.init();
-            PodskazkaManager.init();
-            observeDynamicInfoButtons();
+            TooltipManager.init();
             FormValidator.init();
             FavoritesManager.init();
-        },
-
-        // Exposed so the deferred re-run below can happen without leaking
-        // the module-scoped `Search` const into the global scope.
-        _performSearch() {
-            Search.perform();
         }
     };
 })();
@@ -862,7 +620,7 @@ const RssBridge = (() => {
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         RssBridge._init();
-        setTimeout(() => RssBridge._performSearch(), 100);
+        setTimeout(() => Search.perform(), 100);
     });
 } else {
     RssBridge._init();
