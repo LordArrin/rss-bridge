@@ -25,7 +25,7 @@
                 autocomplete="off"
                 required
             >
-            <i class="info" title="Your admin authentication token from config.ini.php"></i>
+            <i class="info" title="Your admin authentication token from config.ini.php" tabindex="0" role="button" aria-label="More information about the token">i</i>
         </div>
         
         <button type="submit">Authenticate</button>

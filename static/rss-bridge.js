@@ -175,6 +175,9 @@ const RssBridge = (() => {
                     this.hideCurrent();
                 } else {
                     this.show(info);
+                    // Pin the tooltip open on touch devices until the user
+                    // taps elsewhere / presses Escape.
+                    if (this.current) this.current.touch = true;
                 }
             }, { passive: false });
 
@@ -188,7 +191,9 @@ const RssBridge = (() => {
 
             document.addEventListener('mouseover', (e) => {
                 const info = e.target.closest ? e.target.closest('.info') : null;
-                if (info) this.show(info);
+                // Don't fight touch interactions: after a tap the tooltip is
+                // pinned open; ignore mouseover until the pointer really moves.
+                if (info && !(this.current && this.current.touch)) this.show(info);
             });
 
             document.addEventListener('mouseout', (e) => {
@@ -225,10 +230,13 @@ const RssBridge = (() => {
                 }
             });
 
-            // Reposition on scroll so tooltips never leave the viewport
-            window.addEventListener('scroll', () => {
+            // Reposition on scroll so tooltips never leave the viewport.
+            // Use capture:true because most scrolling happens inside .container
+            // (the bridge list), which does not fire window-level scroll events.
+            const reposition = () => {
                 if (this.current) this.place(this.current.trigger, this.current.tooltip);
-            }, { passive: true });
+            };
+            window.addEventListener('scroll', reposition, { passive: true, capture: true });
             window.addEventListener('resize', () => this.hideCurrent());
         },
 
@@ -244,12 +252,14 @@ const RssBridge = (() => {
                 tooltip = document.createElement('div');
                 tooltip.className = 'tooltip';
                 tooltip.setAttribute('role', 'tooltip');
+                tooltip.id = 'rssbridge-tooltip';
                 document.body.appendChild(tooltip);
                 this.pool = tooltip;
             }
 
             tooltip.textContent = text;
             infoEl.setAttribute('aria-expanded', 'true');
+            infoEl.setAttribute('aria-describedby', tooltip.id);
             infoEl.classList.add('active');
 
             this.current = { trigger: infoEl, tooltip };
@@ -296,6 +306,7 @@ const RssBridge = (() => {
             tooltip.classList.remove('visible');
             trigger.classList.remove('active');
             trigger.removeAttribute('aria-expanded');
+            trigger.removeAttribute('aria-describedby');
             this.current = null;
         }
     };
