@@ -206,6 +206,8 @@ function getContents(
         case 301:
         case 302:
         case 303:
+        case 307:
+        case 308:
             break;
         case 304:
             if ($cachedResponse instanceof Response) {
