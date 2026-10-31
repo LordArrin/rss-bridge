@@ -155,7 +155,9 @@
 
 html {
     box-sizing: border-box;
-    font-size: 16px;
+    /* Fluid base size: 16px on phones/tablets/desktops, scaled up to ~20px
+       only on very large (4K/5K) displays so the UI stays proportional. */
+    font-size: clamp(16px, 0.9rem + 0.2vw, 20px);
 }
 
 *, *:before, *:after {
@@ -222,10 +224,20 @@ p {
    ============================================================ */
 
 .container {
-    width: 80%;
-    max-width: 2400px;
+    /* Fluid width: 92vw on phones/ultra-wide panels, capped at 1500px so
+       lines stay readable on 4K/5K displays instead of stretching edge
+       to edge. min() also guarantees it can never exceed the viewport. */
+    width: min(92%, 1500px);
     margin: 0 auto 40px;
     padding: 0 16px;
+}
+
+/* On narrow-ish screens (small laptops, tablets in portrait) a percentage
+   width is too cramped — use nearly the full width instead. */
+@media screen and (max-width: 1100px) {
+    .container {
+        width: 100%;
+    }
 }
 
 /* 
@@ -237,7 +249,9 @@ p {
  */
 .container:has(.bridge-card) {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+    /* min(300px, 100%) keeps the grid single-column on any screen narrower
+       than ~320px (iPhone SE and smaller) without horizontal overflow. */
+    grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
     gap: 20px;
     align-items: stretch;
 }
@@ -643,16 +657,16 @@ input[type="password"]:hover {
 
 input:focus::placeholder { opacity: 0; }
 
-/* Info tooltip trigger icon */
+/* Info tooltip trigger icon (the "i" help button) */
 .info {
     cursor: pointer;
     opacity: 0.7;
-    width: 18px;
-    height: 18px;
-    font-size: 11px;
+    width: 26px;
+    height: 26px;
+    font-size: 13px;
     font-weight: bold;
     font-style: normal;
-    line-height: 18px;
+    line-height: 26px;
     text-align: center;
     color: var(--md-on-primary-container);
     background: var(--md-primary-container);
@@ -665,22 +679,34 @@ input:focus::placeholder { opacity: 0; }
     z-index: 1;
     margin-left: 6px;
     flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
-.info:hover {
+.info:hover,
+.info:focus-visible,
+.info.active {
     opacity: 1;
     background: var(--md-primary);
     color: var(--md-on-primary);
     transform: scale(1.15);
-    z-index: 1000;
 }
 
-/* Tooltip popup */
+.info:focus-visible {
+    outline: 2px solid var(--md-primary);
+    outline-offset: 2px;
+}
+
+/* Tooltip popup.
+   Rendered with `position: fixed` and placed/clamped by the JS
+   TooltipManager relative to the viewport — this guarantees the tooltip
+   never overflows the screen edges or gets clipped by card overflow. */
 .tooltip {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed;
+    top: 0;
+    left: 0;
     background-color: var(--md-surface-container-highest);
     color: var(--md-on-surface);
     padding: 10px 14px;
@@ -689,43 +715,24 @@ input:focus::placeholder { opacity: 0; }
     font-style: normal;
     font-weight: 400;
     line-height: 1.4;
-    white-space: normal;
+    white-space: pre-line; /* honor \n in example/description texts */
     word-wrap: break-word;
     overflow-wrap: break-word;
-    max-width: 280px;
+    max-width: min(280px, calc(100vw - 24px));
     min-width: 120px;
     width: max-content;
     opacity: 0;
+    visibility: hidden;
     pointer-events: none;
-    transition: opacity var(--md-motion-duration-short) var(--md-motion-easing-standard);
+    transition: opacity var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                visibility var(--md-motion-duration-short) var(--md-motion-easing-standard);
     box-shadow: var(--md-elevation-3);
-    z-index: 9999;
+    z-index: 10000;
 }
 
 .tooltip.visible {
     opacity: 1;
-}
-
-/* Tooltip position modifiers (handled via JS) */
-.tooltip.tooltip-bottom {
-    bottom: auto;
-    top: calc(100% + 8px);
-}
-
-.tooltip.tooltip-top {
-    bottom: calc(100% + 8px);
-    top: auto;
-}
-
-.tooltip.tooltip-left {
-    left: 0;
-    transform: none;
-}
-
-.tooltip.tooltip-right {
-    left: auto;
-    right: 0;
-    transform: none;
+    visibility: visible;
 }
 
 /* Search bar on the frontpage */
@@ -853,10 +860,13 @@ input:focus::placeholder { opacity: 0; }
     transform: translateZ(0);
     backface-visibility: hidden;
     
-    /* Performance optimization for large lists */
+    /* Performance optimization for large lists.
+       Note: `paint` containment is intentionally NOT used here — it clips
+       overflow and would cut off the fixed-position tooltips spawned inside
+       the cards on some engines. */
     content-visibility: auto;
     contain-intrinsic-size: auto 300px;
-    contain: style paint;
+    contain: style;
 }
 
 .bridge-card > h2,
@@ -963,10 +973,23 @@ input:focus::placeholder { opacity: 0; }
     overflow: hidden;
 }
 
-/* Expanded bridge card spans 2 columns in the grid */
+/* Expanded bridge card spans 2 columns in the grid — but only when the
+   grid actually has at least two columns (see the media query below). */
 .bridge-card:has(.showmore-box:checked) {
     grid-column: span 2;
     min-height: 400px;
+}
+
+@media screen and (max-width: 640px) {
+    /* Single-column grid: `span 2` would create a phantom second column
+       and cause horizontal overflow on phones. */
+    .container:has(.bridge-card) {
+        grid-template-columns: 1fr;
+    }
+
+    .bridge-card:has(.showmore-box:checked) {
+        grid-column: 1;
+    }
 }
 
 .bridge-card:not(:has(.showmore-box:checked)) {
@@ -1105,7 +1128,8 @@ input:focus::placeholder { opacity: 0; }
     font-size: 0.8rem;
     font-weight: 500;
     line-height: 1.4;
-    max-width: 320px;
+    /* Keep toasts inside the viewport even on 320px-wide phones. */
+    max-width: min(320px, calc(100vw - 32px));
     width: max-content;
     box-shadow: var(--md-elevation-2);
     z-index: 1000;
@@ -1587,7 +1611,7 @@ a.button:active::after {
                 transform var(--md-motion-duration-medium) var(--md-motion-easing-standard);
     z-index: 9999;
     pointer-events: none;
-    max-width: 320px;
+    max-width: min(320px, calc(100vw - 48px));
     width: max-content;
     display: flex;
     align-items: center;
@@ -1667,6 +1691,12 @@ html.has-favorites.favorites-loaded .bridge-card {
    ============================================================ */
 
 @media screen and (max-width: 767px) {
+    html, body {
+        /* Belt-and-braces: a stray wide element can never produce a
+           horizontal scrollbar on phones. */
+        overflow-x: hidden;
+    }
+
     .container {
         width: 100%;
         padding: 8px;
@@ -1696,15 +1726,42 @@ html.has-favorites.favorites-loaded .bridge-card {
         margin: 6px 2px;
     }
 
-    .info, .no-info {
-        display: none;
+    /* The "i" help buttons must stay visible on mobile — that is exactly
+       where native title tooltips don't exist. They are enlarged below to
+       provide a comfortable touch target. */
+    .info {
+        width: 30px;
+        height: 30px;
+        font-size: 14px;
+        line-height: 30px;
     }
 
-    /* Stack parameters grid vertically on mobile */
+    /* Parameters grid on mobile: label + input on the first row,
+       info icon in its own narrow third column (so it never overlaps
+       or gets pushed off-screen). */
     .parameters {
-        grid-template-columns: 1fr;
-        grid-column-gap: 4px;
-        grid-row-gap: 4px;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 36px;
+        grid-column-gap: 8px;
+        grid-row-gap: 6px;
+    }
+
+    .parameters > label {
+        grid-column: 1 / -1;
+    }
+
+    .parameters > input[type="checkbox"] {
+        grid-column: 1;
+    }
+
+    .parameters > .info,
+    .parameters > .no-info {
+        grid-column: 3;
+        justify-self: center;
+    }
+
+    .parameters .no-info {
+        width: 30px;
+        height: 30px;
     }
 
     .parameters label {

@@ -150,68 +150,166 @@ const RssBridge = (() => {
     };
 
     const TooltipManager = {
+        current: null,
+
         init() {
             document.querySelectorAll('.info[data-title], .info[title]').forEach(el => {
                 if (el.getAttribute('title') && !el.getAttribute('data-title')) {
                     el.setAttribute('data-title', el.getAttribute('title'));
+                    // Remove the native title so the browser doesn't show a
+                    // second, unclamped tooltip on top of ours.
                     el.removeAttribute('title');
                 }
-                
-                el.addEventListener('mouseenter', (e) => this.show(e.target));
-                el.addEventListener('mouseleave', (e) => this.hide(e.target));
             });
+
+            // Pointer events cover touch (tap), pen and mouse uniformly.
+            document.addEventListener('pointerdown', (e) => {
+                const info = e.target.closest ? e.target.closest('.info') : null;
+                if (!info) {
+                    this.hideCurrent();
+                    return;
+                }
+                if (e.pointerType === 'mouse') return; // handled via mouseover
+                e.preventDefault();
+                if (this.current && this.current.trigger === info) {
+                    this.hideCurrent();
+                } else {
+                    this.show(info);
+                    // Pin the tooltip open on touch devices until the user
+                    // taps elsewhere / presses Escape.
+                    if (this.current) this.current.touch = true;
+                }
+            }, { passive: false });
+
+            document.addEventListener('pointerup', (e) => {
+                // On touch, keep the tooltip open after tapping an icon;
+                // lift outside any icon closes it.
+                if (!(e.target.closest && e.target.closest('.info'))) {
+                    this.hideCurrent();
+                }
+            });
+
+            document.addEventListener('mouseover', (e) => {
+                const info = e.target.closest ? e.target.closest('.info') : null;
+                // Don't fight touch interactions: after a tap the tooltip is
+                // pinned open; ignore mouseover until the pointer really moves.
+                if (info && !(this.current && this.current.touch)) this.show(info);
+            });
+
+            document.addEventListener('mouseout', (e) => {
+                const info = e.target.closest ? e.target.closest('.info') : null;
+                if (info && !(e.relatedTarget && info.contains(e.relatedTarget))) {
+                    this.hide(info);
+                }
+            });
+
+            // Keyboard accessibility
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    this.hideCurrent();
+                    return;
+                }
+                if (e.key === 'Enter' || e.key === ' ') {
+                    const active = document.activeElement;
+                    if (active && active.classList && active.classList.contains('info')) {
+                        e.preventDefault();
+                        if (this.current && this.current.trigger === active) {
+                            this.hideCurrent();
+                        } else {
+                            this.show(active);
+                        }
+                    }
+                }
+            });
+
+            document.addEventListener('focusin', (e) => {
+                if (e.target.classList && e.target.classList.contains('info')) {
+                    this.show(e.target);
+                } else {
+                    this.hideCurrent();
+                }
+            });
+
+            // Reposition on scroll so tooltips never leave the viewport.
+            // Use capture:true because most scrolling happens inside .container
+            // (the bridge list), which does not fire window-level scroll events.
+            const reposition = () => {
+                if (this.current) this.place(this.current.trigger, this.current.tooltip);
+            };
+            window.addEventListener('scroll', reposition, { passive: true, capture: true });
+            window.addEventListener('resize', () => this.hideCurrent());
         },
 
         show(infoEl) {
-            const tooltip = infoEl.querySelector('.tooltip') || this.createTooltip(infoEl);
-            const card = infoEl.closest('.bridge-card');
-            if (!card) return;
+            if (this.current && this.current.trigger === infoEl) return;
+            this.hideCurrent();
 
-            tooltip.classList.remove('tooltip-top', 'tooltip-bottom', 'tooltip-left', 'tooltip-right');
-            tooltip.style.left = '';
-            tooltip.style.right = '';
-            tooltip.style.transform = '';
-            tooltip.classList.add('visible');
-            
-            const infoRect = infoEl.getBoundingClientRect();
-            const cardRect = card.getBoundingClientRect();
-            const tooltipRect = tooltip.getBoundingClientRect();
+            const text = infoEl.getAttribute('data-title');
+            if (!text) return;
 
-            const relTop = infoRect.top - cardRect.top;
-            const relLeft = infoEl.offsetLeft;
-            const cardHeight = cardRect.height;
-            const cardWidth = cardRect.width;
-
-            if (relTop < cardHeight / 3) {
-                tooltip.classList.add('tooltip-bottom');
-            } else {
-                tooltip.classList.add('tooltip-top');
+            let tooltip = this.pool;
+            if (!tooltip) {
+                tooltip = document.createElement('div');
+                tooltip.className = 'tooltip';
+                tooltip.setAttribute('role', 'tooltip');
+                tooltip.id = 'rssbridge-tooltip';
+                document.body.appendChild(tooltip);
+                this.pool = tooltip;
             }
 
-            const tooltipWidth = tooltipRect.width;
-            const iconCenterX = relLeft + infoEl.offsetWidth / 2;
-            
-            if (iconCenterX - tooltipWidth / 2 < 0) {
-                tooltip.classList.add('tooltip-left');
-            } else if (iconCenterX + tooltipWidth / 2 > cardWidth) {
-                tooltip.classList.add('tooltip-right');
+            tooltip.textContent = text;
+            infoEl.setAttribute('aria-expanded', 'true');
+            infoEl.setAttribute('aria-describedby', tooltip.id);
+            infoEl.classList.add('active');
+
+            this.current = { trigger: infoEl, tooltip };
+            this.place(infoEl, tooltip);
+            requestAnimationFrame(() => tooltip.classList.add('visible'));
+        },
+
+        place(infoEl, tooltip) {
+            const margin = 8;
+            const gap = 10;
+            const vw = document.documentElement.clientWidth;
+            const vh = document.documentElement.clientHeight;
+
+            const rect = infoEl.getBoundingClientRect();
+            const tw = tooltip.offsetWidth;
+            const th = tooltip.offsetHeight;
+
+            // Prefer above the icon; flip below if it would overflow the top.
+            let top = rect.top - th - gap;
+            if (top < margin) {
+                top = rect.bottom + gap;
             }
+            if (top + th > vh - margin) {
+                top = Math.max(margin, vh - th - margin);
+            }
+
+            // Center horizontally over the icon; clamp to the viewport edges.
+            let left = rect.left + rect.width / 2 - tw / 2;
+            left = Math.min(Math.max(margin, left), vw - tw - margin);
+
+            tooltip.style.top = `${Math.round(top)}px`;
+            tooltip.style.left = `${Math.round(left)}px`;
         },
 
         hide(infoEl) {
-            const tooltip = infoEl.querySelector('.tooltip');
-            if (tooltip) tooltip.classList.remove('visible');
+            if (this.current && this.current.trigger === infoEl) {
+                this.hideCurrent();
+            }
         },
 
-        createTooltip(infoEl) {
-            const tooltip = document.createElement('div');
-            tooltip.className = 'tooltip';
-            tooltip.textContent = infoEl.getAttribute('data-title');
-            infoEl.appendChild(tooltip);
-            return tooltip;
+        hideCurrent() {
+            if (!this.current) return;
+            const { trigger, tooltip } = this.current;
+            tooltip.classList.remove('visible');
+            trigger.classList.remove('active');
+            trigger.removeAttribute('aria-expanded');
+            trigger.removeAttribute('aria-describedby');
+            this.current = null;
         }
     };
-
     const Search = {
         perform() {
             const f = document.getElementById('searchfield');
