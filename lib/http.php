@@ -1066,6 +1066,50 @@ final class Response
                 $this->headers[$name] = $value;
             }
         }
+
+        // Responses built from HTML templates (error/exception pages) never
+        // carried an explicit content-type. Without it the client has to
+        // guess: browsers sniff the body and feed readers such as FreshRSS
+        // may treat the error page as a malformed feed instead of showing
+        // the user the details page. Sniff here once, centrally, so every
+        // code path (actions, middlewares, cached copies) benefits.
+        if ($this->getHeader('content-type') === null) {
+            $sniffed = self::sniffContentType($body);
+            if ($sniffed !== null) {
+                $this->headers[mb_strtolower($sniffed[0])] = [$sniffed[1]];
+            }
+        }
+    }
+
+    /**
+     * Detects the media type of a response body by its leading markup.
+     *
+     * Only looks at the first non-whitespace bytes, so plain-text error
+     * messages keep their default handling (no header added).
+     *
+     * @return array{0: string, 1: string}|null [header name, header value]
+     */
+    private static function sniffContentType(string $body): ?array
+    {
+        $trimmed = ltrim($body, " \t\r\n\0\x0B");
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (str_starts_with($trimmed, '<!DOCTYPE html>') === true
+            || str_starts_with($trimmed, '<html') === true
+            || str_starts_with($trimmed, '<head') === true
+            || str_starts_with($trimmed, '<div class="error"') === true
+        ) {
+            return ['content-type', 'text/html; charset=UTF-8'];
+        }
+
+        if (str_starts_with($trimmed, '<?xml') === true) {
+            // XML-based feed formats (RSS/Atom/MRSS)
+            return ['content-type', 'application/rss+xml; charset=UTF-8'];
+        }
+
+        return null;
     }
 
     /**
