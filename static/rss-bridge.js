@@ -152,6 +152,7 @@ const RssBridge = (() => {
     const TooltipManager = {
         current: null,
         lastPointerType: 'mouse',
+        touchStartTarget: null,
 
         init() {
             // Migrate every info icon to data-title. The native title
@@ -164,6 +165,10 @@ const RssBridge = (() => {
                     if (el.getAttribute('title') && !el.getAttribute('data-title')) {
                         el.setAttribute('data-title', el.getAttribute('title'));
                     }
+                    // Nothing to migrate (empty title): leave the element
+                    // alone so a dynamically set title can still be picked
+                    // up later.
+                    if (!el.getAttribute('title')) return;
                     el.removeAttribute('title');
                     // Make the icon keyboard/touch focusable even if the
                     // server-rendered markup forgot tabindex/role.
@@ -213,7 +218,12 @@ const RssBridge = (() => {
                 document.addEventListener('pointerup', (e) => {
                     const info = e.target.closest ? e.target.closest('.info') : null;
                     if (info) {
-                        if (e.pointerType !== 'mouse') {
+                        // Only toggle for non-mouse pointers when the press
+                        // started on this same icon — otherwise a drag that
+                        // ends over an icon would count as a tap. Mouse
+                        // clicks are intentionally ignored here: hovering
+                        // already shows the tooltip and mouseout hides it.
+                        if (e.pointerType !== 'mouse' && this.touchStartTarget === info) {
                             e.preventDefault();
                             toggleFromTouch(info);
                         }
@@ -225,6 +235,14 @@ const RssBridge = (() => {
                         this.hideCurrent();
                     }
                 }, { passive: false });
+
+                // Remember where a touch/pen press began so pointerup can
+                // distinguish real taps from drags ending on an icon.
+                document.addEventListener('pointerdown', (e) => {
+                    this.touchStartTarget = (e.pointerType && e.pointerType !== 'mouse')
+                        ? (e.target.closest ? e.target.closest('.info') : null)
+                        : null;
+                }, { capture: true, passive: true });
             } else {
                 // Legacy fallback: click works on touch screens everywhere.
                 document.addEventListener('click', (e) => {
@@ -241,18 +259,24 @@ const RssBridge = (() => {
             document.addEventListener('mouseover', (e) => {
                 const info = e.target.closest ? e.target.closest('.info') : null;
                 if (!info) return;
-                // Only react to real mouse pointers; touch taps are handled
-                // by the pointerup/click toggling above. Also don't fight
-                // pinned tooltips produced by synthetic mouse events that
-                // follow a tap.
-                if (this.lastPointerType && this.lastPointerType !== 'mouse') return;
+                // Ignore hover logic while a tooltip is pinned open via
+                // touch, so synthetic mouse events that follow a tap don't
+                // fight the toggle. Otherwise only react to real mouse
+                // pointers; touch taps are handled by pointerup/click.
                 if (this.current && this.current.touch) return;
+                if (this.lastPointerType && this.lastPointerType !== 'mouse') return;
                 this.show(info);
             });
 
             document.addEventListener('mouseout', (e) => {
                 const info = e.target.closest ? e.target.closest('.info') : null;
-                if (info && !(e.relatedTarget && info.contains(e.relatedTarget))) {
+                if (!info) return;
+                // Never close on mouseout while a tooltip is pinned open
+                // by a tap — it must stay until the user taps elsewhere or
+                // presses Escape (some mobile browsers fire synthetic
+                // mouseover/mouseout pairs right after a tap).
+                if (this.current && this.current.touch) return;
+                if (!(e.relatedTarget && info.contains(e.relatedTarget))) {
                     this.hide(info);
                 }
             });
@@ -276,11 +300,14 @@ const RssBridge = (() => {
                 }
             });
 
+            // Show on keyboard focus, but never hide when focus moves away:
+            // hiding here would race with the mouseout handler and close a
+            // hover tooltip as soon as the pointer leaves the icon. Tooltips
+            // are dismissed via mouseout, Escape, taps outside or blur-free
+            // hovering instead.
             document.addEventListener('focusin', (e) => {
                 if (e.target.classList && e.target.classList.contains('info')) {
                     this.show(e.target);
-                } else {
-                    this.hideCurrent();
                 }
             });
 

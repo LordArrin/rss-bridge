@@ -155,9 +155,9 @@
 
 html {
     box-sizing: border-box;
-    /* Fluid base size: 16px on phones/tablets/desktops, scaled up to ~20px
+    /* Fluid base size: 16px on phones/tablets/desktops, scaled up to ~18px
        only on very large (4K/5K) displays so the UI stays proportional. */
-    font-size: clamp(16px, 0.9rem + 0.2vw, 20px);
+    font-size: clamp(16px, 0.9rem + 0.1vw, 18px);
 }
 
 *, *:before, *:after {
