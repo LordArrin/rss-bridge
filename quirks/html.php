@@ -92,7 +92,8 @@ function html_tag(string $name, ?string $content = null, array $attributes = [])
         match ($key) {
             // String attributes: rendered as key="escaped_value"
             'type', 'id', 'name', 'value', 'placeholder', 'title', 'pattern',
-            'class', 'for', 'oncontextmenu', 'data-for', 'formtarget' => (function () use (&$html, $key, $value): void {
+            'class', 'for', 'oncontextmenu', 'data-for', 'formtarget',
+            'tabindex', 'role', 'aria-label' => (function () use (&$html, $key, $value): void {
                 if ($value !== null && $value !== '' && $value !== false) {
                     $html .= sprintf(' %s="%s"', $key, e((string) $value));
                 }

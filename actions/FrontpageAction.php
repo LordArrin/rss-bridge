@@ -254,22 +254,31 @@ final class FrontpageAction implements ActionInterface
                 continue;
             }
 
-            $params = [];
+            // Build the tooltip text for the info button. Keep it in a
+            // data-attribute: native title tooltips are unavailable on
+            // touch devices and the JS TooltipManager renders a proper,
+            // viewport-clamped tooltip from this text instead.
+            $tooltipLines = [];
             if (isset($parameter['title']) === true) {
-                $params = [
-                'title' => $parameter['title'],
-                'class' => 'info',
-                ];
+                $tooltipLines[] = (string) $parameter['title'];
             }
             if ($parameter['exampleValue'] !== '') {
-                $params = [
-                'title'         => sprintf("Example (right click to use):\n%s", $parameter['exampleValue']),
-                'class'         => 'info',
-                'data-for'      => $idArg,
-                ];
+                $tooltipLines[] = sprintf(
+                    "Example (long press / right click to use):\n%s",
+                    $parameter['exampleValue']
+                );
             }
 
-            if ($params !== []) {
+            if ($tooltipLines !== []) {
+                $tooltipText = implode("\n\n", $tooltipLines);
+                $params = [
+                    'class'       => 'info',
+                    'title'       => $tooltipText,
+                    'tabindex'    => '0',
+                    'role'        => 'button',
+                    'aria-label'  => 'More information about ' . $parameter['name'],
+                    'data-for'    => $idArg,
+                ];
                 $form .= html_tag('i', 'i', $params) . "\n";
             } else {
                 $form .= html_tag('i', ' ', ['class' => 'no-info']) . "\n";
