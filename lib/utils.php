@@ -202,4 +202,52 @@ final class Url
     {
         return bin2hex(random_bytes($bytes));
     }
+
+    /**
+     * Sanitizes a query string by redacting sensitive parameter values.
+     *
+     * Parameters whose names contain known sensitive keywords (token, api_key,
+     * secret, password, auth, credentials) are replaced with [REDACTED] to
+     * prevent secrets from leaking into logs, error pages, or issue reports.
+     *
+     * @param string $queryString Raw query string (without leading '?').
+     * @return string Sanitized query string safe for display.
+     */
+    public static function sanitizeQueryString(string $queryString): string
+    {
+        if ($queryString === '') {
+            return '';
+        }
+
+        parse_str($queryString, $params);
+
+        if ($params === []) {
+            return '';
+        }
+
+        $sensitiveKeywords = [
+            'token',
+            'api_key',
+            'apikey',
+            'api-key',
+            'secret',
+            'password',
+            'passwd',
+            'auth',
+            'credential',
+            'session',
+        ];
+
+        foreach ($params as $key => $value) {
+            $lowerKey = strtolower((string) $key);
+            foreach ($sensitiveKeywords as $keyword) {
+                if (str_contains($lowerKey, $keyword) === true) {
+                    $params[$key] = '[REDACTED]';
+                    break;
+                }
+            }
+        }
+
+        return http_build_query($params);
+    }
 }

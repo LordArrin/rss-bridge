@@ -15,6 +15,9 @@ namespace RSSBridge;
  *
  * NOTE: Admin contact information (email, telegram) is managed by /bin/load-env
  * and accessed directly from environment variables in the web interface renderer.
+ *
+ * NOTE: Environment mode (prod/dev) is managed by APP_ENV environment variable
+ * set by /bin/load-env and is no longer handled by this class.
  */
 final class Configuration
 {
@@ -56,17 +59,6 @@ final class Configuration
             }
             foreach ($section as $key => $value) {
                 self::setConfig((string) $header, (string) $key, $value);
-            }
-        }
-
-        if (file_exists(__DIR__ . '/../DEBUG') === true) {
-            $debugContent = file_get_contents(__DIR__ . '/../DEBUG');
-            if ($debugContent !== false) {
-                $debug = trim($debugContent);
-                if ($debug === '') {
-                    self::setConfig('system', 'env', 'dev');
-                    self::setConfig('cache', 'type', 'array');
-                }
             }
         }
 
@@ -112,10 +104,6 @@ final class Configuration
 
                 self::setConfig($header, $key, $envValue);
             }
-        }
-
-        if (in_array(self::getConfig('system', 'env'), ['dev', 'prod'], true) === false) {
-            self::throwConfigError('system', 'env', 'Must be dev or prod');
         }
 
         if (is_array(self::getConfig('system', 'enabled_bridges')) === false) {

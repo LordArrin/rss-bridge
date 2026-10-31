@@ -54,7 +54,12 @@ abstract class AbstractCache implements CacheInterface
             'fresh_until' => $freshUntil,
         ];
 
-        return json_encode($wrapper, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE);
+        // JSON_INVALID_UTF8_SUBSTITUTE: replaces invalid UTF-8 sequences with U+FFFD
+        // This provides defense-in-depth for any non-UTF8 strings that slipped through
+        return json_encode(
+            $wrapper,
+            \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE | \JSON_INVALID_UTF8_SUBSTITUTE
+        );
     }
 
     /**
@@ -94,17 +99,39 @@ abstract class AbstractCache implements CacheInterface
      * Converts non-JSON-serializable objects (like Response) into arrays
      * before storing them in the cache.
      *
+     * Binary data (images, files) is automatically base64-encoded to ensure
+     * valid UTF-8 for JSON serialization.
+     *
      * @param mixed $value The value to normalize.
      * @return mixed The normalized value (arrays/scalars pass through unchanged).
      */
     private function normalizeForJson(mixed $value): mixed
     {
         if ($value instanceof Response) {
+            $body = $value->getBody();
+            $headers = $value->getHeaders();
+
+            // Check if body contains binary data (not valid UTF-8)
+            // mb_check_encoding returns false for binary data like images
+            $isBinary = mb_check_encoding($body, 'UTF-8') === false;
+
+            if ($isBinary === true) {
+                // Encode binary data as base64 to make it JSON-safe
+                return [
+                    '__type' => 'Http\\Response',
+                    'code' => $value->getCode(),
+                    'headers' => $headers,
+                    'body' => base64_encode($body),
+                    'body_encoding' => 'base64',
+                ];
+            }
+
             return [
                 '__type' => 'Http\\Response',
                 'code' => $value->getCode(),
-                'headers' => $value->getHeaders(),
-                'body' => $value->getBody(),
+                'headers' => $headers,
+                'body' => $body,
+                'body_encoding' => 'utf8',
             ];
         }
 
@@ -115,14 +142,24 @@ abstract class AbstractCache implements CacheInterface
      * Restores objects from their array representation after retrieving
      * them from the cache.
      *
+     * Base64-encoded binary data is automatically decoded back to raw bytes.
+     *
      * @param mixed $value The decoded value from JSON.
      * @return mixed The restored object or original value.
      */
     private function restoreFromJson(mixed $value): mixed
     {
         if (is_array($value) === true && ($value['__type'] ?? null) === 'Http\\Response') {
+            $body = (string) ($value['body'] ?? '');
+            $encoding = $value['body_encoding'] ?? 'utf8';
+
+            if ($encoding === 'base64') {
+                $decoded = base64_decode($body, true);
+                $body = ($decoded !== false) ? $decoded : '';
+            }
+
             return new Response(
-                (string) ($value['body'] ?? ''),
+                $body,
                 (int) ($value['code'] ?? 200),
                 (array) ($value['headers'] ?? [])
             );

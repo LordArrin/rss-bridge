@@ -7,17 +7,23 @@ use RSSBridge\Utils\Url;
  *
  * @var \Throwable $e
  */
+
+// Read environment mode directly from env var (set by /bin/load-env)
+// Default to PROD for security if not set.
+$isDev = (getenv('APP_ENV') === 'DEV');
 ?>
 <div class="error">
 
     <?php if ($e instanceof \HttpException): ?>
         <?php if ($e instanceof \CloudFlareException): ?>
-            <h2>The website is protected by CloudFlare</h2>
+            <h2>The website is protected by an anti-bot system</h2>
             <p>
-                RSS-Bridge tried to fetch a website.
-                The fetching was blocked by CloudFlare.
-                CloudFlare is anti-bot software.
-                Its purpose is to block non-humans.
+                RSS-Bridge tried to fetch a website, but the request was blocked
+                by an anti-bot protection (such as Cloudflare, DataDome or similar).
+            </p>
+            <p>
+                These systems are designed to block non-human traffic.
+                If this site is frequently blocked, contact bridge maintainer ASAP.
             </p>
         <?php endif; ?>
 
@@ -40,7 +46,7 @@ use RSSBridge\Utils\Url;
             <h2>404 Page Not Found</h2>
             <p>
                 RSS-Bridge tried to fetch a page on a website.
-                But it doesn't exists.
+                But it doesn't exist.
             </p>
         <?php endif; ?>
 
@@ -108,43 +114,49 @@ use RSSBridge\Utils\Url;
             <strong>Message:</strong> <?= e(Url::sanitizeRoot($e->getMessage())) ?>
         </div>
 
-        <div>
-            <strong>File:</strong> <?= e(Url::sanitizeRoot($e->getFile())) ?>
-        </div>
+        <?php if ($isDev === true): ?>
+            <div>
+                <strong>File:</strong> <?= e(Url::sanitizeRoot($e->getFile())) ?>
+            </div>
 
-        <div>
-            <strong>Line:</strong> <?= e((string) $e->getLine()) ?>
-        </div>
+            <div>
+                <strong>Line:</strong> <?= e((string) $e->getLine()) ?>
+            </div>
+        <?php endif; ?>
     </div>
 
-    <h2>Trace</h2>
+    <?php if ($isDev === true): ?>
+        <h2>Trace</h2>
 
-    <?php foreach (Url::traceFromException($e) as $i => $frame) : ?>
-        <code>
-            #<?= $i ?> <?= e(Url::frameToCallPoint($frame)) ?>
-        </code>
+        <?php foreach (Url::traceFromException($e) as $i => $frame) : ?>
+            <code>
+                #<?= $i ?> <?= e(Url::frameToCallPoint($frame)) ?>
+            </code>
+            <br>
+        <?php endforeach; ?>
+
         <br>
-    <?php endforeach; ?>
-
-    <br>
+    <?php endif; ?>
 
     <h2>Context</h2>
 
     <div>
-        <strong>Query:</strong> <?= e(urldecode($_SERVER['QUERY_STRING'] ?? '')) ?>
+        <strong>Query:</strong> <?= e(Url::sanitizeQueryString($_SERVER['QUERY_STRING'] ?? '')) ?>
     </div>
 
     <div>
         <strong>Version:</strong> <?= e(\RSSBridge\Configuration::getVersion()) ?>
     </div>
 
-    <div>
-        <strong>OS:</strong> <?= e(PHP_OS_FAMILY) ?>
-    </div>
+    <?php if ($isDev === true): ?>
+        <div>
+            <strong>OS:</strong> <?= e(PHP_OS_FAMILY) ?>
+        </div>
 
-    <div>
-        <strong>PHP:</strong> <?= e(PHP_VERSION) ?>
-    </div>
+        <div>
+            <strong>PHP:</strong> <?= e(PHP_VERSION) ?>
+        </div>
+    <?php endif; ?>
 
     <br>
 

@@ -93,6 +93,22 @@ $normalizationRules = [
     'MEMCACHED_CONNECTIONS' => ['type' => 'int', 'fallback' => '1024', 'min' => 10,   'max' => 100000],
     'MEMCACHED_THREADS'     => ['type' => 'int', 'fallback' => '4',    'min' => 1,    'max' => 256],
 
+    // Application environment mode
+    'APP_ENV' => [
+        'type' => 'string',
+        'fallback' => 'PROD',
+        'validate' => 'validateAppEnv',
+        'sanitize' => false,
+    ],
+
+    // Maintenance mode
+    'MAINTENANCE' => [
+        'type' => 'string',
+        'fallback' => 'OFF',
+        'validate' => 'validateMaintenance',
+        'sanitize' => false,
+    ],
+
     // Application-level settings
     'DOMAIN' => [
         'type' => 'string',
@@ -334,8 +350,40 @@ function getContainerMemoryMb(): ?int
 }
 
 // ============================================================================
-// Domain, Timezone, Email, Telegram, and CIDR validators
+// Domain, Timezone, Email, Telegram, CIDR, and APP_ENV validators
 // ============================================================================
+
+/**
+ * Validates APP_ENV value.
+ * Must be either 'PROD' or 'DEV'.
+ * Returns the validated value or null on failure.
+ */
+function validateAppEnv(string $value): ?string
+{
+    $value = strtoupper(trim($value));
+
+    if (in_array($value, ['PROD', 'DEV'], true) === true) {
+        return $value;
+    }
+
+    return null;
+}
+
+/**
+ * Validates MAINTENANCE value.
+ * Must be either 'ON' or 'OFF'.
+ * Returns the validated value or null on failure.
+ */
+function validateMaintenance(string $value): ?string
+{
+    $value = strtoupper(trim($value));
+
+    if (in_array($value, ['ON', 'OFF'], true) === true) {
+        return $value;
+    }
+
+    return null;
+}
 
 /**
  * Validates a DOMAIN value.

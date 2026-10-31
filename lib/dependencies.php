@@ -74,7 +74,7 @@ $container['cache_factory'] = function ($c) {
 
 $container['logger'] = function () {
     $logger = new SimpleLogger('rssbridge');
-    if (Configuration::getConfig('system', 'env') === 'dev') {
+    if (getenv('APP_ENV') === 'DEV') {
         $logger->addHandler(new ErrorLogHandler(Logger::DEBUG));
     } else {
         $logger->addHandler(new ErrorLogHandler(Logger::INFO));

@@ -26,7 +26,7 @@ final class ConnectivityAction implements ActionInterface
 
     public function __invoke(Request $request): Response
     {
-        if (Configuration::getConfig('system', 'env') !== 'dev') {
+        if (getenv('APP_ENV') !== 'DEV') {
             return new Response('This action is only available in dev environment!', 403);
         }
 

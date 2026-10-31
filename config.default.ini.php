@@ -2,9 +2,7 @@
 
 [system]
 
-env = "prod"
 enabled_bridges[] = *
-enable_maintenance_mode = false
 
 ; Admin-defined system message, shown on every page as a unified notification
 ; (lib/notifications.php). Leave empty to disable. Rendered as plain text:

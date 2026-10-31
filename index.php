@@ -27,8 +27,8 @@ set_error_handler(function ($code, $message, $file, $line) use ($logger) {
         // Deprecation messages and other masked errors are typically ignored here
         return false;
     }
-    if (Configuration::getConfig('system', 'env') === 'dev') {
-        // This might be annoying, but it's for the greater good
+    if (getenv('APP_ENV') === 'DEV') {
+        // For development
         throw new \ErrorException($message, 0, $code, $file, $line);
     }
     $text = sprintf(

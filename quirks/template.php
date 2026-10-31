@@ -96,7 +96,7 @@ function render(string $template, array $context = []): string
     }
 
     // Debug information in dev environment (unified notifications)
-    if (Configuration::getConfig('system', 'env') === 'dev') {
+    if (getenv('APP_ENV') === 'DEV') {
         notify_warning('System environment: dev', 'Debug mode', 'admin');
         notify_info(
             sprintf('Cache type: %s', (string) Configuration::getConfig('cache', 'type')),
