@@ -25,7 +25,7 @@
                 autocomplete="off"
                 required
             >
-            <i class="info" data-hint="Your admin authentication token from config.ini.php">i</i>
+            <i class="info" title="Your admin authentication token from config.ini.php">i</i>
         </div>
         
         <button type="submit">Authenticate</button>
