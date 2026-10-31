@@ -689,7 +689,7 @@ input:focus::placeholder { opacity: 0; }
 }
 
 /* Tooltip popup */
-.tooltip {
+.podskazka {
     position: absolute;
     bottom: calc(100% + 8px);
     left: 50%;
@@ -715,7 +715,7 @@ input:focus::placeholder { opacity: 0; }
     z-index: 9999;
 }
 
-.tooltip.visible {
+.podskazka.visible {
     opacity: 1;
     /* On touch devices the tooltip must be tappable/dismissible,
        so allow pointer events while it is visible. */
@@ -723,23 +723,23 @@ input:focus::placeholder { opacity: 0; }
 }
 
 /* Tooltip position modifiers (handled via JS) */
-.tooltip.tooltip-bottom {
+.podskazka.podskazka-bottom {
     bottom: auto;
     top: calc(100% + 8px);
 }
 
-.tooltip.tooltip-top {
+.podskazka.podskazka-top {
     bottom: calc(100% + 8px);
     top: auto;
 }
 
-.tooltip.tooltip-left {
+.podskazka.podskazka-left {
     left: 0;
     right: auto;
     transform: none;
 }
 
-.tooltip.tooltip-right {
+.podskazka.podskazka-right {
     left: auto;
     right: 0;
     transform: none;
