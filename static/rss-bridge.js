@@ -150,55 +150,44 @@ const RssBridge = (() => {
     };
 
     const TooltipManager = {
+        activeInfoEl: null,
+
         isTouch() {
             return window.matchMedia('(hover: none)').matches || 'ontouchstart' in window;
         },
 
         init() {
-            document.querySelectorAll('.info[data-title], .info[title]').forEach(el => {
-                if (el.getAttribute('title') && !el.getAttribute('data-title')) {
+            // Convert native browser tooltips (title attribute), which only
+            // appear on mouse hover and can overflow the screen, into custom
+            // DOM tooltips that work with taps on touch devices too.
+            document.querySelectorAll('.info[title]').forEach(el => {
+                if (!el.getAttribute('data-title')) {
                     el.setAttribute('data-title', el.getAttribute('title'));
-                    el.removeAttribute('title');
                 }
-
-                // Make the icon keyboard-accessible
-                if (!el.hasAttribute('tabindex')) {
-                    el.setAttribute('tabindex', '0');
-                    el.setAttribute('role', 'button');
-                    el.setAttribute('aria-label', 'Show help');
-                }
-
-                // Hover devices: classic mouseenter/mouseleave behaviour
-                el.addEventListener('mouseenter', (e) => this.show(e.target));
-                el.addEventListener('mouseleave', (e) => this.hide(e.target));
-
-                // Touch devices / keyboard: tap toggles the tooltip
-                el.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const tooltip = el.querySelector('.tooltip');
-                    if (tooltip && tooltip.classList.contains('visible')) {
-                        this.hide(el);
-                    } else {
-                        this.hideAll();
-                        this.show(el);
-                    }
-                });
-
-                el.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        el.click();
-                    } else if (e.key === 'Escape') {
-                        this.hide(el);
-                    }
-                });
+                // Removing `title` prevents the native OS/browser tooltip
+                // from appearing next to our own one.
+                el.removeAttribute('title');
             });
 
-            // Dismiss any open tooltip when tapping outside of it
-            document.addEventListener('click', (e) => {
-                if (!e.target.closest('.info')) this.hideAll();
+            document.querySelectorAll('.info[data-title]').forEach(el => this.initElement(el));
+
+            // Dismiss any open tooltip when tapping/clicking outside of it.
+            // Using 'pointerdown' makes dismissal instant on touch devices,
+            // but we must ignore the pointer that starts a tap ON an info
+            // button (otherwise it would hide the tooltip right before the
+            // subsequent click event toggles it back open).
+            document.addEventListener('pointerdown', (e) => {
+                if (e.target.closest('.info')) return;
+                this.hideAll();
             });
+
+            // Fallback for environments without Pointer Events: plain clicks.
+            if (!('PointerEvent' in window)) {
+                document.addEventListener('click', (e) => {
+                    if (e.target.closest('.info')) return;
+                    this.hideAll();
+                });
+            }
 
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') this.hideAll();
@@ -208,6 +197,51 @@ const RssBridge = (() => {
             // get cut off by the viewport edges.
             window.addEventListener('scroll', () => this.repositionVisible(), { passive: true, capture: true });
             window.addEventListener('resize', () => this.repositionVisible());
+        },
+
+        toggle(infoEl) {
+            const tooltip = infoEl.querySelector('.tooltip');
+            if (this.activeInfoEl === infoEl && tooltip && tooltip.classList.contains('visible')) {
+                this.hide(infoEl);
+            } else {
+                this.hideAll();
+                this.show(infoEl);
+            }
+        },
+
+        initElement(el) {
+            if (el.dataset.tooltipInit) return;
+            el.dataset.tooltipInit = '1';
+
+            // Make the icon keyboard-accessible
+            if (!el.hasAttribute('tabindex')) {
+                el.setAttribute('tabindex', '0');
+                el.setAttribute('role', 'button');
+                el.setAttribute('aria-label', 'Show help');
+                el.setAttribute('aria-expanded', 'false');
+            }
+
+            // Hover devices: classic mouseenter/mouseleave behaviour
+            el.addEventListener('mouseenter', () => this.show(el));
+            el.addEventListener('mouseleave', () => this.hide(el));
+
+            // Touch devices / keyboard: tap toggles the tooltip.
+            // Bound on the element itself so it works regardless of
+            // whether a real "click" event is synthesized after touchend.
+            el.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggle(el);
+            });
+
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    this.toggle(el);
+                } else if (e.key === 'Escape') {
+                    this.hide(el);
+                }
+            });
         },
 
         repositionVisible() {
@@ -220,19 +254,27 @@ const RssBridge = (() => {
         },
 
         hideAll() {
-            document.querySelectorAll('.info.active').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.info.active').forEach(el => {
+                el.classList.remove('active');
+                el.setAttribute('aria-expanded', 'false');
+            });
             document.querySelectorAll('.tooltip.visible').forEach(t => t.classList.remove('visible'));
+            this.activeInfoEl = null;
         },
 
         show(infoEl) {
             const tooltip = infoEl.querySelector('.tooltip') || this.createTooltip(infoEl);
             infoEl.classList.add('active');
+            infoEl.setAttribute('aria-expanded', 'true');
+            this.activeInfoEl = infoEl;
 
             tooltip.classList.remove('tooltip-top', 'tooltip-bottom', 'tooltip-left', 'tooltip-right');
             tooltip.style.left = '';
             tooltip.style.right = '';
             tooltip.style.top = '';
             tooltip.style.transform = '';
+            tooltip.style.position = '';
+            tooltip.style.maxWidth = '';
             tooltip.classList.add('visible');
 
             this.place(infoEl, tooltip);
@@ -244,27 +286,44 @@ const RssBridge = (() => {
             const margin = 12;
 
             const infoRect = infoEl.getBoundingClientRect();
-            const tooltipRect = tooltip.getBoundingClientRect();
+            // Measure the tooltip while it is visible (opacity only), so
+            // getBoundingClientRect() returns real dimensions.
+            let tooltipRect = tooltip.getBoundingClientRect();
             const vw = window.innerWidth;
             const vh = window.innerHeight;
 
-            if (narrow) {
-                // On small screens position with fixed viewport coordinates
-                // so the tooltip can never overflow the card or the screen.
+            if (narrow || !infoEl.closest('.bridge-card')) {
+                // On small screens (or for buttons outside bridge cards)
+                // position with fixed viewport coordinates so the tooltip
+                // can never overflow the card or the screen. Keep it fully
+                // within the visual viewport (handles browser UI overlays).
                 tooltip.style.position = 'fixed';
 
+                const vv = window.visualViewport;
+                const vpLeft = vv ? vv.offsetLeft : 0;
+                const vpTop = vv ? vv.offsetTop : 0;
+                const vpWidth = vv ? vv.width : vw;
+                const vpHeight = vv ? vv.height : vh;
+
+                // Clamp the width to the viewport before measuring again
+                const maxW = vpWidth - margin * 2;
+                if (tooltipRect.width > maxW) {
+                    tooltip.style.maxWidth = `${maxW}px`;
+                    tooltipRect = tooltip.getBoundingClientRect();
+                }
+
                 let left = infoRect.left + infoRect.width / 2 - tooltipRect.width / 2;
-                left = Math.min(Math.max(left, margin), vw - tooltipRect.width - margin);
+                left = Math.min(Math.max(left, vpLeft + margin), vpLeft + vpWidth - tooltipRect.width - margin);
                 tooltip.style.left = `${left}px`;
 
                 let top = infoRect.top - tooltipRect.height - gap;
-                if (top < margin) {
+                if (top < vpTop + margin) {
                     // Not enough space above → show below
                     top = infoRect.bottom + gap;
                 }
-                if (top + tooltipRect.height > vh - margin) {
+                if (top + tooltipRect.height > vpTop + vpHeight - margin) {
                     // Also doesn't fit below → pin to the bottom edge
-                    top = Math.max(margin, vh - tooltipRect.height - margin);
+                    top = Math.max(vpTop + margin, vpTop + vpHeight - tooltipRect.height - margin);
                 }
                 tooltip.style.top = `${top}px`;
                 return;
@@ -295,12 +354,33 @@ const RssBridge = (() => {
             } else if (iconCenterX + tooltipWidth / 2 > cardWidth) {
                 tooltip.classList.add('tooltip-right');
             }
+
+            // Final safety net: even on wide screens make sure the tooltip
+            // never sticks out past the left/right edge of the viewport.
+            const ttRect = tooltip.getBoundingClientRect();
+            if (ttRect.left < margin || ttRect.right > vw - margin) {
+                let left = infoRect.left + infoRect.width / 2 - ttRect.width / 2;
+                left = Math.min(Math.max(left, margin), vw - ttRect.width - margin);
+                tooltip.style.position = 'fixed';
+                tooltip.style.left = `${left}px`;
+                tooltip.style.top = ttRect.top >= margin
+                    ? `${ttRect.top}px`
+                    : `${infoRect.bottom + gap}px`;
+            }
         },
 
         hide(infoEl) {
             const tooltip = infoEl.querySelector('.tooltip');
-            if (tooltip) tooltip.classList.remove('visible');
+            if (tooltip) {
+                tooltip.classList.remove('visible');
+                // Reset any fixed positioning applied by place()
+                tooltip.style.position = '';
+                tooltip.style.left = '';
+                tooltip.style.top = '';
+            }
             infoEl.classList.remove('active');
+            infoEl.setAttribute('aria-expanded', 'false');
+            if (this.activeInfoEl === infoEl) this.activeInfoEl = null;
         },
 
         createTooltip(infoEl) {
@@ -311,6 +391,33 @@ const RssBridge = (() => {
             infoEl.appendChild(tooltip);
             return tooltip;
         }
+    };
+
+    // Watch for dynamically added help buttons (e.g. injected bridge forms)
+    // and wire them up the same way as the ones present at page load.
+    const observeDynamicInfoButtons = () => {
+        if (!('MutationObserver' in window)) return;
+        const processNode = (node) => {
+            if (!(node instanceof HTMLElement)) return;
+            const els = [];
+            if (node.matches && node.matches('.info')) els.push(node);
+            if (node.querySelectorAll) els.push(...node.querySelectorAll('.info'));
+            els.forEach(el => {
+                if (!el.hasAttribute('data-title') && el.hasAttribute('title')) {
+                    el.setAttribute('data-title', el.getAttribute('title'));
+                    el.removeAttribute('title');
+                }
+                if (el.getAttribute('data-title')) {
+                    TooltipManager.initElement(el);
+                }
+            });
+        };
+        const observer = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+                m.addedNodes.forEach(processNode);
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
     };
 
     const Search = {
@@ -712,6 +819,7 @@ const RssBridge = (() => {
             CardManager.init();
             PlaceholderHelper.init();
             TooltipManager.init();
+            observeDynamicInfoButtons();
             FormValidator.init();
             FavoritesManager.init();
         }

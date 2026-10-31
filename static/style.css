@@ -722,6 +722,13 @@ input:focus::placeholder { opacity: 0; }
     pointer-events: auto;
 }
 
+/* Tapping a visible tooltip dismisses it (works on touch screens where
+   there is no hover to leave). */
+.tooltip.visible:active {
+    opacity: 0;
+    pointer-events: none;
+}
+
 /* Tooltip position modifiers (handled via JS) */
 .tooltip.tooltip-bottom {
     bottom: auto;
