@@ -32,7 +32,7 @@ final class AppleMusicBridge extends BridgeAbstract
 
     private ?string $title = null;
 
-    public function collectData()
+    public function collectData(): void
     {
         $items = $this->getJson();
         $artist = $this->getArtist($items);
@@ -50,18 +50,18 @@ final class AppleMusicBridge extends BridgeAbstract
                 continue;
             }
 
-            $collectionName = (string)($item->collectionName ?? '');
+            $collectionName = (string) ($item->collectionName ?? '');
             if ($collectionName === '') {
                 continue;
             }
 
-            $collectionViewUrl = (string)($item->collectionViewUrl ?? '');
+            $collectionViewUrl = (string) ($item->collectionViewUrl ?? '');
             if ($collectionViewUrl === '') {
                 continue;
             }
 
-            $copyright = (string)($item->copyright ?? '');
-            $artistName = (string)($item->artistName ?? '');
+            $copyright = (string) ($item->copyright ?? '');
+            $artistName = (string) ($item->artistName ?? '');
             $releaseDate = $item->releaseDate ?? null;
 
             $content = $this->buildItemContent($copyright);
@@ -76,13 +76,75 @@ final class AppleMusicBridge extends BridgeAbstract
         }
     }
 
-    public function getName()
+    public function getName(): string
     {
         if ($this->title !== null) {
             return $this->title;
         }
 
         return parent::getName();
+    }
+
+    public function getIcon(): string
+    {
+        try {
+            $artistId = (string) $this->getInput('artist');
+            if ($artistId === '') {
+                return parent::getIcon();
+            }
+
+            $lookupUrl = 'https://itunes.apple.com/lookup?id=' . urlencode($artistId);
+
+            $jsonString = (string) getContents($lookupUrl);
+            $lookup = json_decode($jsonString);
+
+            if (is_object($lookup) === false) {
+                return parent::getIcon();
+            }
+
+            if (isset($lookup->results) === false || is_array($lookup->results) === false) {
+                return parent::getIcon();
+            }
+
+            if (count($lookup->results) === 0) {
+                return parent::getIcon();
+            }
+
+            $firstResult = $lookup->results[0];
+            if (is_object($firstResult) === false) {
+                return parent::getIcon();
+            }
+
+            $artistLinkUrl = $firstResult->artistLinkUrl ?? null;
+            if (is_string($artistLinkUrl) === false || $artistLinkUrl === '') {
+                return parent::getIcon();
+            }
+
+            // Apple redirects (301) if the artist name in the url is wrong, so use the canonical link.
+            $urlParts = explode('?', $artistLinkUrl, 2);
+            $url = $urlParts[0];
+
+            $dom = getSimpleHTMLDOM($url);
+            $meta = $dom->querySelector('meta[property="og:image"]');
+
+            if ($meta instanceof \Dom\Element === false) {
+                return parent::getIcon();
+            }
+
+            $image = $meta->getAttribute('content');
+            if (is_string($image) === false || $image === '') {
+                return parent::getIcon();
+            }
+
+            $updatedImage = preg_replace('/\/\d*x\d*cw/i', '/144x144-999', $image);
+            if (is_string($updatedImage) === false) {
+                return parent::getIcon();
+            }
+
+            return $updatedImage;
+        } catch (\Throwable $e) {
+            return parent::getIcon();
+        }
     }
 
     private function getJson(): array
@@ -94,7 +156,7 @@ final class AppleMusicBridge extends BridgeAbstract
         }
         $limit = min(max($limit, 1), self::MAX_LIMIT);
 
-        $artistId = (string)$this->getInput('artist');
+        $artistId = (string) $this->getInput('artist');
 
         $params = http_build_query([
             'id' => $artistId,
@@ -104,9 +166,10 @@ final class AppleMusicBridge extends BridgeAbstract
         ]);
 
         $url = self::API_URL . '?' . $params;
-        $html = getContents($url);
 
-        $json = json_decode($html, false);
+        $jsonString = (string) getContents($url);
+
+        $json = json_decode($jsonString, false);
         if (is_object($json) === false || isset($json->results) === false || is_array($json->results) === false) {
             throwServerException('There is no artist with id "' . $artistId . '".');
         }
