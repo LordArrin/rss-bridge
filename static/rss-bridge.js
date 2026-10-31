@@ -149,42 +149,50 @@ const RssBridge = (() => {
         }
     };
 
-    const TooltipManager = {
+    // Custom hint popups ("podskazka") replace the native browser tooltips.
+    // The class name deliberately avoids "tooltip" and the `title` attribute
+    // is stripped from the DOM so browsers never show their own built-in
+    // bubble (which only appears on mouse hover and can overflow the screen).
+    const PodskazkaManager = {
+        HINT_SELECTOR: '.podskazka',
         activeInfoEl: null,
+        justToggledAt: 0,
 
         isTouch() {
             return window.matchMedia('(hover: none)').matches || 'ontouchstart' in window;
         },
 
         init() {
-            // Convert native browser tooltips (title attribute), which only
-            // appear on mouse hover and can overflow the screen, into custom
-            // DOM tooltips that work with taps on touch devices too.
-            document.querySelectorAll('.info[title]').forEach(el => {
-                if (!el.getAttribute('data-title')) {
-                    el.setAttribute('data-title', el.getAttribute('title'));
+            // Move every native `title` attribute into `data-hint` and delete
+            // it. Without `title` the browser cannot render its own tooltip.
+            document.querySelectorAll('[title]').forEach(el => {
+                if (!el.matches('.info')) return;
+                if (!el.getAttribute('data-hint')) {
+                    el.setAttribute('data-hint', el.getAttribute('title'));
                 }
-                // Removing `title` prevents the native OS/browser tooltip
-                // from appearing next to our own one.
                 el.removeAttribute('title');
             });
 
-            document.querySelectorAll('.info[data-title]').forEach(el => this.initElement(el));
+            document.querySelectorAll('.info[data-hint]').forEach(el => this.initElement(el));
 
-            // Dismiss any open tooltip when tapping/clicking outside of it.
+            // Dismiss any open hint when tapping/clicking outside of it.
             // Using 'pointerdown' makes dismissal instant on touch devices,
-            // but we must ignore the pointer that starts a tap ON an info
-            // button (otherwise it would hide the tooltip right before the
-            // subsequent click event toggles it back open).
+            // but we must ignore pointers that land on an info button or on
+            // a hint we have just opened — otherwise the same tap that opens
+            // the popup would immediately close it again.
             document.addEventListener('pointerdown', (e) => {
-                if (e.target.closest('.info')) return;
+                const target = e.target instanceof Element ? e.target : null;
+                if (target && (target.closest('.info') || target.closest(this.HINT_SELECTOR))) return;
+                if (Date.now() - this.justToggledAt < 500) return;
                 this.hideAll();
             });
 
             // Fallback for environments without Pointer Events: plain clicks.
             if (!('PointerEvent' in window)) {
                 document.addEventListener('click', (e) => {
-                    if (e.target.closest('.info')) return;
+                    const target = e.target instanceof Element ? e.target : null;
+                    if (target && (target.closest('.info') || target.closest(this.HINT_SELECTOR))) return;
+                    if (Date.now() - this.justToggledAt < 500) return;
                     this.hideAll();
                 });
             }
@@ -193,15 +201,16 @@ const RssBridge = (() => {
                 if (e.key === 'Escape') this.hideAll();
             });
 
-            // Reposition fixed tooltips on scroll/resize so they never
+            // Reposition fixed hints on scroll/resize so they never
             // get cut off by the viewport edges.
             window.addEventListener('scroll', () => this.repositionVisible(), { passive: true, capture: true });
             window.addEventListener('resize', () => this.repositionVisible());
         },
 
         toggle(infoEl) {
-            const tooltip = infoEl.querySelector('.tooltip');
-            if (this.activeInfoEl === infoEl && tooltip && tooltip.classList.contains('visible')) {
+            const hint = infoEl.querySelector(this.HINT_SELECTOR);
+            this.justToggledAt = Date.now();
+            if (this.activeInfoEl === infoEl && hint && hint.classList.contains('visible')) {
                 this.hide(infoEl);
             } else {
                 this.hideAll();
@@ -210,8 +219,11 @@ const RssBridge = (() => {
         },
 
         initElement(el) {
-            if (el.dataset.tooltipInit) return;
-            el.dataset.tooltipInit = '1';
+            if (el.dataset.podskazkaInit) return;
+            el.dataset.podskazkaInit = '1';
+
+            // Belt & braces: never let the browser spawn its own bubble.
+            el.removeAttribute('title');
 
             // Make the icon keyboard-accessible
             if (!el.hasAttribute('tabindex')) {
@@ -221,11 +233,19 @@ const RssBridge = (() => {
                 el.setAttribute('aria-expanded', 'false');
             }
 
-            // Hover devices: classic mouseenter/mouseleave behaviour
-            el.addEventListener('mouseenter', () => this.show(el));
-            el.addEventListener('mouseleave', () => this.hide(el));
+            // Hover devices: classic mouseenter/mouseleave behaviour.
+            // Guarded against sticky hover states on touch screens where
+            // some mobile browsers fire synthetic mouse events after a tap.
+            el.addEventListener('mouseenter', () => {
+                if (this.isTouch()) return;
+                this.show(el);
+            });
+            el.addEventListener('mouseleave', () => {
+                if (this.isTouch()) return;
+                this.hide(el);
+            });
 
-            // Touch devices / keyboard: tap toggles the tooltip.
+            // Touch devices / keyboard: tap toggles the hint.
             // Bound on the element itself so it works regardless of
             // whether a real "click" event is synthesized after touchend.
             el.addEventListener('click', (e) => {
@@ -245,10 +265,10 @@ const RssBridge = (() => {
         },
 
         repositionVisible() {
-            document.querySelectorAll('.tooltip.visible').forEach(tooltip => {
-                const infoEl = tooltip.parentElement;
+            document.querySelectorAll(`${this.HINT_SELECTOR}.visible`).forEach(hint => {
+                const infoEl = hint.parentElement;
                 if (infoEl && infoEl.classList.contains('info')) {
-                    this.place(infoEl, tooltip);
+                    this.place(infoEl, hint);
                 }
             });
         },
@@ -258,46 +278,46 @@ const RssBridge = (() => {
                 el.classList.remove('active');
                 el.setAttribute('aria-expanded', 'false');
             });
-            document.querySelectorAll('.tooltip.visible').forEach(t => t.classList.remove('visible'));
+            document.querySelectorAll(`${this.HINT_SELECTOR}.visible`).forEach(t => t.classList.remove('visible'));
             this.activeInfoEl = null;
         },
 
         show(infoEl) {
-            const tooltip = infoEl.querySelector('.tooltip') || this.createTooltip(infoEl);
+            const hint = infoEl.querySelector(this.HINT_SELECTOR) || this.createHint(infoEl);
             infoEl.classList.add('active');
             infoEl.setAttribute('aria-expanded', 'true');
             this.activeInfoEl = infoEl;
 
-            tooltip.classList.remove('tooltip-top', 'tooltip-bottom', 'tooltip-left', 'tooltip-right');
-            tooltip.style.left = '';
-            tooltip.style.right = '';
-            tooltip.style.top = '';
-            tooltip.style.transform = '';
-            tooltip.style.position = '';
-            tooltip.style.maxWidth = '';
-            tooltip.classList.add('visible');
+            hint.classList.remove('podskazka-top', 'podskazka-bottom', 'podskazka-left', 'podskazka-right');
+            hint.style.left = '';
+            hint.style.right = '';
+            hint.style.top = '';
+            hint.style.transform = '';
+            hint.style.position = '';
+            hint.style.maxWidth = '';
+            hint.classList.add('visible');
 
-            this.place(infoEl, tooltip);
+            this.place(infoEl, hint);
         },
 
-        place(infoEl, tooltip) {
+        place(infoEl, hint) {
             const narrow = window.innerWidth < 768;
             const gap = 8;
             const margin = 12;
 
             const infoRect = infoEl.getBoundingClientRect();
-            // Measure the tooltip while it is visible (opacity only), so
+            // Measure the hint while it is visible (opacity only), so
             // getBoundingClientRect() returns real dimensions.
-            let tooltipRect = tooltip.getBoundingClientRect();
+            let hintRect = hint.getBoundingClientRect();
             const vw = window.innerWidth;
             const vh = window.innerHeight;
 
             if (narrow || !infoEl.closest('.bridge-card')) {
                 // On small screens (or for buttons outside bridge cards)
-                // position with fixed viewport coordinates so the tooltip
+                // position with fixed viewport coordinates so the hint
                 // can never overflow the card or the screen. Keep it fully
                 // within the visual viewport (handles browser UI overlays).
-                tooltip.style.position = 'fixed';
+                hint.style.position = 'fixed';
 
                 const vv = window.visualViewport;
                 const vpLeft = vv ? vv.offsetLeft : 0;
@@ -307,29 +327,29 @@ const RssBridge = (() => {
 
                 // Clamp the width to the viewport before measuring again
                 const maxW = vpWidth - margin * 2;
-                if (tooltipRect.width > maxW) {
-                    tooltip.style.maxWidth = `${maxW}px`;
-                    tooltipRect = tooltip.getBoundingClientRect();
+                if (hintRect.width > maxW) {
+                    hint.style.maxWidth = `${maxW}px`;
+                    hintRect = hint.getBoundingClientRect();
                 }
 
-                let left = infoRect.left + infoRect.width / 2 - tooltipRect.width / 2;
-                left = Math.min(Math.max(left, vpLeft + margin), vpLeft + vpWidth - tooltipRect.width - margin);
-                tooltip.style.left = `${left}px`;
+                let left = infoRect.left + infoRect.width / 2 - hintRect.width / 2;
+                left = Math.min(Math.max(left, vpLeft + margin), vpLeft + vpWidth - hintRect.width - margin);
+                hint.style.left = `${left}px`;
 
-                let top = infoRect.top - tooltipRect.height - gap;
+                let top = infoRect.top - hintRect.height - gap;
                 if (top < vpTop + margin) {
                     // Not enough space above → show below
                     top = infoRect.bottom + gap;
                 }
-                if (top + tooltipRect.height > vpTop + vpHeight - margin) {
+                if (top + hintRect.height > vpTop + vpHeight - margin) {
                     // Also doesn't fit below → pin to the bottom edge
-                    top = Math.max(vpTop + margin, vpTop + vpHeight - tooltipRect.height - margin);
+                    top = Math.max(vpTop + margin, vpTop + vpHeight - hintRect.height - margin);
                 }
-                tooltip.style.top = `${top}px`;
+                hint.style.top = `${top}px`;
                 return;
             }
 
-            tooltip.style.position = '';
+            hint.style.position = '';
 
             const card = infoEl.closest('.bridge-card');
             if (!card) return;
@@ -341,55 +361,55 @@ const RssBridge = (() => {
             const cardWidth = cardRect.width;
 
             if (relTop < cardHeight / 3) {
-                tooltip.classList.add('tooltip-bottom');
+                hint.classList.add('podskazka-bottom');
             } else {
-                tooltip.classList.add('tooltip-top');
+                hint.classList.add('podskazka-top');
             }
 
-            const tooltipWidth = tooltip.getBoundingClientRect().width;
+            const hintWidth = hint.getBoundingClientRect().width;
             const iconCenterX = relLeft + infoEl.offsetWidth / 2;
 
-            if (iconCenterX - tooltipWidth / 2 < 0) {
-                tooltip.classList.add('tooltip-left');
-            } else if (iconCenterX + tooltipWidth / 2 > cardWidth) {
-                tooltip.classList.add('tooltip-right');
+            if (iconCenterX - hintWidth / 2 < 0) {
+                hint.classList.add('podskazka-left');
+            } else if (iconCenterX + hintWidth / 2 > cardWidth) {
+                hint.classList.add('podskazka-right');
             }
 
-            // Final safety net: even on wide screens make sure the tooltip
+            // Final safety net: even on wide screens make sure the hint
             // never sticks out past the left/right edge of the viewport.
-            const ttRect = tooltip.getBoundingClientRect();
+            const ttRect = hint.getBoundingClientRect();
             if (ttRect.left < margin || ttRect.right > vw - margin) {
                 let left = infoRect.left + infoRect.width / 2 - ttRect.width / 2;
                 left = Math.min(Math.max(left, margin), vw - ttRect.width - margin);
-                tooltip.style.position = 'fixed';
-                tooltip.style.left = `${left}px`;
-                tooltip.style.top = ttRect.top >= margin
+                hint.style.position = 'fixed';
+                hint.style.left = `${left}px`;
+                hint.style.top = ttRect.top >= margin
                     ? `${ttRect.top}px`
                     : `${infoRect.bottom + gap}px`;
             }
         },
 
         hide(infoEl) {
-            const tooltip = infoEl.querySelector('.tooltip');
-            if (tooltip) {
-                tooltip.classList.remove('visible');
+            const hint = infoEl.querySelector(this.HINT_SELECTOR);
+            if (hint) {
+                hint.classList.remove('visible');
                 // Reset any fixed positioning applied by place()
-                tooltip.style.position = '';
-                tooltip.style.left = '';
-                tooltip.style.top = '';
+                hint.style.position = '';
+                hint.style.left = '';
+                hint.style.top = '';
             }
             infoEl.classList.remove('active');
             infoEl.setAttribute('aria-expanded', 'false');
             if (this.activeInfoEl === infoEl) this.activeInfoEl = null;
         },
 
-        createTooltip(infoEl) {
-            const tooltip = document.createElement('div');
-            tooltip.className = 'tooltip';
-            tooltip.setAttribute('role', 'tooltip');
-            tooltip.textContent = infoEl.getAttribute('data-title');
-            infoEl.appendChild(tooltip);
-            return tooltip;
+        createHint(infoEl) {
+            const hint = document.createElement('div');
+            hint.className = 'podskazka';
+            hint.setAttribute('role', 'tooltip');
+            hint.textContent = infoEl.getAttribute('data-hint');
+            infoEl.appendChild(hint);
+            return hint;
         }
     };
 
@@ -403,12 +423,12 @@ const RssBridge = (() => {
             if (node.matches && node.matches('.info')) els.push(node);
             if (node.querySelectorAll) els.push(...node.querySelectorAll('.info'));
             els.forEach(el => {
-                if (!el.hasAttribute('data-title') && el.hasAttribute('title')) {
-                    el.setAttribute('data-title', el.getAttribute('title'));
+                if (!el.hasAttribute('data-hint') && el.hasAttribute('title')) {
+                    el.setAttribute('data-hint', el.getAttribute('title'));
                     el.removeAttribute('title');
                 }
-                if (el.getAttribute('data-title')) {
-                    TooltipManager.initElement(el);
+                if (el.getAttribute('data-hint')) {
+                    PodskazkaManager.initElement(el);
                 }
             });
         };
@@ -568,9 +588,14 @@ const RssBridge = (() => {
     const PlaceholderHelper = {
         init() {
             document.addEventListener('contextmenu', e => {
-                if (!e.target.classList.contains('info')) return;
+                // Ignore right-clicks on the hint popup itself (it is a
+                // child of the .info button) — only the button matters.
+                if (!(e.target instanceof Element)) return;
+                if (e.target.closest('.podskazka')) return;
+                const infoBtn = e.target.closest('.info');
+                if (!infoBtn) return;
                 e.preventDefault();
-                const input = document.getElementById(e.target.getAttribute('data-for'));
+                const input = document.getElementById(infoBtn.getAttribute('data-for'));
                 if (input) {
                     input.value = input.getAttribute('placeholder') ?? '';
                     input.focus();
@@ -818,10 +843,16 @@ const RssBridge = (() => {
             Search.init();
             CardManager.init();
             PlaceholderHelper.init();
-            TooltipManager.init();
+            PodskazkaManager.init();
             observeDynamicInfoButtons();
             FormValidator.init();
             FavoritesManager.init();
+        },
+
+        // Exposed so the deferred re-run below can happen without leaking
+        // the module-scoped `Search` const into the global scope.
+        _performSearch() {
+            Search.perform();
         }
     };
 })();
@@ -829,7 +860,7 @@ const RssBridge = (() => {
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         RssBridge._init();
-        setTimeout(() => Search.perform(), 100);
+        setTimeout(() => RssBridge._performSearch(), 100);
     });
 } else {
     RssBridge._init();

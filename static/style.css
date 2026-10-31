@@ -689,7 +689,7 @@ input:focus::placeholder { opacity: 0; }
 }
 
 /* Tooltip popup */
-.tooltip {
+.podskazka {
     position: absolute;
     bottom: calc(100% + 8px);
     left: 50%;
@@ -715,38 +715,40 @@ input:focus::placeholder { opacity: 0; }
     z-index: 9999;
 }
 
-.tooltip.visible {
+.podskazka.visible {
     opacity: 1;
     /* On touch devices the tooltip must be tappable/dismissible,
        so allow pointer events while it is visible. */
     pointer-events: auto;
 }
 
-/* Tapping a visible tooltip dismisses it (works on touch screens where
-   there is no hover to leave). */
-.tooltip.visible:active {
+/* Tapping the visible hint itself dismisses it (works on touch screens
+   where there is no hover to leave). The tap lands on the .info button
+   (the hint is its child), so :active on the parent closes the popup. */
+.info.active:has(> .podskazka.visible):active > .podskazka.visible,
+.info.active:active > .podskazka.visible {
     opacity: 0;
-    pointer-events: none;
+    transition: none;
 }
 
 /* Tooltip position modifiers (handled via JS) */
-.tooltip.tooltip-bottom {
+.podskazka.podskazka-bottom {
     bottom: auto;
     top: calc(100% + 8px);
 }
 
-.tooltip.tooltip-top {
+.podskazka.podskazka-top {
     bottom: calc(100% + 8px);
     top: auto;
 }
 
-.tooltip.tooltip-left {
+.podskazka.podskazka-left {
     left: 0;
     right: auto;
     transform: none;
 }
 
-.tooltip.tooltip-right {
+.podskazka.podskazka-right {
     left: auto;
     right: 0;
     transform: none;
@@ -881,7 +883,7 @@ input:focus::placeholder { opacity: 0; }
     content-visibility: auto;
     contain-intrinsic-size: auto 300px;
     /* Note: no `contain: paint` here — it would clip tooltips/popups that
-       intentionally overflow the card bounds (see .tooltip below). */
+       intentionally overflow the card bounds (see .podskazka below). */
     contain: style;
 }
 
@@ -1776,10 +1778,10 @@ html.has-favorites.favorites-loaded .bridge-card {
 
     /* On narrow screens tooltips are positioned via fixed coordinates by JS,
        so drop the class-based offsets to avoid conflicts. */
-    .tooltip.tooltip-top,
-    .tooltip.tooltip-bottom,
-    .tooltip.tooltip-left,
-    .tooltip.tooltip-right {
+    .podskazka.podskazka-top,
+    .podskazka.podskazka-bottom,
+    .podskazka.podskazka-left,
+    .podskazka.podskazka-right {
         position: fixed;
         bottom: auto;
         top: auto;
