@@ -1096,7 +1096,8 @@ final class Response
             return null;
         }
 
-        if (str_starts_with($trimmed, '<!DOCTYPE html>') === true
+        if (
+            str_starts_with($trimmed, '<!DOCTYPE html>') === true
             || str_starts_with($trimmed, '<html') === true
             || str_starts_with($trimmed, '<head') === true
             || str_starts_with($trimmed, '<div class="error"') === true
