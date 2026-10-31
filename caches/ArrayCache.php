@@ -12,14 +12,17 @@ namespace RSSBridge\Caches;
  * Supports Stale-while-revalidate: expired entries remain accessible
  * via getWithStale() until explicitly pruned or the process terminates.
  */
-final class ArrayCache implements CacheInterface
+final class ArrayCache extends AbstractCache
 {
     /**
-     * @var array<string, array{value: mixed, fresh_until: int, expires_at: int}>
+     * @var array<string, string> Raw JSON blobs (encoded via AbstractCache)
      */
     private array $data = [];
 
-    private const DEFAULT_STALE_TTL = 604800;
+    /**
+     * @var array<string, int> key => lease expiry timestamp
+     */
+    private array $locks = [];
 
     public function get(string $key, mixed $default = null): mixed
     {
@@ -27,9 +30,6 @@ final class ArrayCache implements CacheInterface
 
         return $cached['fresh'] ?? $default;
     }
-
-    /** @var array<string, int> key => lease expiry timestamp */
-    private array $locks = [];
 
     public function acquireLock(string $key, int $ttlSeconds): bool
     {
@@ -50,20 +50,12 @@ final class ArrayCache implements CacheInterface
             return ['fresh' => null, 'stale' => null];
         }
 
-        $item = $this->data[$key];
-        $now = time();
+        $blob = $this->data[$key];
 
-        if ($item['expires_at'] !== 0 && $item['expires_at'] <= $now) {
-            unset($this->data[$key]);
-            return ['fresh' => null, 'stale' => null];
-        }
+        // Use AbstractCache::decode() for JSON deserialization
+        $decoded = $this->decode($blob, $key);
 
-        $isFresh = ($item['fresh_until'] === 0 || $item['fresh_until'] > $now);
-
-        return [
-            'fresh' => $isFresh === true ? $item['value'] : null,
-            'stale' => $item['value'],
-        ];
+        return $decoded;
     }
 
     public function set(string $key, mixed $value, ?int $ttl = null): void
@@ -74,13 +66,14 @@ final class ArrayCache implements CacheInterface
 
         $now = time();
         $freshUntil = $ttl === null ? 0 : $now + $ttl;
-        $expiresAt = $ttl === null ? 0 : $freshUntil + self::DEFAULT_STALE_TTL;
 
-        $this->data[$key] = [
-            'value'       => $value,
-            'fresh_until' => $freshUntil,
-            'expires_at'  => $expiresAt,
-        ];
+        try {
+            // Use AbstractCache::encode() for JSON serialization
+            $this->data[$key] = $this->encode($value, $freshUntil);
+        } catch (\JsonException $e) {
+            // For in-memory cache, just skip storing if encoding fails
+            return;
+        }
     }
 
     public function delete(string $key): void
@@ -98,8 +91,23 @@ final class ArrayCache implements CacheInterface
     {
         $now = time();
 
-        foreach ($this->data as $key => $item) {
-            if ($item['expires_at'] !== 0 && $item['expires_at'] <= $now) {
+        foreach ($this->data as $key => $blob) {
+            try {
+                $decoded = json_decode($blob, true, 512, \JSON_THROW_ON_ERROR);
+            } catch (\JsonException $e) {
+                unset($this->data[$key]);
+                continue;
+            }
+
+            if (is_array($decoded) === false || array_key_exists('fresh_until', $decoded) === false) {
+                unset($this->data[$key]);
+                continue;
+            }
+
+            $freshUntil = (int) ($decoded['fresh_until'] ?? 0);
+            $hardExpiration = $freshUntil + self::DEFAULT_STALE_TTL;
+
+            if ($hardExpiration !== 0 && $hardExpiration <= $now) {
                 unset($this->data[$key]);
             }
         }

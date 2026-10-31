@@ -9,6 +9,9 @@ namespace RSSBridge\Caches;
  *
  * All cache implementations must be final classes with readonly properties.
  * Follows PSR-16 SimpleCache conventions where applicable.
+ *
+ * Implementations should extend AbstractCache to inherit JSON serialization
+ * logic and avoid code duplication.
  */
 interface CacheInterface
 {

@@ -9,23 +9,13 @@ use RSSBridge\Configuration;
 
 /**
  * Factory for creating cache instances based on configuration.
+ *
+ * This class centralizes the logic for instantiating different cache
+ * implementations with their specific configuration requirements.
  */
 final class CacheFactory
 {
     private Logger $logger;
-
-    /**
-     * Map cache names to PSR-4 classes.
-     *
-     * @var array<string, class-string<CacheInterface>>
-     */
-    private const PSR4_CLASSES = [
-        'array'     => ArrayCache::class,
-        'file'      => FileCache::class,
-        'memcached' => MemcachedCache::class,
-        'null'      => NullCache::class,
-        'sqlite'    => SQLiteCache::class,
-    ];
 
     public function __construct(Logger $logger)
     {
@@ -36,11 +26,14 @@ final class CacheFactory
     {
         $name = $this->normalizeName($name);
 
-        if (isset(self::PSR4_CLASSES[$name]) === false) {
-            throw new \InvalidArgumentException(sprintf('Invalid cache name: "%s"', $name));
-        }
-
-        return $this->createPsr4Cache($name);
+        return match ($name) {
+            'array'     => new ArrayCache(),
+            'null'      => new NullCache(),
+            'file'      => $this->createFileCache(),
+            'sqlite'    => $this->createSQLiteCache(),
+            'memcached' => $this->createMemcachedCache(),
+            default     => throw new \InvalidArgumentException(sprintf('Invalid cache name: "%s"', $name)),
+        };
     }
 
     private function normalizeName(?string $name): string
@@ -49,76 +42,63 @@ final class CacheFactory
             $name = Configuration::getConfig('cache', 'type') ?? 'file';
         }
 
-        if ((bool) preg_match('/(.+)(?:\.php)$/', $name, $matches) === true) {
-            $name = $matches[1];
-        }
-
-        if ((bool) preg_match('/(.+)(?:Cache)$/i', $name, $matches) === true) {
+        // Strip common suffixes
+        if ((bool) preg_match('/(.+)(?:\.php|Cache)$/i', $name, $matches) === true) {
             $name = $matches[1];
         }
 
         return strtolower($name);
     }
 
-    private function createPsr4Cache(string $name): CacheInterface
+    private function createFileCache(): FileCache
     {
-        switch ($name) {
-            case 'array':
-                return new ArrayCache();
+        $configuredPath = Configuration::getConfig('FileCache', 'path');
+        $path = Configuration::getPathCache();
 
-            case 'null':
-                return new NullCache();
-
-            case 'file':
-                $configuredPath = Configuration::getConfig('FileCache', 'path');
-                $path = Configuration::getPathCache();
-
-                if ((bool) $configuredPath === true) {
-                    $path = $configuredPath;
-                }
-
-                return new FileCache($this->logger, [
-                    'path'         => $path,
-                    'enable_purge' => Configuration::getConfig('FileCache', 'enable_purge'),
-                ]);
-
-            case 'sqlite':
-                if (extension_loaded('sqlite3') === false) {
-                    throw new \Exception('"sqlite3" extension not loaded. Please check "php.ini"');
-                }
-
-                $file = Configuration::getConfig('SQLiteCache', 'file');
-                if ((bool) $file === false) {
-                    throw new \Exception('Configuration for SQLiteCache missing.');
-                }
-
-                return new SQLiteCache($this->logger, [
-                    'file'         => $file,
-                    'timeout'      => Configuration::getConfig('SQLiteCache', 'timeout'),
-                    'enable_purge' => Configuration::getConfig('SQLiteCache', 'enable_purge'),
-                ]);
-
-            case 'memcached':
-                if (extension_loaded('memcached') === false) {
-                    throw new \Exception('"memcached" extension not loaded. Please check "php.ini"');
-                }
-
-                $type = Configuration::getConfig('MemcachedCache', 'type');
-                if (($type ?? '') === '') {
-                    // Not set in config.ini.php: fall back to the
-                    // consolidated defaults in config/memcached.conf
-                    $type = $this->readMemcachedSetting('type') ?? 'internal';
-                }
-
-                if ($type === 'external') {
-                    return $this->createMemcachedExternal();
-                }
-
-                return $this->createMemcachedInternal();
-
-            default:
-                throw new \InvalidArgumentException(sprintf('Unknown cache type: %s', $name));
+        if ((bool) $configuredPath === true) {
+            $path = $configuredPath;
         }
+
+        return new FileCache($this->logger, [
+            'path'         => $path,
+            'enable_purge' => Configuration::getConfig('FileCache', 'enable_purge'),
+        ]);
+    }
+
+    private function createSQLiteCache(): SQLiteCache
+    {
+        if (extension_loaded('sqlite3') === false) {
+            throw new \Exception('"sqlite3" extension not loaded. Please check "php.ini"');
+        }
+
+        $file = Configuration::getConfig('SQLiteCache', 'file');
+        if ((bool) $file === false) {
+            throw new \Exception('Configuration for SQLiteCache missing.');
+        }
+
+        return new SQLiteCache($this->logger, [
+            'file'         => $file,
+            'timeout'      => Configuration::getConfig('SQLiteCache', 'timeout'),
+            'enable_purge' => Configuration::getConfig('SQLiteCache', 'enable_purge'),
+        ]);
+    }
+
+    private function createMemcachedCache(): MemcachedCache
+    {
+        if (extension_loaded('memcached') === false) {
+            throw new \Exception('"memcached" extension not loaded. Please check "php.ini"');
+        }
+
+        $type = Configuration::getConfig('MemcachedCache', 'type');
+        if (($type ?? '') === '') {
+            $type = $this->readMemcachedSetting('type') ?? 'internal';
+        }
+
+        if ($type === 'external') {
+            return $this->createMemcachedExternal();
+        }
+
+        return $this->createMemcachedInternal();
     }
 
     /**
@@ -167,9 +147,6 @@ final class CacheFactory
         if ($chunkSizeRaw !== null) {
             $parsed = MemcachedCache::parseSize($chunkSizeRaw);
             if ($parsed !== null) {
-                // Never let the client chunk exceed the server's -I limit,
-                // otherwise every chunk write would fail with E2BIG and the
-                // cache would silently stop storing anything.
                 $serverLimitRaw = $this->readMemcachedSetting('item_size_limit');
                 $serverLimit = MemcachedCache::parseSize($serverLimitRaw);
                 if ($serverLimit !== null && $serverLimit > 0 && $parsed > $serverLimit) {
@@ -180,12 +157,10 @@ final class CacheFactory
                     ));
                     $parsed = $serverLimit;
                 }
-                $itemSizeLimit = $parsed + 65536; // restore safety margin -> effective per-item cap
+                $itemSizeLimit = $parsed + 65536;
             }
         }
 
-        // Legacy/explicit item_size_limit (e.g. "32M") also accepted here;
-        // MemcachedCache clamps it to the 1 MB protocol hard cap internally.
         if ($itemSizeLimit === null) {
             $legacyRaw = $this->readMemcachedSetting('item_size_limit');
             $itemSizeLimit = MemcachedCache::parseSize($legacyRaw);
@@ -197,15 +172,11 @@ final class CacheFactory
         return [$itemSizeLimit, $maxChunks];
     }
 
-    /**
-     * Create internal Memcached instance (Unix socket).
-     */
     private function createMemcachedInternal(): MemcachedCache
     {
         $socketPath = Configuration::getConfig('MemcachedCache', 'socket_path');
 
         if (($socketPath ?? '') === '') {
-            // Fall back to the consolidated defaults in config/memcached.conf
             $socketPath = $this->readMemcachedSetting('socket_path');
         }
 
@@ -219,13 +190,9 @@ final class CacheFactory
 
         [$itemSizeLimit, $maxChunks] = $this->memcachedClientOptions();
 
-        // Pass empty string as host, socket path as fourth parameter
         return new MemcachedCache($this->logger, '', 0, $socketPath, $itemSizeLimit, $maxChunks);
     }
 
-    /**
-     * Create external Memcached instance (TCP).
-     */
     private function createMemcachedExternal(): MemcachedCache
     {
         $host = Configuration::getConfig('MemcachedCache', 'host');

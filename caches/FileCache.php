@@ -9,21 +9,16 @@ use RSSBridge\Utils\Url;
 
 /**
  * File-based cache storage with security hardening.
- * Each cache entry is stored as a separate file with serialized data.
+ * Each cache entry is stored as a separate file with JSON-encoded data.
  *
  * Implements Stale-while-revalidate: entries are kept beyond their fresh TTL
  * (up to 7 additional days) so that stale data can be served when upstream fails.
  *
  * Storage format per file:
- *   serialized(['value' => $actualData, 'fresh_until' => int, 'expires_at' => int])
+ *   JSON-encoded: {"__v":2, "value":..., "fresh_until":...}
  */
-final class FileCache implements CacheInterface
+final class FileCache extends AbstractCache
 {
-    /**
-     * How long stale data is retained after fresh TTL expires (7 days).
-     */
-    private const DEFAULT_STALE_TTL = 604800;
-
     private readonly string $path;
     private readonly bool $enablePurge;
     private readonly Logger $logger;
@@ -75,36 +70,31 @@ final class FileCache implements CacheInterface
             return ['fresh' => null, 'stale' => null];
         }
 
-        $item = unserialize($data, ['allowed_classes' => true]);
-        if ($item === false || is_array($item) === false) {
-            $this->logger->warning(sprintf('Failed to unserialize cache file: %s', $cacheFile));
+        // Use AbstractCache::decode() for JSON deserialization
+        $decoded = $this->decode($data, $key);
+
+        // If decode() returned nulls due to JsonException (legacy/corrupt data),
+        // invalidate the entry to prevent repeated failures.
+        if ($decoded['fresh'] === null && $decoded['stale'] === null) {
+            $this->logger->info(sprintf('Discarding non-JSON legacy cache file: %s', $cacheFile));
             $this->delete($key);
             return ['fresh' => null, 'stale' => null];
         }
 
-        // Handle legacy format (old structure without fresh_until)
-        if (array_key_exists('fresh_until', $item) === false) {
-            $value = $item['value'] ?? $item;
-            return ['fresh' => $value, 'stale' => $value];
+        // Check hard expiration (stale TTL)
+        // Note: decode() already checks fresh_until, but we need to check
+        // if the file itself should be deleted (hard expiration)
+        $fileMtime = filemtime($cacheFile);
+        if ($fileMtime !== false) {
+            $now = time();
+            $hardExpiration = $fileMtime + self::DEFAULT_STALE_TTL;
+            if ($hardExpiration <= $now) {
+                $this->delete($key);
+                return ['fresh' => null, 'stale' => null];
+            }
         }
 
-        $now = time();
-        $expiresAt = (int) ($item['expires_at'] ?? 0);
-
-        // Hard-expired: data is too old even for stale serving
-        if ($expiresAt !== 0 && $expiresAt <= $now) {
-            $this->delete($key);
-            return ['fresh' => null, 'stale' => null];
-        }
-
-        $value = $item['value'] ?? null;
-        $freshUntil = (int) ($item['fresh_until'] ?? 0);
-        $isFresh = ($freshUntil === 0 || $freshUntil > $now);
-
-        return [
-            'fresh' => $isFresh === true ? $value : null,
-            'stale' => $value,
-        ];
+        return $decoded;
     }
 
     public function set(string $key, mixed $value, ?int $ttl = null): void
@@ -117,18 +107,19 @@ final class FileCache implements CacheInterface
         $now = time();
 
         $freshUntil = $ttl === null ? 0 : $now + $ttl;
-        $expiresAt = $ttl === null ? 0 : $freshUntil + self::DEFAULT_STALE_TTL;
-
-        $item = [
-            'value'       => $value,
-            'fresh_until' => $freshUntil,
-            'expires_at'  => $expiresAt,
-        ];
-
-        $data = serialize($item);
 
         try {
-            file_put_contents($cacheFile, $data, LOCK_EX);
+            // Use AbstractCache::encode() for JSON serialization
+            $data = $this->encode($value, $freshUntil);
+        } catch (\JsonException $e) {
+            $this->logger->error(sprintf('Failed to JSON encode cache key "%s": %s', $key, $e->getMessage()));
+            return;
+        }
+
+        try {
+            // LOCK_EX for atomic writes, 0600 for security (owner-only access)
+            file_put_contents($cacheFile, $data, \LOCK_EX);
+            chmod($cacheFile, 0600);
         } catch (\Exception $e) {
             $this->logger->warning(Url::createSaneExceptionMessage($e));
         }
@@ -183,16 +174,28 @@ final class FileCache implements CacheInterface
                 continue;
             }
 
-            $item = unserialize($data, ['allowed_classes' => true]);
-            if ($item === false || is_array($item) === false) {
+            // Try to decode as JSON; if it fails, it's legacy/corrupt - delete it
+            try {
+                $decoded = json_decode($data, true, 512, \JSON_THROW_ON_ERROR);
+            } catch (\JsonException $e) {
                 unlink($cacheFile);
                 continue;
             }
 
-            // Handle legacy format: use 'expiration' key if present
-            $expiresAt = (int) ($item['expires_at'] ?? $item['expiration'] ?? 0);
+            if (is_array($decoded) === false || array_key_exists('fresh_until', $decoded) === false) {
+                unlink($cacheFile);
+                continue;
+            }
 
-            if ($expiresAt !== 0 && $expiresAt <= $now) {
+            // Check hard expiration based on file mtime + stale TTL
+            $fileMtime = filemtime($cacheFile);
+            if ($fileMtime === false) {
+                unlink($cacheFile);
+                continue;
+            }
+
+            $hardExpiration = $fileMtime + self::DEFAULT_STALE_TTL;
+            if ($hardExpiration !== 0 && $hardExpiration <= $now) {
                 unlink($cacheFile);
             }
         }
@@ -244,11 +247,12 @@ final class FileCache implements CacheInterface
 
     private function createCacheFile(string $key): string
     {
-        return $this->path . md5($key) . '.cache';
+        // Use AbstractCache::createCacheKey() for consistent SHA-256 hashing
+        return $this->path . bin2hex($this->createCacheKey($key)) . '.cache';
     }
 
     private function isExcludedFile(string $filename): bool
     {
-        return in_array($filename, ['.', '..', '.gitkeep', '.htaccess'], true);
+        return in_array($filename, ['.', '..', '.gitkeep', '.htaccess'], true) === true;
     }
 }

@@ -15,20 +15,16 @@ use RSSBridge\Utils\Url;
  * (up to 7 additional days) so that stale data can be served when upstream fails.
  *
  * Storage format in the 'value' BLOB column:
- *   serialized(['value' => $actualData, 'fresh_until' => int])
+ *   JSON-encoded array: {"__v":2, "value":..., "fresh_until":...}
  *
  * The 'expiration' column stores the hard-expiry timestamp (fresh + stale TTL)
  * and is used exclusively by prune() for garbage collection.
  */
-final class SQLiteCache implements CacheInterface
+final class SQLiteCache extends AbstractCache
 {
-    /**
-     * How long stale data is retained after fresh TTL expires (7 days).
-     */
-    private const DEFAULT_STALE_TTL = 604800;
-
     private readonly Logger $logger;
     private readonly bool $enablePurge;
+
     /**
      * SQLITE_BUSY result code. The sqlite3 extension does not define the
      * SQLITE_* constants, so we carry the value ourselves (stable since
@@ -259,31 +255,20 @@ final class SQLiteCache implements CacheInterface
             return ['fresh' => null, 'stale' => null];
         }
 
-        $blob = $row['value'];
-        $unserialized = unserialize((string) $blob, ['allowed_classes' => true]);
+        $blob = (string) $row['value'];
 
-        if ($unserialized === false) {
-            $this->logger->error(sprintf(
-                "Failed to unserialize cache entry: '%s'",
-                mb_substr((string) $blob, 0, 100)
-            ));
+        // Use AbstractCache::decode() for JSON deserialization
+        $decoded = $this->decode($blob, $key);
+
+        // If decode() returned nulls due to JsonException (legacy/corrupt data),
+        // invalidate the entry to prevent repeated failures.
+        if ($decoded['fresh'] === null && $decoded['stale'] === null) {
+            $this->logger->info(sprintf('Discarding non-JSON legacy cache entry for key "%s"', $key));
+            $this->delete($key);
             return ['fresh' => null, 'stale' => null];
         }
 
-        // Handle legacy format (raw value without metadata wrapper)
-        if (is_array($unserialized) === false || array_key_exists('value', $unserialized) === false) {
-            return ['fresh' => $unserialized, 'stale' => $unserialized];
-        }
-
-        $value = $unserialized['value'];
-        $freshUntil = (int) ($unserialized['fresh_until'] ?? 0);
-
-        $isFresh = ($freshUntil === 0 || $freshUntil > $now);
-
-        return [
-            'fresh' => $isFresh === true ? $value : null,
-            'stale' => $value,
-        ];
+        return $decoded;
     }
 
     public function set(string $key, mixed $value, ?int $ttl = null): void
@@ -298,12 +283,13 @@ final class SQLiteCache implements CacheInterface
         $freshUntil = $ttl === null ? 0 : $now + $ttl;
         $hardExpiration = $ttl === null ? 0 : $freshUntil + self::DEFAULT_STALE_TTL;
 
-        $wrapper = [
-            'value'       => $value,
-            'fresh_until' => $freshUntil,
-        ];
-
-        $blob = serialize($wrapper);
+        try {
+            // Use AbstractCache::encode() for JSON serialization
+            $blob = $this->encode($value, $freshUntil);
+        } catch (\JsonException $e) {
+            $this->logger->error(sprintf('Failed to JSON encode cache key "%s": %s', $key, $e->getMessage()));
+            return;
+        }
 
         $stmt = $this->db->prepare(
             'INSERT OR REPLACE INTO storage (key, value, expiration) VALUES (:key, :value, :expiration)'
@@ -370,10 +356,5 @@ final class SQLiteCache implements CacheInterface
         } catch (\Exception $e) {
             $this->logger->warning(Url::createSaneExceptionMessage($e));
         }
-    }
-
-    private function createCacheKey(string $key): string
-    {
-        return hash('sha256', $key, true);
     }
 }

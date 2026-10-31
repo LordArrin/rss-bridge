@@ -13,17 +13,15 @@ use RSSBridge\Logger\Logger;
  *
  * Implements Stale-while-revalidate pattern: data is kept in cache beyond
  * its fresh TTL to allow serving stale content when upstream fails.
+ *
+ * Uses JSON serialization via AbstractCache to avoid Object Injection vulnerabilities.
+ * Large values are automatically chunked to respect memcached's 1MB item size limit.
  */
-final class MemcachedCache implements CacheInterface
+final class MemcachedCache extends AbstractCache
 {
     private readonly Logger $logger;
     private readonly \Memcached $conn;
     private readonly string $cachePrefix;
-
-    /**
-     * Default stale TTL: keep expired data for 7 days for fallback purposes.
-     */
-    private const DEFAULT_STALE_TTL = 604800;
 
     // Memcached result codes (numeric values for compatibility)
     private const RES_SUCCESS = 0;
@@ -41,7 +39,7 @@ final class MemcachedCache implements CacheInterface
     private const MAX_ITEM_SIZE = 1048576;
 
     /**
-     * Safety margin for key overhead and serialization growth.
+     * Safety margin for key overhead and JSON encoding growth.
      */
     private const CHUNK_SAFETY = 65536;
 
@@ -173,10 +171,12 @@ final class MemcachedCache implements CacheInterface
             return ['fresh' => null, 'stale' => null];
         }
 
-        // Handle legacy format (raw value without metadata wrapper)
+        // Validate that we got a proper array (JSON-decoded wrapper)
         if (is_array($item) === false || array_key_exists('value', $item) === false) {
-            // Legacy data: treat as fresh for backward compatibility
-            return ['fresh' => $item, 'stale' => $item];
+            // Corrupt or legacy data: invalidate
+            $this->logger->info(sprintf('Discarding invalid cache entry for key "%s"', $key));
+            $this->delete($key);
+            return ['fresh' => null, 'stale' => null];
         }
 
         $now = time();
@@ -185,6 +185,7 @@ final class MemcachedCache implements CacheInterface
         $isChunked = isset($item['chunks']) === true && is_array($item['chunks']) === true;
 
         // Fast path: non-chunked fresh entry - no payload reassembly needed.
+        // The value is already a properly decoded JSON value (could be an object like Response)
         if ($isChunked === false && ($freshUntil === 0 || $freshUntil > $now)) {
             return ['fresh' => $value, 'stale' => $value];
         }
@@ -192,18 +193,20 @@ final class MemcachedCache implements CacheInterface
         // Chunked entry: reassemble payload from secondary keys (only reached
         // for stale reads or expired chunks).
         if ($isChunked === true) {
-            $value = $this->readChunked($item['chunks']);
+            $payload = $this->readChunked($item['chunks']);
 
-            if ($value === null) {
+            if ($payload === null) {
                 // Some chunk was evicted or lost: treat the whole entry as a
                 // miss instead of serving corrupt/truncated data.
                 return ['fresh' => null, 'stale' => null];
             }
 
+            // Decode the reassembled JSON payload
             try {
-                $value = unserialize($value, ['allowed_classes' => true]);
+                $decoded = $this->decode($payload, $key);
+                $value = $decoded['stale']; // We only need the value, decode() already handled fresh/stale logic
             } catch (\Throwable $e) {
-                $this->logger->warning('Failed to unserialize chunked memcached entry: ' . $e->getMessage());
+                $this->logger->warning('Failed to decode chunked memcached entry: ' . $e->getMessage());
                 return ['fresh' => null, 'stale' => null];
             }
         }
@@ -234,10 +237,18 @@ final class MemcachedCache implements CacheInterface
             default => $freshUntil + self::DEFAULT_STALE_TTL,
         };
 
+        // Encode the value to JSON using AbstractCache
+        try {
+            $encoded = $this->encode($value, 0); // 0 because fresh_until is stored separately in the wrapper
+        } catch (\JsonException $e) {
+            $this->logger->error(sprintf('Failed to JSON encode cache key "%s": %s', $key, $e->getMessage()));
+            return;
+        }
+
         $storeValue = $value;
         $chunkKeys = [];
 
-        $encoded = serialize($value);
+        // Check if the encoded JSON string exceeds chunk size
         if (strlen($encoded) > $this->chunkSize) {
             $parts = str_split($encoded, $this->chunkSize);
 
@@ -271,8 +282,8 @@ final class MemcachedCache implements CacheInterface
                 return;
             }
 
+            // Store only chunk references in the main key
             $storeValue = [
-                'value'  => null,
                 'chunks' => $chunkKeys,
             ];
         }
@@ -289,7 +300,7 @@ final class MemcachedCache implements CacheInterface
                     $this->conn->delete($chunkKey);
                 }
             }
-            $this->logStoreFailure($cacheKey, strlen(serialize($item)));
+            $this->logStoreFailure($cacheKey, strlen(json_encode($item, \JSON_THROW_ON_ERROR)));
         }
     }
 
@@ -315,7 +326,7 @@ final class MemcachedCache implements CacheInterface
     /**
      * Fetch all chunk keys via a single multi-get and concatenate payloads.
      *
-     * @return string|null Reassembled payload or null if any chunk is missing
+     * @return string|null Reassembled JSON payload or null if any chunk is missing
      */
     private function readChunked(array $chunkKeys): ?string
     {
@@ -425,7 +436,7 @@ final class MemcachedCache implements CacheInterface
         return $this->conn->getStats();
     }
 
-    private function createCacheKey(string $key): string
+    protected function createCacheKey(string $key): string
     {
         return $this->cachePrefix . hash('sha256', $key);
     }
