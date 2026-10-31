@@ -265,7 +265,7 @@ const RssBridge = (() => {
                 // pointers; touch taps are handled by pointerup/click.
                 if (this.current && this.current.touch) return;
                 if (this.lastPointerType && this.lastPointerType !== 'mouse') return;
-                this.show(info);
+                this.show(info, { mouse: true });
             });
 
             document.addEventListener('mouseout', (e) => {
@@ -311,17 +311,95 @@ const RssBridge = (() => {
                 }
             });
 
-            // Reposition on scroll so tooltips never leave the viewport.
-            // Use capture:true because most scrolling happens inside .container
-            // (the bridge list), which does not fire window-level scroll events.
-            const reposition = () => {
-                if (this.current) this.place(this.current.trigger, this.current.tooltip);
-            };
-            window.addEventListener('scroll', reposition, { passive: true, capture: true });
+            // Scrolling dismisses the tooltip: while the page is being
+            // scrolled, hints would otherwise float over unrelated content
+            // and follow the icon around, which feels noisy. Hiding on any
+            // scroll (capture:true — most scrolling happens inside
+            // .container, the bridge list, which does not fire window-level
+            // scroll events) makes the hint disappear as soon as the user
+            // scrolls past the card.
+            window.addEventListener('scroll', () => this.hideCurrent(), { passive: true, capture: true });
             window.addEventListener('resize', () => this.hideCurrent());
+
+            // Dismiss the tooltip when the pointer moves far away from the
+            // "i" icon ("уведение мышки сильно в сторону"). mouseout only
+            // fires when the pointer leaves the icon itself, so a tooltip
+            // opened by keyboard focus or a tap could linger while the
+            // cursor wanders across the screen. A lightweight rAF-throttled
+            // pointer tracker closes it once the distance exceeds a small
+            // tolerance band around the icon + tooltip rectangles.
+            this.trackPointerAway();
         },
 
-        show(infoEl) {
+        trackPointerAway() {
+            let queued = false;
+            const check = (ev) => {
+                if (!this.current || !this.current.mouse) return;
+                // Ignore synthetic mouse events that follow touch taps:
+                // pinned (touch-opened) tooltips must stay until the user
+                // taps elsewhere or presses Escape.
+                if (this.lastPointerType && this.lastPointerType !== 'mouse') return;
+                const x = ev.clientX;
+                const y = ev.clientY;
+                if (this.isWithinHoverZone(x, y)) return;
+                this.hideCurrent();
+            };
+
+            document.addEventListener('pointermove', (ev) => {
+                // Touch/pen pointers never own a hover tooltip at all.
+                if (ev.pointerType && ev.pointerType !== 'mouse') {
+                    if (this.current && this.current.mouse) this.hideCurrent();
+                    return;
+                }
+                if (queued) return;
+                queued = true;
+                requestAnimationFrame(() => {
+                    queued = false;
+                    check(ev);
+                });
+            }, { passive: true });
+
+            // Safety net for engines without PointerEvent support.
+            if (!window.PointerEvent) {
+                document.addEventListener('mousemove', (ev) => {
+                    if (queued) return;
+                    queued = true;
+                    requestAnimationFrame(() => {
+                        queued = false;
+                        check(ev);
+                    });
+                }, { passive: true });
+            }
+        },
+
+        // True while the pointer sits anywhere near the open hint: inside
+        // the trigger icon, inside the tooltip bubble, or within a small
+        // invisible margin around both (so slight hand jitter next to the
+        // icon doesn't close the tooltip immediately).
+        isWithinHoverZone(x, y) {
+            const pad = 24;
+            const inRect = (r) =>
+                x >= r.left - pad && x <= r.right + pad &&
+                y >= r.top - pad && y <= r.bottom + pad;
+
+            const { trigger, tooltip } = this.current;
+            if (inRect(trigger.getBoundingClientRect())) return true;
+            if (tooltip && inRect(tooltip.getBoundingClientRect())) return true;
+
+            // The gap between the icon and its bubble stays part of the
+            // zone too: build one union rectangle covering both.
+            const tr = trigger.getBoundingClientRect();
+            const br = tooltip ? tooltip.getBoundingClientRect() : tr;
+            const union = {
+                left: Math.min(tr.left, br.left),
+                right: Math.max(tr.right, br.right),
+                top: Math.min(tr.top, br.top),
+                bottom: Math.max(tr.bottom, br.bottom),
+            };
+            return inRect(union);
+        },
+
+        show(infoEl, options) {
             if (this.current && this.current.trigger === infoEl) return;
             this.hideCurrent();
 
@@ -343,7 +421,10 @@ const RssBridge = (() => {
             infoEl.setAttribute('aria-describedby', tooltip.id);
             infoEl.classList.add('active');
 
-            this.current = { trigger: infoEl, tooltip };
+            // `mouse: true` marks a hover-opened tooltip: those are the ones
+            // dismissed when the pointer wanders away (see trackPointerAway).
+            // Touch-pinned and keyboard-opened tooltips are excluded there.
+            this.current = { trigger: infoEl, tooltip, mouse: !!(options && options.mouse) };
             this.place(infoEl, tooltip);
             requestAnimationFrame(() => tooltip.classList.add('visible'));
         },

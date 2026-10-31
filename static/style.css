@@ -224,10 +224,12 @@ p {
    ============================================================ */
 
 .container {
-    /* Fluid width: 92vw on phones/ultra-wide panels, capped at 1500px so
+    /* Fluid width: 92vw on phones/ultra-wide panels, capped at 1800px so
        lines stay readable on 4K/5K displays instead of stretching edge
-       to edge. min() also guarantees it can never exceed the viewport. */
-    width: min(92%, 1500px);
+       to edge. min() also guarantees it can never exceed the viewport.
+       (Raised from 1500px: at 1500px the card grid fit only 4 columns on
+       a 4K screen; 1800px leaves room for 5 cards per row.) */
+    width: min(92%, 1800px);
     margin: 0 auto 40px;
     padding: 0 16px;
 }
@@ -249,11 +251,26 @@ p {
  */
 .container:has(.bridge-card) {
     display: grid;
-    /* min(300px, 100%) keeps the grid single-column on any screen narrower
-       than ~320px (iPhone SE and smaller) without horizontal overflow. */
-    grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+    /* Column width is fluid on large screens: min(300px, 100%) keeps the
+       grid single-column on any screen narrower than ~320px (iPhone SE
+       and smaller) without horizontal overflow, while max(300px, ...)
+       caps the column at 1/5 of the container so the bridge list shows
+       at least 5 cards per row on wide displays (a 4K screen fits 5+).
+       On screens below ~1560px the plain 300px minimum applies and the
+       layout behaves exactly like before. */
+    grid-template-columns: repeat(auto-fit, minmax(max(min(300px, 100%), calc((100% - 80px) / 5)), 1fr));
     gap: 20px;
     align-items: stretch;
+}
+
+/* On very large (4K/5K) displays, slightly reduce the overall scale so
+   more content fits in a row: the base font stops growing at 16px
+   instead of scaling up to 18px. The card grid above guarantees at
+   least 5 columns there regardless of the browser's zoom/DPI setting. */
+@media screen and (min-width: 2400px) {
+    html {
+        font-size: 16px;
+    }
 }
 
 /* Force full-width layout for structural elements */
