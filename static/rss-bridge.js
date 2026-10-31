@@ -150,33 +150,132 @@ const RssBridge = (() => {
     };
 
     const TooltipManager = {
+        isTouch() {
+            return window.matchMedia('(hover: none)').matches || 'ontouchstart' in window;
+        },
+
         init() {
             document.querySelectorAll('.info[data-title], .info[title]').forEach(el => {
                 if (el.getAttribute('title') && !el.getAttribute('data-title')) {
                     el.setAttribute('data-title', el.getAttribute('title'));
                     el.removeAttribute('title');
                 }
-                
+
+                // Make the icon keyboard-accessible
+                if (!el.hasAttribute('tabindex')) {
+                    el.setAttribute('tabindex', '0');
+                    el.setAttribute('role', 'button');
+                    el.setAttribute('aria-label', 'Show help');
+                }
+
+                // Hover devices: classic mouseenter/mouseleave behaviour
                 el.addEventListener('mouseenter', (e) => this.show(e.target));
                 el.addEventListener('mouseleave', (e) => this.hide(e.target));
+
+                // Touch devices / keyboard: tap toggles the tooltip
+                el.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const tooltip = el.querySelector('.tooltip');
+                    if (tooltip && tooltip.classList.contains('visible')) {
+                        this.hide(el);
+                    } else {
+                        this.hideAll();
+                        this.show(el);
+                    }
+                });
+
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        el.click();
+                    } else if (e.key === 'Escape') {
+                        this.hide(el);
+                    }
+                });
             });
+
+            // Dismiss any open tooltip when tapping outside of it
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.info')) this.hideAll();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') this.hideAll();
+            });
+
+            // Reposition fixed tooltips on scroll/resize so they never
+            // get cut off by the viewport edges.
+            window.addEventListener('scroll', () => this.repositionVisible(), { passive: true, capture: true });
+            window.addEventListener('resize', () => this.repositionVisible());
+        },
+
+        repositionVisible() {
+            document.querySelectorAll('.tooltip.visible').forEach(tooltip => {
+                const infoEl = tooltip.parentElement;
+                if (infoEl && infoEl.classList.contains('info')) {
+                    this.place(infoEl, tooltip);
+                }
+            });
+        },
+
+        hideAll() {
+            document.querySelectorAll('.info.active').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tooltip.visible').forEach(t => t.classList.remove('visible'));
         },
 
         show(infoEl) {
             const tooltip = infoEl.querySelector('.tooltip') || this.createTooltip(infoEl);
-            const card = infoEl.closest('.bridge-card');
-            if (!card) return;
+            infoEl.classList.add('active');
 
             tooltip.classList.remove('tooltip-top', 'tooltip-bottom', 'tooltip-left', 'tooltip-right');
             tooltip.style.left = '';
             tooltip.style.right = '';
+            tooltip.style.top = '';
             tooltip.style.transform = '';
             tooltip.classList.add('visible');
-            
-            const infoRect = infoEl.getBoundingClientRect();
-            const cardRect = card.getBoundingClientRect();
-            const tooltipRect = tooltip.getBoundingClientRect();
 
+            this.place(infoEl, tooltip);
+        },
+
+        place(infoEl, tooltip) {
+            const narrow = window.innerWidth < 768;
+            const gap = 8;
+            const margin = 12;
+
+            const infoRect = infoEl.getBoundingClientRect();
+            const tooltipRect = tooltip.getBoundingClientRect();
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+
+            if (narrow) {
+                // On small screens position with fixed viewport coordinates
+                // so the tooltip can never overflow the card or the screen.
+                tooltip.style.position = 'fixed';
+
+                let left = infoRect.left + infoRect.width / 2 - tooltipRect.width / 2;
+                left = Math.min(Math.max(left, margin), vw - tooltipRect.width - margin);
+                tooltip.style.left = `${left}px`;
+
+                let top = infoRect.top - tooltipRect.height - gap;
+                if (top < margin) {
+                    // Not enough space above → show below
+                    top = infoRect.bottom + gap;
+                }
+                if (top + tooltipRect.height > vh - margin) {
+                    // Also doesn't fit below → pin to the bottom edge
+                    top = Math.max(margin, vh - tooltipRect.height - margin);
+                }
+                tooltip.style.top = `${top}px`;
+                return;
+            }
+
+            tooltip.style.position = '';
+
+            const card = infoEl.closest('.bridge-card');
+            if (!card) return;
+
+            const cardRect = card.getBoundingClientRect();
             const relTop = infoRect.top - cardRect.top;
             const relLeft = infoEl.offsetLeft;
             const cardHeight = cardRect.height;
@@ -188,9 +287,9 @@ const RssBridge = (() => {
                 tooltip.classList.add('tooltip-top');
             }
 
-            const tooltipWidth = tooltipRect.width;
+            const tooltipWidth = tooltip.getBoundingClientRect().width;
             const iconCenterX = relLeft + infoEl.offsetWidth / 2;
-            
+
             if (iconCenterX - tooltipWidth / 2 < 0) {
                 tooltip.classList.add('tooltip-left');
             } else if (iconCenterX + tooltipWidth / 2 > cardWidth) {
@@ -201,11 +300,13 @@ const RssBridge = (() => {
         hide(infoEl) {
             const tooltip = infoEl.querySelector('.tooltip');
             if (tooltip) tooltip.classList.remove('visible');
+            infoEl.classList.remove('active');
         },
 
         createTooltip(infoEl) {
             const tooltip = document.createElement('div');
             tooltip.className = 'tooltip';
+            tooltip.setAttribute('role', 'tooltip');
             tooltip.textContent = infoEl.getAttribute('data-title');
             infoEl.appendChild(tooltip);
             return tooltip;
