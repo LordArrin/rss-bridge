@@ -3,16 +3,18 @@
 
 declare(strict_types=1);
 
+use RSSBridge\Configuration;
+
 require __DIR__ . '/../vendor/autoload.php';
-require __DIR__ . '/../lib/config.php';
+Configuration::loadConfiguration();
 
 $container = require __DIR__ . '/../lib/dependencies.php';
 
-/** @var \BridgeMetadataCache $cache */
+/** @var \RSSBridge\BridgeMetadataCache $cache */
 $cache = $container['bridge_metadata_cache'];
-/** @var \BridgeFactory $factory */
+/** @var \RSSBridge\BridgeFactory $factory */
 $factory = $container['bridge_factory'];
-/** @var \SafeBridgeLoader $loader */
+/** @var \RSSBridge\SafeBridgeLoader $loader */
 $loader = $container['safe_bridge_loader'];
 
 $force = in_array('--force', $argv ?? [], true);

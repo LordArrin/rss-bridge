@@ -3,14 +3,15 @@
 
 declare(strict_types=1);
 
+use RSSBridge\Configuration;
+
 /**
  * Remove expired items from cache.
  * 
- * Should be run periodically (e.g., via cron) to free up space.
  */
 
 require __DIR__ . '/../vendor/autoload.php';
-require __DIR__ . '/../lib/config.php';
+Configuration::loadConfiguration();
 
 $container = require __DIR__ . '/../lib/dependencies.php';
 

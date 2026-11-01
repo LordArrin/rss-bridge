@@ -3,6 +3,8 @@
 
 declare(strict_types=1);
 
+use RSSBridge\Configuration;
+
 /**
  * Benchmark cache performance.
  * 
@@ -13,7 +15,7 @@ declare(strict_types=1);
  */
 
 require __DIR__ . '/../vendor/autoload.php';
-require __DIR__ . '/../lib/config.php';
+Configuration::loadConfiguration();
 
 $container = require __DIR__ . '/../lib/dependencies.php';
 

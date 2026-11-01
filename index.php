@@ -9,7 +9,7 @@ use RSSBridge\RssBridge;
 use RSSBridge\Utils\Url;
 
 require __DIR__ . '/vendor/autoload.php';
-require __DIR__ . '/lib/config.php';
+Configuration::loadConfiguration();
 
 $container = require __DIR__ . '/lib/dependencies.php';
 
@@ -55,6 +55,83 @@ register_shutdown_function(function () use ($logger) {
         $logger->error($message);
     }
 });
+
+// ============================================================================
+// System Messages (Notifications from ENV)
+// ============================================================================
+
+// Process single system message
+$systemMessage = getenv('SYSTEM_MESSAGE');
+if (is_string($systemMessage) === true && $systemMessage !== '') {
+    $level = getenv('SYSTEM_MESSAGE_LEVEL');
+    $level = is_string($level) ? $level : 'info';
+
+    $titleRaw = getenv('SYSTEM_MESSAGE_TITLE');
+    $title = is_string($titleRaw) && $titleRaw !== '' ? $titleRaw : null;
+
+    $urlRaw = getenv('SYSTEM_MESSAGE_URL');
+    $url = is_string($urlRaw) && $urlRaw !== '' ? $urlRaw : null;
+
+    $links = [];
+    if ($url !== null) {
+        $links[] = ['label' => $title ?? 'More info', 'url' => $url];
+    }
+
+    switch ($level) {
+        case 'warning':
+            notify_warning($systemMessage, $title, null, [], $links);
+            break;
+        case 'error':
+            notify_error($systemMessage, $title, null, [], $links);
+            break;
+        default:
+            notify_info($systemMessage, $title, null, [], $links);
+            break;
+    }
+}
+
+// Process multiple system messages (JSON array)
+$systemMessagesJson = getenv('SYSTEM_MESSAGES');
+if (is_string($systemMessagesJson) === true && $systemMessagesJson !== '') {
+    $messages = json_decode($systemMessagesJson, true);
+    if (is_array($messages) === true) {
+        foreach ($messages as $msg) {
+            if (is_array($msg) === false || isset($msg['text']) === false || is_string($msg['text']) === false) {
+                continue;
+            }
+
+            $text = $msg['text'];
+            if ($text === '') {
+                continue;
+            }
+
+            $level = isset($msg['level']) && is_string($msg['level']) ? $msg['level'] : 'info';
+            $title = isset($msg['title']) && is_string($msg['title']) && $msg['title'] !== '' ? $msg['title'] : null;
+            $url = isset($msg['url']) && is_string($msg['url']) && $msg['url'] !== '' ? $msg['url'] : null;
+
+            $links = [];
+            if ($url !== null) {
+                $links[] = ['label' => $title ?? 'More info', 'url' => $url];
+            }
+
+            switch ($level) {
+                case 'warning':
+                    notify_warning($text, $title, null, [], $links);
+                    break;
+                case 'error':
+                    notify_error($text, $title, null, [], $links);
+                    break;
+                default:
+                    notify_info($text, $title, null, [], $links);
+                    break;
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Request Processing
+// ============================================================================
 
 $argv = $argv ?? null;
 if (is_array($argv) === true) {

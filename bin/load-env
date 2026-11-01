@@ -168,6 +168,36 @@ $normalizationRules = [
         'validate' => 'validateBridgeList',
         'sanitize' => false,
     ],
+
+    // System messages (notifications)
+    'SYSTEM_MESSAGE' => [
+        'type' => 'string',
+        'fallback' => '',
+        'sanitize' => false,
+    ],
+    'SYSTEM_MESSAGE_URL' => [
+        'type' => 'string',
+        'fallback' => '',
+        'validate' => 'validateMessageUrl',
+        'sanitize' => false,
+    ],
+    'SYSTEM_MESSAGE_TITLE' => [
+        'type' => 'string',
+        'fallback' => '',
+        'sanitize' => false,
+    ],
+    'SYSTEM_MESSAGE_LEVEL' => [
+        'type' => 'string',
+        'fallback' => 'info',
+        'validate' => 'validateMessageLevel',
+        'sanitize' => false,
+    ],
+    'SYSTEM_MESSAGES' => [
+        'type' => 'string',
+        'fallback' => '',
+        'validate' => 'validateSystemMessages',
+        'sanitize' => false,
+    ],
 ];
 
 // ============================================================================
@@ -364,7 +394,7 @@ function getContainerMemoryMb(): ?int
 }
 
 // ============================================================================
-// Domain, Timezone, Email, Telegram, CIDR, and APP_ENV validators
+// Domain, Timezone, Email, Telegram, CIDR, Bridge List, and Message validators
 // ============================================================================
 
 /**
@@ -648,6 +678,106 @@ function validateBridgeList(string $value): ?string
     }
 
     return implode(',', $validated);
+}
+
+/**
+ * Validates a message level.
+ * Must be one of: 'info', 'warning', 'error' (case-insensitive).
+ * Returns the validated value or null on failure.
+ */
+function validateMessageLevel(string $value): ?string
+{
+    $value = strtolower(trim($value));
+    if (in_array($value, ['info', 'warning', 'error'], true) === true) {
+        return $value;
+    }
+    return null;
+}
+
+/**
+ * Validates a message URL.
+ * Must be http(s), mailto, or relative URL (no scheme).
+ * Returns the validated value or null on failure.
+ * Empty string is valid (optional field).
+ */
+function validateMessageUrl(string $value): ?string
+{
+    $trimmed = trim($value);
+    if ($trimmed === '') {
+        return '';
+    }
+
+    // Relative URL (no scheme) — allowed
+    if (preg_match('~^[a-z][a-z0-9+.-]*:~i', $trimmed) === 0) {
+        return $trimmed;
+    }
+
+    // Absolute URL — must be http(s) or mailto
+    if (preg_match('~^(https?|mailto):~i', $trimmed) === 1) {
+        return $trimmed;
+    }
+
+    return null;
+}
+
+/**
+ * Validates SYSTEM_MESSAGES JSON array.
+ * Each element must be either a string or an object with 'text' field.
+ * Returns the validated JSON string or null on failure.
+ * Empty string is valid (optional field).
+ */
+function validateSystemMessages(string $value): ?string
+{
+    $trimmed = trim($value);
+    if ($trimmed === '') {
+        return '';
+    }
+
+    $decoded = json_decode($trimmed, true);
+    if (is_array($decoded) === false) {
+        return null;
+    }
+
+    $validated = [];
+    foreach ($decoded as $item) {
+        if (is_string($item) === true) {
+            $validated[] = ['text' => $item, 'level' => 'info'];
+        } elseif (is_array($item) === true && isset($item['text']) === true && is_string($item['text']) === true) {
+            $text = trim($item['text']);
+            if ($text === '') {
+                continue;
+            }
+
+            $level = isset($item['level']) && is_string($item['level'])
+                ? validateMessageLevel($item['level'])
+                : 'info';
+            if ($level === null) {
+                $level = 'info';
+            }
+
+            $entry = ['text' => $text, 'level' => $level];
+
+            if (isset($item['title']) && is_string($item['title']) && trim($item['title']) !== '') {
+                $entry['title'] = trim($item['title']);
+            }
+
+            if (isset($item['url']) && is_string($item['url'])) {
+                $url = validateMessageUrl($item['url']);
+                if ($url !== null && $url !== '') {
+                    $entry['url'] = $url;
+                }
+            }
+
+            $validated[] = $entry;
+        }
+        // Skip invalid items silently
+    }
+
+    if ($validated === []) {
+        return '';
+    }
+
+    return json_encode($validated, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
 /**

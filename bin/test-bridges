@@ -1,12 +1,18 @@
 #!/usr/bin/env php
 <?php
 
+declare(strict_types=1);
+
+use RSSBridge\Configuration;
+
 require __DIR__ . '/../vendor/autoload.php';
-require __DIR__ . '/../lib/config.php';
+Configuration::loadConfiguration();
 
 $container = require __DIR__ . '/../lib/dependencies.php';
 
+/** @var \RSSBridge\BridgeFactory $bridgeFactory */
 $bridgeFactory = $container['bridge_factory'];
+/** @var \RSSBridge\SafeBridgeLoader $safeLoader */
 $safeLoader = $container['safe_bridge_loader'];
 
 $bridgeNames = $bridgeFactory->getBridgeClassNames();
@@ -32,7 +38,7 @@ foreach ($bridgeNames as $bridgeClass) {
             echo "OK\n";
             $passed++;
         }
-    } catch (Throwable $e) {
+    } catch (\Throwable $e) {
         echo "? {$e->getMessage()}\n";
         $failed++;
         $errors[] = "{$shortName}: {$e->getMessage()}";

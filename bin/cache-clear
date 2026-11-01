@@ -3,6 +3,8 @@
 
 declare(strict_types=1);
 
+use RSSBridge\Configuration;
+
 /**
  * Clear all cached data (except bridge metadata).
  * 
@@ -10,7 +12,7 @@ declare(strict_types=1);
  */
 
 require __DIR__ . '/../vendor/autoload.php';
-require __DIR__ . '/../lib/config.php';
+Configuration::loadConfiguration();
 
 $container = require __DIR__ . '/../lib/dependencies.php';
 

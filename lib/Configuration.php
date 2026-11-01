@@ -8,19 +8,12 @@ namespace RSSBridge;
  * Configuration module for RSS-Bridge.
  *
  * This class implements a configuration module for RSS-Bridge.
+ * It is strictly responsible for loading and validating application-level
+ * settings from INI files (config.default.ini.php and config.ini.php).
  *
- * NOTE: Timezone configuration was removed from this class. The TZ is now
- * managed system-wide by /bin/load-env at container startup, which applies
- * the timezone to PHP runtime, libc, and shell environments simultaneously.
- *
- * NOTE: Admin contact information (email, telegram) is managed by /bin/load-env
- * and accessed directly from environment variables in the web interface renderer.
- *
- * NOTE: Environment mode (prod/dev) is managed by APP_ENV environment variable
- * set by /bin/load-env and is no longer handled by this class.
- *
- * NOTE: Bridge filtering (enabled/disabled bridges) is now managed by /bin/load-env
- * via ENABLED_BRIDGES and DISABLED_BRIDGES environment variables.
+ * NOTE: System-level configurations (Timezone, APP_ENV, Admin contacts,
+ * PHP-FPM, Memcached, HTTP client settings, and Bridge filtering) are now
+ * managed exclusively by /bin/load-env at container startup.
  *
  * NOTE: Application version is read directly from the /app/VERSION file
  * generated during docker build, without using this class.
@@ -36,8 +29,9 @@ final class Configuration
     {
     }
 
-    public static function loadConfiguration(array $customConfig = [], array $env = []): void
+    public static function loadConfiguration(): void
     {
+        // Load default configuration (always present)
         $defaultConfigPath = __DIR__ . '/../config.default.ini.php';
         if (file_exists($defaultConfigPath) === false) {
             throwServerException('The default configuration file is missing');
@@ -45,7 +39,7 @@ final class Configuration
 
         $config = parse_ini_file($defaultConfigPath, true, INI_SCANNER_TYPED);
         if ($config === false) {
-            throwServerException('Error parsing ini config');
+            throwServerException('Error parsing default config');
         }
 
         foreach ($config as $header => $section) {
@@ -57,35 +51,19 @@ final class Configuration
             }
         }
 
-        foreach ($customConfig as $header => $section) {
-            if (is_array($section) === false) {
-                continue;
-            }
-            foreach ($section as $key => $value) {
-                self::setConfig((string) $header, (string) $key, $value);
-            }
-        }
-
-        foreach ($env as $envName => $envValue) {
-            $nameParts = explode('_', (string) $envName);
-            if (($nameParts[0] ?? '') === 'RSSBRIDGE') {
-                if (count($nameParts) < 3) {
-                    // Invalid env name
-                    continue;
+        // Load user configuration (optional)
+        $userConfigPath = __DIR__ . '/../config.ini.php';
+        if (file_exists($userConfigPath) === true) {
+            $userConfig = parse_ini_file($userConfigPath, true, INI_SCANNER_TYPED);
+            if ($userConfig !== false) {
+                foreach ($userConfig as $header => $section) {
+                    if (is_array($section) === false) {
+                        continue;
+                    }
+                    foreach ($section as $key => $value) {
+                        self::setConfig((string) $header, (string) $key, $value);
+                    }
                 }
-
-                // The variable is named $header but it's actually the section in config.ini.php
-                $header = $nameParts[1];
-
-                // Recombine the key if it had multiple underscores
-                $key = implode('_', array_slice($nameParts, 2));
-                $key = strtolower($key);
-
-                if (is_string($envValue) === true && ($envValue === 'true' || $envValue === 'false')) {
-                    $envValue = filter_var($envValue, FILTER_VALIDATE_BOOLEAN);
-                }
-
-                self::setConfig($header, $key, $envValue);
             }
         }
 
