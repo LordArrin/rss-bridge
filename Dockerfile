@@ -264,7 +264,6 @@ RUN apk del .build-deps
 FROM alpine:${ALPINE_VERSION} AS runtime
 
 ARG IMAGE_VERSION=1.2.7
-ENV RSSBRIDGE_SYSTEM_VERSION=${IMAGE_VERSION}
 ARG VERSION_PLACEHOLDER=__RSSBRIDGE_IMAGE_VERSION__
 ENV CURL_IMPERSONATE=firefox155
 ENV LD_PRELOAD=/usr/lib/libmimalloc-secure.so \
@@ -431,6 +430,11 @@ COPY LICENSE ./
 COPY --chown=nginx:nginx ./ /app/
 
 WORKDIR /app
+
+# Generate immutable version artifact from build argument.
+RUN echo -n "${IMAGE_VERSION}" > /app/VERSION && \
+    chown nginx:nginx /app/VERSION && \
+    chmod 444 /app/VERSION
 
 RUN composer install --optimize-autoloader --no-interaction --ignore-platform-reqs --classmap-authoritative && \
     sed -i "s/__RSSBRIDGE_IMAGE_VERSION__/${IMAGE_VERSION}/g" /app/index.html && \
