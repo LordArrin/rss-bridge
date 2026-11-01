@@ -36,7 +36,7 @@ final class HealthAction implements ActionInterface
         $response = [
             'status' => $overallStatus,
             'timestamp' => date('c'),
-            'version' => Configuration::getVersion(),
+            'version' => get_rssbridge_version(),
             'checks' => $checks,
         ];
 

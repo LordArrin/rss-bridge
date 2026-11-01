@@ -35,12 +35,12 @@ final class FrontpageAction implements ActionInterface
 
         $bridgeClassNames = $this->bridgeFactory->getBridgeClassNames();
 
-        // Notifications from SafeBridgeLoader / BridgeFactory (unified system v2)
+        // Notifications from BridgeFactory / SafeBridgeLoader (unified system v2)
         foreach ($this->bridgeFactory->getMissingEnabledBridges() as $missingEnabledBridge) {
             notify_warning(
-                sprintf('Bridge "%s" is enabled in configuration but was not found and cannot be used.', $missingEnabledBridge),
+                sprintf('Bridge "%s" is listed in ENABLED_BRIDGES but was not found and cannot be used.', $missingEnabledBridge),
                 'Bridge not found',
-                'SafeBridgeLoader',
+                'BridgeFactory',
                 [],
                 [['label' => $missingEnabledBridge, 'url' => './?action=list']]
             );

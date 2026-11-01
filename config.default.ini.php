@@ -2,8 +2,6 @@
 
 [system]
 
-enabled_bridges[] = *
-
 ; Admin-defined system message, shown on every page as a unified notification
 ; (lib/notifications.php). Leave empty to disable. Rendered as plain text:
 ; HTML is stripped; the URL (if set) becomes a safe hyperlink in the body.

@@ -54,7 +54,7 @@ final class DisplayAction implements ActionInterface
         }
 
         if ($this->bridgeFactory->isEnabled($bridgeClassName) === false) {
-            return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'This bridge is not whitelisted']), 400);
+            return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Bridge is not enabled!']), 400);
         }
 
         $params = $request->toArray();
@@ -271,7 +271,7 @@ final class DisplayAction implements ActionInterface
                 Url::createSaneExceptionMessage($e),
                 implode("\n", Url::traceToCallPoints(Url::traceFromException($e))),
                 $queryString,
-                Configuration::getVersion(),
+                get_rssbridge_version(),
                 PHP_OS_FAMILY,
                 $phpVer,
                 implode(', @', $maintainers),

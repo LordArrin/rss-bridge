@@ -46,7 +46,7 @@ final class ConnectivityAction implements ActionInterface
     private function reportBridgeConnectivity(string $bridgeClassName): Response
     {
         if ($this->bridgeFactory->isEnabled($bridgeClassName) === false) {
-            throw new \Exception('Bridge is not whitelisted!');
+            throw new \Exception('Bridge is not enabled!');
         }
 
         $bridge = $this->safeLoader->createSafely($bridgeClassName);

@@ -6,7 +6,6 @@ namespace RSSBridge;
 
 use RSSBridge\Logger\Logger;
 use RSSBridge\Caches\CacheInterface;
-use RSSBridge\Configuration;
 
 /**
  * Factory for creating and managing bridge instances.
@@ -18,6 +17,9 @@ use RSSBridge\Configuration;
  * It uses an isolated "sandbox" process to detect fatal compile errors
  * (like signature mismatches) before loading them into the main process,
  * preventing the entire application from crashing.
+ *
+ * Bridge filtering is controlled by the ENABLED_BRIDGES and DISABLED_BRIDGES
+ * environment variables, parsed as comma-separated lists.
  */
 final class BridgeFactory
 {
@@ -41,14 +43,14 @@ final class BridgeFactory
     private array $shortNameMap = [];
 
     /**
-     * List of bridge class names that are enabled in the configuration.
+     * List of bridge class names that are enabled after applying filters.
      *
      * @var string[]
      */
     private array $enabledBridges = [];
 
     /**
-     * List of enabled bridges from config that were not found on disk.
+     * List of enabled bridges from configuration that were not found on disk.
      *
      * @var string[]
      */
@@ -92,35 +94,78 @@ final class BridgeFactory
     }
 
     /**
-     * Loads the list of enabled bridges from configuration.
+     * Loads the list of enabled bridges from environment variables.
      *
-     * The special value '*' enables all discovered bridges.
-     * Bridges that are configured but not found on disk are logged
+     * Reads ENABLED_BRIDGES and DISABLED_BRIDGES (comma-separated lists).
+     * The special value '*' in ENABLED_BRIDGES enables all discovered bridges.
+     * Bridges listed in ENABLED_BRIDGES but not found on disk are logged
      * and stored in {@see getMissingEnabledBridges()}.
      *
-     * @throws \Exception If no bridges are enabled at all
+     * @throws \Exception If no bridges are enabled after filtering
      */
     private function loadEnabledBridges(): void
     {
-        $enabledBridges = Configuration::getConfig('system', 'enabled_bridges');
-        if ($enabledBridges === null) {
-            throw new \Exception('No bridges are enabled...');
+        $enabledRaw = getenv('ENABLED_BRIDGES');
+        $disabledRaw = getenv('DISABLED_BRIDGES');
+
+        $enabledList = $this->parseBridgeList($enabledRaw === false ? '' : (string) $enabledRaw);
+        $disabledList = $this->parseBridgeList($disabledRaw === false ? '' : (string) $disabledRaw);
+
+        $resolvedEnabled = [];
+
+        if (in_array('*', $enabledList, true) === true) {
+            $resolvedEnabled = $this->bridgeClassNames;
+        } else {
+            foreach ($enabledList as $bridgeName) {
+                $bridgeClassName = $this->createBridgeClassName($bridgeName);
+                if ($bridgeClassName !== null) {
+                    $resolvedEnabled[] = $bridgeClassName;
+                } else {
+                    $this->missingEnabledBridges[] = $bridgeName;
+                    $this->logger->info(sprintf('Bridge listed in ENABLED_BRIDGES not found: %s', $bridgeName));
+                }
+            }
         }
 
-        foreach ($enabledBridges as $enabledBridge) {
-            if ($enabledBridge === '*') {
-                $this->enabledBridges = $this->bridgeClassNames;
-                break;
-            }
-
-            $bridgeClassName = $this->createBridgeClassName($enabledBridge);
+        $resolvedDisabled = [];
+        foreach ($disabledList as $bridgeName) {
+            $bridgeClassName = $this->createBridgeClassName($bridgeName);
             if ($bridgeClassName !== null) {
-                $this->enabledBridges[] = $bridgeClassName;
+                $resolvedDisabled[] = $bridgeClassName;
             } else {
-                $this->missingEnabledBridges[] = $enabledBridge;
-                $this->logger->info(sprintf('Bridge not found: %s', $enabledBridge));
+                $this->logger->info(sprintf('Bridge listed in DISABLED_BRIDGES not found (ignored): %s', $bridgeName));
             }
         }
+
+        $this->enabledBridges = array_values(array_diff($resolvedEnabled, $resolvedDisabled));
+
+        if ($this->enabledBridges === []) {
+            throw new \Exception('No bridges are enabled after applying ENABLED_BRIDGES and DISABLED_BRIDGES filters');
+        }
+    }
+
+    /**
+     * Parses a comma-separated string of bridge names into an array.
+     *
+     * @param string $raw The raw string from environment variable
+     * @return string[] Array of trimmed, non-empty strings
+     */
+    private function parseBridgeList(string $raw): array
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return [];
+        }
+
+        $parts = explode(',', $raw);
+        $list = [];
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part !== '') {
+                $list[] = $part;
+            }
+        }
+        return $list;
     }
 
     /**

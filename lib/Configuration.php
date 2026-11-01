@@ -18,11 +18,15 @@ namespace RSSBridge;
  *
  * NOTE: Environment mode (prod/dev) is managed by APP_ENV environment variable
  * set by /bin/load-env and is no longer handled by this class.
+ *
+ * NOTE: Bridge filtering (enabled/disabled bridges) is now managed by /bin/load-env
+ * via ENABLED_BRIDGES and DISABLED_BRIDGES environment variables.
+ *
+ * NOTE: Application version is read directly from the /app/VERSION file
+ * generated during docker build, without using this class.
  */
 final class Configuration
 {
-    public const VERSION = '1.0.0'; // fallback
-
     /**
      * @var array<string, array<string, mixed>>
      */
@@ -62,21 +66,6 @@ final class Configuration
             }
         }
 
-        if (file_exists(__DIR__ . '/../whitelist.txt') === true) {
-            $whitelistContent = file_get_contents(__DIR__ . '/../whitelist.txt');
-            if ($whitelistContent !== false) {
-                $enabledBridges = trim($whitelistContent);
-                if ($enabledBridges === '*') {
-                    self::setConfig('system', 'enabled_bridges', ['*']);
-                } else {
-                    self::setConfig('system', 'enabled_bridges', array_filter(
-                        array_map('trim', explode("\n", $enabledBridges)),
-                        fn(string $v): bool => $v !== ''
-                    ));
-                }
-            }
-        }
-
         foreach ($env as $envName => $envValue) {
             $nameParts = explode('_', (string) $envName);
             if (($nameParts[0] ?? '') === 'RSSBRIDGE') {
@@ -92,22 +81,12 @@ final class Configuration
                 $key = implode('_', array_slice($nameParts, 2));
                 $key = strtolower($key);
 
-                // Handle this specifically because it's an array
-                if ($key === 'enabled_bridges' && is_string($envValue) === true) {
-                    $envValue = explode(',', $envValue);
-                    $envValue = array_map('trim', $envValue);
-                }
-
                 if (is_string($envValue) === true && ($envValue === 'true' || $envValue === 'false')) {
                     $envValue = filter_var($envValue, FILTER_VALIDATE_BOOLEAN);
                 }
 
                 self::setConfig($header, $key, $envValue);
             }
-        }
-
-        if (is_array(self::getConfig('system', 'enabled_bridges')) === false) {
-            self::throwConfigError('system', 'enabled_bridges', 'Is not an array');
         }
 
         if (is_string(self::getConfig('cache', 'type')) === false) {
@@ -162,18 +141,6 @@ final class Configuration
     public static function setConfig(string $section, string $key, mixed $value): void
     {
         self::$config[strtolower($section)][strtolower($key)] = $value;
-    }
-
-    public static function getVersion(): string
-    {
-        // Single source of truth: ARG IMAGE_VERSION in the Dockerfile,
-        // exported as ENV RSSBRIDGE_SYSTEM_VERSION into the image.
-        $envVersion = getenv('RSSBRIDGE_SYSTEM_VERSION');
-        if ($envVersion !== false && $envVersion !== '') {
-            return (string) $envVersion;
-        }
-
-        return self::VERSION;
     }
 
     private static function throwConfigError(string $section, string $key, string $message = ''): never

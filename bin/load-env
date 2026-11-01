@@ -154,6 +154,20 @@ $normalizationRules = [
         'validate' => 'validateCidrList',
         'sanitize' => false,
     ],
+
+    // Bridge filtering
+    'ENABLED_BRIDGES' => [
+        'type' => 'string',
+        'fallback' => '*',
+        'validate' => 'validateBridgeList',
+        'sanitize' => false,
+    ],
+    'DISABLED_BRIDGES' => [
+        'type' => 'string',
+        'fallback' => '',
+        'validate' => 'validateBridgeList',
+        'sanitize' => false,
+    ],
 ];
 
 // ============================================================================
@@ -592,6 +606,45 @@ function validateCidrList(string $value): ?string
         }
 
         $validated[] = $cidr;
+    }
+
+    return implode(',', $validated);
+}
+
+/**
+ * Validates a comma-separated list of bridge names.
+ * Accepts:
+ *   - Single bridge: "TwitterBridge"
+ *   - Multiple bridges: "TwitterBridge,YouTubeBridge,RedditBridge"
+ *   - Wildcard: "*"
+ * Returns the validated/normalized value or null on failure.
+ * Empty string is valid (optional field).
+ */
+function validateBridgeList(string $value): ?string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+    if ($value === '*') {
+        return '*';
+    }
+
+    $bridges = explode(',', $value);
+    $validated = [];
+
+    foreach ($bridges as $bridge) {
+        $bridge = trim($bridge);
+        if ($bridge === '') {
+            continue;
+        }
+
+        // Bridge class names are alphanumeric + underscore
+        if (preg_match('/^[a-zA-Z0-9_]+$/', $bridge) !== 1) {
+            return null;
+        }
+
+        $validated[] = $bridge;
     }
 
     return implode(',', $validated);

@@ -145,7 +145,7 @@ $isDev = (getenv('APP_ENV') === 'DEV');
     </div>
 
     <div>
-        <strong>Version:</strong> <?= e(\RSSBridge\Configuration::getVersion()) ?>
+        <strong>Version:</strong> <?= e(get_rssbridge_version()) ?>
     </div>
 
     <?php if ($isDev === true): ?>

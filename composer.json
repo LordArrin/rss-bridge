@@ -37,6 +37,7 @@
             "lib/logger.php",
             "lib/notifications.php",
             "lib/utils.php",
+            "lib/version.php",
             "quirks/extract.php",
             "quirks/filter.php", 
             "quirks/html.php",
