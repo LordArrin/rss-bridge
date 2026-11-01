@@ -12,8 +12,9 @@ namespace RSSBridge;
  * settings from INI files (config.default.ini.php and config.ini.php).
  *
  * NOTE: System-level configurations (Timezone, APP_ENV, Admin contacts,
- * PHP-FPM, Memcached, HTTP client settings, and Bridge filtering) are now
- * managed exclusively by /bin/load-env at container startup.
+ * PHP-FPM, Memcached, HTTP client settings, Bridge filtering, and Error
+ * reporting settings) are now managed exclusively by /bin/load-env at
+ * container startup.
  *
  * NOTE: Application version is read directly from the /app/VERSION file
  * generated during docker build, without using this class.
@@ -89,19 +90,6 @@ final class Configuration
 
         if (is_string(self::getConfig('authentication', 'password_hash')) === false) {
             self::throwConfigError('authentication', 'password_hash', 'Is not a valid string');
-        }
-
-        $errorOutput = self::getConfig('error', 'output');
-        if (is_string($errorOutput) === false) {
-            self::throwConfigError('error', 'output', 'Is not a valid String');
-        }
-        if (in_array($errorOutput, ['feed', 'http', 'none'], true) === false) {
-            self::throwConfigError('error', 'output', 'Invalid output');
-        }
-
-        $reportLimit = self::getConfig('error', 'report_limit');
-        if (is_numeric($reportLimit) === false || (int) $reportLimit < 1) {
-            self::throwConfigError('error', 'report_limit', 'Value is invalid');
         }
     }
 

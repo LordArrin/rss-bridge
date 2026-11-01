@@ -169,6 +169,20 @@ $normalizationRules = [
         'sanitize' => false,
     ],
 
+    // Error reporting
+    'ERROR_OUTPUT' => [
+        'type' => 'string',
+        'fallback' => 'http',
+        'validate' => 'validateErrorOutput',
+        'sanitize' => false,
+    ],
+    'ERROR_REPORT_LIMIT' => [
+        'type' => 'int',
+        'fallback' => '1',
+        'min' => 1,
+        'max' => 100,
+    ],
+
     // System messages (notifications)
     'SYSTEM_MESSAGE' => [
         'type' => 'string',
@@ -394,7 +408,7 @@ function getContainerMemoryMb(): ?int
 }
 
 // ============================================================================
-// Domain, Timezone, Email, Telegram, CIDR, Bridge List, and Message validators
+// Domain, Timezone, Email, Telegram, CIDR, Bridge List, Message, and Error Output validators
 // ============================================================================
 
 /**
@@ -678,6 +692,20 @@ function validateBridgeList(string $value): ?string
     }
 
     return implode(',', $validated);
+}
+
+/**
+ * Validates ERROR_OUTPUT value.
+ * Must be one of: 'feed', 'http', 'none' (case-insensitive).
+ * Returns the validated value or null on failure.
+ */
+function validateErrorOutput(string $value): ?string
+{
+    $value = strtolower(trim($value));
+    if (in_array($value, ['feed', 'http', 'none'], true) === true) {
+        return $value;
+    }
+    return null;
 }
 
 /**

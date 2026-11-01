@@ -134,8 +134,16 @@ final class DisplayAction implements ActionInterface
                 $this->logger->error(sprintf('Exception in DisplayAction(%s)', $bridge->getShortName()), ['e' => $e]);
             }
 
-            $errorOutput = Configuration::getConfig('error', 'output');
-            $reportLimit = Configuration::getConfig('error', 'report_limit');
+            // Read error reporting settings from environment variables
+            $errorOutputRaw = getenv('ERROR_OUTPUT');
+            $errorOutput = (is_string($errorOutputRaw) === true && $errorOutputRaw !== '') ? $errorOutputRaw : 'http';
+
+            $reportLimitRaw = getenv('ERROR_REPORT_LIMIT');
+            $reportLimit = 1;
+            if (is_string($reportLimitRaw) === true && is_numeric($reportLimitRaw) === true) {
+                $reportLimit = max(1, (int) $reportLimitRaw);
+            }
+
             $errorCount = 1;
 
             if ($reportLimit > 1) {
