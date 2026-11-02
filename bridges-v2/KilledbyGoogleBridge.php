@@ -25,7 +25,7 @@ final class KilledbyGoogleBridge extends BridgeAbstract
 
     public function collectData(): void
     {
-        $json = getContents(self::URI . '/graveyard.json');
+        $json = getContents(self::URI . '/api/graveyard');
 
         if (is_string($json) === false || $json === '') {
             throwServerException('Empty response from Killed by Google API');
