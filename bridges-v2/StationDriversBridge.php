@@ -26,6 +26,12 @@ final class StationDriversBridge extends FeedExpander
                 'exampleValue' => 'https://www.station-drivers.com/index.php/en/component/remository/func-rss/747/no_html,1/lang,en-gb/',
                 'title' => 'URL of the Station-Drivers RSS feed OR catalog page',
             ],
+            'hide_description' => [
+                'name' => 'Hide description',
+                'type' => 'checkbox',
+                'defaultValue' => false,
+                'title' => 'Hide the long description block (OS, platforms, etc.), show only file size and downloads',
+            ],
         ],
     ];
 
@@ -41,6 +47,7 @@ final class StationDriversBridge extends FeedExpander
         'Submitted By:',
         'File Version:',
         'File Author:',
+        'File HomePage:',
     ];
 
     public function collectData(): void
@@ -223,6 +230,7 @@ final class StationDriversBridge extends FeedExpander
     private function buildContent(\Dom\HTMLDocument $dom, string $baseUrl): string
     {
         $content = '';
+        $hideDescription = (bool) $this->getInput('hide_description');
         $dtElements = $dom->querySelectorAll('dt');
 
         foreach ($dtElements as $dt) {
@@ -233,6 +241,11 @@ final class StationDriversBridge extends FeedExpander
             $label = trim($dt->textContent ?? '');
 
             if (in_array($label, self::EXCLUDED_LABELS, true) === true) {
+                continue;
+            }
+
+            // Skip description block if hide_description is enabled
+            if ($label === 'Description:' && $hideDescription === true) {
                 continue;
             }
 
@@ -249,7 +262,7 @@ final class StationDriversBridge extends FeedExpander
             $value = $this->fixRelativeUrls($value, $baseUrl);
 
             // Special formatting for Description block (lists)
-            if ($label === 'Description:') {
+            if ($label === 'Description:' && $hideDescription === false) {
                 $value = $this->formatDescriptionLists($value);
             }
 
