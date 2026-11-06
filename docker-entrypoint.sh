@@ -2,20 +2,25 @@
 
 set -e
 
-# Load environment variables and generate service configs
+# 1. Load environment variables and generate service configs
 # This merges .env.default with /config/.env and creates override files
 eval "$(php /app/bin/load-env)"
 
-# Import custom config
-if [ -f /config/config.ini.php ]; then
-    cp /config/config.ini.php /app/config.ini.php
-    chown nginx:nginx /app/config.ini.php
+# 1.5. Import custom bridges config (Fixes host permission issues for PHP-FPM)
+if [ -f /config/.bridges ]; then
+    cp /config/.bridges /app/.bridges
+    chown nginx:nginx /app/.bridges
+    chmod 644 /app/.bridges
+    echo "Bridges config: imported from /config/.bridges"
+else
+    echo "Bridges config: using default (.bridges.default)"
 fi
 
-# Count custom settings compared to defaults
+# 2. Count custom bridge settings compared to defaults
+# Note: We read from /app/.bridges here to ensure consistency with what PHP-FPM will see
 CUSTOM_SETTINGS=$(php -r '
-    $default = parse_ini_file("/app/config.default.ini.php", true, INI_SCANNER_RAW) ?: [];
-    $user = parse_ini_file("/app/config.ini.php", true, INI_SCANNER_RAW) ?: [];
+    $default = parse_ini_file("/app/.bridges.default", true, INI_SCANNER_RAW) ?: [];
+    $user = parse_ini_file("/app/.bridges", true, INI_SCANNER_RAW) ?: [];
     $count = 0;
     foreach ($user as $section => $values) {
         if (!is_array($values) || $section === "") continue;
@@ -28,12 +33,12 @@ CUSTOM_SETTINGS=$(php -r '
 ')
 
 if [ "$CUSTOM_SETTINGS" -eq 0 ]; then
-    echo "Config: default (no custom settings)"
+    echo "Bridges settings: default (no custom overrides)"
 else
-    echo "Config: imported ${CUSTOM_SETTINGS} custom settings"
+    echo "Bridges settings: imported ${CUSTOM_SETTINGS} custom overrides"
 fi
 
-# Import custom bridges
+# 3. Import custom bridges (PHP files)
 BRIDGE_COUNT=0
 if [ -d /config/bridges-v2 ]; then
     for f in /config/bridges-v2/*.php; do
@@ -50,22 +55,22 @@ if [ -d /config/bridges-v2 ]; then
 fi
 
 if [ "$BRIDGE_COUNT" -eq 0 ]; then
-    echo "Bridges: no custom bridges"
+    echo "Bridges code: no custom bridges"
 else
-    echo "Bridges: imported ${BRIDGE_COUNT} custom bridges"
+    echo "Bridges code: imported ${BRIDGE_COUNT} custom bridges"
 fi
 
-# Ensure cache directories are writable
+# 4. Ensure cache directories are writable
 chown -R nginx:nginx /app/cache
 chmod 750 /app/cache/opcache
 rm -rf /app/cache/opcache/* 2>/dev/null || true
 
-# Generate composer autoloader if missing
+# 5. Generate composer autoloader if missing
 if [ ! -f /app/vendor/autoload.php ]; then
     cd /app && composer dump-autoload --optimize --no-interaction --classmap-authoritative >/dev/null 2>&1
 fi
 
-# Read memcached configuration
+# 6. Read memcached configuration
 eval "$(php /app/config/memcached-config.php)"
 
 if [ "$MEMCACHED_TYPE" = "external" ]; then
@@ -130,19 +135,19 @@ else
     chmod 660 "$MEMCACHED_SOCKET_PATH"
 fi
 
-# Clean old cache
+# 7. Clean old cache
 php /app/bin/cache-clear >/dev/null 2>&1 || true
 
-# Build bridges metadata cache
+# 8. Build bridges metadata cache
 php /app/bin/cache-bridge-metadata
 
 # Fix ownership after cache build
 chown -R nginx:nginx /app/cache
 
-# Ensure supervisor runtime directory exists
+# 9. Ensure supervisor runtime directory exists
 mkdir -p /var/run/supervisor
 chmod 700 /var/run/supervisor
 
-# Start supervisord
+# 10. Start supervisord
 echo "Starting web services..."
 exec supervisord -n -c /etc/supervisord.conf

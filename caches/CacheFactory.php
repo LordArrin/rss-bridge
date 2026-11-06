@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace RSSBridge\Caches;
 
 use RSSBridge\Logger\Logger;
-use RSSBridge\Configuration;
+use RSSBridge\Paths;
 
 /**
- * Factory for creating cache instances based on configuration.
+ * Factory for creating cache instances based on environment configuration.
  *
  * This class centralizes the logic for instantiating different cache
- * implementations with their specific configuration requirements.
+ * implementations. All configuration is now read directly from environment
+ * variables, which are validated and normalized by /bin/load-env at startup.
  */
 final class CacheFactory
 {
@@ -39,11 +40,11 @@ final class CacheFactory
     private function normalizeName(?string $name): string
     {
         if ($name === null) {
-            $name = Configuration::getConfig('cache', 'type') ?? 'file';
+            $name = $this->getEnv('CACHE_TYPE', 'file');
         }
 
         // Strip common suffixes
-        if ((bool) preg_match('/(.+)(?:\.php|Cache)$/i', $name, $matches) === true) {
+        if (preg_match('/(.+)(?:\.php|Cache)$/i', $name, $matches) === 1) {
             $name = $matches[1];
         }
 
@@ -52,16 +53,14 @@ final class CacheFactory
 
     private function createFileCache(): FileCache
     {
-        $configuredPath = Configuration::getConfig('FileCache', 'path');
-        $path = Configuration::getPathCache();
-
-        if ((bool) $configuredPath === true) {
-            $path = $configuredPath;
-        }
+        // Use centralized path resolution
+        $defaultPath = Paths::getCache();
+        $path = $this->getEnv('CACHE_FILE_PATH', $defaultPath);
+        $enablePurge = filter_var($this->getEnv('CACHE_FILE_PURGE', 'true'), FILTER_VALIDATE_BOOLEAN);
 
         return new FileCache($this->logger, [
             'path'         => $path,
-            'enable_purge' => Configuration::getConfig('FileCache', 'enable_purge'),
+            'enable_purge' => $enablePurge,
         ]);
     }
 
@@ -71,15 +70,14 @@ final class CacheFactory
             throw new \Exception('"sqlite3" extension not loaded. Please check "php.ini"');
         }
 
-        $file = Configuration::getConfig('SQLiteCache', 'file');
-        if ((bool) $file === false) {
-            throw new \Exception('Configuration for SQLiteCache missing.');
-        }
+        $file = $this->getEnv('CACHE_SQLITE_FILE', Paths::getCache() . 'cache.sqlite');
+        $timeout = (int) $this->getEnv('CACHE_SQLITE_TIMEOUT', '5000');
+        $enablePurge = filter_var($this->getEnv('CACHE_SQLITE_PURGE', 'true'), FILTER_VALIDATE_BOOLEAN);
 
         return new SQLiteCache($this->logger, [
             'file'         => $file,
-            'timeout'      => Configuration::getConfig('SQLiteCache', 'timeout'),
-            'enable_purge' => Configuration::getConfig('SQLiteCache', 'enable_purge'),
+            'timeout'      => $timeout,
+            'enable_purge' => $enablePurge,
         ]);
     }
 
@@ -89,10 +87,7 @@ final class CacheFactory
             throw new \Exception('"memcached" extension not loaded. Please check "php.ini"');
         }
 
-        $type = Configuration::getConfig('MemcachedCache', 'type');
-        if (($type ?? '') === '') {
-            $type = $this->readMemcachedSetting('type') ?? 'internal';
-        }
+        $type = $this->getEnv('CACHE_MEMCACHED_TYPE', 'internal');
 
         if ($type === 'external') {
             return $this->createMemcachedExternal();
@@ -102,87 +97,27 @@ final class CacheFactory
     }
 
     /**
-     * Read a memcached client setting, falling back to the consolidated
-     * defaults file /config/memcached.conf when not present in config.ini.php.
-     */
-    private function readMemcachedSetting(string $key): ?string
-    {
-        $value = Configuration::getConfig('MemcachedCache', $key);
-        if ($value !== null && trim((string) $value) !== '') {
-            return trim((string) $value);
-        }
-
-        static $defaults = null;
-        if ($defaults === null) {
-            $defaults = [];
-            $file = '/config/memcached.conf';
-            if (is_readable($file) === true) {
-                // '#' comments are not understood by PHP's INI parser: convert them to ';'
-                $raw = (string) file_get_contents($file);
-                $parsed = parse_ini_string(preg_replace('/^(\h*)#.*$/m', '$1;', $raw), true, INI_SCANNER_RAW);
-                if (is_array($parsed) === true) {
-                    foreach ($parsed as $section => $values) {
-                        if (is_array($values) === true && array_key_exists('value', $values) === true) {
-                            $defaults[$section] = trim((string) $values['value']);
-                        }
-                    }
-                }
-            }
-        }
-
-        return $defaults[$key] ?? null;
-    }
-
-    /**
-     * Resolve chunking parameters for the Memcached client from
-     * config.ini.php ([MemcachedCache]) or /config/memcached.conf defaults.
+     * Resolve chunking parameters for the Memcached client from environment.
+     * The MEMCACHED_ITEM_SIZE_LIMIT is pre-calculated by config/memcached-config.php
+     * to safely satisfy memcached's 49% memory rule.
      *
      * @return array{?int, ?int} [itemSizeLimitBytes, maxChunks]
      */
     private function memcachedClientOptions(): array
     {
-        $itemSizeLimit = null;
+        $itemSizeLimitRaw = $this->getEnv('MEMCACHED_ITEM_SIZE_LIMIT', '32M');
+        $itemSizeLimit = MemcachedCache::parseSize($itemSizeLimitRaw);
 
-        $chunkSizeRaw = $this->readMemcachedSetting('client_chunk_size');
-        if ($chunkSizeRaw !== null) {
-            $parsed = MemcachedCache::parseSize($chunkSizeRaw);
-            if ($parsed !== null) {
-                $serverLimitRaw = $this->readMemcachedSetting('item_size_limit');
-                $serverLimit = MemcachedCache::parseSize($serverLimitRaw);
-                if ($serverLimit !== null && $serverLimit > 0 && $parsed > $serverLimit) {
-                    $this->logger->warning(sprintf(
-                        'Memcached client_chunk_size (%d) exceeds server item_size_limit (%d); clamping.',
-                        $parsed,
-                        $serverLimit
-                    ));
-                    $parsed = $serverLimit;
-                }
-                $itemSizeLimit = $parsed + 65536;
-            }
-        }
-
-        if ($itemSizeLimit === null) {
-            $legacyRaw = $this->readMemcachedSetting('item_size_limit');
-            $itemSizeLimit = MemcachedCache::parseSize($legacyRaw);
-        }
-
-        $maxChunksRaw = $this->readMemcachedSetting('client_max_chunks');
-        $maxChunks = ($maxChunksRaw !== null && ctype_digit($maxChunksRaw) === true) ? (int) $maxChunksRaw : null;
+        $maxChunksRaw = $this->getEnv('MEMCACHED_MAX_CHUNKS', '');
+        $maxChunks = ($maxChunksRaw !== '' && ctype_digit($maxChunksRaw) === true) ? (int) $maxChunksRaw : null;
 
         return [$itemSizeLimit, $maxChunks];
     }
 
     private function createMemcachedInternal(): MemcachedCache
     {
-        $socketPath = Configuration::getConfig('MemcachedCache', 'socket_path');
-
-        if (($socketPath ?? '') === '') {
-            $socketPath = $this->readMemcachedSetting('socket_path');
-        }
-
-        if (($socketPath ?? '') === '') {
-            throw new \Exception('"socket_path" param is not set for MemcachedCache (internal mode)');
-        }
+        // Socket path is fixed and managed by the container/supervisor
+        $socketPath = $this->getEnv('MEMCACHED_SOCKET_PATH', '/var/run/memcached/memcached.sock');
 
         if (file_exists($socketPath) === false) {
             throw new \Exception(sprintf('Memcached socket does not exist: %s', $socketPath));
@@ -195,28 +130,33 @@ final class CacheFactory
 
     private function createMemcachedExternal(): MemcachedCache
     {
-        $host = Configuration::getConfig('MemcachedCache', 'host');
-        $port = Configuration::getConfig('MemcachedCache', 'port');
+        $host = $this->getEnv('CACHE_MEMCACHED_HOST', '127.0.0.1');
+        $portStr = $this->getEnv('CACHE_MEMCACHED_PORT', '11211');
 
-        if (($host ?? '') === '') {
-            throw new \Exception('"host" param is not set for MemcachedCache (external mode)');
-        }
-        if (($port ?? '') === '') {
-            throw new \Exception('"port" param is not set for MemcachedCache (external mode)');
-        }
-
-        $port = (string) $port;
-        if (ctype_digit($port) === false) {
+        if (ctype_digit($portStr) === false) {
             throw new \Exception('"port" param is invalid for MemcachedCache');
         }
 
-        $portInt = (int) $port;
+        $portInt = (int) $portStr;
         if ($portInt < 1 || $portInt > 65535) {
             throw new \Exception('"port" param is invalid for MemcachedCache');
         }
 
         [$itemSizeLimit, $maxChunks] = $this->memcachedClientOptions();
 
-        return new MemcachedCache($this->logger, (string) $host, $portInt, '', $itemSizeLimit, $maxChunks);
+        return new MemcachedCache($this->logger, $host, $portInt, '', $itemSizeLimit, $maxChunks);
+    }
+
+    /**
+     * Safe environment variable reader with fallback.
+     *
+     * @param string $key The environment variable name.
+     * @param string $default The default value if the variable is missing or empty.
+     * @return string The validated environment value or the default.
+     */
+    private function getEnv(string $key, string $default = ''): string
+    {
+        $value = getenv($key);
+        return ($value !== false && $value !== '') ? (string) $value : $default;
     }
 }

@@ -6,7 +6,6 @@ use RSSBridge\BridgeFactory;
 use RSSBridge\Caches\CacheFactory;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Container;
-use RSSBridge\Configuration;
 use RSSBridge\Http\CurlHttpClient;
 use RSSBridge\Logger\ErrorLogHandler;
 use RSSBridge\Logger\Logger;
@@ -74,18 +73,24 @@ $container['cache_factory'] = function ($c) {
 
 $container['logger'] = function () {
     $logger = new SimpleLogger('rssbridge');
-    if (getenv('APP_ENV') === 'DEV') {
+
+    $appEnv = getenv('APP_ENV');
+    if ($appEnv !== false && $appEnv === 'DEV') {
         $logger->addHandler(new ErrorLogHandler(Logger::DEBUG));
     } else {
         $logger->addHandler(new ErrorLogHandler(Logger::INFO));
     }
 
-    $file_path  = Configuration::getConfig('logging', 'file_path');
-    $file_level = Configuration::getConfig('logging', 'file_level');
+    // Reading logging config directly from environment with explicit checks
+    $filePathRaw = getenv('LOG_FILE_PATH');
+    $filePath = ($filePathRaw !== false && $filePathRaw !== '') ? (string) $filePathRaw : '';
 
-    if (($file_path ?? '') !== '' && ($file_level ?? '') !== '') {
-        $level = array_flip(Logger::LEVEL_NAMES)[strtoupper((string) $file_level)];
-        $logger->addHandler(new StreamHandler((string) $file_path, $level));
+    $fileLevelRaw = getenv('LOG_FILE_LEVEL');
+    $fileLevel = ($fileLevelRaw !== false && $fileLevelRaw !== '') ? (string) $fileLevelRaw : '';
+
+    if ($filePath !== '' && $fileLevel !== '') {
+        $level = array_flip(Logger::LEVEL_NAMES)[strtoupper($fileLevel)] ?? Logger::INFO;
+        $logger->addHandler(new StreamHandler($filePath, $level));
     }
 
     return $logger;
@@ -93,8 +98,13 @@ $container['logger'] = function () {
 
 $container['cache'] = function ($c) {
     $cacheFactory = $c['cache_factory'];
-    $cache = $cacheFactory->create(Configuration::getConfig('cache', 'type'));
-    return $cache;
+
+    // CacheFactory::create() now handles reading CACHE_TYPE internally if null is passed.
+    // We pass it explicitly here for clarity, falling back to null if not set.
+    $cacheTypeRaw = getenv('CACHE_TYPE');
+    $cacheType = ($cacheTypeRaw !== false && $cacheTypeRaw !== '') ? (string) $cacheTypeRaw : null;
+
+    return $cacheFactory->create($cacheType);
 };
 
 $container['bridge_metadata_cache'] = function ($c) {

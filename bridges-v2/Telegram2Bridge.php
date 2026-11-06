@@ -100,7 +100,7 @@ TXT,
     public const CONFIGURATION = [
         'embed_max_size' => [
             'required' => false,
-            'defaultValue' => '10m',
+            'defaultValue' => '32m',
         ],
     ];
 

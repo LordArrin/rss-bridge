@@ -8,7 +8,6 @@ use RSSBridge\Utils\Json;
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
 use RSSBridge\Caches\CacheInterface;
-use RSSBridge\Configuration;
 use RSSBridge\SafeBridgeLoader;
 
 final class HealthAction implements ActionInterface
@@ -61,6 +60,10 @@ final class HealthAction implements ActionInterface
 
     private function checkCache(): array
     {
+        // Safe environment read with explicit fallback
+        $cacheTypeRaw = getenv('CACHE_TYPE');
+        $cacheType = $cacheTypeRaw !== false ? $cacheTypeRaw : 'file';
+
         try {
             $testKey = 'health_check_' . uniqid();
             $testValue = 'test_' . time();
@@ -78,7 +81,7 @@ final class HealthAction implements ActionInterface
             $result = [
                 'status' => 'ok',
                 'message' => 'cache read/write working correctly',
-                'type' => Configuration::getConfig('cache', 'type'),
+                'type' => $cacheType,
                 'set_latency_ms' => $setLatency,
                 'get_latency_ms' => $getLatency,
             ];
@@ -87,14 +90,16 @@ final class HealthAction implements ActionInterface
                 $stats = $this->cache->getStats();
                 if (is_array($stats) === true && $stats !== []) {
                     $serverStats = reset($stats);
-                    $result['memcached'] = [
-                        'curr_items' => $serverStats['curr_items'] ?? 0,
-                        'total_items' => $serverStats['total_items'] ?? 0,
-                        'bytes' => $serverStats['bytes'] ?? 0,
-                        'get_hits' => $serverStats['get_hits'] ?? 0,
-                        'get_misses' => $serverStats['get_misses'] ?? 0,
-                        'hit_rate' => $this->calculateHitRate($serverStats),
-                    ];
+                    if (is_array($serverStats) === true) {
+                        $result['memcached'] = [
+                            'curr_items' => $serverStats['curr_items'] ?? 0,
+                            'total_items' => $serverStats['total_items'] ?? 0,
+                            'bytes' => $serverStats['bytes'] ?? 0,
+                            'get_hits' => $serverStats['get_hits'] ?? 0,
+                            'get_misses' => $serverStats['get_misses'] ?? 0,
+                            'hit_rate' => $this->calculateHitRate($serverStats),
+                        ];
+                    }
                 }
             }
 
@@ -113,7 +118,7 @@ final class HealthAction implements ActionInterface
             return [
                 'status' => 'error',
                 'message' => $e->getMessage(),
-                'type' => Configuration::getConfig('cache', 'type'),
+                'type' => $cacheType,
             ];
         }
     }
@@ -134,7 +139,6 @@ final class HealthAction implements ActionInterface
     private function checkProxy(): array
     {
         $profiles = [];
-
         $possibleProfiles = [
             'flaresolverr',
             'tgws',
@@ -142,16 +146,16 @@ final class HealthAction implements ActionInterface
         ];
 
         foreach ($possibleProfiles as $profileName) {
-            $type = Configuration::getConfig('proxy_profile_' . $profileName, 'type');
-            if ($type !== null && $type !== '') {
+            $envKey = 'PROXY_PROFILE_' . strtoupper($profileName) . '_TYPE';
+            $type = getenv($envKey);
+
+            // Explicit strict comparisons to satisfy PHPCS
+            if ($type !== false && trim((string) $type) !== '') {
                 $profiles[] = $profileName;
             }
         }
 
-        $status = 'disabled';
-        if (count($profiles) !== 0) {
-            $status = 'ok';
-        }
+        $status = count($profiles) !== 0 ? 'ok' : 'disabled';
 
         return [
             'status' => $status,

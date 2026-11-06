@@ -212,6 +212,114 @@ $normalizationRules = [
         'validate' => 'validateSystemMessages',
         'sanitize' => false,
     ],
+
+    // Cache settings
+    'CACHE_TYPE' => [
+        'type' => 'string',
+        'fallback' => 'memcached',
+        'validate' => 'validateCacheType',
+        'sanitize' => false,
+    ],
+    'CACHE_CUSTOM_TIMEOUT' => ['type' => 'bool', 'fallback' => 'false'],
+    'CACHE_FILE_PATH' => [
+        'type' => 'string',
+        'fallback' => '',
+        'sanitize' => false,
+    ],
+    'CACHE_FILE_PURGE' => ['type' => 'bool', 'fallback' => 'true'],
+    'CACHE_SQLITE_FILE' => [
+        'type' => 'string',
+        'fallback' => '/app/cache/cache.sqlite',
+        'sanitize' => false,
+    ],
+    'CACHE_SQLITE_PURGE' => ['type' => 'bool', 'fallback' => 'true'],
+    'CACHE_SQLITE_TIMEOUT' => ['type' => 'int', 'fallback' => '5000', 'min' => 1000, 'max' => 30000],
+    'CACHE_MEMCACHED_TYPE' => [
+        'type' => 'string',
+        'fallback' => 'internal',
+        'validate' => 'validateMemcachedType',
+        'sanitize' => false,
+    ],
+    'CACHE_MEMCACHED_HOST' => [
+        'type' => 'string',
+        'fallback' => '127.0.0.1',
+        'sanitize' => false,
+    ],
+    'CACHE_MEMCACHED_PORT' => ['type' => 'int', 'fallback' => '11211', 'min' => 1, 'max' => 65535],
+
+    // Authentication settings
+    'AUTHENTICATION_ENABLE' => ['type' => 'bool', 'fallback' => 'false'],
+    'AUTHENTICATION_USERNAME' => [
+        'type' => 'string',
+        'fallback' => 'admin',
+        'validate' => 'validateAuthUsername',
+        'sanitize' => false,
+    ],
+    'AUTHENTICATION_PASSWORD' => [
+        'type' => 'string',
+        'fallback' => '',
+        'sanitize' => false,
+    ],
+    'AUTHENTICATION_PASSWORD_HASH' => [
+        'type' => 'string',
+        'fallback' => '',
+        'validate' => 'validatePasswordHash',
+        'sanitize' => false,
+    ],
+    'AUTHENTICATION_TOKEN' => [
+        'type' => 'string',
+        'fallback' => '',
+        'sanitize' => false,
+    ],
+
+    // Logging settings
+    'LOG_FILE_PATH' => [
+        'type' => 'string',
+        'fallback' => '',
+        'sanitize' => false,
+    ],
+    'LOG_FILE_LEVEL' => [
+        'type' => 'string',
+        'fallback' => 'INFO',
+        'validate' => 'validateLogLevel',
+        'sanitize' => false,
+    ],
+    // Proxy profiles
+    'PROXY_PROFILE_FLARESOLVERR_URL' => [
+        'type' => 'string',
+        'fallback' => '',
+        'validate' => 'validateProxyUrl',
+        'sanitize' => false,
+    ],
+    'PROXY_PROFILE_FLARESOLVERR_SESSION_NAME' => [
+        'type' => 'string',
+        'fallback' => 'rss_bridge_session',
+        'sanitize' => false,
+    ],
+    'PROXY_PROFILE_TRAWL_URL' => [
+        'type' => 'string',
+        'fallback' => '',
+        'validate' => 'validateProxyUrl',
+        'sanitize' => false,
+    ],
+    'PROXY_PROFILE_TRAWL_TIMEOUT' => ['type' => 'int', 'fallback' => '180000', 'min' => 1000, 'max' => 600000],
+    'PROXY_PROFILE_TRAWL_TWOCAPTCHA_API_KEY' => [
+        'type' => 'string',
+        'fallback' => '',
+        'sanitize' => false,
+    ],
+    'PROXY_PROFILE_TRAWL_USE_FORWARD_PROXY' => ['type' => 'bool', 'fallback' => 'false'],
+    'PROXY_PROFILE_TRAWL_FORWARD_PROXY_PORT' => ['type' => 'int', 'fallback' => '8192', 'min' => 1, 'max' => 65535],
+    'PROXY_PROFILE_TGWS_SOCKS_URL' => [
+        'type' => 'string',
+        'fallback' => '',
+        'sanitize' => false,
+    ],
+    'PROXY_PROFILE_TGWS_CONNECT_TIMEOUT' => ['type' => 'int', 'fallback' => '5', 'min' => 1, 'max' => 60],
+    'PROXY_PROFILE_TGWS_REQUEST_TIMEOUT' => ['type' => 'int', 'fallback' => '20', 'min' => 1, 'max' => 120],
+    'PROXY_PROFILE_TGWS_RETRIES' => ['type' => 'int', 'fallback' => '1', 'min' => 0, 'max' => 10],
+    'PROXY_PROFILE_TGWS_BUDGET_SECONDS' => ['type' => 'int', 'fallback' => '45', 'min' => 5, 'max' => 300],
+    'PROXY_PROFILE_TGWS_FALLBACK_DIRECT' => ['type' => 'bool', 'fallback' => 'true'],
 ];
 
 // ============================================================================
@@ -806,6 +914,111 @@ function validateSystemMessages(string $value): ?string
     }
 
     return json_encode($validated, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+/**
+ * Validates CACHE_TYPE value.
+ * Must be one of: 'memcached', 'sqlite', 'file', 'array', 'null' (case-insensitive).
+ * Returns the validated value or null on failure.
+ */
+function validateCacheType(string $value): ?string
+{
+    $value = strtolower(trim($value));
+    if (in_array($value, ['memcached', 'sqlite', 'file', 'array', 'null'], true) === true) {
+        return $value;
+    }
+    return null;
+}
+
+/**
+ * Validates CACHE_MEMCACHED_TYPE value.
+ * Must be either 'internal' or 'external' (case-insensitive).
+ * Returns the validated value or null on failure.
+ */
+function validateMemcachedType(string $value): ?string
+{
+    $value = strtolower(trim($value));
+    if (in_array($value, ['internal', 'external'], true) === true) {
+        return $value;
+    }
+    return null;
+}
+
+/**
+ * Validates authentication username.
+ * Must be alphanumeric with underscores, at least 1 character.
+ * Returns the validated value or null on failure.
+ */
+function validateAuthUsername(string $value): ?string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return null;
+    }
+
+    if (preg_match('/^[a-zA-Z0-9_]+$/', $value) !== 1) {
+        return null;
+    }
+
+    return $value;
+}
+
+/**
+ * Validates a password hash.
+ * Must be a valid bcrypt or argon2 hash (starts with $2y$, $2a$, $2b$, $argon2i$, or $argon2id$).
+ * Returns the validated value or null on failure.
+ * Empty string is valid (optional field).
+ */
+function validatePasswordHash(string $value): ?string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    // Check if it's a valid bcrypt or argon2 hash
+    if (preg_match('/^\$(2y|2a|2b|argon2i|argon2id)\$/', $value) === 1) {
+        return $value;
+    }
+
+    return null;
+}
+
+/**
+ * Validates log level.
+ * Must be one of: DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL (case-insensitive).
+ * Returns the validated value (uppercase) or null on failure.
+ */
+function validateLogLevel(string $value): ?string
+{
+    $value = strtoupper(trim($value));
+    $validLevels = ['DEBUG', 'INFO', 'NOTICE', 'WARNING', 'ERROR', 'CRITICAL'];
+    
+    if (in_array($value, $validLevels, true) === true) {
+        return $value;
+    }
+    
+    return null;
+}
+
+/**
+ * Validates proxy URL.
+ * Must be http:// or https:// followed by hostname and optional port.
+ * Returns the validated value or null on failure.
+ * Empty string is valid (profile not configured).
+ */
+function validateProxyUrl(string $value): ?string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    if (preg_match('#^https?://[^/\s]+(:[0-9]+)?(/.*)?$#i', $value) !== 1) {
+        return null;
+    }
+
+    return $value;
 }
 
 /**

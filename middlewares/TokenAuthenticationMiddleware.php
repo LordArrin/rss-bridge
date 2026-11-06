@@ -6,30 +6,33 @@ namespace RSSBridge\Middlewares;
 
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
-use RSSBridge\Configuration;
 
 final class TokenAuthenticationMiddleware implements Middleware
 {
     public function __invoke(Request $request, callable $next): Response
     {
-        $token = Configuration::getConfig('authentication', 'token');
-        if ((bool) $token === false) {
+        // Read token directly from environment variables
+        $tokenRaw = getenv('AUTHENTICATION_TOKEN');
+        $token = ($tokenRaw !== false && $tokenRaw !== '') ? (string) $tokenRaw : '';
+
+        // If no token is configured, bypass authentication
+        if ($token === '') {
             return $next($request);
         }
 
         $requestToken = $request->get('token');
 
-        if ((bool) $requestToken === false) {
+        if ($requestToken === null || (string) $requestToken === '') {
             return new Response(render(__DIR__ . '/../templates/token.html.php', [
                 'message' => 'Missing token',
                 'token' => '',
             ]), 401);
         }
 
-        if (hash_equals($token, $requestToken) === false) {
+        if (hash_equals($token, (string) $requestToken) === false) {
             return new Response(render(__DIR__ . '/../templates/token.html.php', [
                 'message' => 'Invalid token',
-                'token' => $requestToken,
+                'token' => (string) $requestToken,
             ]), 401);
         }
 

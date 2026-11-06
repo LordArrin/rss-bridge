@@ -10,7 +10,6 @@ use RSSBridge\Logger\Logger;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\BridgeFactory;
 use RSSBridge\Caches\CacheInterface;
-use RSSBridge\Configuration;
 use RSSBridge\Formats\FormatFactory;
 use RSSBridge\SafeBridgeLoader;
 use RSSBridge\Http\Request;
@@ -71,12 +70,17 @@ final class DisplayAction implements ActionInterface
         }
 
         $ttl = $request->get('_cache_timeout');
-        if (Configuration::getConfig('cache', 'custom_timeout') === true && isset($ttl) === true) {
+
+        // Read custom timeout setting directly from environment
+        $customTimeoutEnabled = filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN);
+
+        if ($customTimeoutEnabled === true && $ttl !== null) {
             $ttl = (int) $ttl;
             $ttl = max(1, min($ttl, 86400));
         } else {
             $ttl = $bridge->getCacheTimeout();
         }
+
         $request = $request->withAttribute('_resolved_cache_timeout', (int) $ttl);
 
         $response = $this->createResponse($request, $bridge, $format);

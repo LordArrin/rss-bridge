@@ -269,7 +269,7 @@ function getProtectedContents(string $url, string $profileName, array $options =
     } catch (\Throwable $e) {
         if ($proxy instanceof DirectProxy) {
             throwClientException(sprintf(
-                "Failed to fetch %s via DirectProxy: %s\n\nIf this site is protected by Cloudflare, configure a profile in config.ini.php:\n\n  [proxy_profile_flaresolverr]\n  type = \"FlareSolverr\"\n  url = \"http://localhost:8191\"",
+                "Failed to fetch %s via DirectProxy: %s\n\nIf this site is protected by Cloudflare, configure a FlareSolverr proxy via environment variables:\n\n  PROXY_PROFILE_FLARESOLVERR_URL=http://localhost:8191",
                 $url,
                 $e->getMessage()
             ));

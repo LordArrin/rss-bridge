@@ -6,7 +6,6 @@ namespace RSSBridge\Actions;
 
 use RSSBridge\BridgeFactory;
 use RSSBridge\BridgeMetadataCache;
-use RSSBridge\Configuration;
 use RSSBridge\SafeBridgeLoader;
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
@@ -85,10 +84,11 @@ final class FrontpageAction implements ActionInterface
                 ]]
             );
         }
+
         $response = new Response(render(__DIR__ . '/../templates/frontpage.html.php', [
-        'bridges'           => $body,
-        'active_bridges'    => $activeBridges,
-        'total_bridges'     => count($bridgeClassNames),
+            'bridges'           => $body,
+            'active_bridges'    => $activeBridges,
+            'total_bridges'     => count($bridgeClassNames),
         ]));
 
         return $response;
@@ -118,7 +118,8 @@ final class FrontpageAction implements ActionInterface
         $uriSafe = $e($uri);
         $descriptionSafe = $e($description);
 
-        if (Configuration::getConfig('cache', 'custom_timeout') === true) {
+        // Read custom timeout setting directly from environment
+        if (filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN) === true) {
             $parameters['global']['_cache_timeout'] = [
                 'name' => 'Cache timeout in seconds',
                 'type' => 'number',
@@ -207,7 +208,8 @@ final class FrontpageAction implements ActionInterface
 
         EOD;
 
-        if (Configuration::getConfig('authentication', 'token') === true && $token !== null && $token !== '') {
+        // Read authentication setting directly from environment
+        if (filter_var(getenv('AUTHENTICATION_ENABLE'), FILTER_VALIDATE_BOOLEAN) === true && $token !== null && $token !== '') {
             $form .= html_input([
                 'type'  => 'hidden',
                 'name'  => 'token',

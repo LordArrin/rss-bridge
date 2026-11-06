@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Caches;
 
 use RSSBridge\Logger\Logger;
-use RSSBridge\Configuration;
+use RSSBridge\Paths;
 use RSSBridge\Utils\Url;
 
 /**
@@ -57,8 +57,8 @@ final class SQLiteCache extends AbstractCache
 
         $dir = dirname($file);
         if ($dir === '.') {
-            $file = Configuration::getPathCache() . $file;
-            $dir = Configuration::getPathCache();
+            $file = Paths::getCache() . $file;
+            $dir = Paths::getCache();
         }
 
         if (is_dir($dir) === false) {

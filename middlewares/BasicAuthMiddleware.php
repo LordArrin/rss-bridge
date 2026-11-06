@@ -6,7 +6,6 @@ namespace RSSBridge\Middlewares;
 
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
-use RSSBridge\Configuration;
 
 /**
  * HTTP Basic auth check
@@ -15,7 +14,11 @@ final class BasicAuthMiddleware implements Middleware
 {
     public function __invoke(Request $request, callable $next): Response
     {
-        if ((bool) Configuration::getConfig('authentication', 'enable') === false) {
+        // Read authentication enable flag directly from environment
+        $authEnableRaw = getenv('AUTHENTICATION_ENABLE');
+        $authEnabled = filter_var($authEnableRaw, FILTER_VALIDATE_BOOLEAN);
+
+        if ($authEnabled === false) {
             return $next($request);
         }
 
@@ -59,9 +62,14 @@ final class BasicAuthMiddleware implements Middleware
      */
     private function getCredentials(): array
     {
-        $username = (string) Configuration::getConfig('authentication', 'username');
-        $password = (string) Configuration::getConfig('authentication', 'password');
-        $passwordHash = (string) Configuration::getConfig('authentication', 'password_hash');
+        $usernameRaw = getenv('AUTHENTICATION_USERNAME');
+        $username = ($usernameRaw !== false && $usernameRaw !== '') ? (string) $usernameRaw : 'admin';
+
+        $passwordRaw = getenv('AUTHENTICATION_PASSWORD');
+        $password = ($passwordRaw !== false) ? (string) $passwordRaw : '';
+
+        $passwordHashRaw = getenv('AUTHENTICATION_PASSWORD_HASH');
+        $passwordHash = ($passwordHashRaw !== false) ? (string) $passwordHashRaw : '';
 
         return [$username, $password, $passwordHash];
     }

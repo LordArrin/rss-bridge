@@ -2,8 +2,6 @@
 
 declare(strict_types=1);
 
-use RSSBridge\Configuration;
-
 /**
  * HTML template rendering utilities.
  *
@@ -69,12 +67,7 @@ function render(string $template, array $context = []): string
         }
     }
 
-    // Admin-defined system messages from configuration (unified notifications).
-    // Legacy admin notification mechanism: [system] message / message_url and
-    // the per-bridge custom_message / custom_title options used to be rendered
-    // manually as alert-* markup in base.html.php. They are now converted
-    // transparently into unified notifications queued here and rendered once
-    // by render_notifications() in the layout.
+    // Admin-defined system messages from environment variables (unified notifications).
     $systemMessages = get_admin_system_messages();
     if ($systemMessages !== []) {
         $adminLinks = get_admin_contact_links();
@@ -96,10 +89,13 @@ function render(string $template, array $context = []): string
     }
 
     // Debug information in dev environment (unified notifications)
-    if (getenv('APP_ENV') === 'DEV') {
+    $appEnv = getenv('APP_ENV');
+    if ($appEnv !== false && $appEnv === 'DEV') {
         notify_warning('System environment: dev', 'Debug mode', 'admin');
+        $cacheTypeRaw = getenv('CACHE_TYPE');
+        $cacheType = ($cacheTypeRaw !== false && $cacheTypeRaw !== '') ? (string) $cacheTypeRaw : 'file';
         notify_info(
-            sprintf('Cache type: %s', (string) Configuration::getConfig('cache', 'type')),
+            sprintf('Cache type: %s', $cacheType),
             'Debug info',
             'admin'
         );
@@ -110,86 +106,82 @@ function render(string $template, array $context = []): string
 }
 
 /**
- * Collect the legacy admin-defined messages from configuration and normalize
+ * Collect the admin-defined messages from environment variables and normalize
  * them into plain-data descriptors ready for the unified notification system.
  *
- * Supported configuration keys (all optional):
- *   [system] message        = "Text"           -> info notification body
- *   [system] message_url    = "https://..."    -> link appended to the body
- *   [system] message_title  = "Heading"        -> notification title
- *   [system] message_level  = "info|warning|error" (default: info)
- *   [system] messages[]     = { text, url, title, level }  (array form, via
- *                             ini sections, e.g. [messages.text], see README)
+ * Priority:
+ *   1. SYSTEM_MESSAGES (JSON array) - if present and valid, single message
+ *      variables are ignored to prevent duplication
+ *   2. SYSTEM_MESSAGE + SYSTEM_MESSAGE_* - fallback if SYSTEM_MESSAGES is empty
+ *
+ * Supported environment variables:
+ *   SYSTEM_MESSAGE       = "Text"
+ *   SYSTEM_MESSAGE_URL   = "https://..."
+ *   SYSTEM_MESSAGE_TITLE = "Heading"
+ *   SYSTEM_MESSAGE_LEVEL = "info|warning|error"
+ *   SYSTEM_MESSAGES      = '[{"text":"...","level":"warning"}]' (JSON array)
  *
  * Text fields are treated as PLAIN TEXT (the notification renderer escapes
  * them); any HTML coming from configuration is stripped here so that admins
- * cannot inject markup through the old alert-* mechanism.
+ * cannot inject markup.
  *
  * @return array<int, array{body: string, url: string, title: string, level: string, url_label: string}>
  */
 function get_admin_system_messages(): array
 {
-    /** @var array<int, array<string, mixed>> $raw */
-    $raw = [];
+    $result = [];
 
-    // Single-message form (backwards compatible with upstream rss-bridge).
-    $message = Configuration::getConfig('system', 'message');
-    if (is_string($message) === true && trim($message) !== '') {
-        $raw[] = [
-            'text'  => $message,
-            'url'   => (string) (Configuration::getConfig('system', 'message_url') ?? ''),
-            'title' => (string) (Configuration::getConfig('system', 'message_title') ?? 'System message'),
-            'level' => (string) (Configuration::getConfig('system', 'message_level') ?? 'info'),
-        ];
-    }
-
-    // Multi-message form: [system] messages[] = ... or [messages.N] sections.
-    $messages = Configuration::getConfig('system', 'messages');
-    if (is_array($messages) === true) {
-        foreach ($messages as $key => $entry) {
-            if (is_string($entry) === true && trim($entry) !== '') {
-                // messages[] = "plain text"
-                $raw[] = [
-                    'text'  => $entry,
-                    'url'   => '',
-                    'title' => 'System message',
-                    'level' => 'info',
-                ];
-            } elseif (is_array($entry) === true) {
-                // messages[] = { text = "...", url = "...", title = "...", level = "warning" }
-                $text = trim((string) ($entry['text'] ?? ''));
+    // 1. Check for multi-message JSON environment variable FIRST
+    // If present and valid, it takes precedence and single message vars are ignored
+    $messagesJson = getenv('SYSTEM_MESSAGES');
+    if ($messagesJson !== false && trim((string) $messagesJson) !== '') {
+        $decoded = json_decode((string) $messagesJson, true);
+        if (is_array($decoded) === true) {
+            foreach ($decoded as $item) {
+                $text = trim((string) ($item['text'] ?? ''));
                 if ($text === '') {
                     continue;
                 }
 
-                $title = trim((string) ($entry['title'] ?? ''));
-                $level = trim((string) ($entry['level'] ?? ''));
+                $level = $item['level'] ?? '';
+                $validLevels = ['info', 'warning', 'error'];
+                $safeLevel = in_array($level, $validLevels, true) === true ? $level : 'info';
 
-                $raw[] = [
-                    'text'  => $text,
-                    'url'   => trim((string) ($entry['url'] ?? '')),
-                    'title' => $title === '' ? 'System message' : $title,
-                    'level' => $level === '' ? 'info' : $level,
+                $result[] = [
+                    'body'      => strip_tags($text),
+                    'url'       => trim((string) ($item['url'] ?? '')),
+                    'title'     => strip_tags(trim((string) ($item['title'] ?? 'System message'))),
+                    'level'     => $safeLevel,
+                    'url_label' => 'Details',
                 ];
-            } elseif (is_int($key) === false) {
-                // Skipped: unexpected scalar under an integer key.
             }
+        }
+
+        // If SYSTEM_MESSAGES was valid and non-empty, return it (ignore SYSTEM_MESSAGE)
+        if ($result !== []) {
+            return $result;
         }
     }
 
-    $levels = ['info', 'warning', 'error'];
-    $result = [];
-    foreach ($raw as $item) {
-        $level = strtolower((string) $item['level']);
-        if (in_array($level, $levels, true) === false) {
-            $level = 'info';
-        }
+    // 2. Fallback to single message environment variables (only if SYSTEM_MESSAGES is empty/invalid)
+    $message = getenv('SYSTEM_MESSAGE');
+    if ($message !== false && trim((string) $message) !== '') {
+        $levelRaw = getenv('SYSTEM_MESSAGE_LEVEL');
+        $level = ($levelRaw !== false && $levelRaw !== '') ? (string) $levelRaw : 'info';
+        $validLevels = ['info', 'warning', 'error'];
+        $safeLevel = in_array($level, $validLevels, true) === true ? $level : 'info';
+
+        $urlRaw = getenv('SYSTEM_MESSAGE_URL');
+        $url = ($urlRaw !== false && $urlRaw !== '') ? (string) $urlRaw : '';
+
+        $titleRaw = getenv('SYSTEM_MESSAGE_TITLE');
+        $title = ($titleRaw !== false && $titleRaw !== '') ? (string) $titleRaw : 'System message';
+
         $result[] = [
-            // Plain text only: strip any HTML left over from the old manual markup.
-            'body'      => strip_tags(trim((string) $item['text'])),
-            'url'       => (string) $item['url'],
-            'title'     => strip_tags(trim((string) $item['title'])),
-            'level'     => $level,
+            'body'      => strip_tags(trim((string) $message)),
+            'url'       => $url,
+            'title'     => strip_tags(trim($title)),
+            'level'     => $safeLevel,
             'url_label' => 'Details',
         ];
     }

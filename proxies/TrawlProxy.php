@@ -19,15 +19,13 @@ namespace RSSBridge\Proxies;
  * - Automatic clearance cache reuse for repeat requests
  * - Custom headers, cookies, and session management
  *
- * Configuration example in config.ini.php:
+ * Configuration example in .env or docker-compose environment:
  *
- * [proxy_profile_trawl]
- * type = "Trawl"
- * url = "http://trawl:8191"
- * timeout = 180000
- * twocaptcha_api_key = ""       ; Optional: for advanced CAPTCHA solving (lazy validated, cached)
- * use_forward_proxy = true      ; Optional: use forward proxy for binary/simple requests (faster)
- * forward_proxy_port = 8192     ; Optional: forward proxy port (default: 8192)
+ * PROXY_PROFILE_TRAWL_URL=http://trawl:8191
+ * PROXY_PROFILE_TRAWL_TIMEOUT=180000
+ * PROXY_PROFILE_TRAWL_TWOCAPTCHA_API_KEY=
+ * PROXY_PROFILE_TRAWL_USE_FORWARD_PROXY=true
+ * PROXY_PROFILE_TRAWL_FORWARD_PROXY_PORT=8192
  */
 final class TrawlProxy extends ProxyAbstract
 {
