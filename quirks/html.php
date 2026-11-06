@@ -61,7 +61,7 @@ function raw(string $s): string
  */
 function truncate(string $s, int $length = 150, string $marker = '...'): string
 {
-    $s = trim($s);
+    $s = trim_unicode($s);
     if (mb_strlen($s) <= $length) {
         return $s;
     }
@@ -312,7 +312,12 @@ function strip_invisible_unicode(string $text): string
     $pattern = '/[\x{200B}-\x{200D}\x{FEFF}\x{00AD}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{00A0}\x{1680}\x{2000}-\x{200A}\x{202F}\x{205F}\x{3000}\x{0000}-\x{0008}\x{000B}\x{000C}\x{000E}-\x{001F}\x{007F}]/u';
     $cleaned = preg_replace($pattern, '', $text);
 
-    return is_string($cleaned) === true ? $cleaned : $text;
+    if (is_string($cleaned) === false) {
+        return $text;
+    }
+
+    // Add normalization after stripping
+    return normalize_unicode($cleaned, 'NFC');
 }
 
 /**

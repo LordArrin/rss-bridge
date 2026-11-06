@@ -49,7 +49,8 @@
             "quirks/sanitize_image.php",
             "quirks/seo.php",
             "quirks/srcset.php",
-            "quirks/template.php"
+            "quirks/template.php",
+            "quirks/unicode.php"
         ]
     },
     "require": {
