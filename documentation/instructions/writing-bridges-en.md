@@ -15,6 +15,7 @@ This guide covers bridge development for this fork. It assumes familiarity with 
 | Markdown | Embedded Parsedown | `erusev/parsedown` via Composer |
 | URL joining | Embedded | `busybee/urljoin` via Composer |
 | Bridge loading | Direct `include` | Sandboxed subprocess via `SafeBridgeLoader` |
+| Configuration | INI files only | Environment variables (system) + `.bridges` (tokens) |
 
 Legacy `bridges/` directory is not supported. All bridges live in `bridges-v2/`.
 
@@ -237,7 +238,7 @@ Parameters under the `'global'` context are appended to every other context. Use
 
 ## Configuration (Secrets)
 
-For API tokens, cookies, and other sensitive values, define them in `CONFIGURATION` and set the actual values in `config.ini.php`:
+For API tokens, cookies, and other sensitive values, define them in `CONFIGURATION` and set the actual values in `/config/.bridges`:
 
 ```php
 public const CONFIGURATION = [
@@ -246,13 +247,15 @@ public const CONFIGURATION = [
 ];
 ```
 
-In `config/config.ini.php`:
+In `/config/.bridges` (mounted volume):
 
 ```ini
 [ExampleBridge]
 api_token = "your-token-here"
 session_cookie = "abc123"
 ```
+
+> **Note:** The container automatically copies `/config/.bridges` to `/app/.bridges` at startup with correct permissions for PHP-FPM. Default values are provided in `.bridges.default` (baked into the image).
 
 Access values in the bridge:
 
@@ -302,8 +305,8 @@ $response = getContents($url, [], [], true);  // requests the full Response obje
 - Cached responses are revalidated with `ETag` (`If-None-Match`) and `Last-Modified`; freshness honors `Cache-Control: max-age`, `Expires`, and `Age`
 - The cache key includes the POST body hash, so different POST payloads are cached separately
 - Non-2xx responses (except redirects and 304) throw `HttpException::fromResponse()` — Cloudflare challenge pages are automatically detected and thrown as `CloudFlareException`
-- Global settings apply: `[http] timeout` (60s default), `[error] retries`, `[error] max_filesize` (40 MB default)
-- **SSRF protection is on by default** (`[http] ssrf_check = true`): requests to internal/reserved IP ranges are blocked, with DNS pinning against rebinding
+- Global settings apply via environment variables: `HTTP_TIMEOUT` (60s default), `HTTP_RETRIES`, `HTTP_MAX_FILESIZE` (40 MB default)
+- **SSRF protection is on by default** (`HTTP_SSRF_CHECK=true`): requests to internal/reserved IP ranges are blocked, with DNS pinning against rebinding
 
 For sitemaps there is a dedicated helper returning a list of `{loc, lastmod, changefreq, priority}` entries:
 
@@ -551,7 +554,7 @@ Returns an array containing **only the keys that were found**, among: `uri`, `ti
 $item = [
     'title' => $metadata['title'] ?? $fallbackTitle,
     'uri' => $metadata['uri'] ?? $articleUrl,
-    'content' => $articleContent,
+    'content' => $metadata['content'] ?? $articleContent,
     'timestamp' => $metadata['timestamp'] ?? time(),
     'author' => $metadata['author'] ?? null,
     'enclosures' => $metadata['enclosures'] ?? [],
@@ -567,7 +570,7 @@ $item = [
 $html = markdownToHtml($markdown, ['breaksEnabled' => true]);
 
 // Generate YouTube embed (iframe) or a clickable WebP/JPEG thumbnail,
-// controlled by [youtube] iframe/nocookie in config.ini.php.
+// controlled by [youtube] iframe/nocookie in .bridges (or .bridges.default).
 // Returns '' if no valid video ID is found.
 $embed = handleYoutube('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
 
@@ -691,7 +694,7 @@ public function collectData(): void
 **APCu vs Memcached:**
 
 - **APCu**: In-memory, local to container, ~1µs access time, lost on container restart
-- **Memcached**: Network-based, shared across containers, ~100µs access time, persistent (this fork's default `[cache] type` is `memcached`)
+- **Memcached**: Network-based, shared across containers, ~100µs access time, persistent (default cache type is controlled via `CACHE_TYPE` environment variable, defaulting to `memcached`)
 
 **Best practice:** Use APCu for frequently accessed, rarely changing data (config, metadata). Use memcached for shared data across multiple instances.
 
@@ -762,7 +765,7 @@ throw new \HttpException('Not Found', 404);
 
 `getContents()` throws `HttpException::fromResponse()` automatically on non-2xx responses; Cloudflare challenge pages are detected and raised as `CloudFlareException`. The `Retry-After` header is parsed into `HttpException::$retryAfter`.
 
-All exceptions are caught by the framework and rendered according to the `[error] output` setting in `config.ini.php` (`feed`, `http`, or `none`).
+All exceptions are caught by the framework and rendered according to the `ERROR_OUTPUT` environment variable (`feed`, `http`, or `none`, default: `http`).
 
 ## Feed Item Structure
 
@@ -817,7 +820,7 @@ Both `$this->cache` and `$this->logger` are injected by `BridgeFactory` through 
 **Cache backend priority:**
 
 1. APCu (if enabled, fastest)
-2. Memcached (shared across instances; the default in `config.default.ini.php`)
+2. Memcached (shared across instances; configured via `CACHE_TYPE` env var, default: `memcached`)
 3. File cache (fallback)
 
 ## Proxy Profiles
@@ -842,23 +845,40 @@ if ($binary !== null) {
 
 All three accept an optional third parameter `array $options = []`.
 
-Proxy profiles are defined in `config/config.ini.php`:
+### Configuring Proxy Profiles
 
-```ini
-[proxy_profile_flaresolverr]
-type = "FlareSolverr"
-url = "http://flaresolverr:8191"
-timeout = 60000
+Proxy profiles are now configured via **environment variables** (processed by `/bin/load-env`). The profile name implicitly defines the proxy type (e.g., profile `flaresolverr` → `FlareSolverrProxy`).
 
-[proxy_profile_tgws]
-type = "TgWS"
-socks_url = "socks5h://user:pass@192.168.1.1:14444"
+**Available proxy types:**
+- `direct` — Standard curl-impersonate requests (always available, no configuration needed)
+- `tgws` — SOCKS5 proxy for Telegram Web Services
+- `flaresolverr` — Cloudflare bypass service
+- `trawl` — Advanced web scraping with CAPTCHA solving
 
-[proxy_profile_direct]
-type = "Direct"
+**Example environment variables:**
+
+```bash
+# FlareSolverr (Cloudflare bypass)
+PROXY_PROFILE_FLARESOLVERR_URL=http://flaresolverr:8191
+PROXY_PROFILE_FLARESOLVERR_SESSION_NAME=rss_bridge_session
+
+# Trawl (advanced scraping with CAPTCHA solving)
+PROXY_PROFILE_TRAWL_URL=http://trawl:8191
+PROXY_PROFILE_TRAWL_TIMEOUT=180000
+PROXY_PROFILE_TRAWL_TWOCAPTCHA_API_KEY=your_key_here
+PROXY_PROFILE_TRAWL_USE_FORWARD_PROXY=true
+PROXY_PROFILE_TRAWL_FORWARD_PROXY_PORT=8192
+
+# TgWS (SOCKS5 for Telegram)
+PROXY_PROFILE_TGWS_SOCKS_URL=socks5h://user:pass@192.168.1.1:14444
+PROXY_PROFILE_TGWS_CONNECT_TIMEOUT=5
+PROXY_PROFILE_TGWS_REQUEST_TIMEOUT=20
+PROXY_PROFILE_TGWS_RETRIES=1
+PROXY_PROFILE_TGWS_BUDGET_SECONDS=45
+PROXY_PROFILE_TGWS_FALLBACK_DIRECT=true
 ```
 
-`proxy_profile_direct` and `proxy_profile_tgws` are preconfigured in `config.default.ini.php`. If a profile is referenced but not defined, `getProtectedContents()` throws a `ClientException` with a hint about the missing configuration.
+If a profile is referenced but not configured, `getProtectedContents()` throws a `ClientException` with a hint about the missing configuration. The system automatically falls back to `DirectProxy` when using `safeFromProfile()`.
 
 ## Relative URLs
 
@@ -937,7 +957,8 @@ Core classes live in the `RSSBridge` namespace tree (loaded via Composer classma
 ```php
 use RSSBridge\BridgeAbstract;          // required — every bridge extends it
 use RSSBridge\FeedExpander;            // base class for feed-expanding bridges
-use RSSBridge\Configuration;           // static access to config.ini.php
+use RSSBridge\Configuration;           // static access to .bridges (bridge-specific tokens only)
+use RSSBridge\Paths;                   // centralized directory paths (cache, libraries)
 use RSSBridge\Utils\Json;              // JSON encode/decode (throws \JsonException)
 use RSSBridge\Utils\Url;               // URL/MIME/formatting helpers
 use RSSBridge\Http\Response;           // HTTP response object (no __toString)
@@ -975,7 +996,7 @@ docker exec rss-bridge php85 /app/vendor/bin/phpcs --standard=phpcs.xml bridges-
 ## Testing Your Bridge
 
 1. Place the bridge file in `bridges-v2/` — this is the **only** directory `BridgeFactory` scans (non-recursively), and the file name must match `*Bridge.php`. There is no `config/bridges-v2/` loading path.
-2. Make sure the bridge is enabled: `config.default.ini.php` ships with `[system] enabled_bridges[] = *` (all bridges enabled). If your `config.ini.php` lists bridges explicitly, add yours (short name, e.g. `MyBridge` or `My`).
+2. Make sure the bridge is enabled: `.bridges.default` ships with all bridges enabled by default. If your `/config/.bridges` lists bridges explicitly, add yours (short name, e.g. `MyBridge` or `My`).
 3. For Docker deployments the image ships with built-in bridges baked in; to test a custom bridge without rebuilding, bind-mount the file into the container:
 
    ```yaml
@@ -1061,7 +1082,7 @@ When fetching multiple items, use parallel requests or batch endpoints when avai
 - [ ] Relative URLs handled via `urljoin()` (with `use function urljoin;`)
 - [ ] Code passes `phpcs` checks (see [`phpcs.xml`](https://github.com/LordArrin/rss-bridge/blob/master/phpcs.xml))
 - [ ] Code passes `phpstan` analysis at Level 5 (see [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon))
-- [ ] Bridge tested with real data in Docker and enabled via `[system] enabled_bridges`
+- [ ] Bridge tested with real data in Docker and enabled via `ENABLED_BRIDGES` env var
 - [ ] Malformed HTML sites use `tidy` cleanup
 - [ ] Large cached objects use `igbinary` or `zstd` compression
 - [ ] API authentication uses `sodium` for signatures
@@ -1204,7 +1225,3 @@ final class BlogBridge extends BridgeAbstract
     }
 }
 ```
-
-## Questions?
-
-Open an issue on [github.com/LordArrin/rss-bridge](https://github.com/LordArrin/rss-bridge).
