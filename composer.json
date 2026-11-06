@@ -26,11 +26,13 @@
             "lib/FeedItem.php",
             "lib/FeedParser.php",
             "lib/ParameterValidator.php",
+            "lib/Paths.php",
             "lib/RssBridge.php",
             "lib/SafeBridgeLoader.php"
         ],
         "files": [
             "lib/contents.php",
+            "lib/dependencies.php",
             "lib/exceptions.php",
             "lib/http.php",
             "lib/json.php",
@@ -44,6 +46,7 @@
             "quirks/json_path.php",
             "quirks/media.php",
             "quirks/media_embed.php",
+            "quirks/sanitize_image.php",
             "quirks/seo.php",
             "quirks/srcset.php",
             "quirks/template.php"
@@ -63,7 +66,7 @@
         "busybee/urljoin": "^1.0"
     },
     "require-dev": {
-        "phpstan/phpstan": "^2.3.4",
+        "phpstan/phpstan": "^2.3.5",
         "phpstan/phpstan-deprecation-rules": "^2.0.5",
         "phpstan/phpstan-strict-rules": "^2.1.0",
         "phpunit/phpunit": "^13.4.5",

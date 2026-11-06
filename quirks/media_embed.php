@@ -125,6 +125,8 @@ function media_embed_url_to_data_uri(
  * Fetch binary content from a remote URL with optional retry and proxy.
  *
  * Returns an array with the body and detected MIME type, or null on failure.
+ * Images are automatically sanitized to strip EXIF metadata and neutralize
+ * polyglot attacks.
  *
  * @param string $url The URL to fetch.
  * @param string|null $proxyProfile Optional proxy profile name.
@@ -151,6 +153,14 @@ function media_embed_fetch_binary(
                 /** @var array{body: string, type: string}|null $data */
                 $data = getProtectedBinary($url, $proxyProfile);
                 if ($data !== null) {
+                    // Sanitize images to strip EXIF and neutralize polyglot attacks
+                    if (str_starts_with($data['type'], 'image/') === true) {
+                        $sanitized = sanitize_image($data['body']);
+                        if ($sanitized !== $data['body']) {
+                            $data['body'] = $sanitized;
+                            $data['type'] = 'image/webp';
+                        }
+                    }
                     return $data;
                 }
             }
@@ -171,6 +181,15 @@ function media_embed_fetch_binary(
             $headers = $response->getHeaders();
             $contentType = $headers['content-type'][0] ?? 'application/octet-stream';
             $type = trim(explode(';', (string) $contentType)[0]);
+
+            // Sanitize images to strip EXIF and neutralize polyglot attacks
+            if (str_starts_with($type, 'image/') === true) {
+                $sanitized = sanitize_image($body);
+                if ($sanitized !== $body) {
+                    $body = $sanitized;
+                    $type = 'image/webp';
+                }
+            }
 
             return [
                 'body' => $body,

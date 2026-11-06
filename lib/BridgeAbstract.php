@@ -99,16 +99,6 @@ abstract class BridgeAbstract
         return static::CACHE_TIMEOUT;
     }
 
-    public function getRawOutput(): ?Response
-    {
-        return $this->rawOutput;
-    }
-
-    protected function setRawOutput(Response $response): void
-    {
-        $this->rawOutput = $response;
-    }
-
     public function loadConfiguration()
     {
         foreach (static::CONFIGURATION as $optionName => $optionValue) {

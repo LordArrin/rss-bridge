@@ -30,15 +30,6 @@ final class Url
         'txt'   => 'text/plain',
     ];
 
-    public static function getHomePageUrl(): string
-    {
-        $uri = $_SERVER['REQUEST_URI'] ?? '/';
-        if (($pos = strpos($uri, '?')) !== false) {
-            $uri = substr($uri, 0, $pos);
-        }
-        return self::getBaseUrl() . $uri;
-    }
-
     public static function getCurrentUrl(): string
     {
         return self::getBaseUrl() . ($_SERVER['REQUEST_URI'] ?? '/');
@@ -64,16 +55,6 @@ final class Url
             self::sanitizeRoot($e->getMessage()),
             self::sanitizeRoot($e->getFile()),
             $e->getLine()
-        );
-    }
-
-    public static function renderGithubUrl(string $file, int $line, string $revision = 'master'): string
-    {
-        return sprintf(
-            'https://github.com/LordArrin/rss-bridge/blob/%s/%s#L%d',
-            $revision,
-            $file,
-            $line
         );
     }
 
@@ -196,11 +177,6 @@ final class Url
     public static function now(): \DateTimeImmutable
     {
         return new \DateTimeImmutable();
-    }
-
-    public static function createRandomString(int $bytes = 16): string
-    {
-        return bin2hex(random_bytes($bytes));
     }
 
     /**

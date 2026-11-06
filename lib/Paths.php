@@ -26,14 +26,4 @@ final class Paths
     {
         return dirname(__DIR__) . '/cache/';
     }
-
-    /**
-     * Returns the absolute path to the caches library directory.
-     *
-     * This directory contains cache implementation classes.
-     */
-    public static function getLibCaches(): string
-    {
-        return dirname(__DIR__) . '/caches/';
-    }
 }

@@ -314,7 +314,6 @@ RUN set -xe && \
       php85-fileinfo \
       php85-sqlite3 \
       php85-pdo_sqlite \
-      php85-zip \
       # Images
       php85-gd \
       # System & processes

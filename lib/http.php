@@ -181,18 +181,6 @@ final class IpResolver
     }
 
     /**
-     * Clears the DNS cache for a specific host or all hosts.
-     */
-    public static function clearCache(?string $host = null): void
-    {
-        if ($host === null) {
-            self::$cache = [];
-            return;
-        }
-        unset(self::$cache[strtolower(rtrim($host, '.'))]);
-    }
-
-    /**
      * Checks if an IP is allowed (not blocked).
      */
     public function isAllowed(string $ip): bool
