@@ -11,7 +11,7 @@
 <h4>Configuration</h4>
 <ol>
     <li>
-        <p>Create a MangaDex account if you don't have one: <a href="https://mangadex.org/register" target="_blank" rel="a noopener">https://mangadex.org/register</a></p>
+        <p>Create a MangaDex account if you don't have one: <a href="https://mangadex.org/register" target="_blank" rel="noopener">https://mangadex.org/register</a></p>
     </li>
     <li>
         <p>Log in and go to your account settings: <a href="https://mangadex.org/settings" target="_blank" rel="noopener">https://mangadex.org/settings</a></p>
@@ -20,12 +20,10 @@
         <p>Scroll down to the <strong>API Clients</strong> section and click <strong>Create</strong>.</p>
     </li>
     <li>
-        <p>Fill in the form:</p>
-        <ul>
-            <li><strong>Name:</strong> Any descriptive name (e.g., "RSS Bridge")</li>
-            <li><strong>Type:</strong> Select <strong>Personal Client</strong></li>
-        </ul>
-        <p>After approval (usually automatic), your client will appear in the list.</p>
+        <p>Fill in the form:<br>
+        • <strong>Name:</strong> Any descriptive name (e.g., "RSS Bridge")<br>
+        • <strong>Type:</strong> Select <strong>Personal Client</strong><br>
+        After approval (usually automatic), your client will appear in the list.</p>
     </li>
     <li>
         <p>Copy your <strong>Client ID</strong> (looks like <code>personal-client-xxxxx-xxxxx-xxxxx-xxxxx</code>) and click <strong>Get Secret</strong> to reveal and copy your <strong>Client Secret</strong>.</p>
@@ -73,7 +71,9 @@ log_level = "info"</code></pre>
 <p>The bridge uses the OAuth2 password grant flow as described in the <a href="https://api.mangadex.org/docs/02-authentication/personal-clients/" target="_blank" rel="noopener">MangaDex API documentation</a>:</p>
 <ol>
     <li><p>On first request, the bridge exchanges your username and password for an <strong>access token</strong> and a <strong>refresh token</strong>.</p></li>
-    <li><p>The access token is cached for <strong>14 minutes</strong> (tokens expire after  is cached for <strong>30 days</strong>. When it expires, the bridge re-authenticates with your credentials.</p></li>
+    <li><p>The access token is cached for <strong>14 minutes</strong> (tokens expire after 15 minutes).</p></li>
+    <li><p>When the access token expires, the bridge automatically refreshes it using the refresh token (no password needed).</p></li>
+    <li><p>The refresh token is cached for <strong>30 days</strong>. When it expires, the bridge re-authenticates with your credentials.</p></li>
 </ol>
 
 <p>All token management happens automatically. You never need to manually obtain, copy, or update tokens. Just configure your credentials once and the bridge handles the rest.</p>
