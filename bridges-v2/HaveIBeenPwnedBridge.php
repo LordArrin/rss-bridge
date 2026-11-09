@@ -31,31 +31,34 @@ final class HaveIBeenPwnedBridge extends BridgeAbstract
                 'type' => 'number',
                 'required' => true,
                 'defaultValue' => 20,
-            ]
-        ]
+            ],
+        ],
     ];
 
     private const BREACH_TYPES = [
         'IsVerified' => [
-            false => 'Unverified breach, may be sourced from elsewhere'
+            false => 'Unverified breach, may be sourced from elsewhere',
         ],
         'IsFabricated' => [
-            true => 'Fabricated breach, likely not legitimate'
+            true => 'Fabricated breach, likely not legitimate',
         ],
         'IsSensitive' => [
-            true => 'Sensitive breach, not publicly searchable'
+            true => 'Sensitive breach, not publicly searchable',
         ],
         'IsRetired' => [
-            true => 'Retired breach, removed from system'
+            true => 'Retired breach, removed from system',
         ],
         'IsSpamList' => [
-            true => 'Spam list, used for spam marketing'
+            true => 'Spam list, used for spam marketing',
         ],
         'IsMalware' => [
-            true => 'Malware breach'
+            true => 'Malware breach',
         ],
     ];
 
+    /**
+     * @var list<array{title: string, dateAdded: string, breachDate: string, uri: string, content: string, uid: string}>
+     */
     private array $breaches = [];
 
     public function collectData(): void
@@ -124,6 +127,9 @@ EOD;
         $this->createItems();
     }
 
+    /**
+     * @param array<string, mixed> $breach
+     */
     private function breachType(array $breach): string
     {
         $content = '';

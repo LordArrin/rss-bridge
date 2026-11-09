@@ -58,6 +58,9 @@ final class Url
         );
     }
 
+    /**
+     * @return list<array{file: string, line: int|null, class: string|null, type: string|null, function: string|null}>
+     */
     public static function traceFromException(\Throwable $e): array
     {
         $frames = array_reverse($e->getTrace());
@@ -68,42 +71,49 @@ final class Url
         $trace = [];
         foreach ($frames as $frame) {
             $trace[] = [
-                'file'     => self::sanitizeRoot($frame['file'] ?? ''),
-                'line'     => $frame['line'] ?? null,
-                'class'    => $frame['class'] ?? null,
-                'type'     => $frame['type'] ?? null,
-                'function' => $frame['function'] ?? null,
+                'file'     => self::sanitizeRoot((string)($frame['file'] ?? '')),
+                'line'     => isset($frame['line']) === true ? (int)$frame['line'] : null,
+                'class'    => isset($frame['class']) === true ? (string)$frame['class'] : null,
+                'type'     => isset($frame['type']) === true ? (string)$frame['type'] : null,
+                'function' => isset($frame['function']) === true ? (string)$frame['function'] : null,
             ];
         }
         return $trace;
     }
 
+    /**
+     * @param list<array{file: string, line: int|null, class: string|null, type: string|null, function: string|null}> $trace
+     * @return list<string>
+     */
     public static function traceToCallPoints(array $trace): array
     {
         return array_map(fn(array $frame) => self::frameToCallPoint($frame), $trace);
     }
 
+    /**
+     * @param array{file: string, line: int|null, class: string|null, type: string|null, function: string|null} $frame
+     */
     public static function frameToCallPoint(array $frame): string
     {
         if (($frame['class'] ?? '') !== '') {
             return sprintf(
                 '%s(%s): %s%s%s()',
                 $frame['file'],
-                $frame['line'],
+                (string)$frame['line'],
                 $frame['class'],
-                $frame['type'],
-                $frame['function'],
+                (string)$frame['type'],
+                (string)$frame['function'],
             );
         }
         if (($frame['function'] ?? '') !== '') {
             return sprintf(
                 '%s(%s): %s()',
                 $frame['file'],
-                $frame['line'],
+                (string)$frame['line'],
                 $frame['function'],
             );
         }
-        return sprintf('%s(%s)', $frame['file'], $frame['line']);
+        return sprintf('%s(%s)', $frame['file'], (string)$frame['line']);
     }
 
     public static function sanitizeRoot(string $filePath): string
@@ -131,12 +141,12 @@ final class Url
             $file = fopen('/etc/mime.types', 'r');
             if ($file !== false) {
                 while (($line = fgets($file)) !== false) {
-                    $line = trim(preg_replace('/#.*/', '', $line));
+                    $line = trim((string)preg_replace('/#.*/', '', $line));
                     if ($line === '') {
                         continue;
                     }
                     $parts = preg_split('/\s+/', $line);
-                    if (count($parts) < 2) {
+                    if ($parts === false || count($parts) < 2) {
                         continue;
                     }
                     $type = array_shift($parts);

@@ -119,6 +119,7 @@ final class BookMyShowBridge extends BridgeAbstract
         ],
     ];
 
+    /** @var list<string> */
     private array $languages = [];
 
     public function collectData(): void
@@ -209,6 +210,9 @@ final class BookMyShowBridge extends BridgeAbstract
         return sprintf('BookMyShow: %s in %s', $categoryName, $cityName);
     }
 
+    /**
+     * @return array<string, string>
+     */
     private function getCities(): array
     {
         return [
@@ -221,6 +225,9 @@ final class BookMyShowBridge extends BridgeAbstract
         ];
     }
 
+    /**
+     * @return list<string>
+     */
     private function makeHeaders(string $city): array
     {
         $uniqid = uniqid();
@@ -228,6 +235,9 @@ final class BookMyShowBridge extends BridgeAbstract
         return ['Cookie: bmsId=' . $uniqid . '; Rgn=' . $rgn . ';'];
     }
 
+    /**
+     * @param list<array<string, mixed>> $dates
+     */
     private function getDatesHtml(array $dates): string
     {
         if ($dates === []) {
@@ -267,6 +277,9 @@ final class BookMyShowBridge extends BridgeAbstract
         return '<p>Dates: ' . $firstFormatted . ' - ' . $lastDate->format('D, d M Y') . '</p>';
     }
 
+    /**
+     * @param array<string, mixed> $event
+     */
     private function generateEventHtml(array $event, string $category): string
     {
         $dates = $event['arrDates'] ?? [];
@@ -290,6 +303,9 @@ final class BookMyShowBridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @param list<array<string, mixed>> $venues
+     */
     private function generateVenueHtml(array $venues): string
     {
         $html = '<h3>Venues</h3>';
@@ -323,6 +339,10 @@ final class BookMyShowBridge extends BridgeAbstract
         return $html . '</tbody></table>';
     }
 
+    /**
+     * @param array<string, mixed> $event
+     * @param array<string, string> $headers
+     */
     private function generateEventDetails(array $event, array $headers = self::TABLE_HEADERS): string
     {
         $html = '';
@@ -353,6 +373,9 @@ final class BookMyShowBridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @param array<string, mixed> $event
+     */
     private function generateStandardHtml(array $event): string
     {
         $details = $this->generateEventDetails($event);
@@ -377,6 +400,9 @@ final class BookMyShowBridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @param list<array<string, mixed>> $data
+     */
     private function generateInnerMovieDetails(array $data): string
     {
         $headers = ['EventLanguage', 'EventDimension'];
@@ -429,6 +455,9 @@ final class BookMyShowBridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @param array<string, mixed> $eventGroup
+     */
     private function generateMovieHtml(array $eventGroup): string
     {
         $childEvents = $eventGroup['ChildEvents'] ?? [];
@@ -474,6 +503,10 @@ final class BookMyShowBridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @param array<string, mixed> $eventGroup
+     * @param array<string, mixed> $childData
+     */
     private function extractDescription(array $eventGroup, array $childData = []): string
     {
         $descriptionFields = [
@@ -515,6 +548,9 @@ final class BookMyShowBridge extends BridgeAbstract
         return htmlspecialchars($desc, ENT_QUOTES, 'UTF-8');
     }
 
+    /**
+     * @param array<string, mixed> $eventGroup
+     */
     private function generateMovieUrl(array $eventGroup): string
     {
         $urlTitle = (string) ($eventGroup['EventURLTitle'] ?? '');
@@ -522,6 +558,10 @@ final class BookMyShowBridge extends BridgeAbstract
         return self::URI . '/movies/' . $urlTitle . '/' . $eventCode;
     }
 
+    /**
+     * @param array<string, mixed> $eventGroup
+     * @return array<string, mixed>|null
+     */
     private function generateMoviesData(array $eventGroup): ?array
     {
         $childEvents = $eventGroup['ChildEvents'] ?? [];
@@ -555,6 +595,10 @@ final class BookMyShowBridge extends BridgeAbstract
         ];
     }
 
+    /**
+     * @param array<string, mixed> $event
+     * @return array<string, mixed>|null
+     */
     private function generateEventData(array $event, string $category): ?array
     {
         if ($category === self::MOVIES) {
@@ -564,6 +608,10 @@ final class BookMyShowBridge extends BridgeAbstract
         return $this->generateGenericEventData($event, $category);
     }
 
+    /**
+     * @param array<string, mixed> $event
+     * @return array<string, mixed>|null
+     */
     private function generateGenericEventData(array $event, string $category): ?array
     {
         $datetime = (string) ($event['Event_dtmCreated'] ?? '');
@@ -599,6 +647,9 @@ final class BookMyShowBridge extends BridgeAbstract
         ];
     }
 
+    /**
+     * @param array<string, mixed> $event
+     */
     private function isEventOnline(array $event): bool
     {
         $venues = $event['arrVenues'] ?? [];
@@ -622,6 +673,9 @@ final class BookMyShowBridge extends BridgeAbstract
         return in_array($language, $this->languages, true);
     }
 
+    /**
+     * @param array<string, mixed> $event
+     */
     private function matchesOnline(array $event): bool
     {
         $includeOnlineInput = $this->getInput('include_online');
@@ -634,6 +688,9 @@ final class BookMyShowBridge extends BridgeAbstract
         return $this->isEventOnline($event) === false;
     }
 
+    /**
+     * @param array<string, mixed> $event
+     */
     private function matchesFilters(array $event): bool
     {
         return $this->matchesLanguage() === true && $this->matchesOnline($event) === true;

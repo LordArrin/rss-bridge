@@ -19,6 +19,9 @@ abstract class FormatAbstract implements FormatInterface
      */
     public const MIME_TYPE = 'text/plain';
 
+    /**
+     * @var array<string, mixed>
+     */
     protected array $feed = [];
 
     /**
@@ -30,6 +33,8 @@ abstract class FormatAbstract implements FormatInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param array<string, mixed> $feed
      */
     public function setFeed(array $feed): void
     {
@@ -43,6 +48,8 @@ abstract class FormatAbstract implements FormatInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @return array<string, mixed>
      */
     public function getFeed(): array
     {
@@ -53,15 +60,17 @@ abstract class FormatAbstract implements FormatInterface
      * {@inheritdoc}
      *
      * Accepts both FeedItem instances and raw arrays.
+     *
+     * @param list<FeedItem|array<string, mixed>> $items
      */
     public function setItems(array $items): void
     {
         $this->items = [];
         foreach ($items as $item) {
-            if ($item instanceof FeedItem) {  // < ÓÁÐÀÒÜ ÎÁÐÀÒÍÛÉ ÑËÅØ
+            if ($item instanceof FeedItem) {
                 $this->items[] = $item;
             } else {
-                $this->items[] = FeedItem::fromArray((array) $item);  // < ÓÁÐÀÒÜ ÎÁÐÀÒÍÛÉ ÑËÅØ
+                $this->items[] = FeedItem::fromArray((array) $item);
             }
         }
     }

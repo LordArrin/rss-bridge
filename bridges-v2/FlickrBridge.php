@@ -212,6 +212,9 @@ final class FlickrBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function extractJsonModel(string $html): array
     {
         $startMarker = 'modelExport:';
@@ -242,6 +245,10 @@ final class FlickrBridge extends BridgeAbstract
         return $decoded;
     }
 
+    /**
+     * @param array<string, mixed> $json
+     * @return list<array<string, mixed>>
+     */
     private function getPhotoModels(array $json, string $filter): array
     {
         $photoModels = [];
@@ -274,6 +281,9 @@ final class FlickrBridge extends BridgeAbstract
         return $photoModels;
     }
 
+    /**
+     * @param array<string, mixed> $model
+     */
     private function extractContentImage(array $model): string
     {
         $areas = [];

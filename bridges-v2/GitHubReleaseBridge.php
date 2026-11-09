@@ -129,6 +129,9 @@ final class GitHubReleaseBridge extends BridgeAbstract
         return parent::getURI();
     }
 
+    /**
+     * @return array{owner: string, repo: string}|null
+     */
     public function detectParameters(string $url): ?array
     {
         $parsed = parse_url($url);
@@ -147,6 +150,9 @@ final class GitHubReleaseBridge extends BridgeAbstract
         return null;
     }
 
+    /**
+     * @param array<string, mixed> $release
+     */
     private function shouldSkipRelease(array $release, bool $includePrereleases): bool
     {
         if (($release['draft'] ?? false) === true) {
@@ -160,6 +166,10 @@ final class GitHubReleaseBridge extends BridgeAbstract
         return false;
     }
 
+    /**
+     * @param array<string, mixed> $release
+     * @return array{title: string, uri: string, content: string, timestamp: int, author: string, uid: string, categories: list<string>}
+     */
     private function buildReleaseItem(array $release, string $owner, string $repo, bool $hideAssets): array
     {
         $name = $release['name'] ?? '';
@@ -188,22 +198,25 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
         return [
             'title' => $title,
-            'uri' => $release['html_url'] ?? '',
+            'uri' => (string) ($release['html_url'] ?? ''),
             'content' => $content,
             'timestamp' => $timestamp,
-            'author' => $release['author']['login'] ?? '',
+            'author' => (string) ($release['author']['login'] ?? ''),
             'uid' => $tagName !== '' ? $tagName : (string) ($release['id'] ?? uniqid()),
             'categories' => [$tagName !== '' ? $tagName : ''],
         ];
     }
 
+    /**
+     * @param list<array<string, mixed>> $assets
+     */
     private function buildAssetsBlock(array $assets): string
     {
         $links = [];
 
         foreach ($assets as $asset) {
-            $url = $asset['browser_download_url'] ?? '';
-            $name = $asset['name'] ?? '';
+            $url = (string) ($asset['browser_download_url'] ?? '');
+            $name = (string) ($asset['name'] ?? '');
 
             if ($url === '' || $name === '') {
                 continue;

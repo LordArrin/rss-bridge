@@ -9,10 +9,13 @@ use RSSBridge\Utils\Json;
 use RSSBridge\Proxies\DirectProxy;
 use RSSBridge\Proxies\ProxyFactory;
 
+/**
+ * @return list<array<string, mixed>>
+ */
 function get_sitemap(string $url): array
 {
     $xmlString = getContents($url);
-    if ($xmlString === '') {
+    if (is_string($xmlString) === false || $xmlString === '') {
         return [];
     }
 
@@ -27,6 +30,9 @@ function get_sitemap(string $url): array
 
     $urls = [];
     foreach ($doc->querySelectorAll('url') as $urlNode) {
+        if ($urlNode instanceof \Dom\Element === false) {
+            continue;
+        }
         $locNode = $urlNode->querySelector('loc');
         $lastmodNode = $urlNode->querySelector('lastmod');
         $changefreqNode = $urlNode->querySelector('changefreq');
@@ -41,11 +47,15 @@ function get_sitemap(string $url): array
 
         $newsNodes = $urlNode->getElementsByTagNameNS('http://www.google.com/schemas/sitemap-news/0.9', '*');
         foreach ($newsNodes as $element) {
-            if ($element instanceof \Dom\Element) {
-                $localName = $element->localName;
-                $prefix = $element->prefix ?? 'news';
-                $item[$prefix][$localName] = $element->textContent;
+            $localName = $element->localName;
+            $prefix = $element->prefix ?? 'news';
+            if (isset($item[$prefix]) === false || is_array($item[$prefix]) === false) {
+                $item[$prefix] = [];
             }
+            /** @var array<string, string> $newsData */
+            $newsData = $item[$prefix];
+            $newsData[$localName] = $element->textContent;
+            $item[$prefix] = $newsData;
         }
         $urls[] = $item;
     }
@@ -234,6 +244,8 @@ function getContents(
 /**
  * Gets contents from the Internet as HTMLDocument object.
  *
+ * @param array<string, string>|list<string> $header
+ * @param array<int, mixed> $opts
  * @return \Dom\HTMLDocument Parsed HTML document
  * @throws \Exception If the HTTP response is empty or parsing fails
  */
@@ -243,7 +255,7 @@ function getSimpleHTMLDOM(
     array $opts = []
 ): \Dom\HTMLDocument {
     $html = getContents($url, $header, $opts);
-    if ($html === '') {
+    if (is_string($html) === false || $html === '') {
         throw new \Exception('Unable to parse dom because the http response was the empty string');
     }
 
@@ -258,6 +270,7 @@ function getSimpleHTMLDOM(
 /**
  * Retrieves HTML via a named proxy profile.
  *
+ * @param array<string, mixed> $options
  * @return string HTML content
  */
 function getProtectedContents(string $url, string $profileName, array $options = []): string
@@ -281,6 +294,7 @@ function getProtectedContents(string $url, string $profileName, array $options =
 /**
  * Retrieves HTML via a named proxy profile as HTMLDocument object.
  *
+ * @param array<string, mixed> $options
  * @return \Dom\HTMLDocument Parsed HTML document
  * @throws \Exception If the proxy returns empty HTML or parsing fails
  */
@@ -303,6 +317,7 @@ function getProtectedSimpleHTMLDOM(string $url, string $profileName, array $opti
 /**
  * Retrieves binary content (images, videos, etc.) via a named proxy profile.
  *
+ * @param array<string, mixed> $options
  * @return array{body: string, type: string}|null
  */
 function getProtectedBinary(string $url, string $profileName, array $options = []): ?array

@@ -3,7 +3,7 @@ includes:
     - vendor/phpstan/phpstan-deprecation-rules/rules.neon
 
 parameters:
-    level: 5
+    level: 6
     paths:
         - .
 
@@ -12,20 +12,26 @@ parameters:
             - vendor/*
 
     scanFiles:
+        - lib/contents.php
+        - lib/dependencies.php
         - lib/exceptions.php
         - lib/http.php
-        - lib/logger.php
         - lib/json.php
+        - lib/logger.php
+        - lib/notifications.php
         - lib/utils.php
-        - lib/contents.php
-        - quirks/template.php
-        - quirks/html.php
-        - quirks/srcset.php
+        - lib/version.php
         - quirks/extract.php
+        - quirks/filter.php
+        - quirks/html.php
+        - quirks/json_path.php
         - quirks/media.php
         - quirks/media_embed.php
-        - quirks/json_path.php
+        - quirks/sanitize_image.php
         - quirks/seo.php
+        - quirks/srcset.php
+        - quirks/template.php
+        - quirks/unicode.php
 
     treatPhpDocTypesAsCertain: false
 

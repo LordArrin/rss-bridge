@@ -115,6 +115,9 @@ abstract class NginxBase extends BridgeAbstract
         }
     }
 
+    /**
+     * @return list<string>
+     */
     private function parseChangeItems(string $changes): array
     {
         $lines = explode("\n", $changes);
@@ -165,6 +168,10 @@ abstract class NginxBase extends BridgeAbstract
         return mb_strtoupper(mb_substr($text, 0, 1, 'UTF-8'), 'UTF-8') . mb_substr($text, 1, null, 'UTF-8');
     }
 
+    /**
+     * @param list<string> $items
+     * @return array<string, list<string>>
+     */
     private function groupItemsByCategory(array $items): array
     {
         $categories = [];
@@ -178,6 +185,9 @@ abstract class NginxBase extends BridgeAbstract
         return $categories;
     }
 
+    /**
+     * @param array<string, list<string>> $categories
+     */
     private function buildCategoriesHtml(array $categories): string
     {
         $html = sprintf('<div style="%s">', self::CSS_WRAPPER);

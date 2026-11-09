@@ -66,6 +66,9 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         $this->sortItemsByDate();
     }
 
+    /**
+     * @return list<array{version: string, url: string}>
+     */
     private function fetchReleaseLinks(): array
     {
         $cacheKey = 'firefox_releases_list';
@@ -101,6 +104,9 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         return $releases;
     }
 
+    /**
+     * @return list<array{version: string, url: string}>
+     */
     private function prepareReleases(): array
     {
         $releases = $this->fetchReleaseLinks();
@@ -113,6 +119,10 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         return array_slice(array_values($unique), 0, self::RELEASE_LIMIT);
     }
 
+    /**
+     * @param array{version: string, url: string} $release
+     * @return array<string, mixed>
+     */
     private function buildReleaseItem(array $release): array
     {
         $item = [
@@ -243,6 +253,9 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         return implode("\n", $parts);
     }
 
+    /**
+     * @param list<string> $items
+     */
     private function buildSection(string $sectionId, string $title, array $items): string
     {
         $color = self::SECTION_COLORS[$sectionId] ?? self::FALLBACK_SECTION_COLOR;

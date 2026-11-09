@@ -155,6 +155,9 @@ final class AppleAppStoreBridge extends BridgeAbstract
         return parent::getName();
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getAppData(): array
     {
         $url = $this->resolveHtmlUrl();
@@ -189,6 +192,10 @@ final class AppleAppStoreBridge extends BridgeAbstract
         return $json['data'][0]['data'] ?? $json['data'][0];
     }
 
+    /**
+     * @param array<string, mixed> $data
+     * @return list<string|null>
+     */
     private function extractAppDetails(array $data): array
     {
         if (isset($data['lockup']) === true) {
@@ -213,6 +220,10 @@ final class AppleAppStoreBridge extends BridgeAbstract
         return [$this->appName, 'Unknown Developer'];
     }
 
+    /**
+     * @param array<string, mixed> $data
+     * @return list<array{versionDisplay: string, releaseNotes: string, releaseDate: string|null}>
+     */
     private function getVersionHistory(array $data): array
     {
         $versionHistory = [];

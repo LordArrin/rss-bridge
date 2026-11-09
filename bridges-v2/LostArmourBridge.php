@@ -50,7 +50,7 @@ final class LostArmourBridge extends BridgeAbstract
         'image' => 'display: block; max-width: 1500px; height: auto; margin: 20px 0;',
     ];
 
-    public function collectData()
+    public function collectData(): void
     {
         $today = new \DateTime();
 
@@ -67,7 +67,7 @@ final class LostArmourBridge extends BridgeAbstract
         $url = self::URI . '/summary/voyna_na_ukraine-svodka-za-' . $dateStr;
 
         try {
-            $html = getContents($url);
+            $html = (string) getContents($url);
         } catch (\Exception $e) {
             return;
         }

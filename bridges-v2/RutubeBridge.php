@@ -158,6 +158,9 @@ final class RutubeBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return list<mixed>
+     */
     private function getVideosFromReduxState(): array
     {
         $html = getContents($this->getURI());
@@ -177,16 +180,16 @@ final class RutubeBridge extends BridgeAbstract
             $results = read_json_path($reduxState, 'api', 'queries', $videosMethod1, 'data', 'results');
 
             if (is_array($results) === true) {
-                $videos = $results;
+                $videos = array_values($results);
             } elseif (is_object($results) === true) {
-                $videos = (array)$results;
+                $videos = array_values((array)$results);
             } else {
                 $results = read_json_path($reduxState, 'api', 'queries', $videosMethod2, 'data', 'results');
 
                 if (is_array($results) === true) {
-                    $videos = $results;
+                    $videos = array_values($results);
                 } elseif (is_object($results) === true) {
-                    $videos = (array)$results;
+                    $videos = array_values((array)$results);
                 }
             }
 
@@ -204,9 +207,9 @@ final class RutubeBridge extends BridgeAbstract
             $results = read_json_path($reduxState, 'api', 'queries', $playListVideosMethod, 'data', 'results');
 
             if (is_array($results) === true) {
-                $videos = $results;
+                $videos = array_values($results);
             } elseif (is_object($results) === true) {
-                $videos = (array)$results;
+                $videos = array_values((array)$results);
             }
 
             $title = read_json_path($reduxState, 'api', 'queries', $playListMethod, 'data', 'title');
@@ -221,6 +224,9 @@ final class RutubeBridge extends BridgeAbstract
         return $videos;
     }
 
+    /**
+     * @return list<mixed>
+     */
     private function getVideosFromSearchAPI(): array
     {
         $s = (string)$this->getInput('s');
@@ -238,7 +244,7 @@ final class RutubeBridge extends BridgeAbstract
             return [];
         }
 
-        return $json->results;
+        return array_values($json->results);
     }
 
     private function getJSONData(string $html): object

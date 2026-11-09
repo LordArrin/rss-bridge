@@ -23,9 +23,6 @@ final class CacheMiddleware implements Middleware
     private const STALE_RETRY_AFTER = 60;
     private const DEFAULT_MAX_AGE = 3600;
     private const SERVICE_UNAVAILABLE_RETRY_AFTER = 600;
-    // A slow (timed-out) feed is a temporary problem: FreshRSS honours
-    // Retry-After and comes back in 10 minutes instead of marking the feed
-    // broken or hammering the upstream service on every polling cycle.
     private const TIMEOUT_RETRY_AFTER = 600;
 
     public function __invoke(Request $request, callable $next): Response
@@ -79,16 +76,7 @@ final class CacheMiddleware implements Middleware
             $isTimeout = $this->isTimeoutResponse($response) === true;
             $stale = $this->serveStale($cacheKey, $response);
             if ($stale !== null) {
-                // Slow/timed-out feed with a cached copy available: hand the
-                // reader the last good version and ask it to come back in 10
-                // minutes. FreshRSS imports it as a normal (slightly older)
-                // feed instead of flagging an error on every refresh.
                 $retryAfter = $isTimeout === true ? self::TIMEOUT_RETRY_AFTER : min(max(self::STALE_RETRY_AFTER, $this->resolveMaxAge($request)), 3600);
-                // Keep the cached validators in sync with the re-served body:
-                // a stale representation is no longer the one identified by
-                // the old ETag, and serving a new ETag together with the old
-                // Last-Modified would make If-None-Match/If-Modified-Since
-                // contradict each other for clients like FreshRSS.
                 return $stale
                     ->withoutHeader('etag')
                     ->withoutHeader('last-modified')
@@ -130,10 +118,6 @@ final class CacheMiddleware implements Middleware
     {
         $code = $response->getCode();
         $isRateLimited = $code === 429;
-        // "Тормозная" лента: апстрим не ответил до истечения таймаута запроса.
-        // Это временная проблема, поэтому всегда просим читателя вернуться
-        // через 10 минут (FreshRSS учитывает Retry-After у 5xx и откладывает
-        // следующую попытку, не помечая ленту сломанной).
         $isTimeout = $this->isTimeoutResponse($response) === true;
 
         if ($isRateLimited === true) {
@@ -276,8 +260,6 @@ final class CacheMiddleware implements Middleware
 
     private function isTimeoutResponse(Response $response): bool
     {
-        // ExceptionMiddleware tags responses that were produced from a
-        // connection/read timeout (cURL error, 408, 504) with this header.
         if ($response->getHeader('x-feed-timeout') !== null) {
             return true;
         }
@@ -352,16 +334,7 @@ final class CacheMiddleware implements Middleware
     }
 
     /**
-     * Splits an If-None-Match header value into individual etag candidates.
-     *
-     * Quoted etags may themselves contain commas ("a,b"), so a plain
-     * explode(',') would corrupt the list and make valid conditional
-     * requests from clients like FreshRSS fail to match - the reader would
-     * silently re-download unchanged feeds every cycle instead of getting
-     * a cheap 304. This parser walks the value respecting quoted strings
-     * per RFC 9110 section 8.8.3.
-     *
-     * @return string[]
+     * @return list<string>
      */
     private static function parseIfNoneMatch(string $value): array
     {
@@ -370,7 +343,6 @@ final class CacheMiddleware implements Middleware
         $i = 0;
 
         while ($i < $length) {
-            // Skip whitespace and commas between list items.
             while ($i < $length && ($value[$i] === ' ' || $value[$i] === "\t" || $value[$i] === ',')) {
                 $i++;
             }
@@ -381,7 +353,6 @@ final class CacheMiddleware implements Middleware
             if ($value[$i] === '"') {
                 $start = ++$i;
                 while ($i < $length && $value[$i] !== '"') {
-                    // Skip quoted-pair escapes inside the etag (RFC 9110 5.6.4).
                     if ($value[$i] === '\\' && ($i + 1) < $length) {
                         $i++;
                     }
@@ -389,7 +360,7 @@ final class CacheMiddleware implements Middleware
                 }
                 $candidates[] = substr($value, $start, $i - $start);
                 if ($i < $length) {
-                    $i++; // skip closing quote
+                    $i++;
                 }
             } else {
                 $start = $i;
@@ -431,6 +402,10 @@ final class CacheMiddleware implements Middleware
         return trim($etag, '"');
     }
 
+    /**
+     * @param array<string, string|null> $validators
+     * @return array<string, string>
+     */
     private static function createNotModifiedHeaders(array $validators): array
     {
         $headers = self::addDateHeader(['vary' => 'Accept-Encoding']);
@@ -449,9 +424,14 @@ final class CacheMiddleware implements Middleware
             unset($params[$key]);
         }
         ksort($params);
-        return 'http_' . json_encode($params);
+        $encoded = json_encode($params);
+        return 'http_' . ($encoded === false ? '{}' : $encoded);
     }
 
+    /**
+     * @param array<string, string> $headers
+     * @return array<string, string>
+     */
     private static function addDateHeader(array $headers): array
     {
         if (isset($headers['date']) === false) {

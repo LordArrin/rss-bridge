@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "c1a4ed7b7849947efbbbdacb3f2f1512",
+    "content-hash": "05d13568cab423536f94e9746fb3a0e3",
     "packages": [
         {
             "name": "busybee/urljoin",
@@ -2240,13 +2240,14 @@
     "platform": {
         "php": ">=8.5",
         "ext-curl": "*",
-        "ext-mbstring": "*",
+        "ext-dom": "*",
         "ext-intl": "*",
-        "ext-xml": "*",
+        "ext-mbstring": "*",
         "ext-simplexml": "*",
         "ext-sqlite3": "*",
-        "ext-zip": "*",
-        "ext-dom": "*"
+        "ext-tidy": "*",
+        "ext-xml": "*",
+        "ext-zip": "*"
     },
     "platform-dev": {},
     "plugin-api-version": "2.9.0"

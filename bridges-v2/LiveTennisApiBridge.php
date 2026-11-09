@@ -176,6 +176,9 @@ final class LiveTennisApiBridge extends BridgeAbstract
         return '';
     }
 
+    /**
+     * @param array<string, mixed> $row
+     */
     private static function namesContain(array $row, bool $isFixture, string $needle): bool
     {
         if ($isFixture === true) {
@@ -198,6 +201,10 @@ final class LiveTennisApiBridge extends BridgeAbstract
         return max(1, min(200, (int)$limit));
     }
 
+    /**
+     * @param array<string, mixed> $query
+     * @return list<array<string, mixed>>
+     */
     private function fetchList(string $path, array $query, string $apiKey): array
     {
         $url = self::API_BASE . $path . '?' . http_build_query($query);
@@ -268,6 +275,10 @@ final class LiveTennisApiBridge extends BridgeAbstract
         throwRateLimitException($message . $suffix);
     }
 
+    /**
+     * @param array<string, mixed> $match
+     * @return array<string, mixed>|null
+     */
     private function matchToItem(array $match): ?array
     {
         $id = $match['id'] ?? null;
@@ -305,6 +316,10 @@ final class LiveTennisApiBridge extends BridgeAbstract
         ];
     }
 
+    /**
+     * @param array<string, mixed> $fixture
+     * @return array<string, mixed>|null
+     */
     private function fixtureToItem(array $fixture): ?array
     {
         $id = $fixture['id'] ?? null;
@@ -358,6 +373,10 @@ final class LiveTennisApiBridge extends BridgeAbstract
         ];
     }
 
+    /**
+     * @param array<string, mixed> $match
+     * @param array<string, mixed>|null $score
+     */
     private static function matchContent(array $match, ?array $score, string $p1, string $p2, string $status, string $gamesText): string
     {
         $rows = [];
@@ -429,6 +448,9 @@ final class LiveTennisApiBridge extends BridgeAbstract
         return self::renderRows($rows);
     }
 
+    /**
+     * @param array<string, mixed>|null $score
+     */
     private static function isBreakPoint(?array $score): bool
     {
         if ($score === null) {
@@ -461,6 +483,9 @@ final class LiveTennisApiBridge extends BridgeAbstract
         return in_array($serverPoints, $validServerPoints, true) === true;
     }
 
+    /**
+     * @param array<string, mixed>|null $score
+     */
     private static function serverNumber(?array $score): ?int
     {
         if ($score === null) {
@@ -494,6 +519,9 @@ final class LiveTennisApiBridge extends BridgeAbstract
         return implode(' ', $sets);
     }
 
+    /**
+     * @param array<string, mixed> $score
+     */
     private static function formatPoints(array $score): string
     {
         $points = $score['points'] ?? null;
@@ -508,6 +536,9 @@ final class LiveTennisApiBridge extends BridgeAbstract
         return $a . '-' . $b;
     }
 
+    /**
+     * @param array<string, mixed> $match
+     */
     private static function statusLabel(array $match, string $p1, string $p2): string
     {
         $status = self::text($match['status'] ?? null);
@@ -544,6 +575,10 @@ final class LiveTennisApiBridge extends BridgeAbstract
         };
     }
 
+    /**
+     * @param array<string, mixed> $match
+     * @param array<string, mixed>|null $score
+     */
     private static function matchTimestamp(array $match, ?array $score): string
     {
         if ($score !== null) {
@@ -559,6 +594,10 @@ final class LiveTennisApiBridge extends BridgeAbstract
         return self::text($match['scheduled_time'] ?? null);
     }
 
+    /**
+     * @param array<string, mixed> $match
+     * @return list<string>
+     */
     private static function categories(array $match): array
     {
         $categories = [];
@@ -605,6 +644,9 @@ final class LiveTennisApiBridge extends BridgeAbstract
         return gmdate('Y-m-d H:i', $timestamp) . ' UTC';
     }
 
+    /**
+     * @param array<string, string> $rows
+     */
     private static function renderRows(array $rows): string
     {
         $html = '';

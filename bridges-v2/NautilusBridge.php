@@ -151,6 +151,9 @@ final class NautilusBridge extends FeedExpander
         return $item;
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     private function extractNextData(\Dom\HTMLDocument $dom): ?array
     {
         $script = $dom->querySelector('script#__NEXT_DATA__');
@@ -174,13 +177,16 @@ final class NautilusBridge extends FeedExpander
         }
     }
 
+    /**
+     * @param array<string, mixed> $nextData
+     */
     private function parseNextDataContent(array $nextData): string
     {
-        $pageProps = $nextData['props']['pageProps'] ?? [];
+        $pageProps = is_array($nextData['props']['pageProps'] ?? null) === true ? $nextData['props']['pageProps'] : [];
         $content = '';
 
-        $featuredImage = $pageProps['post']['featuredImage']['node'] ?? [];
-        $featuredImageUrl = $featuredImage['sourceUrl'] ?? '';
+        $featuredImage = is_array($pageProps['post']['featuredImage']['node'] ?? null) === true ? $pageProps['post']['featuredImage']['node'] : [];
+        $featuredImageUrl = is_string($featuredImage['sourceUrl'] ?? null) === true ? $featuredImage['sourceUrl'] : '';
 
         if ($featuredImageUrl !== '') {
             $imgStyle = 'display: block !important; max-width: 1600px !important; width: auto !important; height: auto !important; float: none !important; clear: both !important;';
@@ -192,8 +198,10 @@ final class NautilusBridge extends FeedExpander
             $content .= '>';
         }
 
-        $blocks = $pageProps['blocks'] ?? ($pageProps['post']['contentBlocks']['blocks'] ?? []);
-        if (is_array($blocks) === false || count($blocks) === 0) {
+        $blocks = is_array($pageProps['blocks'] ?? null) === true ? $pageProps['blocks'] : (is_array($pageProps['post']['contentBlocks']['blocks'] ?? null) === true ? $pageProps['post']['contentBlocks']['blocks'] : []);
+
+        // Убрана избыточная проверка is_array($blocks), так как PHPStan уже знает, что $blocks гарантированно является массивом
+        if (count($blocks) === 0) {
             return $content;
         }
 
@@ -333,6 +341,9 @@ final class NautilusBridge extends FeedExpander
         return $html;
     }
 
+    /**
+     * @param list<array<string, mixed>> $blocks
+     */
     private function renderBlocks(array $blocks): string
     {
         $html = '';

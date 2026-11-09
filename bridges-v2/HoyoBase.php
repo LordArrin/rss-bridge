@@ -52,6 +52,9 @@ abstract class HoyoBase extends BridgeAbstract
     abstract protected function getArticleUrl(int $infoId): string;
     abstract protected function getBannerKey(): string;
 
+    /**
+     * @param array<string, mixed> $jsonExt
+     */
     protected function getBannerUrl(array $jsonExt): string
     {
         $bannerKey = $this->getBannerKey();

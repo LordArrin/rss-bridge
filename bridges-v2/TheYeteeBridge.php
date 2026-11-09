@@ -82,6 +82,9 @@ final class TheYeteeBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     private function extractAuthor(array $data): string
     {
         if (isset($data['vendor']) === true && is_string($data['vendor']) === true && $data['vendor'] !== '') {

@@ -23,6 +23,9 @@ final class FileCache extends AbstractCache
     private readonly bool $enablePurge;
     private readonly Logger $logger;
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(Logger $logger, array $config = [])
     {
         $this->logger = $logger;
@@ -136,7 +139,12 @@ final class FileCache extends AbstractCache
 
     public function clear(): void
     {
-        foreach (scandir($this->path) as $filename) {
+        $files = scandir($this->path);
+        if ($files === false) {
+            return;
+        }
+
+        foreach ($files as $filename) {
             if ($this->isExcludedFile($filename) === true) {
                 continue;
             }
@@ -157,7 +165,12 @@ final class FileCache extends AbstractCache
 
         $now = time();
 
-        foreach (scandir($this->path) as $filename) {
+        $files = scandir($this->path);
+        if ($files === false) {
+            return;
+        }
+
+        foreach ($files as $filename) {
             if ($this->isExcludedFile($filename) === true) {
                 continue;
             }

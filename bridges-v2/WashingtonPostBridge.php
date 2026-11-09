@@ -164,6 +164,8 @@ final class WashingtonPostBridge extends BridgeAbstract
 
     /**
      * Renders article JSON structure into HTML
+     *
+     * @param list<array<string, mixed>> $content
      */
     private function renderDescription(array $content): string
     {

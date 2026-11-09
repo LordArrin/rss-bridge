@@ -52,7 +52,7 @@ final class RuStoreBridge extends BridgeAbstract
         $this->package = $package;
         $html = getContents(self::BASE_URL . urlencode($package) . self::VERSIONS_PATH, self::HTTP_HEADERS);
 
-        if ($html === '') {
+        if (is_string($html) === false || $html === '') {
             throw new \RuntimeException('Failed to load page (empty response).');
         }
 
@@ -98,7 +98,7 @@ final class RuStoreBridge extends BridgeAbstract
         return self::BASE_URL . urlencode($this->package);
     }
 
-    public function getIcon(): ?string
+    public function getIcon(): string
     {
         if ($this->appIcon === null) {
             return parent::getIcon();
@@ -162,6 +162,9 @@ final class RuStoreBridge extends BridgeAbstract
         return null;
     }
 
+    /**
+     * @return list<array{versionName: string, whatsNew: string, date: string}>
+     */
     private function parseJsonLd(string $html): array
     {
         $versions = [];
@@ -220,6 +223,9 @@ final class RuStoreBridge extends BridgeAbstract
         return $versions;
     }
 
+    /**
+     * @return list<array{versionName: string, whatsNew: string, date: string}>
+     */
     private function parseNextJsPayload(string $html): array
     {
         $marker = '"versions":[';
@@ -372,6 +378,9 @@ final class RuStoreBridge extends BridgeAbstract
         );
     }
 
+    /**
+     * @param list<string> $lines
+     */
     private function looksLikeImplicitList(array $lines): bool
     {
         if (count($lines) < 2) {
@@ -413,6 +422,10 @@ final class RuStoreBridge extends BridgeAbstract
         return mb_strtoupper(mb_substr($text, 0, 1)) . mb_substr($text, 1);
     }
 
+    /**
+     * @param array{versionName: string, whatsNew: string, date: string} $version
+     * @return array{uri: string, title: string, content: string, uid: string, timestamp: int}
+     */
     private function buildItem(array $version): array
     {
         try {

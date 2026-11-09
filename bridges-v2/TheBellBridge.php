@@ -180,7 +180,11 @@ GQL;
         }
     }
 
-    public function detectParameters($url)
+    /**
+     * @param mixed $url
+     * @return array<string, string>|null
+     */
+    public function detectParameters(mixed $url): ?array
     {
         if (is_string($url) === false) {
             return null;
@@ -197,6 +201,9 @@ GQL;
         return null;
     }
 
+    /**
+     * @param list<array<string, mixed>> $authors
+     */
     private function extractAuthors(array $authors): string
     {
         $names = [];
@@ -219,6 +226,10 @@ GQL;
         return implode(', ', $names);
     }
 
+    /**
+     * @param list<array<string, mixed>> $items
+     * @return list<string>
+     */
     private function extractTitles(array $items): array
     {
         $titles = [];

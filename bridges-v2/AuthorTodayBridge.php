@@ -115,6 +115,9 @@ final class AuthorTodayBridge extends BridgeAbstract
         return trim($titleNode->textContent);
     }
 
+    /**
+     * @return list<array{uri: string, title: string, uid: string, content: string, _position: int, timestamp?: int, author?: string, categories?: list<string>}>
+     */
     private function parseChapters(\Dom\HTMLDocument $html): array
     {
         $authorNode = $html->querySelector('.book-authors a');
@@ -149,6 +152,10 @@ final class AuthorTodayBridge extends BridgeAbstract
         return $items;
     }
 
+    /**
+     * @param list<string> $tags
+     * @return array{uri: string, title: string, uid: string, content: string, _position: int, timestamp?: int, author?: string, categories?: list<string>}|null
+     */
     private function buildChapterItem(
         \Dom\Element $chapter,
         int $position,
@@ -189,6 +196,9 @@ final class AuthorTodayBridge extends BridgeAbstract
         ];
     }
 
+    /**
+     * @param list<array{uri: string, title: string, uid: string, content: string, _position: int, timestamp?: int, author?: string, categories?: list<string>}> $items
+     */
     private function addSortedItems(array $items): void
     {
         usort($items, function (array $a, array $b): int {
@@ -280,6 +290,9 @@ final class AuthorTodayBridge extends BridgeAbstract
         return trim((string)preg_replace(pattern: '/\s+/u', replacement: ' ', subject: $text));
     }
 
+    /**
+     * @return list<string>
+     */
     private function tags(\Dom\HTMLDocument $html): array
     {
         $tags = [];

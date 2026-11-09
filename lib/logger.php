@@ -35,14 +35,32 @@ interface Logger
         self::ERROR => 'ERROR',
     ];
 
+    /**
+     * @param array<string, mixed> $context
+     */
     public function debug(string $message, array $context = []): void;
+
+    /**
+     * @param array<string, mixed> $context
+     */
     public function info(string $message, array $context = []): void;
+
+    /**
+     * @param array<string, mixed> $context
+     */
     public function warning(string $message, array $context = []): void;
+
+    /**
+     * @param array<string, mixed> $context
+     */
     public function error(string $message, array $context = []): void;
 }
 
 final class LogFilter
 {
+    /**
+     * @param array<string, mixed> $record
+     */
     public static function shouldLog(array $record): bool
     {
         if (isset($record['context']['e']) === false) {
@@ -77,25 +95,34 @@ final class LogFilter
 
 final class LogFormatter
 {
+    /**
+     * @param array<string, mixed> $record
+     * @return array<string, mixed>
+     */
     public static function formatRecord(array $record): array
     {
-        if (isset($record['context']['e']) === true && $record['context']['e'] instanceof \Throwable) {
+        $context = $record['context'] ?? [];
+        if (is_array($context) === true && isset($context['e']) === true && $context['e'] instanceof \Throwable) {
             /** @var \Throwable $e */
-            $e = $record['context']['e'];
-            unset($record['context']['e']);
+            $e = $context['e'];
+            unset($context['e']);
 
-            $record['context']['type'] = $e::class;
-            $record['context']['code'] = $e->getCode();
-            $record['context']['message'] = Url::sanitizeRoot($e->getMessage());
-            $record['context']['file'] = Url::sanitizeRoot($e->getFile());
-            $record['context']['line'] = $e->getLine();
-            $record['context']['url'] = Url::getCurrentUrl();
-            $record['context']['trace'] = Url::traceToCallPoints(Url::traceFromException($e));
+            $context['type'] = $e::class;
+            $context['code'] = $e->getCode();
+            $context['message'] = Url::sanitizeRoot($e->getMessage());
+            $context['file'] = Url::sanitizeRoot($e->getFile());
+            $context['line'] = $e->getLine();
+            $context['url'] = Url::getCurrentUrl();
+            $context['trace'] = Url::traceToCallPoints(Url::traceFromException($e));
+            $record['context'] = $context;
         }
 
         return $record;
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     public static function encodeContext(array $context): string
     {
         if ($context === []) {
@@ -120,11 +147,11 @@ final class SimpleLogger implements Logger
 {
     private string $name;
 
-    /** @var callable[] */
+    /** @var list<callable(array<string, mixed>): void> */
     private array $handlers;
 
     /**
-     * @param callable[] $handlers
+     * @param list<callable(array<string, mixed>): void> $handlers
      */
     public function __construct(string $name, array $handlers = [])
     {
@@ -132,31 +159,49 @@ final class SimpleLogger implements Logger
         $this->handlers = $handlers;
     }
 
+    /**
+     * @param callable(array<string, mixed>): void $fn
+     */
     public function addHandler(callable $fn): void
     {
         $this->handlers[] = $fn;
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     public function debug(string $message, array $context = []): void
     {
         $this->log(self::DEBUG, $message, $context);
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     public function info(string $message, array $context = []): void
     {
         $this->log(self::INFO, $message, $context);
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     public function warning(string $message, array $context = []): void
     {
         $this->log(self::WARNING, $message, $context);
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     public function error(string $message, array $context = []): void
     {
         $this->log(self::ERROR, $message, $context);
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     private function log(int $level, string $message, array $context = []): void
     {
         $record = [
@@ -185,9 +230,13 @@ final class StreamHandler
         $this->level = $level;
     }
 
+    /**
+     * @param array<string, mixed> $record
+     */
     public function __invoke(array $record): void
     {
-        if ($record['level'] < $this->level) {
+        $level = (int)($record['level'] ?? 0);
+        if ($level < $this->level) {
             return;
         }
 
@@ -196,14 +245,20 @@ final class StreamHandler
         }
 
         $record = LogFormatter::formatRecord($record);
-        $context = LogFormatter::encodeContext($record['context']);
+        $contextArray = $record['context'] ?? [];
+        $context = is_array($contextArray) === true ? LogFormatter::encodeContext($contextArray) : '';
+
+        $createdAt = $record['created_at'] ?? null;
+        if ($createdAt instanceof \DateTimeInterface === false) {
+            return;
+        }
 
         $text = sprintf(
             "[%s] %s.%s %s %s\n",
-            $record['created_at']->format('Y-m-d H:i:s'),
-            $record['name'],
-            $record['level_name'],
-            $record['message'],
+            $createdAt->format('Y-m-d H:i:s'),
+            (string)($record['name'] ?? ''),
+            (string)($record['level_name'] ?? ''),
+            (string)($record['message'] ?? ''),
             $context
         );
 
@@ -220,9 +275,13 @@ final class ErrorLogHandler
         $this->level = $level;
     }
 
+    /**
+     * @param array<string, mixed> $record
+     */
     public function __invoke(array $record): void
     {
-        if ($record['level'] < $this->level) {
+        $level = (int)($record['level'] ?? 0);
+        if ($level < $this->level) {
             return;
         }
 
@@ -231,14 +290,20 @@ final class ErrorLogHandler
         }
 
         $record = LogFormatter::formatRecord($record);
-        $context = LogFormatter::encodeContext($record['context']);
+        $contextArray = $record['context'] ?? [];
+        $context = is_array($contextArray) === true ? LogFormatter::encodeContext($contextArray) : '';
+
+        $createdAt = $record['created_at'] ?? null;
+        if ($createdAt instanceof \DateTimeInterface === false) {
+            return;
+        }
 
         $text = sprintf(
             '[%s] %s.%s %s %s',
-            $record['created_at']->format('Y-m-d H:i:s'),
-            $record['name'],
-            $record['level_name'],
-            $record['message'],
+            $createdAt->format('Y-m-d H:i:s'),
+            (string)($record['name'] ?? ''),
+            (string)($record['level_name'] ?? ''),
+            (string)($record['message'] ?? ''),
             $context
         );
 
@@ -248,15 +313,30 @@ final class ErrorLogHandler
 
 final class NullLogger implements Logger
 {
+    /**
+     * @param array<string, mixed> $context
+     */
     public function debug(string $message, array $context = []): void
     {
     }
+
+    /**
+     * @param array<string, mixed> $context
+     */
     public function info(string $message, array $context = []): void
     {
     }
+
+    /**
+     * @param array<string, mixed> $context
+     */
     public function warning(string $message, array $context = []): void
     {
     }
+
+    /**
+     * @param array<string, mixed> $context
+     */
     public function error(string $message, array $context = []): void
     {
     }

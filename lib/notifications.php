@@ -113,16 +113,28 @@ function add_notification(array $notification): void
 
 /** Convenience wrappers ---------------------------------------------------- */
 
+/**
+ * @param array<int, array{label: string, url?: string, method?: string, attributes?: array<string,string>}> $buttons
+ * @param array<int, array{label: string, url: string}> $links
+ */
 function notify_info(string $body, ?string $title = null, ?string $author = null, array $buttons = [], array $links = []): void
 {
     add_notification(build_notification('info', $body, $title, $author, $buttons, $links));
 }
 
+/**
+ * @param array<int, array{label: string, url?: string, method?: string, attributes?: array<string,string>}> $buttons
+ * @param array<int, array{label: string, url: string}> $links
+ */
 function notify_warning(string $body, ?string $title = null, ?string $author = null, array $buttons = [], array $links = []): void
 {
     add_notification(build_notification('warning', $body, $title, $author, $buttons, $links));
 }
 
+/**
+ * @param array<int, array{label: string, url?: string, method?: string, attributes?: array<string,string>}> $buttons
+ * @param array<int, array{label: string, url: string}> $links
+ */
 function notify_error(string $body, ?string $title = null, ?string $author = null, array $buttons = [], array $links = []): void
 {
     add_notification(build_notification('error', $body, $title, $author, $buttons, $links));

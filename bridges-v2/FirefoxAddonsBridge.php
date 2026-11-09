@@ -21,8 +21,8 @@ final class FirefoxAddonsBridge extends BridgeAbstract
                 'type' => 'text',
                 'required' => true,
                 'exampleValue' => 'ublock-origin',
-            ]
-        ]
+            ],
+        ],
     ];
 
     private const CSS = [
@@ -221,13 +221,19 @@ EOD;
         return trim($wrapper->innerHTML);
     }
 
-    public function detectParameters($url): ?array
+    /**
+     * @return array{id: string}|null
+     */
+    public function detectParameters(?string $url): ?array
     {
-        $urlString = (string) $url;
+        if ($url === null) {
+            return null;
+        }
+
         $params = [];
 
         $pattern = '/addons\.mozilla\.org\/(?:[\w-]+\/)?firefox\/addon\/([\w-]+)/';
-        if (preg_match($pattern, $urlString, $matches) === 1) {
+        if (preg_match($pattern, $url, $matches) === 1) {
             $params['id'] = $matches[1];
             return $params;
         }

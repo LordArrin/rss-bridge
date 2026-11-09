@@ -21,6 +21,8 @@ abstract class FeedExpander extends BridgeAbstract
 {
     /**
      * Parsed feed data returned by {@see FeedParser::parseFeed()}.
+     *
+     * @var array<string, mixed>
      */
     private array $feed = [];
 
@@ -32,7 +34,7 @@ abstract class FeedExpander extends BridgeAbstract
      *
      * @param string $url Feed URL to fetch
      * @param int $maxItems Maximum number of items to keep (-1 for unlimited)
-     * @param array $headers Additional HTTP headers for the request
+     * @param list<string> $headers Additional HTTP headers for the request
      *
      * @throws \Exception If the URL is empty, the response is empty, or the XML cannot be parsed
      */
@@ -58,16 +60,18 @@ abstract class FeedExpander extends BridgeAbstract
         try {
             $this->feed = $feedParser->parseFeed($xmlString);
         } catch (\Exception $e) {
-            // FeedMergeBridge relies on this specific message format
             throw new \Exception(sprintf('Failed to parse xml from %s: %s', $url, Url::createSaneExceptionMessage($e)));
         }
 
-        $items = array_slice($this->feed['items'] ?? [], 0, $maxItems);
+        $rawItems = $this->feed['items'] ?? [];
+        $items = is_array($rawItems) === true ? array_slice($rawItems, 0, $maxItems) : [];
 
         foreach ($items as $item) {
-            $item = $this->parseItem($item);
-            if ($item !== false && $item !== []) {
-                $this->items[] = $item;
+            if (is_array($item) === true) {
+                $parsedItem = $this->parseItem($item);
+                if ($parsedItem !== false && $parsedItem !== []) {
+                    $this->items[] = $parsedItem;
+                }
             }
         }
     }
@@ -82,9 +86,9 @@ abstract class FeedExpander extends BridgeAbstract
      * to remain compatible with legacy bridges that override this method
      * with their own untyped signatures.
      *
-     * @param array $item Parsed feed item
+     * @param array<string, mixed> $item Parsed feed item
      *
-     * @return array|false The (possibly modified) item, or a falsy value to drop it
+     * @return array<string, mixed>|false The (possibly modified) item, or a falsy value to drop it
      */
     protected function parseItem(array $item): array|false
     {

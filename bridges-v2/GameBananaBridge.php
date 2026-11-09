@@ -117,6 +117,9 @@ final class GameBananaBridge extends BridgeAbstract
         return parent::getURI();
     }
 
+    /**
+     * @return list<string>
+     */
     private function fetchModIds(string $gid, bool $includeUpdates): array
     {
         $params = [
@@ -148,6 +151,10 @@ final class GameBananaBridge extends BridgeAbstract
         return $modIds;
     }
 
+    /**
+     * @param list<string> $modIds
+     * @return list<array<int, mixed>>
+     */
     private function fetchModData(string $gid, array $modIds): array
     {
         $parts = [];
@@ -173,6 +180,10 @@ final class GameBananaBridge extends BridgeAbstract
         return $data;
     }
 
+    /**
+     * @param array<int, mixed> $element
+     * @return array<string, mixed>|null
+     */
     private function buildItem(array $element, bool $includeUpdates): ?array
     {
         $name = (string)($element[self::IDX_NAME] ?? '');
@@ -266,6 +277,9 @@ final class GameBananaBridge extends BridgeAbstract
         return $content;
     }
 
+    /**
+     * @param list<array<string, mixed>> $updates
+     */
     private function buildUpdates(array $updates, bool $includeUpdates): string
     {
         if ($includeUpdates === false || count($updates) === 0) {

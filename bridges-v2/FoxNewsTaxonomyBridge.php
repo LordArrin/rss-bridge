@@ -21,16 +21,16 @@ final class FoxNewsTaxonomyBridge extends FeedExpander
                 'type' => 'text',
                 'required' => false,
                 'title' => 'Comma-separated taxonomies to KEEP',
-                'defaultValue' => 'politics, world, us'
+                'defaultValue' => 'politics, world, us',
             ],
             'exclude' => [
                 'name' => 'Exclude Taxonomies',
                 'type' => 'text',
                 'required' => false,
                 'title' => 'Comma-separated taxonomies to REMOVE',
-                'defaultValue' => 'deals, entertainment, sports'
-            ]
-        ]
+                'defaultValue' => 'deals, entertainment, sports',
+            ],
+        ],
     ];
 
     public function collectData(): void
@@ -91,6 +91,9 @@ final class FoxNewsTaxonomyBridge extends FeedExpander
         $this->items = $filteredItems;
     }
 
+    /**
+     * @return list<string>
+     */
     private function parseInputList(?string $input): array
     {
         $inputValue = $input ?? '';
@@ -111,6 +114,10 @@ final class FoxNewsTaxonomyBridge extends FeedExpander
         return $cleanParts;
     }
 
+    /**
+     * @param list<string> $categories
+     * @param list<string> $rules
+     */
     private function matchesRules(array $categories, string $uri, array $rules): bool
     {
         foreach ($rules as $rule) {

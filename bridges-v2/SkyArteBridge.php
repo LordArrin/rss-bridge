@@ -64,6 +64,9 @@ final class SkyArteBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     private function getJson(string $url): ?array
     {
         $html = getContents($url);
@@ -83,11 +86,22 @@ final class SkyArteBridge extends BridgeAbstract
         return is_array($decoded) === true ? $decoded : null;
     }
 
+    /**
+     * @param array<string, mixed> $json
+     * @return array{title: string, content: string, categories: list<string>, enclosures: list<string>}
+     */
     private function parseEventData(array $json): array
     {
-        $props = $json['props']['pageProps']['data'] ?? [];
-        $card = $props['card'] ?? [];
-        $info = $props['info'] ?? [];
+        $data = [];
+        if (
+            isset($json['props'], $json['props']['pageProps'], $json['props']['pageProps']['data']) === true
+            && is_array($json['props']['pageProps']['data']) === true
+        ) {
+            $data = $json['props']['pageProps']['data'];
+        }
+
+        $card = is_array($data['card'] ?? null) === true ? $data['card'] : [];
+        $info = is_array($data['info'] ?? null) === true ? $data['info'] : [];
 
         $event = [
             'title' => (string) ($card['title']['typography']['text'] ?? '(untitled)'),
@@ -159,7 +173,7 @@ final class SkyArteBridge extends BridgeAbstract
             $content .= '<p><strong>Periodo:</strong> ' . htmlspecialchars($dates) . '</p>';
         }
 
-        $description = (string) ($props['description'] ?? '');
+        $description = (string) ($data['description'] ?? '');
         if ($description !== '') {
             $result = preg_replace('~<h2>(.*?)</h2>~i', '<strong>$1</strong>', $description);
             $description = (is_string($result) === true) ? $result : $description;

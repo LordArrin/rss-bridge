@@ -193,7 +193,8 @@ final class MemcachedCache extends AbstractCache
         // Chunked entry: reassemble payload from secondary keys (only reached
         // for stale reads or expired chunks).
         if ($isChunked === true) {
-            $payload = $this->readChunked($item['chunks']);
+            $chunksList = $item['chunks'];
+            $payload = is_array($chunksList) === true ? $this->readChunked($chunksList) : null;
 
             if ($payload === null) {
                 // Some chunk was evicted or lost: treat the whole entry as a
@@ -316,7 +317,9 @@ final class MemcachedCache extends AbstractCache
             && is_array($item['chunks']) === true
         ) {
             foreach ($item['chunks'] as $chunkKey) {
-                $this->conn->delete($chunkKey);
+                if (is_string($chunkKey) === true) {
+                    $this->conn->delete($chunkKey);
+                }
             }
         }
 
@@ -326,6 +329,7 @@ final class MemcachedCache extends AbstractCache
     /**
      * Fetch all chunk keys via a single multi-get and concatenate payloads.
      *
+     * @param list<string> $chunkKeys
      * @return string|null Reassembled JSON payload or null if any chunk is missing
      */
     private function readChunked(array $chunkKeys): ?string
@@ -430,10 +434,13 @@ final class MemcachedCache extends AbstractCache
 
     /**
      * Get statistics about the memcached server.
+     *
+     * @return array<string, array<string, mixed>>
      */
     public function getStats(): array
     {
-        return $this->conn->getStats();
+        $stats = $this->conn->getStats();
+        return is_array($stats) === true ? $stats : [];
     }
 
     protected function createCacheKey(string $key): string

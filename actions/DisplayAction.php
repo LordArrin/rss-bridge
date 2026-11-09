@@ -216,6 +216,9 @@ final class DisplayAction implements ActionInterface
         return 'http_' . json_encode($params);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function createFeedItemFromException(\Throwable $e, BridgeAbstract $bridge): array
     {
         $uniqueIdentifier = urlencode((string)(int)(time() / 86400));

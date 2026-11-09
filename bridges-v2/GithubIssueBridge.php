@@ -114,6 +114,7 @@ final class GithubIssueBridge extends BridgeAbstract
 
     /**
      * @param array<string, mixed> $issue
+     * @return array{uri: string, title: string, author: string, timestamp: int, content: string, uid: string}
      */
     private function buildIssueItem(array $issue, string $owner, string $repo): array
     {

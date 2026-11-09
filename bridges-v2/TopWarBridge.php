@@ -107,9 +107,9 @@ final class TopWarBridge extends BridgeAbstract
         return $this->fixEscapedIframes($content);
     }
 
-    private function getInnerHTML($element): string
+    private function getInnerHTML(\Dom\Element $element): string
     {
-        if ($element === null || $element->hasChildNodes() === false) {
+        if ($element->hasChildNodes() === false) {
             return '';
         }
 
@@ -117,7 +117,11 @@ final class TopWarBridge extends BridgeAbstract
         $ownerDoc = $element->ownerDocument;
 
         foreach ($element->childNodes as $child) {
-            $innerHTML .= $ownerDoc->saveHTML($child);
+            if ($ownerDoc instanceof \Dom\HTMLDocument) {
+                $innerHTML .= $ownerDoc->saveHtml($child);
+            } else {
+                $innerHTML .= $child->C14N();
+            }
         }
 
         return $innerHTML;
@@ -132,7 +136,7 @@ final class TopWarBridge extends BridgeAbstract
         return $html;
     }
 
-    private function processImagesAndCaptions($articleBody): void
+    private function processImagesAndCaptions(\Dom\Element $articleBody): void
     {
         $imgContainers = $articleBody->querySelectorAll('div[style*="text-align:center"]');
 
@@ -163,7 +167,7 @@ final class TopWarBridge extends BridgeAbstract
                 $nextSibling = $nextSibling->nextSibling;
             }
 
-            if ($nextSibling !== null && $nextSibling->nodeType === XML_ELEMENT_NODE) {
+            if ($nextSibling instanceof \Dom\Element) {
                 $tagName = $nextSibling->tagName ?? '';
                 if ($tagName === 'div' || $tagName === 'span') {
                     $captionText = trim($nextSibling->textContent ?? '');
@@ -180,7 +184,7 @@ final class TopWarBridge extends BridgeAbstract
         }
     }
 
-    private function processHeadings($articleBody): void
+    private function processHeadings(\Dom\Element $articleBody): void
     {
         $h3Tags = $articleBody->querySelectorAll('h3');
         foreach ($h3Tags as $h3) {

@@ -192,6 +192,21 @@ final class AlpinePackagesBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array{
+     *     package: string,
+     *     package_href: string,
+     *     repo: string,
+     *     repo_href: string,
+     *     arch: string,
+     *     arch_href: string,
+     *     maintainer: string,
+     *     maintainer_href: string,
+     *     branch: string,
+     *     bdate: string,
+     *     version: string
+     * } $data
+     */
     private function generateContent(array $data): string
     {
         $content = '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse;">';
@@ -231,6 +246,21 @@ final class AlpinePackagesBridge extends BridgeAbstract
         return $content;
     }
 
+    /**
+     * @return array{
+     *     package: string,
+     *     package_href: string,
+     *     repo: string,
+     *     repo_href: string,
+     *     arch: string,
+     *     arch_href: string,
+     *     maintainer: string,
+     *     maintainer_href: string,
+     *     branch: string,
+     *     bdate: string,
+     *     version: string
+     * }
+     */
     private function getElementData(\Dom\Element $tr): array
     {
         $classesWithLink = ['package', 'repo', 'arch', 'maintainer'];
@@ -241,15 +271,14 @@ final class AlpinePackagesBridge extends BridgeAbstract
         foreach ($classesWithLink as $class) {
             $td = $tr->querySelector('td.' . $class);
             $a = $td !== null ? $td->querySelector('a') : null;
-            $data[$class] = $a !== null ? trim($a->textContent) : '';
+            $data[$class] = $a !== null ? trim((string) $a->textContent) : '';
             $href = $a !== null ? $a->getAttribute('href') : null;
-            $isHrefString = is_string($href);
-            $data[$class . '_href'] = ($isHrefString === true) ? urljoin(self::URI, $href) : '';
+            $data[$class . '_href'] = is_string($href) === true ? urljoin(self::URI, $href) : '';
         }
 
         foreach ($classesWithoutLink as $class) {
             $td = $tr->querySelector('td.' . $class);
-            $data[$class] = $td !== null ? trim($td->textContent) : '';
+            $data[$class] = $td !== null ? trim((string) $td->textContent) : '';
         }
 
         $tdVersion = $tr->querySelector('td.version');
@@ -258,8 +287,8 @@ final class AlpinePackagesBridge extends BridgeAbstract
             $strong = $tdVersion->querySelector('strong');
         }
 
-        $strongText = $strong !== null ? $strong->textContent : '';
-        $tdVersionText = $tdVersion !== null ? $tdVersion->textContent : '';
+        $strongText = $strong !== null ? (string) $strong->textContent : '';
+        $tdVersionText = $tdVersion !== null ? (string) $tdVersion->textContent : '';
         $versionText = $strongText !== '' ? $strongText : $tdVersionText;
         $data['version'] = trim($versionText);
 

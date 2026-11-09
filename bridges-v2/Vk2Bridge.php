@@ -127,9 +127,13 @@ final class Vk2Bridge extends BridgeAbstract
         return $this->iconUrl !== null ? $this->proxyImage($this->iconUrl) : parent::getIcon();
     }
 
-    public function detectParameters($url): ?array
+    /**
+     * @param mixed $url
+     * @return array<string, string>|null
+     */
+    public function detectParameters(mixed $url): ?array
     {
-        if (preg_match(self::URL_REGEX, $url, $m) === 0) {
+        if (is_string($url) === false || preg_match(self::URL_REGEX, $url, $m) === 0) {
             return null;
         }
         $name = strtolower($m[1]);
@@ -216,6 +220,9 @@ final class Vk2Bridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $post
+     */
     protected function getPostURI(array $post): string
     {
         $uri = sprintf(
@@ -230,6 +237,9 @@ final class Vk2Bridge extends BridgeAbstract
         return sprintf('%s?reply=%d&thread=%d', $uri, $post['id'] ?? 0, $threadId);
     }
 
+    /**
+     * @param array<string, mixed> $post
+     */
     protected function generateContentFromPost(array $post, bool $extractTitle = true): string
     {
         $text = $post['text'] ?? '';
@@ -290,6 +300,9 @@ final class Vk2Bridge extends BridgeAbstract
         return $ret;
     }
 
+    /**
+     * @param array<string, mixed> $attachment
+     */
     protected function renderAttachment(array $attachment): string
     {
         $type = $attachment['type'] ?? '';
@@ -362,6 +375,9 @@ final class Vk2Bridge extends BridgeAbstract
         };
     }
 
+    /**
+     * @param array<string, mixed> $post
+     */
     protected function getTitle(array $post): string
     {
         [$title] = $this->splitFirstLine($post['text'] ?? '');
@@ -377,6 +393,11 @@ final class Vk2Bridge extends BridgeAbstract
         return 'untitled';
     }
 
+    /**
+     * @param array<string, mixed> $params
+     * @param list<int> $expectedErrorCodes
+     * @return array<string, mixed>
+     */
     protected function api(string $method, array $params, array $expectedErrorCodes = []): array
     {
         $accessToken = $this->getOption('access_token');
@@ -473,6 +494,9 @@ final class Vk2Bridge extends BridgeAbstract
         };
     }
 
+    /**
+     * @param list<array<string, mixed>> $posts
+     */
     private function generateFeed(array $posts, int $ownerId): void
     {
         $this->fetchPhotoDescriptions($posts);
@@ -518,6 +542,9 @@ final class Vk2Bridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param list<array<string, mixed>> $posts
+     */
     private function fetchPhotoDescriptions(array $posts): void
     {
         $photoKeys = [];
@@ -552,6 +579,9 @@ final class Vk2Bridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $response
+     */
     private function cacheOwnerData(array $response, int $ownerId): void
     {
         foreach ($response['profiles'] ?? [] as $profile) {
@@ -570,6 +600,9 @@ final class Vk2Bridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $post
+     */
     private function isRepost(array $post): bool
     {
         return isset($post['copy_history'][0]) === true;
@@ -614,6 +647,9 @@ final class Vk2Bridge extends BridgeAbstract
         $this->handleError(self::ERR_OWNER_NOT_FOUND, "Short name '{$u}'");
     }
 
+    /**
+     * @param list<array<string, mixed>> $posts
+     */
     private function processArticlesFromPosts(array $posts, string $groupName): void
     {
         /** @var array<string, array{url: string, timestamp: int, author: string}> $articles */
@@ -730,6 +766,9 @@ final class Vk2Bridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return list<string>
+     */
     private function findArticleLinks(string $text, string $groupLower): array
     {
         $urls = [];
@@ -776,6 +815,9 @@ final class Vk2Bridge extends BridgeAbstract
         return preg_match($pattern, $url) === 1;
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     private function parseArticle(string $url, int $parentTimestamp, string $parentAuthor): ?array
     {
         $normalized = $this->normalizeArticleUrl($url);
@@ -1169,6 +1211,9 @@ final class Vk2Bridge extends BridgeAbstract
         return $parsed['scheme'] . '://' . $host . $parsed['path'];
     }
 
+    /**
+     * @param array<string, mixed> $d
+     */
     private function renderDocAttachment(array $d): string
     {
         if (($d['ext'] ?? '') === 'gif') {
@@ -1182,6 +1227,9 @@ final class Vk2Bridge extends BridgeAbstract
         return "<p>{$this->link($url, $title)}</p>";
     }
 
+    /**
+     * @param array<string, mixed> $d
+     */
     private function renderVideo(array $d): string
     {
         $title = $d['title'] ?? 'Video';
@@ -1211,6 +1259,9 @@ final class Vk2Bridge extends BridgeAbstract
         return $this->renderLinkCard($url, $title, $this->getLargestImageUrl($d['image'] ?? []));
     }
 
+    /**
+     * @param array<string, mixed> $d
+     */
     private function renderClip(array $d): string
     {
         $title = $this->cleanClipTitle($d['title'] ?? 'Clip');
@@ -1224,6 +1275,9 @@ final class Vk2Bridge extends BridgeAbstract
         return $this->renderLinkCard($url, $title, $this->getLargestImageUrl($d['image'] ?? []));
     }
 
+    /**
+     * @param array<string, mixed> $d
+     */
     private function renderAudio(array $d): string
     {
         $url = 'https://vk.ru/audio' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0);
@@ -1239,6 +1293,9 @@ final class Vk2Bridge extends BridgeAbstract
         return $extra !== '' ? $html . $extra : $html;
     }
 
+    /**
+     * @param array<string, mixed> $d
+     */
     private function renderPoll(array $d): string
     {
         $question = $this->e($d['question'] ?? 'Poll');
@@ -1283,6 +1340,9 @@ final class Vk2Bridge extends BridgeAbstract
         return '<pre>' . implode("\n", $lines) . '</pre>';
     }
 
+    /**
+     * @param array<string, mixed> $d
+     */
     private function renderWall(array $d): string
     {
         $text = $d['text'] ?? '';
@@ -1293,6 +1353,9 @@ final class Vk2Bridge extends BridgeAbstract
         return '<p><strong>Attached post:</strong><br>' . $this->linkHtml($this->getPostURI($d), $this->e($preview)) . '</p>';
     }
 
+    /**
+     * @param array<string, mixed> $d
+     */
     private function renderSticker(array $d): string
     {
         $images = $d['images'] ?? [];
@@ -1304,6 +1367,9 @@ final class Vk2Bridge extends BridgeAbstract
         return $url !== '' ? "<p>{$this->image($this->proxyImage($url), 'Sticker')}</p>" : '';
     }
 
+    /**
+     * @param array<string, mixed> $d
+     */
     private function renderEvent(array $d): string
     {
         $time = $d['time'] ?? 0;
@@ -1319,6 +1385,9 @@ final class Vk2Bridge extends BridgeAbstract
         return $html . '</p>';
     }
 
+    /**
+     * @param array<string, mixed> $d
+     */
     private function renderPodcast(array $d): string
     {
         $title = $d['podcast_title'] ?? $d['title'] ?? 'Podcast';
@@ -1347,6 +1416,9 @@ final class Vk2Bridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @param array<string, mixed> $attachment
+     */
     private function getAttachmentTitle(array $attachment): string
     {
         $type = $attachment['type'] ?? '';
@@ -1378,6 +1450,9 @@ final class Vk2Bridge extends BridgeAbstract
         };
     }
 
+    /**
+     * @return array{0: string, 1: string}
+     */
     private function splitFirstLine(string $text): array
     {
         $lines = explode("\n", $text);
@@ -1431,6 +1506,9 @@ final class Vk2Bridge extends BridgeAbstract
         return [$title, implode("\n", $lines)];
     }
 
+    /**
+     * @return array{0: string, 1: string}
+     */
     private function cutAtFirstUrl(string $text): array
     {
         if (preg_match('~\s+https?://~iu', $text, $m, PREG_OFFSET_CAPTURE) === 1) {
@@ -1471,6 +1549,9 @@ final class Vk2Bridge extends BridgeAbstract
         return preg_match('~^(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?)$~i', $line) === 1;
     }
 
+    /**
+     * @param array<string, string> $placeholders
+     */
     private function applyPlaceholders(string $text, array &$placeholders, int &$counter, string $pattern, callable $resolver): string
     {
         $result = preg_replace_callback($pattern, function (array $m) use (&$placeholders, &$counter, $resolver): string {
@@ -1498,6 +1579,9 @@ final class Vk2Bridge extends BridgeAbstract
         return $this->safeLink('https://vk.ru/' . $target, $linkText);
     }
 
+    /**
+     * @param list<array<string, mixed>> $sizes
+     */
     private function getLargestImageUrl(array $sizes): string
     {
         if ($sizes === []) {

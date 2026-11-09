@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
-use RSSBridge\FeedItem;
 
 final class MSISupportBridge extends BridgeAbstract
 {
@@ -39,6 +38,7 @@ final class MSISupportBridge extends BridgeAbstract
         'download' => 'display:inline-block;margin-top:10px;padding:8px 16px;background:#cc0000;color:#fff;text-decoration:none;border-radius:4px;font-weight:500',
     ];
 
+    /** @var array{product: string, category: string, fragment: string, sub_product: string}|null */
     private ?array $productInfo = null;
 
     public function getIcon(): string
@@ -73,6 +73,9 @@ final class MSISupportBridge extends BridgeAbstract
         return $url;
     }
 
+    /**
+     * @return array{product: string, category: string, fragment: string, sub_product: string}|null
+     */
     private function getProductInfo(): ?array
     {
         if ($this->productInfo !== null) {
@@ -124,6 +127,9 @@ final class MSISupportBridge extends BridgeAbstract
         return $this->productInfo;
     }
 
+    /**
+     * @return list<string>
+     */
     private function getDownloadTypes(): array
     {
         $fragment = $this->getProductInfo()['fragment'] ?? '';
@@ -132,6 +138,9 @@ final class MSISupportBridge extends BridgeAbstract
         return array_values(array_filter($types, fn(string $t): bool => $t !== 'manual'));
     }
 
+    /**
+     * @return array<string, list<array<string, mixed>>>|null
+     */
     private function fetchApiData(string $type): ?array
     {
         $info = $this->getProductInfo();
@@ -195,6 +204,11 @@ final class MSISupportBridge extends BridgeAbstract
         return $text;
     }
 
+    /**
+     * @param array<string, mixed> $file
+     * @param array{product: string, category: string, fragment: string, sub_product: string} $info
+     * @return array<string, mixed>
+     */
     private function buildFeedItem(array $file, string $subCategory, array $info, bool $hideAttachments): array
     {
         $rawTitle = $file['download_title'] ?? $subCategory;

@@ -21,31 +21,31 @@ abstract class GelbooruBase extends BridgeAbstract
                 'name' => 'API Key',
                 'type' => 'text',
                 'required' => false,
-                'title' => 'Your API key (if required)'
+                'title' => 'Your API key (if required)',
             ],
             'user_id' => [
                 'name' => 'User ID',
                 'type' => 'number',
                 'required' => false,
-                'title' => 'Your user ID (if required)'
+                'title' => 'Your user ID (if required)',
             ],
             'p' => [
                 'name' => 'page',
                 'defaultValue' => 0,
-                'type' => 'number'
+                'type' => 'number',
             ],
             't' => [
                 'name' => 'tags',
                 'exampleValue' => 'solo',
-                'title' => 'Tags to search for'
+                'title' => 'Tags to search for',
             ],
             'l' => [
                 'name' => 'limit',
                 'exampleValue' => 100,
-                'title' => 'How many posts to retrieve (hard limit of 1000)'
-            ]
+                'title' => 'How many posts to retrieve (hard limit of 1000)',
+            ],
         ],
-        0 => []
+        0 => [],
     ];
 
     public function collectData(): void
@@ -92,6 +92,9 @@ abstract class GelbooruBase extends BridgeAbstract
         }
     }
 
+    /**
+     * @return list<\stdClass>|\stdClass
+     */
     protected function extractPosts(mixed $data): array|\stdClass
     {
         return $data->post ?? $data ?? [];
@@ -103,11 +106,14 @@ abstract class GelbooruBase extends BridgeAbstract
             . '/thumbnail_' . $element->md5 . '.jpg';
     }
 
+    /**
+     * @return array{uri: string, postid: int, author: string, timestamp: string, tags: string, title: string, content: string}
+     */
     protected function getItemFromElement(\stdClass $element): array
     {
         $postId = (int) ($element->id ?? 0);
-        $thumbnailUri = $element->preview_url ?? $this->buildThumbnailURI($element);
-        $source = $element->source ?? null;
+        $thumbnailUri = (string) ($element->preview_url ?? $this->buildThumbnailURI($element));
+        $source = (string) ($element->source ?? '');
         $timestamp = $this->getTimestamp($element);
 
         $item = [
@@ -128,7 +134,7 @@ abstract class GelbooruBase extends BridgeAbstract
             $item['tags']
         );
 
-        if ($source !== null && $source !== '') {
+        if ($source !== '') {
             $content .= sprintf('<br><br><b>Source: </b><a href="%1$s">%1$s</a>', $source);
         }
 

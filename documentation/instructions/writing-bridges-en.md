@@ -30,7 +30,7 @@ Before submitting or generating any bridge code, ensure it passes the following 
    - Command: `vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php`
    - Auto-fix: `vendor/bin/phpcbf --standard=phpcs.xml bridges-v2/YourBridge.php`
 
-2. **PHPStan**: Performs static analysis to catch type errors, dead code, and potential bugs. **Level 5 is the minimum required standard.**
+2. **PHPStan**: Performs static analysis to catch type errors, dead code, and potential bugs. **Level 6 is the minimum required standard.**
    - Configuration: [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon)
    - Command: `vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=5`
    - Includes `phpstan-strict-rules` and `phpstan-deprecation-rules`
@@ -57,10 +57,10 @@ composer test       # phpunit
 **CI behavior** (`.github/workflows/lint-bridges.yml`, runs on pull requests touching `bridges-v2/**`):
 - `phpcbf` auto-fixes style issues and commits them back to the PR branch
 - `phpcs` errors fail the build; warnings are reported but tolerated
-- PHPStan Level 5 runs on the changed bridge files
+- PHPStan Level 6 runs on the changed bridge files
 - Bridge files must **not** have the executable bit set (`git update-index --chmod=-x bridges-v2/YourBridge.php`)
 
-> **⚠️ Note for AI Agents:** When generating or modifying bridge code, you must proactively ensure the output complies with `phpcs.xml` rules (e.g., `declare(strict_types=1)`, proper namespaces, no unused variables) and passes PHPStan Level 5. Fork-specific traps: `getContents()` returns `string|Response` (cast with `(string)` or guard with `is_string()`), `querySelectorAll()` iterates `\Dom\Node` (narrow with `instanceof \Dom\Element` before calling Element methods), and the legacy `DOM*` API is forbidden by `ForbidOldDomApiRule`. Do not output code that will fail these checks.
+> **⚠️ Note for AI Agents:** When generating or modifying bridge code, you must proactively ensure the output complies with `phpcs.xml` rules (e.g., `declare(strict_types=1)`, proper namespaces, no unused variables) and passes PHPStan Level 6. Fork-specific traps: `getContents()` returns `string|Response` (cast with `(string)` or guard with `is_string()`), `querySelectorAll()` iterates `\Dom\Node` (narrow with `instanceof \Dom\Element` before calling Element methods), and the legacy `DOM*` API is forbidden by `ForbidOldDomApiRule`. Do not output code that will fail these checks.
 
 ## Available PHP Extensions
 
@@ -283,7 +283,7 @@ $json = (string) getContents($url, ['Accept: application/json']);
 $response = getContents($url, [], [], true);  // requests the full Response object
 ```
 
-> **⚠️ PHPStan trap:** `getContents()` is declared as returning `string|Response`. Passing the result directly into a `string` parameter (e.g. `\Dom\HTMLDocument::createFromString()`) **fails PHPStan Level 5**. In practice `getContents()` returns a string unless `$returnFull = true`, but static analysis needs help. Use one of the verified patterns:
+> **⚠️ PHPStan trap:** `getContents()` is declared as returning `string|Response`. Passing the result directly into a `string` parameter (e.g. `\Dom\HTMLDocument::createFromString()`) **fails PHPStan Level 6**. In practice `getContents()` returns a string unless `$returnFull = true`, but static analysis needs help. Use one of the verified patterns:
 >
 > ```php
 > // Pattern 1: explicit cast (used by CodebergReleasesBridge)
@@ -663,7 +663,7 @@ public function collectData(): void
 ```
 
 - `Json::decode(string $json, bool $assoc = true): mixed` and `Json::encode(mixed $value, bool $pretty = true, bool $asciiSafe = false): string` both throw `\JsonException` on invalid input (`JSON_THROW_ON_ERROR`)
-- Note the `(string)` cast on `getContents()` — required for PHPStan Level 5
+- Note the `(string)` cast on `getContents()` — required for PHPStan Level 6
 - An equally valid pattern used by bridges: `json_decode((string) getContents($url, $headers), true, 512, JSON_THROW_ON_ERROR)`
 - For deeply nested payloads, combine with `read_json_path()` (see [quirks](#json-path-traversal-quirksjson_pathphp))
 
@@ -981,7 +981,7 @@ vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php
 # Auto-fix style issues
 vendor/bin/phpcbf --standard=phpcs.xml bridges-v2/YourBridge.php
 
-# Static analysis (Level 5 is mandatory; phpstan.neon already sets it)
+# Static analysis (Level 6 is mandatory; phpstan.neon already sets it)
 vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=5
 ```
 
@@ -1074,14 +1074,14 @@ When fetching multiple items, use parallel requests or batch endpoints when avai
 - [ ] All five required constants defined with `public const`
 - [ ] No `simple_html_dom` calls (`str_get_html()`, `->find()`, `->plaintext`) and no legacy `DOM*` classes (`DOMDocument`, `DOMXPath`, ...) — forbidden by `ForbidOldDomApiRule`
 - [ ] Uses `getSimpleHTMLDOM()`, `\Dom\HTMLDocument`, or `\Dom\XMLDocument` for parsing
-- [ ] `getContents()` results cast to `(string)` or guarded with `is_string()` (PHPStan Level 5)
+- [ ] `getContents()` results cast to `(string)` or guarded with `is_string()` (PHPStan Level 6)
 - [ ] `querySelectorAll()` items narrowed with `instanceof \Dom\Element` before Element methods
 - [ ] Null-safe operator `?->` used for optional elements
 - [ ] Exception helpers (`throwClientException`, ...) used from the **global namespace** — no imports
 - [ ] `Json` imported as `use RSSBridge\Utils\Json;` if used
 - [ ] Relative URLs handled via `urljoin()` (with `use function urljoin;`)
 - [ ] Code passes `phpcs` checks (see [`phpcs.xml`](https://github.com/LordArrin/rss-bridge/blob/master/phpcs.xml))
-- [ ] Code passes `phpstan` analysis at Level 5 (see [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon))
+- [ ] Code passes `phpstan` analysis at Level 6 (see [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon))
 - [ ] Bridge tested with real data in Docker and enabled via `ENABLED_BRIDGES` env var
 - [ ] Malformed HTML sites use `tidy` cleanup
 - [ ] Large cached objects use `igbinary` or `zstd` compression

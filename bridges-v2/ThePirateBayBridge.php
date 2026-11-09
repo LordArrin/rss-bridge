@@ -109,7 +109,7 @@ final class ThePirateBayBridge extends BridgeAbstract
         '699' => 'Other',
     ];
 
-    public function collectData()
+    public function collectData(): void
     {
         $q = $this->getInput('q');
         if (is_string($q) === false) {
@@ -149,7 +149,7 @@ final class ThePirateBayBridge extends BridgeAbstract
         }
 
         $api = 'https://apibay.org';
-        $json = getContents($api . $query);
+        $json = (string) getContents($api . $query);
         $result = json_decode($json);
 
         if (is_array($result) === false || isset($result[0]) === false) {

@@ -58,12 +58,12 @@ final class KitsuBridge extends BridgeAbstract
         'image' => 'display: block; max-width: 500px; height: auto; margin: 10px 0;',
     ];
 
-    public function collectData()
+    public function collectData(): void
     {
         $pageSize = $this->getPageSize();
         $urlApi = $this->buildApiUrl($pageSize);
 
-        $feedContent = json_decode(getContents($urlApi), true);
+        $feedContent = json_decode((string) getContents($urlApi), true);
 
         if (is_array($feedContent) === false || isset($feedContent['data']) === false || is_array($feedContent['data']) === false) {
             throwServerException('Invalid API response');
@@ -154,7 +154,7 @@ final class KitsuBridge extends BridgeAbstract
         }
 
         $urlApiAnime = self::URI . '/api/edge/anime?' . http_build_query($params);
-        $animeList = json_decode(getContents($urlApiAnime), true);
+        $animeList = json_decode((string) getContents($urlApiAnime), true);
 
         if (is_array($animeList) === false || isset($animeList['meta']['count']) === false) {
             throwClientException('Invalid API response');
@@ -167,6 +167,10 @@ final class KitsuBridge extends BridgeAbstract
         return (int)$animeList['data'][0]['id'];
     }
 
+    /**
+     * @param array<string, mixed> $feedContent
+     * @return array<int, array<string, mixed>>
+     */
     private function buildAnimeList(array $feedContent): array
     {
         $animeList = [];
@@ -189,6 +193,11 @@ final class KitsuBridge extends BridgeAbstract
         return $animeList;
     }
 
+    /**
+     * @param array<string, mixed> $episode
+     * @param array<int, array<string, mixed>> $animeList
+     * @return array<string, mixed>|null
+     */
     private function buildItem(array $episode, array $animeList): ?array
     {
         $animeId = (int)($episode['relationships']['media']['data']['id'] ?? 0);

@@ -63,7 +63,7 @@ final class ItchBridge extends BridgeAbstract
                 'type' => 'number',
                 'defaultValue' => 10,
                 'title' => 'Maximum number of items to return.',
-            ]
+            ],
         ],
         'global' => [
             'proxy_profile' => [
@@ -95,6 +95,9 @@ final class ItchBridge extends BridgeAbstract
         return '';
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function buildProxyOptions(): array
     {
         $options = [
@@ -118,6 +121,9 @@ final class ItchBridge extends BridgeAbstract
         return $options;
     }
 
+    /**
+     * @param array<string, mixed> $options
+     */
     private function fetchWithRetry(string $url, array $options, string $context = ''): string
     {
         $lastException = null;
@@ -230,7 +236,7 @@ final class ItchBridge extends BridgeAbstract
 
     private function processYouTubeIframes(string $html): string
     {
-        return (string)preg_replace_callback(
+        return (string) preg_replace_callback(
             '/<iframe[^>]*src=["\'](?:https?:)?\/\/(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]+)[^"\']*["\'][^>]*>/i',
             function (array $matches): string {
                 $videoId = $matches[1];
@@ -317,6 +323,9 @@ final class ItchBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $options
+     */
     private function fetchFullArticleContent(string $link, array $options): string
     {
         try {

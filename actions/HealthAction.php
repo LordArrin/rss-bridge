@@ -46,6 +46,9 @@ final class HealthAction implements ActionInterface
         );
     }
 
+    /**
+     * @return array{status: string, broken_count: int, broken_bridges: list<string>}
+     */
     private function checkBridges(): array
     {
         $broken = $this->safeBridgeLoader->getBrokenBridges();
@@ -58,6 +61,9 @@ final class HealthAction implements ActionInterface
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function checkCache(): array
     {
         // Safe environment read with explicit fallback
@@ -123,6 +129,9 @@ final class HealthAction implements ActionInterface
         }
     }
 
+    /**
+     * @param array<string, mixed> $stats
+     */
     private function calculateHitRate(array $stats): string
     {
         $hits = $stats['get_hits'] ?? 0;
@@ -136,6 +145,9 @@ final class HealthAction implements ActionInterface
         return sprintf('%.1f%%', ($hits / $total) * 100);
     }
 
+    /**
+     * @return array{status: string, profiles: list<string>, count: int}
+     */
     private function checkProxy(): array
     {
         $profiles = [];
@@ -164,6 +176,9 @@ final class HealthAction implements ActionInterface
         ];
     }
 
+    /**
+     * @param array<string, mixed> $checks
+     */
     private function calculateOverallStatus(array $checks): string
     {
         $statuses = [];

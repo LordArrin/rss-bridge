@@ -98,6 +98,9 @@ EOD;
         }
     }
 
+    /**
+     * @return array{author: ?string, timestamp: int}
+     */
     private function extractAuthorAndDate(\Dom\Element $title): array
     {
         $author = null;
@@ -138,6 +141,9 @@ EOD;
         return ['author' => $author, 'timestamp' => $timestamp];
     }
 
+    /**
+     * @return array{uri: string, timestamp: int, content: string}
+     */
     private function getArticleContent(\Dom\Element $title, ?int $timestamp = null): array
     {
         $link = $title->firstChild;
@@ -286,6 +292,9 @@ EOD;
         }
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     private function getFeatureContents(\Dom\HTMLDocument $html): array
     {
         $items = [];
@@ -314,6 +323,9 @@ EOD;
         return $items;
     }
 
+    /**
+     * @param array<int, string> $cats
+     */
     private function getItemPrefix(\Dom\Node $cat, array &$cats): string
     {
         $cat1 = '';
@@ -369,6 +381,9 @@ EOD;
         return $prefix;
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     private function getAnnouncements(\Dom\HTMLDocument $html): array
     {
         $items = [];
@@ -458,6 +473,9 @@ EOD;
         return $items;
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     private function getBriefItems(\Dom\HTMLDocument $html): array
     {
         $items = [];

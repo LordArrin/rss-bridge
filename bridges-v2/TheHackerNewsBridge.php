@@ -290,6 +290,9 @@ final class TheHackerNewsBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param list<string> $selectors
+     */
     private function removeSelectors(\Dom\Node $node, array $selectors): void
     {
         if ($node instanceof \Dom\Element === false && $node instanceof \Dom\HTMLDocument === false) {

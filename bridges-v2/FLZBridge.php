@@ -157,6 +157,8 @@ final class FLZBridge extends BridgeAbstract
     private string $loginProblem = '';
     private float $started = 0.0;
     private float $lastRequest = 0.0;
+
+    /** @var list<string> */
     private array $skippedFeeds = [];
 
     public function collectData(): void
@@ -249,7 +251,11 @@ final class FLZBridge extends BridgeAbstract
         ));
     }
 
-    public function detectParameters($url): ?array
+    /**
+     * @param mixed $url
+     * @return array<string, string>|null
+     */
+    public function detectParameters(mixed $url): ?array
     {
         $host = parse_url($url, PHP_URL_HOST);
         $path = parse_url($url, PHP_URL_PATH);
@@ -272,6 +278,9 @@ final class FLZBridge extends BridgeAbstract
         return null;
     }
 
+    /**
+     * @return array<string, string>
+     */
     private function getFeeds(): array
     {
         $sections = $this->checkedFields(array_keys(self::SECTIONS));
@@ -298,11 +307,18 @@ final class FLZBridge extends BridgeAbstract
         return $feeds;
     }
 
+    /**
+     * @param list<string> $fields
+     * @return list<string>
+     */
     private function checkedFields(array $fields): array
     {
         return array_values(array_filter($fields, fn($field) => (bool) $this->getInput($field)));
     }
 
+    /**
+     * @return list<string>
+     */
     private function getIndividualPlace(): array
     {
         $input = $this->getInput('more_places');
@@ -353,6 +369,9 @@ final class FLZBridge extends BridgeAbstract
         return explode(': ', $name, 2)[1] ?? $name;
     }
 
+    /**
+     * @return list<array<string, mixed>>|null
+     */
     private function collectFeed(string $path): ?array
     {
         $xml = $this->fetchFeed($path);
@@ -435,6 +454,9 @@ final class FLZBridge extends BridgeAbstract
         return $url;
     }
 
+    /**
+     * @return array<string, true>
+     */
     private function collectAds(): array
     {
         $ads = [];
@@ -487,6 +509,9 @@ final class FLZBridge extends BridgeAbstract
         return $ads;
     }
 
+    /**
+     * @param array<string, mixed> $item
+     */
     private function collectFullContent(array $item): string
     {
         $image = $item['enclosures'][0] ?? '';
@@ -722,6 +747,9 @@ final class FLZBridge extends BridgeAbstract
         return getContents($url, $headers, $this->requestOptions());
     }
 
+    /**
+     * @return array<int, mixed>
+     */
     private function requestOptions(): array
     {
         $timeoutEnv = getenv('HTTP_TIMEOUT');

@@ -54,17 +54,17 @@ final class DjMagDotComBridge extends BridgeAbstract
         'image' => 'display: block; max-width: 500px; height: auto; margin: 10px 0;',
     ];
 
-    public function getURI()
+    public function getURI(): string
     {
         return self::URI . 'news';
     }
 
-    public function collectData()
+    public function collectData(): void
     {
         $limit = $this->getLimit();
         $url = $this->getURI();
 
-        $html = getContents($url);
+        $html = (string) getContents($url);
 
         libxml_use_internal_errors(true);
         $dom = \Dom\HTMLDocument::createFromString($html);
@@ -123,6 +123,9 @@ final class DjMagDotComBridge extends BridgeAbstract
         return $limit;
     }
 
+    /**
+     * @return array{title: string, uri: string, uid: string, content: string, timestamp: int|null, author: string|null, categories: list<string>}|null
+     */
     private function extractNewsItem(\Dom\Element $element, bool $isFeatured): ?array
     {
         $titleLink = $element->querySelector('h1 > a');
@@ -190,10 +193,13 @@ final class DjMagDotComBridge extends BridgeAbstract
         return urljoin(self::URI, $url);
     }
 
+    /**
+     * @return array{timestamp: int|null, content: string, author: string|null}|null
+     */
     private function fetchArticleDetails(string $uri, ?string $image, string $title): ?array
     {
         try {
-            $html = getContents($uri);
+            $html = (string) getContents($uri);
         } catch (\Exception $e) {
             return null;
         }

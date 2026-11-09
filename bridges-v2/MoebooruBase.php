@@ -146,6 +146,10 @@ abstract class MoebooruBase extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $post
+     * @return array<string, mixed>
+     */
     private function createFeedItem(array $post, string $imageSize, bool $includeTags, bool $embedImages): array
     {
         $id = (int)($post['id'] ?? 0);
@@ -187,6 +191,9 @@ abstract class MoebooruBase extends BridgeAbstract
         ];
     }
 
+    /**
+     * @param array<string, mixed> $post
+     */
     private function getImageUrl(array $post, string $size): string
     {
         $url = match ($size) {
@@ -213,6 +220,9 @@ abstract class MoebooruBase extends BridgeAbstract
         };
     }
 
+    /**
+     * @param array<string, mixed> $post
+     */
     private function buildContent(array $post, string $imageUrl, bool $embedImages): string
     {
         $id = (int)($post['id'] ?? 0);

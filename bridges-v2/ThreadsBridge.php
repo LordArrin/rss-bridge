@@ -46,9 +46,12 @@ final class ThreadsBridge extends BridgeAbstract
         return parent::getName();
     }
 
-    public function detectParameters($url)
+    /**
+     * @return array{context: string, u: string}|null
+     */
+    public function detectParameters(?string $url): ?array
     {
-        if (is_string($url) === false) {
+        if ($url === null) {
             return null;
         }
 
@@ -204,6 +207,9 @@ final class ThreadsBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return list<mixed>
+     */
     private function recursiveFind(mixed $haystack, string $needle): array
     {
         $found = [];

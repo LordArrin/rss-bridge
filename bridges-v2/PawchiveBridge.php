@@ -172,7 +172,10 @@ final class PawchiveBridge extends BridgeAbstract
 
     private ?string $author = null;
     private ?string $authorAvatarUrl = null;
+
+    /** @var array<string, string> */
     private array $mimeCache = [];
+
     private ?string $activeDomainHost = null;
 
     private function getActiveDomainHost(): string
@@ -289,6 +292,9 @@ final class PawchiveBridge extends BridgeAbstract
         };
     }
 
+    /**
+     * @param array<string, mixed> $post
+     */
     private function hasMedia(array $post): bool
     {
         if (isset($post['file']['path']) === true && $post['file']['path'] !== '') {
@@ -510,6 +516,9 @@ final class PawchiveBridge extends BridgeAbstract
         return $css !== '' ? ' style="' . $css . '"' : '';
     }
 
+    /**
+     * @param array<string, mixed> $poll
+     */
     private function renderPoll(array $poll): string
     {
         $title = $poll['title'] ?? '';
@@ -596,6 +605,9 @@ final class PawchiveBridge extends BridgeAbstract
         return $h . '</div>';
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getJson(string $endpoint): array
     {
         $service = $this->getInput('service');
@@ -672,6 +684,10 @@ final class PawchiveBridge extends BridgeAbstract
         ));
     }
 
+    /**
+     * @param array<string, mixed> $post
+     * @return list<array<string, mixed>>
+     */
     private function collectFiles(array $post): array
     {
         $files = [];
@@ -704,6 +720,9 @@ final class PawchiveBridge extends BridgeAbstract
         return $files;
     }
 
+    /**
+     * @param list<array<string, mixed>> $files
+     */
     private function thumbnailsAvailable(array $files): bool
     {
         $thumbnailDomain = $this->getThumbnailDomain();
@@ -756,6 +775,10 @@ final class PawchiveBridge extends BridgeAbstract
         return $available;
     }
 
+    /**
+     * @param list<array<string, mixed>> $files
+     * @param list<array{url: string, name: string}> $downloadLinks
+     */
     private function processFiles(array $files, bool $hideAttachments, string &$contentHtml, array &$downloadLinks): void
     {
         $containerStyle = self::CSS['file-container'];
@@ -813,6 +836,9 @@ final class PawchiveBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param list<array{url: string, name: string}> $downloadLinks
+     */
     private function renderAttachmentsBlock(array $downloadLinks): string
     {
         if ($downloadLinks === []) {
@@ -904,6 +930,10 @@ final class PawchiveBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $post
+     * @return array<string, mixed>
+     */
     private function createItem(array $post, bool $hideAttachments): array
     {
         $content = ($post['content'] ?? '')

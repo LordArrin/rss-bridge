@@ -53,8 +53,8 @@ final class WarThunderBridge extends BridgeAbstract
                 'type' => 'number',
                 'defaultValue' => 10,
                 'title' => 'Maximum: 10 for previews, 5 for full articles',
-            ]
-        ]
+            ],
+        ],
     ];
 
     private function checkYouTubeThumbnail(string $videoId): string
@@ -96,7 +96,7 @@ final class WarThunderBridge extends BridgeAbstract
 
     private function processYouTubeIframes(string $html): string
     {
-        return (string)preg_replace_callback(
+        return (string) preg_replace_callback(
             '/<iframe[^>]*src=["\'](?:https?:)?\/\/(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]+)[^"\']*["\'][^>]*>/i',
             function (array $matches): string {
                 $videoId = $matches[1];
@@ -119,8 +119,8 @@ final class WarThunderBridge extends BridgeAbstract
 
     private function processHtmlContent(string $html): string
     {
-        $html = (string)preg_replace_callback('/<img\s+([^>]*)>/i', function (array $matches): string {
-            $attributes = (string)preg_replace('/\s+(width|height|align|style)=["\'][^"\']*["\']/i', '', $matches[1]);
+        $html = (string) preg_replace_callback('/<img\s+([^>]*)>/i', function (array $matches): string {
+            $attributes = (string) preg_replace('/\s+(width|height|align|style)=["\'][^"\']*["\']/i', '', $matches[1]);
             $attributes = trim($attributes);
 
             if ($attributes !== '') {
@@ -130,9 +130,9 @@ final class WarThunderBridge extends BridgeAbstract
             return '<img ' . $attributes . 'style="' . self::IMG_STYLE . '" align="left" />';
         }, $html);
 
-        $html = (string)preg_replace_callback('/<ul\s+([^>]*)>/i', function (array $matches): string {
+        $html = (string) preg_replace_callback('/<ul\s+([^>]*)>/i', function (array $matches): string {
             $attributes = $matches[1];
-            $attributes = (string)preg_replace('/\s*style=["\'][^"\']*["\']/i', '', $attributes);
+            $attributes = (string) preg_replace('/\s*style=["\'][^"\']*["\']/i', '', $attributes);
             $attributes = trim($attributes);
 
             if ($attributes !== '') {
@@ -142,9 +142,9 @@ final class WarThunderBridge extends BridgeAbstract
             return '<ul ' . $attributes . 'style="' . self::LIST_STYLE . '">';
         }, $html);
 
-        $html = (string)preg_replace_callback('/<li\s+([^>]*)>/i', function (array $matches): string {
+        $html = (string) preg_replace_callback('/<li\s+([^>]*)>/i', function (array $matches): string {
             $attributes = $matches[1];
-            $attributes = (string)preg_replace('/\s*style=["\'][^"\']*["\']/i', '', $attributes);
+            $attributes = (string) preg_replace('/\s*style=["\'][^"\']*["\']/i', '', $attributes);
             $attributes = trim($attributes);
 
             if ($attributes !== '') {
@@ -154,10 +154,10 @@ final class WarThunderBridge extends BridgeAbstract
             return '<li ' . $attributes . 'style="' . self::LI_STYLE . '">';
         }, $html);
 
-        $html = (string)preg_replace_callback('/<(p|div|h[1-6])\s+([^>]*)>/i', function (array $matches): string {
+        $html = (string) preg_replace_callback('/<(p|div|h[1-6])\s+([^>]*)>/i', function (array $matches): string {
             $tag = strtolower($matches[1]);
             $regex = '/\s*style=["\'][^"\']*text-align\s*:\s*center[^"\']*["\']/i';
-            $attributes = trim((string)preg_replace($regex, '', $matches[2]));
+            $attributes = trim((string) preg_replace($regex, '', $matches[2]));
 
             if ($attributes === '') {
                 return '<' . $tag . ' align="left">';
@@ -285,11 +285,11 @@ final class WarThunderBridge extends BridgeAbstract
         $maxLimit = $fetchFull === true ? self::LIMIT_FULL_MAX : self::LIMIT_PREVIEW_MAX;
         $limitInput = $this->getInput('limit');
 
-        if ($limitInput === null || (int)$limitInput <= 0) {
+        if ($limitInput === null || (int) $limitInput <= 0) {
             return $maxLimit;
         }
 
-        return min((int)$limitInput, $maxLimit);
+        return min((int) $limitInput, $maxLimit);
     }
 
     private function parseDate(string $dateString): int
@@ -336,10 +336,13 @@ final class WarThunderBridge extends BridgeAbstract
         return $timestamp;
     }
 
+    /**
+     * @return list<array{link: ?string, title: string, description: string, date: int, image: string}>
+     */
     private function fetchNewsList(string $language, int $limit): array
     {
         $news = [];
-        $pagesNeeded = (int)ceil($limit / self::ITEMS_PER_PAGE);
+        $pagesNeeded = (int) ceil($limit / self::ITEMS_PER_PAGE);
 
         for ($page = 1; $page <= $pagesNeeded; $page++) {
             if ($page > 1) {
@@ -465,9 +468,9 @@ final class WarThunderBridge extends BridgeAbstract
     public function collectData(): void
     {
         $languageInput = $this->getInput('language');
-        $language = $languageInput !== null ? (string)$languageInput : 'en';
+        $language = $languageInput !== null ? (string) $languageInput : 'en';
 
-        $fetchFull = (bool)$this->getInput('fetch_full');
+        $fetchFull = (bool) $this->getInput('fetch_full');
         $limit = $this->resolveLimit($fetchFull);
 
         $newsList = $this->fetchNewsList($language, $limit);

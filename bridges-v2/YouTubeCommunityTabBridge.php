@@ -39,7 +39,11 @@ final class YouTubeCommunityTabBridge extends BridgeAbstract
     private const URL_REGEX = '/youtube\.com\/(channel|user|c)\/([\w]+)\/posts/';
     private const JSON_REGEX = '/var ytInitialData = ([^<]*);<\/script>/';
 
-    public function detectParameters($url): ?array
+    /**
+     * @param mixed $url
+     * @return array<string, string>|null
+     */
+    public function detectParameters(mixed $url): ?array
     {
         if (is_string($url) === false) {
             return null;
@@ -188,18 +192,25 @@ final class YouTubeCommunityTabBridge extends BridgeAbstract
         return false;
     }
 
+    /**
+     * @return list<object>|null
+     */
     private function getPosts(object $json): ?array
     {
         $tabs = $json->contents->twoColumnBrowseResultsRenderer->tabs ?? [];
         foreach ($tabs as $tab) {
             $url = $tab->tabRenderer?->endpoint?->commandMetadata?->webCommandMetadata->url ?? '';
             if (is_string($url) === true && str_ends_with($url, 'posts') === true) {
-                return $tab->tabRenderer->content->sectionListRenderer->contents[0]->itemSectionRenderer->contents ?? null;
+                $contents = $tab->tabRenderer->content->sectionListRenderer->contents[0]->itemSectionRenderer->contents ?? null;
+                return is_array($contents) === true ? $contents : null;
             }
         }
         return null;
     }
 
+    /**
+     * @param list<object> $runs
+     */
     private function getText(array $runs): string
     {
         $text = '';
@@ -211,6 +222,9 @@ final class YouTubeCommunityTabBridge extends BridgeAbstract
         return nl2br($text);
     }
 
+    /**
+     * @return array{content: string, title: string}
+     */
     private function getAttachments(object $details): array
     {
         $result = ['content' => '', 'title' => ''];

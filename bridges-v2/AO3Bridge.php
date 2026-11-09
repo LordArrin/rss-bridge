@@ -59,7 +59,7 @@ final class AO3Bridge extends BridgeAbstract
                 'required' => true,
                 'exampleValue' => '18181853',
             ],
-        ]
+        ],
     ];
 
     // AO3 asked us to identify as a bot rather than imitate a browser (RSS-Bridge#3188)
@@ -89,6 +89,9 @@ final class AO3Bridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param list<string> $headers
+     */
     private function getContentsWithFallback(string $url, array $headers): string
     {
         $mirrors = [

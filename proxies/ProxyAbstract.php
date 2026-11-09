@@ -18,12 +18,16 @@ use RSSBridge\Logger\Logger;
  */
 abstract class ProxyAbstract implements ProxyInterface
 {
+    /** @var array<string, mixed> */
     protected array $config;
     protected int $timeout = 180;
     protected int $maxRetries = 3;
     protected ?CacheInterface $cache = null;
     protected ?Logger $logger = null;
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(array $config = [])
     {
         $this->config = $config;
@@ -58,15 +62,16 @@ abstract class ProxyAbstract implements ProxyInterface
      * successfully cached response is returned instead, preventing bridge failures.
      *
      * @param string $url     URL to fetch
-     * @param array  $options Proxy-specific options (cache_ttl, use_cache, etc.)
+     * @param array<string, mixed> $options Proxy-specific options (cache_ttl, use_cache, etc.)
      * @return string HTML content
      * @throws \RuntimeException If fetch fails and no stale data is available
      */
     public function getHtml(string $url, array $options = []): string
     {
-        $cacheTtl = $options['cache_ttl'] ?? 3600;
-        $useCache = $options['use_cache'] ?? true;
+        $cacheTtl = (int)($options['cache_ttl'] ?? 3600);
+        $useCache = (bool)($options['use_cache'] ?? true);
 
+        /** @var array{fresh: ?string, stale: ?string} $cached */
         $cached = ['fresh' => null, 'stale' => null];
 
         if ($useCache === true && $this->cache instanceof CacheInterface) {
@@ -121,15 +126,16 @@ abstract class ProxyAbstract implements ProxyInterface
      * Retrieves binary data via proxy with Stale-while-revalidate fallback.
      *
      * @param string $url     URL to fetch
-     * @param array  $options Proxy-specific options
+     * @param array<string, mixed> $options Proxy-specific options
      * @return array{body: string, type: string}
      * @throws \RuntimeException If fetch fails and no stale data is available
      */
     public function getBinary(string $url, array $options = []): array
     {
-        $cacheTtl = $options['cache_ttl'] ?? 86400;
-        $useCache = $options['use_cache'] ?? true;
+        $cacheTtl = (int)($options['cache_ttl'] ?? 86400);
+        $useCache = (bool)($options['use_cache'] ?? true);
 
+        /** @var array{fresh: mixed, stale: mixed} $cached */
         $cached = ['fresh' => null, 'stale' => null];
 
         if ($useCache === true && $this->cache instanceof CacheInterface) {
@@ -180,6 +186,9 @@ abstract class ProxyAbstract implements ProxyInterface
     /**
      * Default binary fetcher - throws by default.
      * Child classes must override either doFetchBinary() or getBinary() directly.
+     *
+     * @param array<string, mixed> $options
+     * @return array{body: string, type: string}
      */
     protected function doFetchBinary(string $url, array $options): array
     {
@@ -195,6 +204,9 @@ abstract class ProxyAbstract implements ProxyInterface
         return $response !== '';
     }
 
+    /**
+     * @param array<string, mixed> $options
+     */
     protected function buildCacheKey(string $url, array $options): string
     {
         return 'proxy_' . md5($url . serialize($options));
@@ -220,6 +232,8 @@ abstract class ProxyAbstract implements ProxyInterface
 
     /**
      * Logger
+     *
+     * @param array<string, mixed> $context
      */
     protected function log(string $level, string $message, array $context = []): void
     {
@@ -241,6 +255,10 @@ abstract class ProxyAbstract implements ProxyInterface
     /**
      * A general-purpose method for HTTP requests with retries and exponential backoff.
      * Used by child classes (e.g., FlareSolverrProxy) for API calls.
+     *
+     * @param array<string, mixed> $payload
+     * @param array<int, string> $headers
+     * @return array<string, mixed>
      */
     protected function request(string $method, string $url, array $payload = [], array $headers = []): array
     {
@@ -266,7 +284,15 @@ abstract class ProxyAbstract implements ProxyInterface
         ));
     }
 
+    /**
+     * @param array<string, mixed> $options
+     */
     abstract protected function fetchHtml(string $url, array $options): string;
 
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<int, string> $headers
+     * @return array<string, mixed>
+     */
     abstract protected function executeRequest(string $method, string $url, array $payload, array $headers): array;
 }

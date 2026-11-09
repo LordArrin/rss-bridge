@@ -42,7 +42,7 @@ final class ARDAudiothekBridge extends BridgeAbstract
     private ?string $feedUri = null;
     private ?string $feedIcon = null;
 
-    public function collectData()
+    public function collectData(): void
     {
         $path = $this->getInput('path');
         $limit = $this->getInput('limit');
@@ -60,7 +60,7 @@ final class ARDAudiothekBridge extends BridgeAbstract
         }
 
         $url = self::API_ENDPOINT . 'programsets/' . $showID . '/';
-        $json1 = getContents($url);
+        $json1 = (string) getContents($url);
         $data1 = json_decode($json1, false);
 
         if (is_object($data1) === false || isset($data1->data->programSet) === false) {
@@ -79,7 +79,7 @@ final class ARDAudiothekBridge extends BridgeAbstract
         $numberOfElements = 1;
 
         while ($answerLength !== 0 && $offset < $numberOfElements && $offset < $limitValue) {
-            $json2 = getContents($url . '?offset=' . $offset);
+            $json2 = (string) getContents($url . '?offset=' . $offset);
             $data2 = json_decode($json2, false);
 
             if (is_object($data2) === false || isset($data2->data->programSet) === false) {
@@ -162,7 +162,7 @@ final class ARDAudiothekBridge extends BridgeAbstract
         $this->items = array_slice($this->items, 0, $limitValue);
     }
 
-    public function getURI()
+    public function getURI(): string
     {
         if ($this->feedUri !== null && $this->feedUri !== '') {
             return $this->feedUri;
@@ -170,7 +170,7 @@ final class ARDAudiothekBridge extends BridgeAbstract
         return parent::getURI();
     }
 
-    public function getName()
+    public function getName(): string
     {
         if ($this->feedTitle !== null && $this->feedTitle !== '') {
             return $this->feedTitle;
@@ -178,7 +178,7 @@ final class ARDAudiothekBridge extends BridgeAbstract
         return parent::getName();
     }
 
-    public function getIcon()
+    public function getIcon(): string
     {
         if ($this->feedIcon !== null && $this->feedIcon !== '') {
             return $this->feedIcon;

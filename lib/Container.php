@@ -4,9 +4,19 @@ declare(strict_types=1);
 
 namespace RSSBridge;
 
+/**
+ * @implements \ArrayAccess<string, mixed>
+ */
 class Container implements \ArrayAccess
 {
+    /**
+     * @var array<string, callable|mixed>
+     */
     private array $values = [];
+
+    /**
+     * @var array<string, mixed>
+     */
     private array $resolved = [];
 
     public function offsetSet(mixed $offset, mixed $value): void

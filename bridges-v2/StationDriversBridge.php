@@ -152,6 +152,9 @@ final class StationDriversBridge extends FeedExpander
         return $item;
     }
 
+    /**
+     * @param array<string, mixed> $item
+     */
     private function extractAuthor(\Dom\HTMLDocument $dom, array &$item): void
     {
         $dtElements = $dom->querySelectorAll('dt');

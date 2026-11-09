@@ -30,53 +30,53 @@ final class Rule34Bridge extends GelbooruBase
                 'name' => 'API Key',
                 'type' => 'text',
                 'required' => false,
-                'title' => 'Your Rule34 API key. Leave empty to use server default'
+                'title' => 'Your Rule34 API key. Leave empty to use server default',
             ],
             'user_id' => [
                 'name' => 'User ID',
                 'type' => 'number',
                 'required' => false,
-                'title' => 'Your Rule34 user ID. Leave empty to use server default'
+                'title' => 'Your Rule34 user ID. Leave empty to use server default',
             ],
             'q' => [
                 'name' => 'Query (Tags)',
                 'type' => 'text',
                 'required' => true,
-                'title' => 'Tags for search, separated by commas or spaces'
+                'title' => 'Tags for search, separated by commas or spaces',
             ],
             'l' => [
                 'name' => 'Posts limit',
                 'type' => 'number',
                 'required' => false,
                 'title' => 'Maximum number of posts to fetch (API hard limit is 1000)',
-                'defaultValue' => 10
+                'defaultValue' => 10,
             ],
             'embed_images' => [
                 'name' => 'Embed images',
                 'type' => 'checkbox',
                 'required' => false,
-                'title' => 'Download images and embed them as data URIs in the feed (larger feed size)'
+                'title' => 'Download images and embed them as data URIs in the feed (larger feed size)',
             ],
             'exclude_ai' => [
                 'name' => 'Exclude AI-generated content',
                 'type' => 'checkbox',
                 'required' => false,
-                'defaultValue' => 'checked'
+                'defaultValue' => 'checked',
             ],
             'hide_edited' => [
                 'name' => 'Hide edited content',
                 'type' => 'checkbox',
                 'required' => false,
-                'defaultValue' => 'checked'
+                'defaultValue' => 'checked',
             ],
             'hide_details' => [
                 'name' => 'Hide tags and source',
                 'type' => 'checkbox',
                 'required' => false,
-                'defaultValue' => 'checked'
-            ]
+                'defaultValue' => 'checked',
+            ],
         ],
-        0 => []
+        0 => [],
     ];
 
     private string $apiKey = '';
@@ -147,6 +147,9 @@ final class Rule34Bridge extends GelbooruBase
         return $this->getURI() . 'index.php?' . http_build_query($params);
     }
 
+    /**
+     * @return list<\stdClass>|\stdClass
+     */
     protected function extractPosts(mixed $data): array|\stdClass
     {
         if ($data instanceof \stdClass && ($data->success ?? null) === false) {
@@ -156,9 +159,13 @@ final class Rule34Bridge extends GelbooruBase
         return $data instanceof \stdClass ? ($data->post ?? []) : $data;
     }
 
+    /**
+     * @return array{uri: string, postid: int, author: string, timestamp: string, tags: string, title: string, content: string}
+     */
     protected function getItemFromElement(\stdClass $element): array
     {
-        $pageUrl = self::VIEW_URI . 'index.php?page=post&s=view&id=' . (int) ($element->id ?? 0);
+        $postId = (int) ($element->id ?? 0);
+        $pageUrl = self::VIEW_URI . 'index.php?page=post&s=view&id=' . $postId;
         $thumbnailUrl = (string) ($element->preview_url ?? $this->buildThumbnailURI($element));
 
         if ($this->getInput('embed_images') === true) {
@@ -196,11 +203,12 @@ final class Rule34Bridge extends GelbooruBase
 
         return [
             'uri' => $pageUrl,
-            'id' => $pageUrl,
-            'title' => sprintf('Image %d', (int) ($element->id ?? 0)),
-            'content' => $content,
+            'postid' => $postId,
             'author' => (string) ($element->owner ?? 'unknown'),
             'timestamp' => $this->getTimestamp($element),
+            'tags' => (string) ($element->tags ?? ''),
+            'title' => sprintf('Image %d', $postId),
+            'content' => $content,
         ];
     }
 }

@@ -12,6 +12,9 @@ namespace RSSBridge;
  */
 final class FeedParser
 {
+    /**
+     * @return array{title: string, uri: string, icon: string, items: list<array<string, mixed>>}
+     */
     public function parseFeed(string $xmlString): array
     {
         $xmlString = self::prepareXml($xmlString);
@@ -52,7 +55,9 @@ final class FeedParser
                 }
             }
             foreach ($root->querySelectorAll('item') as $item) {
-                $feed['items'][] = $this->parseRss1Item($item);
+                if ($item instanceof \Dom\Element === true) {
+                    $feed['items'][] = $this->parseRss1Item($item);
+                }
             }
         } elseif ($rootName === 'rss') {
             $channel = $root->querySelector('channel');
@@ -70,7 +75,9 @@ final class FeedParser
                 }
             }
             foreach ($root->querySelectorAll('channel > item') as $item) {
-                $feed['items'][] = $this->parseRss2Item($item);
+                if ($item instanceof \Dom\Element === true) {
+                    $feed['items'][] = $this->parseRss2Item($item);
+                }
             }
         } elseif ($rootName === 'feed') {
             $titleNode = $root->querySelector('title');
@@ -95,7 +102,9 @@ final class FeedParser
             }
 
             foreach ($root->querySelectorAll('entry') as $item) {
-                $feed['items'][] = $this->parseAtomItem($item);
+                if ($item instanceof \Dom\Element === true) {
+                    $feed['items'][] = $this->parseAtomItem($item);
+                }
             }
         } else {
             throw new \Exception('Unable to detect feed format');
@@ -117,6 +126,9 @@ final class FeedParser
         return str_replace($problematicStrings, '', $xmlString);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function parseAtomItem(\Dom\Element $feedItem): array
     {
         $item = [
@@ -164,6 +176,9 @@ final class FeedParser
         }
 
         foreach ($feedItem->querySelectorAll('link') as $link) {
+            if ($link instanceof \Dom\Element === false) {
+                continue;
+            }
             $rel = $this->getNodeAttr($link, 'rel');
             $href = $this->getNodeAttr($link, 'href');
             if ($href === null) {
@@ -185,6 +200,9 @@ final class FeedParser
         return $item;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function parseRss2Item(\Dom\Element $feedItem): array
     {
         $item = [
@@ -300,6 +318,9 @@ final class FeedParser
         return $item;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function parseRss1Item(\Dom\Element $feedItem): array
     {
         $item = [
@@ -342,6 +363,9 @@ final class FeedParser
         return $item;
     }
 
+    /**
+     * @return array<string, mixed>|string
+     */
     private function parseDomModule(\Dom\Element $element): array|string
     {
         $result = [];

@@ -27,10 +27,9 @@ final class AlpineReleasesBridge extends BridgeAbstract
         $xml = \Dom\XMLDocument::createFromString($feedXml);
         libxml_use_internal_errors(false);
 
-        // Modern API: querySelectorAll instead of getElementsByTagName
         foreach ($xml->querySelectorAll('entry') as $entry) {
             $titleEl = $entry->querySelector('title');
-            $title = $titleEl !== null ? trim($titleEl->textContent) : '';
+            $title = $titleEl !== null ? trim((string) $titleEl->textContent) : '';
             if ($title === '') {
                 continue;
             }
@@ -45,7 +44,7 @@ final class AlpineReleasesBridge extends BridgeAbstract
             $updatedEl = $entry->querySelector('updated');
             $timestamp = 0;
             if ($updatedEl !== null) {
-                $dateText = trim($updatedEl->textContent);
+                $dateText = trim((string) $updatedEl->textContent);
                 if ($dateText !== '') {
                     $parsed = strtotime($dateText);
                     if ($parsed !== false) {
@@ -78,12 +77,12 @@ final class AlpineReleasesBridge extends BridgeAbstract
             if ($authorEl !== null) {
                 $authorNameEl = $authorEl->querySelector('name');
                 if ($authorNameEl !== null) {
-                    $author = trim($authorNameEl->textContent);
+                    $author = trim((string) $authorNameEl->textContent);
                 }
             }
 
             $idEl = $entry->querySelector('id');
-            $uid = $idEl !== null ? $idEl->textContent : uniqid('alpine-', true);
+            $uid = $idEl !== null ? (string) $idEl->textContent : uniqid('alpine-', true);
 
             $this->items[] = [
                 'title'     => $title,
@@ -95,10 +94,12 @@ final class AlpineReleasesBridge extends BridgeAbstract
             ];
         }
 
-        // Modern PHP spaceship operator for sorting
         usort($this->items, static fn (array $a, array $b): int => $b['timestamp'] <=> $a['timestamp']);
     }
 
+    /**
+     * @return array<string, array{branchName: string, branchDate: string, endOfSupport: string}>
+     */
     private function getBranchesInfo(): array
     {
         $url = self::URI . 'releases/';
@@ -121,15 +122,15 @@ final class AlpineReleasesBridge extends BridgeAbstract
                 continue;
             }
 
-            $branchName = $this->cleanText(trim($cellsArray[0]->textContent));
+            $branchName = $this->cleanText(trim((string) $cellsArray[0]->textContent));
             if (str_starts_with($branchName, 'v') === true) {
                 $branchName = substr($branchName, 1);
             }
 
-            $branchDate = $this->cleanText(trim($cellsArray[1]->textContent));
-            $endOfSupport = $this->cleanText(trim($cellsArray[4]->textContent));
+            $branchDate = $this->cleanText(trim((string) $cellsArray[1]->textContent));
+            $endOfSupport = $this->cleanText(trim((string) $cellsArray[4]->textContent));
 
-            preg_match_all('/(\d+\.\d+(?:\.\d+)?)/', trim($cellsArray[3]->textContent), $matches);
+            preg_match_all('/(\d+\.\d+(?:\.\d+)?)/', trim((string) $cellsArray[3]->textContent), $matches);
 
             foreach ($matches[1] ?? [] as $version) {
                 $branches[$version] = [
@@ -157,6 +158,10 @@ final class AlpineReleasesBridge extends BridgeAbstract
         return is_string($text) === true ? trim($text) : '';
     }
 
+    /**
+     * @param list<string> $versions
+     * @param array<string, array{branchName: string, branchDate: string, endOfSupport: string}> $branches
+     */
     private function buildBranchesMeta(array $versions, array $branches): string
     {
         if ($versions === []) {

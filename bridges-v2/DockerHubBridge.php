@@ -64,9 +64,9 @@ final class DockerHubBridge extends BridgeAbstract
 
     /**
      * @param string $url
-     * @return array|null
+     * @return array<string, mixed>|null
      */
-    public function detectParameters($url)
+    public function detectParameters($url): ?array
     {
         if (is_string($url) === false) {
             return null;
@@ -90,9 +90,9 @@ final class DockerHubBridge extends BridgeAbstract
         return null;
     }
 
-    public function collectData()
+    public function collectData(): void
     {
-        $json = getContents($this->getApiUrl());
+        $json = (string) getContents($this->getApiUrl());
         $data = json_decode($json, false);
 
         if (is_object($data) === false || isset($data->results) === false || is_array($data->results) === false) {
@@ -135,7 +135,7 @@ final class DockerHubBridge extends BridgeAbstract
         }
     }
 
-    public function getURI()
+    public function getURI(): string
     {
         $uri = parent::getURI();
         $filter = $this->getInput('filter');
@@ -155,7 +155,7 @@ final class DockerHubBridge extends BridgeAbstract
         return $uri;
     }
 
-    public function getName()
+    public function getName(): string
     {
         $repo = $this->getInput('repo');
         if ($repo === null || $repo === '') {

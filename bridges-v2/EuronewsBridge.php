@@ -45,7 +45,7 @@ final class EuronewsBridge extends BridgeAbstract
         ],
     ];
 
-    public function collectData()
+    public function collectData(): void
     {
         $limit = (int)($this->getInput('limit') ?? 10);
         $lang = $this->getInput('lang');
@@ -60,7 +60,7 @@ final class EuronewsBridge extends BridgeAbstract
 
         $rootUrl = 'https://' . $lang;
         $url = $rootUrl . '/api/timeline.json?limit=' . $limit;
-        $json = getContents($url);
+        $json = (string) getContents($url);
         $data = json_decode($json, true);
 
         if (is_array($data) === false) {
@@ -103,12 +103,15 @@ final class EuronewsBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return array{author: string, content: string, enclosures: list<string>}
+     */
     private function getItemContent(string $url): array
     {
         try {
-            $html = getContents($url);
+            $html = (string) getContents($url);
         } catch (\Exception $e) {
-            return ['author' => null, 'content' => '', 'enclosures' => []];
+            return ['author' => 'Euronews', 'content' => '', 'enclosures' => []];
         }
 
         libxml_use_internal_errors(true);

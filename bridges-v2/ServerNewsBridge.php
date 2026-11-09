@@ -33,7 +33,7 @@ final class ServerNewsBridge extends BridgeAbstract
                 'defaultValue' => false,
                 'title' => 'Fetch full article content instead of RSS preview',
             ],
-        ]
+        ],
     ];
 
     private function extractUrlFromGuid(string $guid): string
@@ -47,6 +47,9 @@ final class ServerNewsBridge extends BridgeAbstract
         return '';
     }
 
+    /**
+     * @return list<string>
+     */
     private function extractHashtags(string $text): array
     {
         $tags = [];
@@ -105,9 +108,12 @@ final class ServerNewsBridge extends BridgeAbstract
             $element->setAttribute('align', 'left');
         }
 
-        return $wrapper->innerHTML;
+        return $wrapper->innerHTML ?? $html;
     }
 
+    /**
+     * @return array{content: string, tags: list<string>, author: string, date: string}
+     */
     private function fetchFullContent(string $url): array
     {
         $result = [
@@ -154,9 +160,9 @@ final class ServerNewsBridge extends BridgeAbstract
 
             $authorElement = $dateElement->querySelector('span[itemprop="name"]');
             if ($authorElement !== null) {
-                $author = trim($authorElement->textContent);
+                $author = trim((string) $authorElement->textContent);
             } else {
-                $dateText = trim($dateElement->textContent);
+                $dateText = trim((string) $dateElement->textContent);
                 if (preg_match('/,\s*(.+)$/u', $dateText, $matches) === 1) {
                     $author = trim($matches[1]);
                 }
@@ -170,7 +176,7 @@ final class ServerNewsBridge extends BridgeAbstract
 
         if ($taglist !== null) {
             foreach ($taglist->querySelectorAll('a.tag') as $tagLink) {
-                $tagText = trim($tagLink->textContent);
+                $tagText = trim((string) $tagLink->textContent);
                 if ($tagText !== '' && in_array($tagText, $tags, true) === false) {
                     $tags[] = $tagText;
                 }
@@ -191,8 +197,8 @@ final class ServerNewsBridge extends BridgeAbstract
             $element->remove();
         }
 
-        $content = $article->innerHTML;
-        $content = preg_replace('/#([^\s#<]+)\s*/u', '', $content);
+        $content = $article->innerHTML ?? '';
+        $content = preg_replace('/#([^\s#<]+)\s*/u', '', $content) ?? $content;
         $content = $this->applyStyles($content);
 
         $result['content'] = $content;
@@ -206,7 +212,7 @@ final class ServerNewsBridge extends BridgeAbstract
     private function cleanRssDescription(string $description): string
     {
         $description = preg_replace('/#([^\s#<]+)\s*/u', '', $description);
-        return trim($description);
+        return trim($description ?? '');
     }
 
     private function processRssDescription(string $description): string

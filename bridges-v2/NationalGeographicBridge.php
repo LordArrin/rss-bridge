@@ -64,6 +64,9 @@ final class NationalGeographicBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     private function fetchTiles(string $moduleId): array
     {
         $url = 'https://www.nationalgeographic.com/proxy/hub?context='
@@ -100,6 +103,10 @@ final class NationalGeographicBridge extends BridgeAbstract
         return false;
     }
 
+    /**
+     * @param array<string, mixed> $story
+     * @return array<string, mixed>|null
+     */
     private function buildStoryItem(array $story, bool $loadFull): ?array
     {
         $title = $story['title'] ?? null;
@@ -164,6 +171,9 @@ final class NationalGeographicBridge extends BridgeAbstract
         return $item;
     }
 
+    /**
+     * @param array<string, mixed> $story
+     */
     private function extractStoryImage(array $story): string
     {
         $img = $story['img'] ?? null;
@@ -179,6 +189,10 @@ final class NationalGeographicBridge extends BridgeAbstract
         return str_replace(' ', '%20', $src);
     }
 
+    /**
+     * @param array<string, mixed> $story
+     * @return list<string>
+     */
     private function extractStoryCategories(array $story): array
     {
         $categories = [];
@@ -199,6 +213,9 @@ final class NationalGeographicBridge extends BridgeAbstract
         return $categories;
     }
 
+    /**
+     * @return array{content: string, published_date: int, authors: string}|null
+     */
     private function fetchFullArticle(string $uri): ?array
     {
         $html = getContents($uri);
@@ -270,6 +287,10 @@ final class NationalGeographicBridge extends BridgeAbstract
         ];
     }
 
+    /**
+     * @param list<array<string, mixed>> $data
+     * @return array<string, mixed>|null
+     */
     private function filterArticleData(array $data): ?array
     {
         foreach ($data as $item) {
@@ -297,6 +318,9 @@ final class NationalGeographicBridge extends BridgeAbstract
         return null;
     }
 
+    /**
+     * @param array<string, mixed> $article
+     */
     private function extractAuthors(array $article): string
     {
         $contributors = $article['cntrbGrp'] ?? [];
@@ -324,6 +348,9 @@ final class NationalGeographicBridge extends BridgeAbstract
         return implode(', ', $names);
     }
 
+    /**
+     * @param list<array<string, mixed>> $body
+     */
     private function renderArticleBody(array $body): string
     {
         $content = '';
@@ -362,6 +389,9 @@ final class NationalGeographicBridge extends BridgeAbstract
         return $content;
     }
 
+    /**
+     * @param array<string, mixed> $module
+     */
     private function renderInlineModule(array $module): string
     {
         $cmsType = $module['cmsType'] ?? '';
@@ -390,6 +420,9 @@ final class NationalGeographicBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $module
+     */
     private function renderImage(array $module, string $imageType): string
     {
         $imageSrc = '';
@@ -442,6 +475,9 @@ final class NationalGeographicBridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @param array<string, mixed> $module
+     */
     private function renderImageGroup(array $module): string
     {
         $images = $module['images'] ?? [];
@@ -459,6 +495,9 @@ final class NationalGeographicBridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @param array<string, mixed> $module
+     */
     private function renderListicle(array $module): string
     {
         $title = $module['title'] ?? '(no title)';
@@ -478,6 +517,9 @@ final class NationalGeographicBridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @param array<string, mixed> $module
+     */
     private function renderPhotoGallery(array $module): string
     {
         $media = $module['media'] ?? [];
@@ -513,6 +555,9 @@ final class NationalGeographicBridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @param array<string, mixed> $module
+     */
     private function renderPullQuote(array $module): string
     {
         $quote = $module['quote'] ?? '';

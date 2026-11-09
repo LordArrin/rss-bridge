@@ -143,6 +143,9 @@ EOD;
         }
     }
 
+    /**
+     * @return array{uri: string, title: string, timestamp: int, author: string, content: string, categories: list<string>, uid: string}|null
+     */
     private function buildItem(object $video, string $displayName): ?array
     {
         if (isset($video->id) === false) {
@@ -310,6 +313,9 @@ EOD;
         return sprintf('%dh%dm%ds', $hours, $minutes, $secs);
     }
 
+    /**
+     * @param array<string, mixed> $variables
+     */
     private function apiRequest(string $query, array $variables): object
     {
         $cacheKey = 'twitch_gql_' . md5($query . json_encode($variables));

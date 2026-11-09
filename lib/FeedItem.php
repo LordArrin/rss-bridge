@@ -11,11 +11,27 @@ class FeedItem
     protected ?int $timestamp = null;
     protected ?string $author = null;
     protected ?string $content = null;
+
+    /**
+     * @var list<string>
+     */
     protected array $enclosures = [];
+
+    /**
+     * @var list<string>
+     */
     protected array $categories = [];
+
     protected ?string $uid = null;
+
+    /**
+     * @var array<string, mixed>
+     */
     protected array $misc = [];
 
+    /**
+     * @param array<string, mixed> $itemArray
+     */
     public static function fromArray(array $itemArray): self
     {
         $item = new self();
@@ -29,7 +45,7 @@ class FeedItem
     {
     }
 
-    public function __set($name, $value)
+    public function __set(string $name, mixed $value): void
     {
         switch ($name) {
             case 'uri':
@@ -61,7 +77,7 @@ class FeedItem
         }
     }
 
-    public function __get($name)
+    public function __get(string $name): mixed
     {
         switch ($name) {
             case 'uri':
@@ -93,7 +109,7 @@ class FeedItem
         return $this->uri;
     }
 
-    public function setURI($uri)
+    public function setURI(mixed $uri): void
     {
         $this->uri = null;
 
@@ -120,7 +136,7 @@ class FeedItem
         return $this->title;
     }
 
-    public function setTitle($title)
+    public function setTitle(mixed $title): void
     {
         $this->title = null;
         if (is_string($title) === true) {
@@ -133,7 +149,7 @@ class FeedItem
         return $this->timestamp;
     }
 
-    public function setTimestamp($datetime): void
+    public function setTimestamp(mixed $datetime): void
     {
         $this->timestamp = null;
 
@@ -162,7 +178,7 @@ class FeedItem
         return $this->author;
     }
 
-    public function setAuthor($author)
+    public function setAuthor(mixed $author): void
     {
         $this->author = null;
         if (is_string($author) === true) {
@@ -175,7 +191,7 @@ class FeedItem
         return $this->content;
     }
 
-    public function setContent($content)
+    public function setContent(mixed $content): void
     {
         $this->content = null;
 
@@ -190,12 +206,15 @@ class FeedItem
         }
     }
 
+    /**
+     * @return list<string>
+     */
     public function getEnclosures(): array
     {
         return $this->enclosures;
     }
 
-    public function setEnclosures($enclosures)
+    public function setEnclosures(mixed $enclosures): void
     {
         $this->enclosures = [];
 
@@ -203,6 +222,9 @@ class FeedItem
             return;
         }
         foreach ($enclosures as $enclosure) {
+            if (is_string($enclosure) === false) {
+                continue;
+            }
             if (
                 filter_var(
                     $enclosure,
@@ -217,12 +239,15 @@ class FeedItem
         }
     }
 
+    /**
+     * @return list<string>
+     */
     public function getCategories(): array
     {
         return $this->categories;
     }
 
-    public function setCategories($categories)
+    public function setCategories(mixed $categories): void
     {
         $this->categories = [];
 
@@ -241,7 +266,7 @@ class FeedItem
         return $this->uid;
     }
 
-    public function setUid($uid): void
+    public function setUid(mixed $uid): void
     {
         $this->uid = null;
         if (is_string($uid) === false) {
@@ -255,11 +280,14 @@ class FeedItem
         }
     }
 
-    public function addMisc($name, $value)
+    public function addMisc(string $name, mixed $value): void
     {
         $this->misc[$name] = $value;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function toArray(): array
     {
         return array_merge(

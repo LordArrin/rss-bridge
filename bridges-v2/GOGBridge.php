@@ -119,6 +119,9 @@ final class GOGBridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @return list<string>
+     */
     private function extractGenreNames(object $game): array
     {
         $genres = read_json_path($game, 'genres');
@@ -184,6 +187,9 @@ final class GOGBridge extends BridgeAbstract
         return '';
     }
 
+    /**
+     * @return list<string>
+     */
     private function extractStringArray(object $obj, string $property): array
     {
         $value = read_json_path($obj, $property);

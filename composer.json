@@ -56,15 +56,16 @@
     "require": {
         "php": ">=8.5",
         "ext-curl": "*",
-        "ext-mbstring": "*",
+        "ext-dom": "*",
         "ext-intl": "*",
-        "ext-xml": "*",
+        "ext-mbstring": "*",
         "ext-simplexml": "*",
         "ext-sqlite3": "*",
+        "ext-tidy": "*",
+        "ext-xml": "*",
         "ext-zip": "*",
-        "ext-dom": "*",
-        "erusev/parsedown": "^1.8",
-        "busybee/urljoin": "^1.0"
+        "busybee/urljoin": "^1.0",
+        "erusev/parsedown": "^1.8"
     },
     "require-dev": {
         "phpstan/phpstan": "^2.3.5",

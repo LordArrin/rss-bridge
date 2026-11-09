@@ -56,7 +56,7 @@ final class PikabuBridge extends BridgeAbstract
 
     private ?string $feedTitle = null;
 
-    public function getURI()
+    public function getURI(): string
     {
         $tag = $this->getInput('tag');
         $user = $this->getInput('user');
@@ -82,12 +82,12 @@ final class PikabuBridge extends BridgeAbstract
         return parent::getURI();
     }
 
-    public function getIcon()
+    public function getIcon(): string
     {
         return 'https://cs.pikabu.ru/assets/favicon.ico';
     }
 
-    public function getName()
+    public function getName(): string
     {
         if ($this->feedTitle === null) {
             return parent::getName();
@@ -96,10 +96,10 @@ final class PikabuBridge extends BridgeAbstract
         return $this->feedTitle . ' - ' . parent::getName();
     }
 
-    public function collectData()
+    public function collectData(): void
     {
         $link = $this->getURI();
-        $rawHtml = getContents($link);
+        $rawHtml = (string) getContents($link);
 
         libxml_use_internal_errors(true);
         $dom = \Dom\HTMLDocument::createFromString($rawHtml);
@@ -258,6 +258,9 @@ final class PikabuBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return list<string>
+     */
     private function extractCategories(\Dom\Element $post): array
     {
         $categories = [];

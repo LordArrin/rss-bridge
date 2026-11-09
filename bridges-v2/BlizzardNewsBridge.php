@@ -61,9 +61,9 @@ final class BlizzardNewsBridge extends BridgeAbstract
 
     private const API_PATH = '/api/news/blizzard?';
 
-    public function collectData()
+    public function collectData(): void
     {
-        $feedContent = json_decode(getContents($this->getSourceUrl()), true);
+        $feedContent = json_decode((string) getContents($this->getSourceUrl()), true);
 
         if (is_array($feedContent) === false || isset($feedContent['feed']['contentItems']) === false) {
             throwServerException('Invalid response from Blizzard API');

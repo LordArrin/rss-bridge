@@ -141,6 +141,9 @@ final class TgWSProxy extends ProxyAbstract
         return $url;
     }
 
+    /**
+     * @param array<string, mixed> $parsed
+     */
     private function buildUrl(array $parsed): string
     {
         $url = $parsed['scheme'] . '://';
@@ -265,12 +268,18 @@ final class TgWSProxy extends ProxyAbstract
         curl_setopt_array($ch, $options);
     }
 
+    /**
+     * @param array<string, mixed> $options
+     */
     private function directFallback(string $url, array $options): string
     {
         $fallbackOptions = array_merge($options, ['use_cache' => false]);
         return (new DirectProxy($this->config))->getHtml($url, $fallbackOptions);
     }
 
+    /**
+     * @param array<string, mixed> $options
+     */
     protected function fetchHtml(string $url, array $options): string
     {
         $url = $this->normalizeUrl($url);
@@ -411,6 +420,10 @@ final class TgWSProxy extends ProxyAbstract
         ));
     }
 
+    /**
+     * @param array<string, mixed> $options
+     * @return array{body: string, type: string}
+     */
     public function getBinary(string $url, array $options = []): array
     {
         $url = $this->normalizeUrl($url);
@@ -471,6 +484,10 @@ final class TgWSProxy extends ProxyAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $options
+     * @return array{body: string, type: string}
+     */
     private function doFetchBinaryInternal(string $url, array $options): array
     {
         $connectTimeout = (int) ($this->config['connect_timeout'] ?? 5);
@@ -620,6 +637,11 @@ final class TgWSProxy extends ProxyAbstract
         ));
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<int, string> $headers
+     * @return array<string, mixed>
+     */
     protected function executeRequest(string $method, string $url, array $payload, array $headers): array
     {
         throw new \RuntimeException('TgWSProxy does not use executeRequest()');

@@ -14,8 +14,8 @@ final class FlareSolverrProxy extends ProxyAbstract
 
     protected function initialize(): void
     {
-        $this->apiUrl = rtrim($this->config['url'] ?? '', '/') . '/v1';
-        $this->sessionName = $this->config['session_name'] ?? 'rss_bridge_session';
+        $this->apiUrl = rtrim((string)($this->config['url'] ?? ''), '/') . '/v1';
+        $this->sessionName = (string)($this->config['session_name'] ?? 'rss_bridge_session');
     }
 
     public function getName(): string
@@ -58,6 +58,9 @@ final class FlareSolverrProxy extends ProxyAbstract
         return parent::validateResponse($response);
     }
 
+    /**
+     * @param array<string, mixed> $options
+     */
     protected function fetchHtml(string $url, array $options): string
     {
         $parsedHost = parse_url($url, PHP_URL_HOST);
@@ -65,11 +68,14 @@ final class FlareSolverrProxy extends ProxyAbstract
         $wait = $this->calculateWaitTime($url, $options);
 
         $cookies = $options['cookies'] ?? [];
+        if (is_array($cookies) === false) {
+            $cookies = [];
+        }
 
         $payload = [
             'cmd' => 'request.get',
             'url' => $url,
-            'maxTimeout' => $options['timeout'] ?? 180000,
+            'maxTimeout' => (int)($options['timeout'] ?? 180000),
             'wait' => $wait,
         ];
 
@@ -115,6 +121,9 @@ final class FlareSolverrProxy extends ProxyAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $options
+     */
     private function calculateWaitTime(string $url, array $options): int
     {
         if (isset($options['wait']) === true) {
@@ -137,6 +146,9 @@ final class FlareSolverrProxy extends ProxyAbstract
         return 5000;
     }
 
+    /**
+     * @param array<int|string, mixed> $cookies
+     */
     private function ensureSession(string $domain, array $cookies): void
     {
         if ($this->sessionName === null || $this->sessionName === '') {
@@ -154,10 +166,13 @@ final class FlareSolverrProxy extends ProxyAbstract
         $response = $this->request('POST', $this->apiUrl, ['cmd' => 'sessions.list']);
 
         $sessionExists = false;
-        foreach ($response['sessions'] ?? [] as $session) {
-            if (($session['session'] ?? '') === $this->sessionName) {
-                $sessionExists = true;
-                break;
+        $sessions = $response['sessions'] ?? [];
+        if (is_array($sessions) === true) {
+            foreach ($sessions as $session) {
+                if (is_array($session) === true && ($session['session'] ?? '') === $this->sessionName) {
+                    $sessionExists = true;
+                    break;
+                }
             }
         }
 
@@ -180,6 +195,11 @@ final class FlareSolverrProxy extends ProxyAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<int, string> $headers
+     * @return array<string, mixed>
+     */
     protected function executeRequest(string $method, string $url, array $payload, array $headers): array
     {
         $ch = curl_init($url);
@@ -216,18 +236,25 @@ final class FlareSolverrProxy extends ProxyAbstract
 
             $result = json_decode((string)$response, true, 512, JSON_THROW_ON_ERROR);
 
+            if (is_array($result) === false) {
+                $this->log('error', 'FlareSolverr returned non-array JSON', [
+                    'response' => is_string($response) === true ? substr($response, 0, 500) : ''
+                ]);
+                throwServerException('FlareSolverr returned non-array JSON');
+            }
+
             if (($result['status'] ?? '') !== 'ok') {
                 $this->log('error', 'FlareSolverr API error', [
                     'message' => $result['message'] ?? 'Unknown'
                 ]);
 
-                if ($this->cache !== null && isset($result['message']) === true && str_contains((string)$result['message'], 'session') === true) {
+                if ($this->cache !== null && isset($result['message']) === true && is_string($result['message']) === true && str_contains($result['message'], 'session') === true) {
                     $cacheKey = self::SESSION_FLAG_PREFIX . md5($this->sessionName);
                     $this->cache->delete($cacheKey);
                     $this->log('warning', 'FlareSolverr session cache invalidated due to API error');
                 }
 
-                throwServerException('API error: ' . ($result['message'] ?? 'Unknown'));
+                throwServerException('API error: ' . (is_string($result['message'] ?? null) === true ? $result['message'] : 'Unknown'));
             }
 
             return $result;
@@ -240,17 +267,24 @@ final class FlareSolverrProxy extends ProxyAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $options
+     * @return array{body: string, type: string}
+     */
     public function getBinary(string $url, array $options = []): array
     {
         $this->log('info', "Fetching binary {$url} via FlareSolverr");
 
         $cookies = $options['cookies'] ?? [];
+        if (is_array($cookies) === false) {
+            $cookies = [];
+        }
 
         $payload = [
             'cmd' => 'request.get',
             'url' => $url,
-            'maxTimeout' => $options['timeout'] ?? 180000,
-            'wait' => $options['wait'] ?? 5000,
+            'maxTimeout' => (int)($options['timeout'] ?? 180000),
+            'wait' => (int)($options['wait'] ?? 5000),
         ];
 
         if ($this->sessionName !== null && $this->sessionName !== '') {
@@ -288,8 +322,9 @@ final class FlareSolverrProxy extends ProxyAbstract
                     'pdf' => 'application/pdf',
                 ];
 
-                if (isset($mimeMap[strtolower($extension)]) === true) {
-                    $type = $mimeMap[strtolower($extension)];
+                $extLower = strtolower($extension);
+                if (isset($mimeMap[$extLower]) === true) {
+                    $type = $mimeMap[$extLower];
                 }
 
                 return ['body' => $body, 'type' => $type];

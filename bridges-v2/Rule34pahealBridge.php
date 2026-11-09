@@ -40,7 +40,7 @@ final class Rule34pahealBridge extends BridgeAbstract
                 'defaultValue' => false,
                 'title' => 'Do not include tags as RSS categories',
             ],
-        ]
+        ],
     ];
 
     private const PATHTODATA = '.shm-thumb';
@@ -112,6 +112,9 @@ final class Rule34pahealBridge extends BridgeAbstract
         return implode(' ', $tags);
     }
 
+    /**
+     * @return array{uri: string, timestamp: int, title: string, content: string, uid: string, categories?: list<string>}|null
+     */
     private function getItemFromElement(\Dom\Element $element, bool $hideCategories): ?array
     {
         $titleLink = $element->querySelector('.shm-thumb-link');

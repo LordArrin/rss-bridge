@@ -66,6 +66,9 @@ abstract class PhilomenaBase extends BridgeAbstract
         ]
     ];
 
+    /**
+     * @return array<string, int|string>
+     */
     protected static function getAvailableFilters(): array
     {
         return [];
@@ -91,7 +94,11 @@ abstract class PhilomenaBase extends BridgeAbstract
         return $params;
     }
 
-    public function detectParameters($url)
+    /**
+     * @param mixed $url
+     * @return array<string, string>|null
+     */
+    public function detectParameters(mixed $url): ?array
     {
         if (get_class($this) === self::class) {
             return null;
@@ -257,6 +264,9 @@ abstract class PhilomenaBase extends BridgeAbstract
         );
     }
 
+    /**
+     * @param list<string> $tags
+     */
     private function extractArtist(array $tags): string
     {
         foreach ($tags as $tag) {

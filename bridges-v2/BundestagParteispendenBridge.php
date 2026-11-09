@@ -74,6 +74,9 @@ TMPL;
         }
     }
 
+    /**
+     * @return array{title: string, content: string, uid: string, enclosures?: list<string>, timestamp?: int}|null
+     */
     private function generateItemFromRow(\Dom\Element $row): ?array
     {
         $cells = $row->querySelectorAll('td');
@@ -100,9 +103,9 @@ TMPL;
         $content = sprintf(self::CONTENT_TEMPLATE, $party, $amount, $donor, $date);
 
         $item = [
-        'title' => $party . ': ' . $amount,
-        'content' => $content,
-        'uid' => sha1($content),
+            'title' => $party . ': ' . $amount,
+            'content' => $content,
+            'uid' => sha1($content),
         ];
 
         if ($dipEl !== null) {

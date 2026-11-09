@@ -29,18 +29,24 @@ final class SfeedFormat extends FormatAbstract
             $uri = (string) ($itemArray['uri'] ?? '');
             $content = $this->escape((string) ($itemArray['content'] ?? ''));
             $author = (string) ($itemArray['author'] ?? '');
-            $enclosure = $this->getFirstEnclosure($itemArray['enclosures'] ?? []);
-            $categories = $this->escape($this->getCategories($itemArray['categories'] ?? []));
+
+            $rawEnclosures = $itemArray['enclosures'] ?? [];
+            $enclosures = is_array($rawEnclosures) === true ? $rawEnclosures : [];
+            $enclosure = $this->getFirstEnclosure($enclosures);
+
+            $rawCategories = $itemArray['categories'] ?? [];
+            $categories = is_array($rawCategories) === true ? $rawCategories : [];
+            $categoriesStr = $this->escape($this->getCategories($categories));
 
             $text .= sprintf(
                 "%s\t%s\t%s\t%s\thtml\t\t%s\t%s\t%s\n",
-                $timestamp,
+                (string) $timestamp,
                 preg_replace('/\s+/', ' ', $title),
                 $uri,
                 $content,
                 $author,
                 $enclosure,
-                $categories
+                $categoriesStr
             );
         }
 
@@ -54,11 +60,17 @@ final class SfeedFormat extends FormatAbstract
         return str_replace("\t", '\\t', $str);
     }
 
+    /**
+     * @param list<string> $enclosures
+     */
     private function getFirstEnclosure(array $enclosures): string
     {
         return $enclosures[0] ?? '';
     }
 
+    /**
+     * @param list<string> $cats
+     */
     private function getCategories(array $cats): string
     {
         return implode('|', array_map('trim', $cats));

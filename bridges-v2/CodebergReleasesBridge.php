@@ -146,6 +146,9 @@ final class CodebergReleasesBridge extends BridgeAbstract
         return self::NAME;
     }
 
+    /**
+     * @return list<string>
+     */
     private function repository(): array
     {
         return [
@@ -163,6 +166,9 @@ final class CodebergReleasesBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     private function fetchJson(string $url): array
     {
         $headers = ['Accept: application/json', 'User-Agent: RSS-Bridge CodebergReleasesBridge'];
@@ -175,6 +181,9 @@ final class CodebergReleasesBridge extends BridgeAbstract
         throw new \RuntimeException('Codeberg API returned an unexpected response.');
     }
 
+    /**
+     * @return list<string>
+     */
     private function parseFilter(string $input): array
     {
         if ($input === '') {
@@ -200,6 +209,9 @@ final class CodebergReleasesBridge extends BridgeAbstract
         return $result;
     }
 
+    /**
+     * @param list<string> $filter
+     */
     private function matchesFilter(string $name, array $filter): bool
     {
         if ($filter === []) {
@@ -215,6 +227,11 @@ final class CodebergReleasesBridge extends BridgeAbstract
         return false;
     }
 
+    /**
+     * @param array<string, mixed> $release
+     * @param list<string> $downloadsFilter
+     * @return array<string, mixed>
+     */
     private function buildItem(array $release, string $owner, string $repo, string $downloadsMode, array $downloadsFilter): array
     {
         $tag = (string) ($release['tag_name'] ?? '');
@@ -285,6 +302,11 @@ final class CodebergReleasesBridge extends BridgeAbstract
         };
     }
 
+    /**
+     * @param array<string, mixed> $release
+     * @param list<string> $downloadsFilter
+     * @return list<string>
+     */
     private function extractEnclosures(array $release, array $downloadsFilter): array
     {
         $assets = array_filter((array) ($release['assets'] ?? []), is_array(...));
@@ -313,6 +335,10 @@ final class CodebergReleasesBridge extends BridgeAbstract
         return array_values(array_unique($urls));
     }
 
+    /**
+     * @param array<string, mixed> $release
+     * @param list<string> $downloadsFilter
+     */
     private function buildContent(array $release, string $downloadsMode, array $downloadsFilter): string
     {
         $content = '';
@@ -360,6 +386,10 @@ final class CodebergReleasesBridge extends BridgeAbstract
         return $content;
     }
 
+    /**
+     * @param array<string, mixed> $release
+     * @param list<string> $downloadsFilter
+     */
     private function buildDownloadsHtml(array $release, array $downloadsFilter): string
     {
         $items = [];

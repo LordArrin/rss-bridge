@@ -34,10 +34,10 @@ final class NotAlwaysBridge extends BridgeAbstract
                     'Healthy' => 'healthy',
                     'Legal' => 'legal',
                     'Friendly' => 'friendly',
-                    'Unfiltered' => 'unfiltered'
-                ]
-            ]
-        ]
+                    'Unfiltered' => 'unfiltered',
+                ],
+            ],
+        ],
     ];
 
     public function collectData(): void
@@ -66,6 +66,9 @@ final class NotAlwaysBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return array{uri: string, title: string, content: string, uid: string}|null
+     */
     private function parsePost(\Dom\Element $post): ?array
     {
         $h1 = $post->querySelector('h1');

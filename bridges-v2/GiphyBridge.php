@@ -23,24 +23,24 @@ final class GiphyBridge extends BridgeAbstract
             's' => [
                 'name' => 'search tag',
                 'exampleValue' => 'bird',
-                'required' => true
+                'required' => true,
             ],
             'noGif' => [
                 'name' => 'Without gifs',
                 'type' => 'checkbox',
-                'title' => 'Exclude gifs from the results'
+                'title' => 'Exclude gifs from the results',
             ],
             'noStick' => [
                 'name' => 'Without stickers',
                 'type' => 'checkbox',
-                'title' => 'Exclude stickers from the results'
+                'title' => 'Exclude stickers from the results',
             ],
             'n' => [
                 'name' => 'max number of returned items (max 50)',
                 'type' => 'number',
                 'exampleValue' => 3,
-            ]
-        ]
+            ],
+        ],
     ];
 
     public function getName(): string
@@ -53,6 +53,9 @@ final class GiphyBridge extends BridgeAbstract
         return parent::getName();
     }
 
+    /**
+     * @param list<object> $entries
+     */
     private function getGiphyItems(array $entries): void
     {
         foreach ($entries as $entry) {

@@ -8,6 +8,10 @@ class ParameterValidator
 {
     /**
      * Validate and sanitize user inputs against configured bridge parameters (contexts)
+     *
+     * @param array<string, mixed> $input
+     * @param array<string, array<string, array<string, mixed>>> $parameters
+     * @return list<array{name: string, reason: string}>
      */
     public function validateInput(array &$input, array $parameters): array
     {
@@ -33,7 +37,7 @@ class ParameterValidator
                         $input[$name] = $this->validateCheckboxValue($value);
                         break;
                     case 'list':
-                        $input[$name] = $this->validateListValue($value, $contextParameters[$name]['values']);
+                        $input[$name] = $this->validateListValue($value, $contextParameters[$name]['values'] ?? []);
                         break;
                     default:
                     case 'text':
@@ -63,6 +67,8 @@ class ParameterValidator
     }
 
     /**
+     * @param array<string, mixed> $input
+     * @param array<string, array<string, mixed>> $parameters
      * @return string|int|false|null
      */
     public function getQueriedContext(array $input, array $parameters): string|int|false|null
@@ -121,7 +127,11 @@ class ParameterValidator
                 return null;
             case 1:
                 // Found unique match
-                return array_search(true, $queriedContexts, true);
+                $key = array_search(true, $queriedContexts, true);
+                if (is_string($key) === true || is_int($key) === true) {
+                    return $key;
+                }
+                return false;
             default:
                 return false;
         }
@@ -155,6 +165,9 @@ class ParameterValidator
         return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
     }
 
+    /**
+     * @param array<int|string, mixed> $expectedValues
+     */
     private function validateListValue(mixed $value, array $expectedValues): ?string
     {
         $filteredValue = filter_var($value, FILTER_UNSAFE_RAW);

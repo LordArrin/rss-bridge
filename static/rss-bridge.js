@@ -473,19 +473,45 @@ const RssBridge = (() => {
         }
     };
     const Search = {
+        collator: null,
+
+        getCollator() {
+            if (!this.collator) {
+                // 'base' sensitivity ignores case and accents (cafe == café, strasse == straße)
+                // This is perfect for fuzzy bridge name searching across all languages
+                this.collator = new Intl.Collator('en', { sensitivity: 'base' });
+            }
+            return this.collator;
+        },
+
+        // Unicode-aware substring search using Intl.Collator
+        contains(haystack, needle) {
+            if (!needle) return true;
+            const haystackLen = haystack.length;
+            const needleLen = needle.length;
+            
+            if (needleLen > haystackLen) return false;
+            
+            const collator = this.getCollator();
+            
+            // Sliding window comparison
+            for (let i = 0; i <= haystackLen - needleLen; i++) {
+                const substring = haystack.substring(i, i + needleLen);
+                if (collator.compare(substring, needle) === 0) {
+                    return true;
+                }
+            }
+            return false;
+        },
+
         perform() {
             const f = document.getElementById('searchfield');
             const term = f?.value.trim() ?? '';
-            const termLower = term.toLowerCase();
             sessionStorage.setItem('rssbridge_search_query', term);
             
             const clearBtn = document.querySelector('.search-clear-btn');
             if (clearBtn) {
-                if (term.length > 0) {
-                    clearBtn.classList.add('visible');
-                } else {
-                    clearBtn.classList.remove('visible');
-                }
+                clearBtn.classList.toggle('visible', term.length > 0);
             }
 
             const isUrlSearch = Utils.isUrl(term);
@@ -500,15 +526,18 @@ const RssBridge = (() => {
                     return; 
                 }
 
-                const name = card.getAttribute('data-ref')?.toLowerCase() ?? '';
-                const shortName = card.getAttribute('data-short-name')?.toLowerCase() ?? '';
-                const desc = card.querySelector('.description')?.textContent.toLowerCase() ?? '';
-                const domain = card.getAttribute('data-domain')?.toLowerCase() ?? '';
+                const name = card.getAttribute('data-ref') ?? '';
+                const shortName = card.getAttribute('data-short-name') ?? '';
+                const desc = card.querySelector('.description')?.textContent ?? '';
+                const domain = card.getAttribute('data-domain') ?? '';
 
                 let isVisible = false;
 
                 if (!isUrlSearch) {
-                    isVisible = (name + shortName + desc).includes(termLower);
+                    // Combine all searchable text (no need to lowercase, Collator handles it)
+                    const searchableText = `${name} ${shortName} ${desc}`;
+                    // Use Unicode-aware collator search instead of .includes()
+                    isVisible = this.contains(searchableText, term);
                 }
                 
                 if (isUrlSearch && searchDomain) {

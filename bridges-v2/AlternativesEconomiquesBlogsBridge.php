@@ -80,6 +80,9 @@ final class AlternativesEconomiquesBlogsBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return array{uri: string, title: string, author: string, timestamp: int, content: string}|null
+     */
     private function processArticle(Element $article, string $baseUrl): ?array
     {
         $titleElement = $article->querySelector('h2');

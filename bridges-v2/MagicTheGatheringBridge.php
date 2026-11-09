@@ -33,9 +33,9 @@ final class MagicTheGatheringBridge extends BridgeAbstract
                     'Magic Story' => 'magic-story',
                     'Making Magic' => 'making-magic',
                     'MTG Arena' => 'mtg-arena',
-                ]
-            ]
-        ]
+                ],
+            ],
+        ],
     ];
 
     public function collectData(): void
@@ -72,6 +72,9 @@ final class MagicTheGatheringBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return array{title: string, author: string, uri: string, content: string, uid: string, timestamp?: int}|null
+     */
     private function parseArticle(\Dom\Element $article): ?array
     {
         $h3 = $article->querySelector('h3');
@@ -93,7 +96,7 @@ final class MagicTheGatheringBridge extends BridgeAbstract
             return null;
         }
 
-        $author = trim($authorLink->textContent);
+        $author = trim((string) $authorLink->textContent);
         $articlePath = $articleLink->getAttribute('href') ?? '';
 
         if ($articlePath === '') {
@@ -123,7 +126,7 @@ final class MagicTheGatheringBridge extends BridgeAbstract
         $timeElement = $articleBody->querySelector('time');
         $timestamp = null;
         if ($timeElement !== null) {
-            $timeText = trim($timeElement->textContent);
+            $timeText = trim((string) $timeElement->textContent);
             if ($timeText !== '') {
                 $ts = strtotime($timeText);
                 if ($ts !== false) {

@@ -131,6 +131,9 @@ final class SearchFloorBridge extends BridgeAbstract
         return $dom;
     }
 
+    /**
+     * @return array{id: int, title: string, author: string, uri: string, date: int|null}|null
+     */
     private function loadWorkBookData(): ?array
     {
         $bookId = $this->getInputInt('book_id');
@@ -140,6 +143,9 @@ final class SearchFloorBridge extends BridgeAbstract
         return $this->extractBookFromPage($html, $bookId);
     }
 
+    /**
+     * @return list<array{id: int, title: string, uri: string, date: int|null}>
+     */
     private function extractBooks(\Dom\HTMLDocument $html): array
     {
         $books = [];
@@ -170,6 +176,9 @@ final class SearchFloorBridge extends BridgeAbstract
         return $books;
     }
 
+    /**
+     * @return array{id: int, title: string, author: string, uri: string, date: int|null}|null
+     */
     private function extractBookFromPage(\Dom\HTMLDocument $html, int $bookId): ?array
     {
         $titleNode = $html->querySelector('title');
@@ -199,12 +208,20 @@ final class SearchFloorBridge extends BridgeAbstract
         ];
     }
 
+    /**
+     * @param list<array{id: int, title: string, uri: string, date: int|null}> $books
+     * @return list<array{id: int, title: string, uri: string, date: int|null}>
+     */
     private function sortByDateDesc(array $books): array
     {
         usort($books, static fn (array $a, array $b): int => ($b['date'] ?? 0) <=> ($a['date'] ?? 0));
         return $books;
     }
 
+    /**
+     * @param array{id: int, title: string, uri: string, date: int|null} $book
+     * @return array{uri: string, title: string, timestamp: int, author: string, content: string, enclosures: list<string>}
+     */
     private function buildItem(array $book, string $author): array
     {
         $meta = $this->fetchBookMeta($book['id']);
@@ -221,6 +238,9 @@ final class SearchFloorBridge extends BridgeAbstract
         ];
     }
 
+    /**
+     * @return array{description: string, chapter: string}
+     */
     private function fetchBookMeta(int $bookId): array
     {
         $cacheKey = 'searchfloor_book_meta_' . $bookId;
@@ -372,6 +392,9 @@ final class SearchFloorBridge extends BridgeAbstract
         return 'data:image/jpeg;base64,' . base64_encode($jpegData);
     }
 
+    /**
+     * @return list<int>
+     */
     private function calculateDimensions(int $origW, int $origH): array
     {
         if ($origH <= 300) {

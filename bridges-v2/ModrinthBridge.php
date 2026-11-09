@@ -180,6 +180,11 @@ final class ModrinthBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param list<string> $loaders
+     * @param list<string> $gameVersions
+     * @param list<object> $dependencies
+     */
     private function buildCompatibilityBlock(array $loaders, array $gameVersions, array $dependencies): string
     {
         $hasData = (count($loaders) > 0) || (count($gameVersions) > 0) || (count($dependencies) > 0);
@@ -191,8 +196,8 @@ final class ModrinthBridge extends BridgeAbstract
         $html .= '<div style="' . self::CSS['block_title'] . '">Compatibility</div>';
 
         if (count($loaders) > 0) {
-            $loadersList = array_map(function ($loader) {
-                return is_string($loader) === true ? htmlspecialchars($loader) : '';
+            $loadersList = array_map(function (string $loader): string {
+                return htmlspecialchars($loader);
             }, $loaders);
             $html .= '<div style="' . self::CSS['compat_item'] . '">';
             $html .= '<span style="' . self::CSS['compat_label'] . '">Loaders:</span> ';
@@ -201,8 +206,8 @@ final class ModrinthBridge extends BridgeAbstract
         }
 
         if (count($gameVersions) > 0) {
-            $versionsList = array_map(function ($version) {
-                return is_string($version) === true ? htmlspecialchars($version) : '';
+            $versionsList = array_map(function (string $version): string {
+                return htmlspecialchars($version);
             }, $gameVersions);
             $html .= '<div style="' . self::CSS['compat_item'] . '">';
             $html .= '<span style="' . self::CSS['compat_label'] . '">Game versions:</span> ';
@@ -213,9 +218,6 @@ final class ModrinthBridge extends BridgeAbstract
         if (count($dependencies) > 0) {
             $depsHtml = [];
             foreach ($dependencies as $dep) {
-                if (is_object($dep) === false) {
-                    continue;
-                }
                 $projectId = (string) ($dep->project_id ?? '');
                 $depType = (string) ($dep->dependency_type ?? 'required');
                 $fileName = (string) ($dep->file_name ?? '');
@@ -265,13 +267,13 @@ final class ModrinthBridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @param list<object> $files
+     */
     private function buildDownloadButton(array $files): string
     {
         $downloadUrl = '';
         foreach ($files as $file) {
-            if (is_object($file) === false) {
-                continue;
-            }
             $isPrimary = $file->primary ?? false;
             $fileUrl = (string) ($file->url ?? '');
 

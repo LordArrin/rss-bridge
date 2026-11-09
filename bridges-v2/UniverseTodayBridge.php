@@ -136,6 +136,10 @@ final class UniverseTodayBridge extends FeedExpander
         return $item;
     }
 
+    /**
+     * @param array<string, mixed> $item
+     * @return array<string, mixed>
+     */
     private function cleanAuthor(array $item): array
     {
         $author = (string) ($item['author'] ?? '');

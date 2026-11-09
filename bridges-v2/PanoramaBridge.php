@@ -110,6 +110,9 @@ final class PanoramaBridge extends BridgeAbstract
         return $dom;
     }
 
+    /**
+     * @return list<string>
+     */
     private function getDatesToFetch(): array
     {
         $tzString = date_default_timezone_get();
@@ -125,6 +128,9 @@ final class PanoramaBridge extends BridgeAbstract
         return $dates;
     }
 
+    /**
+     * @param list<string> $processedUris
+     */
     private function isValidNewsUri(?string $path, array $processedUris): bool
     {
         if ($path === null) {
@@ -146,6 +152,9 @@ final class PanoramaBridge extends BridgeAbstract
         return true;
     }
 
+    /**
+     * @return array{uri: string, uid: string, title: string, timestamp: int, author: string, content: string}|null
+     */
     private function processNewsCard(\Dom\Element $card, string $uri): ?array
     {
         $previewTitle = $this->extractPreviewTitle($card);
@@ -166,7 +175,7 @@ final class PanoramaBridge extends BridgeAbstract
                 $this->extractImage($articleHTML, $previewImage),
                 $this->extractContent($articleHTML, $previewTitle),
                 $this->extractTitle($articleHTML, $previewTitle)
-            )
+            ),
         ];
     }
 
@@ -268,7 +277,7 @@ final class PanoramaBridge extends BridgeAbstract
                 'style',
                 'div[id*="yandex_rtb"]',
                 '.sharethis-inline-share-buttons',
-                '.alert'
+                '.alert',
             ];
 
             foreach ($contentElem->querySelectorAll(implode(',', $junkSelectors)) as $junk) {

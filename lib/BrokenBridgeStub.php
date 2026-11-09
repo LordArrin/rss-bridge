@@ -79,8 +79,10 @@ class BrokenBridgeStub extends BridgeAbstract
     }
 
     /**
-     * Returns an empty parameter list, since a broken bridge cannot
+     * Returns an empty parameter list, since a a broken bridge cannot
      * be configured by the user.
+     *
+     * @return array<string, array<string, array<string, mixed>>>
      */
     public function getParameters(): array
     {

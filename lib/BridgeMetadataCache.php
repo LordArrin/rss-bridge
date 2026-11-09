@@ -21,9 +21,16 @@ final class BridgeMetadataCache
     private const DEFAULT_TTL = 2592000;
 
     private CacheInterface $cache;
+
+    /**
+     * @var list<string>
+     */
     private array $bridgesDirs;
     private ?string $cachedHash = null;
 
+    /**
+     * @param list<string> $bridgesDirs
+     */
     public function __construct(CacheInterface $cache, array $bridgesDirs)
     {
         $this->cache = $cache;
@@ -35,7 +42,16 @@ final class BridgeMetadataCache
      *
      * @param BridgeFactory $factory Factory for resolving bridge class names
      * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
-     * @return array<string, array> Metadata indexed by bridge class name
+     * @return array<string, array{
+     *     name: string,
+     *     uri: string,
+     *     description: string,
+     *     parameters: array<string, array<string, mixed>>,
+     *     domain: string,
+     *     short_name: string,
+     *     maintainer: string,
+     *     cache_timeout: int
+     * }> Metadata indexed by bridge class name
      */
     public function getAll(BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
@@ -44,9 +60,11 @@ final class BridgeMetadataCache
 
         if ($cached !== null && is_array($cached) === true && isset($cached['metadata']) === true) {
             // Restore broken bridges list to the loader so FrontpageAction can access it
-            if (isset($cached['broken_bridges']) === true) {
+            if (isset($cached['broken_bridges']) === true && is_array($cached['broken_bridges']) === true) {
                 foreach ($cached['broken_bridges'] as $bridgeName => $errorInfo) {
-                    $loader->restoreBrokenBridge($bridgeName, $errorInfo);
+                    if (is_string($bridgeName) === true && is_array($errorInfo) === true) {
+                        $loader->restoreBrokenBridge($bridgeName, $errorInfo);
+                    }
                 }
             }
             return $cached['metadata'];
@@ -64,7 +82,16 @@ final class BridgeMetadataCache
      * @param string $bridgeClassName Bridge class name
      * @param BridgeFactory $factory Factory for resolving bridge class names
      * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
-     * @return array|null Metadata array or null if not found
+     * @return array{
+     *     name: string,
+     *     uri: string,
+     *     description: string,
+     *     parameters: array<string, array<string, mixed>>,
+     *     domain: string,
+     *     short_name: string,
+     *     maintainer: string,
+     *     cache_timeout: int
+     * }|null Metadata array or null if not found
      */
     public function get(string $bridgeClassName, BridgeFactory $factory, SafeBridgeLoader $loader): ?array
     {
@@ -77,7 +104,16 @@ final class BridgeMetadataCache
      *
      * @param BridgeFactory $factory Factory for resolving bridge class names
      * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
-     * @return array<string, array> Fresh metadata indexed by bridge class name
+     * @return array<string, array{
+     *     name: string,
+     *     uri: string,
+     *     description: string,
+     *     parameters: array<string, array<string, mixed>>,
+     *     domain: string,
+     *     short_name: string,
+     *     maintainer: string,
+     *     cache_timeout: int
+     * }> Fresh metadata indexed by bridge class name
      */
     public function rebuild(BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
@@ -117,7 +153,19 @@ final class BridgeMetadataCache
      *
      * @param BridgeFactory $factory Factory for resolving bridge class names
      * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
-     * @return array{metadata: array<string, array>, broken_bridges: array<string, array>}
+     * @return array{
+     *     metadata: array<string, array{
+     *         name: string,
+     *         uri: string,
+     *         description: string,
+     *         parameters: array<string, array<string, mixed>>,
+     *         domain: string,
+     *         short_name: string,
+     *         maintainer: string,
+     *         cache_timeout: int
+     *     }>,
+     *     broken_bridges: array<string, array{message: string, file: string, line: int, class: string}>
+     * }
      */
     private function buildMetadata(BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
@@ -128,7 +176,12 @@ final class BridgeMetadataCache
                 continue;
             }
 
-            foreach (scandir($dir) as $file) {
+            $files = scandir($dir);
+            if ($files === false) {
+                continue;
+            }
+
+            foreach ($files as $file) {
                 if (preg_match('/^([^.]+Bridge)\.php$/U', $file, $m) !== 1) {
                     continue;
                 }
@@ -154,14 +207,14 @@ final class BridgeMetadataCache
                 }
 
                 $metadata[$className] = [
-                'name' => $bridge->getName(),
-                'uri' => $bridge->getURI(),
-                'description' => $bridge->getDescription(),
-                'parameters' => $bridge->getParameters(),
-                'domain' => $this->extractDomain($bridge->getURI()),
-                'short_name' => $shortName,
-                'maintainer' => $bridge->getMaintainer(),
-                'cache_timeout' => $bridge->getCacheTimeout(),
+                    'name' => $bridge->getName(),
+                    'uri' => $bridge->getURI(),
+                    'description' => $bridge->getDescription(),
+                    'parameters' => $bridge->getParameters(),
+                    'domain' => $this->extractDomain($bridge->getURI()),
+                    'short_name' => $shortName,
+                    'maintainer' => $bridge->getMaintainer(),
+                    'cache_timeout' => $bridge->getCacheTimeout(),
                 ];
             }
         }
@@ -204,10 +257,16 @@ final class BridgeMetadataCache
             foreach ($this->bridgesDirs as $dir) {
                 if (is_dir($dir) === true) {
                     $hashParts[] = $dir;
-                    foreach (scandir($dir) as $file) {
-                        if ($file !== '.' && $file !== '..') {
-                            $filepath = $dir . '/' . $file;
-                            $hashParts[] = filemtime($filepath);
+                    $files = scandir($dir);
+                    if ($files !== false) {
+                        foreach ($files as $file) {
+                            if ($file !== '.' && $file !== '..') {
+                                $filepath = $dir . '/' . $file;
+                                $mtime = filemtime($filepath);
+                                if ($mtime !== false) {
+                                    $hashParts[] = $mtime;
+                                }
+                            }
                         }
                     }
                 }

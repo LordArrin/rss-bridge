@@ -65,6 +65,9 @@ final class RssBridge
         });
     }
 
+    /**
+     * @param list<class-string> $middlewareClasses
+     */
     private function processMiddlewares(
         array $middlewareClasses,
         Request $request,

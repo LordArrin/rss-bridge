@@ -49,6 +49,9 @@ final class VieDeMerdeBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return array{uri: string, title: string, content: string, author: string, uid: string}|null
+     */
     private function extractQuoteItem(\Dom\Element $quote): ?array
     {
         $titleNode = $quote->querySelector('h2');
@@ -70,23 +73,23 @@ final class VieDeMerdeBridge extends BridgeAbstract
         }
 
         $uri = self::URI . $href;
-        $title = html_entity_decode(trim($titleNode->textContent), ENT_QUOTES, 'UTF-8');
-        $quoteText = trim($quoteTextNode->textContent);
+        $title = html_entity_decode(trim((string) $titleNode->textContent), ENT_QUOTES, 'UTF-8');
+        $quoteText = trim((string) $quoteTextNode->textContent);
 
         $content = htmlspecialchars($quoteText, ENT_QUOTES, 'UTF-8');
 
         $voteButtons = $quote->querySelectorAll('.vote-btn');
         if (count($voteButtons) >= 1) {
-            $content .= '<br>' . htmlspecialchars(trim($voteButtons[0]->textContent), ENT_QUOTES, 'UTF-8');
+            $content .= '<br>' . htmlspecialchars(trim((string) $voteButtons[0]->textContent), ENT_QUOTES, 'UTF-8');
         }
         if (count($voteButtons) >= 2) {
-            $content .= '<br>' . htmlspecialchars(trim($voteButtons[1]->textContent), ENT_QUOTES, 'UTF-8');
+            $content .= '<br>' . htmlspecialchars(trim((string) $voteButtons[1]->textContent), ENT_QUOTES, 'UTF-8');
         }
 
         $authorNode = $quote->querySelector('p');
         $author = '';
         if ($authorNode !== null) {
-            $author = trim($authorNode->textContent);
+            $author = trim((string) $authorNode->textContent);
         }
 
         return [

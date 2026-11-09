@@ -44,7 +44,7 @@ final class TrawlProxy extends ProxyAbstract
 
     protected function initialize(): void
     {
-        $this->apiUrl = rtrim($this->config['url'] ?? '', '/');
+        $this->apiUrl = rtrim((string)($this->config['url'] ?? ''), '/');
         $this->timeout = (int)($this->config['timeout'] ?? 180000) / 1000;
 
         $apiKey = (string)($this->config['twocaptcha_api_key'] ?? '');
@@ -148,26 +148,29 @@ final class TrawlProxy extends ProxyAbstract
         return true;
     }
 
+    /**
+     * @param array<string, mixed> $options
+     */
     protected function fetchHtml(string $url, array $options): string
     {
         $payload = [
             'url' => $url,
-            'maxTimeout' => $options['timeout'] ?? 180000,
-            'maxTier' => $options['max_tier'] ?? 4,
+            'maxTimeout' => (int)($options['timeout'] ?? 180000),
+            'maxTier' => (int)($options['max_tier'] ?? 4),
             'solveEmbeddedCaptchas' => true,
         ];
 
         $cookies = $options['cookies'] ?? [];
-        if ($cookies !== []) {
+        if (is_array($cookies) === true && $cookies !== []) {
             $payload['cookies'] = $cookies;
         }
 
         $headers = $options['headers'] ?? [];
-        if ($headers !== []) {
+        if (is_array($headers) === true && $headers !== []) {
             $payload['headers'] = $headers;
         }
 
-        if (isset($options['session_id']) === true && $options['session_id'] !== '') {
+        if (isset($options['session_id']) === true && is_string($options['session_id']) === true && $options['session_id'] !== '') {
             $payload['sessionId'] = $options['session_id'];
         }
 
@@ -199,8 +202,9 @@ final class TrawlProxy extends ProxyAbstract
 
         $tier = $response['tier'] ?? null;
         $totalMs = $response['totalMs'] ?? null;
-        $cookiesCount = isset($response['cookies']) === true ? count((array)$response['cookies']) : 0;
-        $sessionCached = $response['sessionCached'] ?? false;
+        $responseCookies = $response['cookies'] ?? [];
+        $cookiesCount = is_array($responseCookies) === true ? count($responseCookies) : 0;
+        $sessionCached = (bool)($response['sessionCached'] ?? false);
 
         $this->log('info', 'Trawl scrape completed', [
             'url' => $url,
@@ -243,6 +247,11 @@ final class TrawlProxy extends ProxyAbstract
         return false;
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<int, string> $headers
+     * @return array<string, mixed>
+     */
     protected function executeRequest(string $method, string $url, array $payload, array $headers): array
     {
         $ch = curl_init($url);
@@ -294,17 +303,28 @@ final class TrawlProxy extends ProxyAbstract
             throwServerException('Invalid JSON response: ' . $e->getMessage());
         }
 
+        if (is_array($result) === false) {
+            $this->log('error', 'Trawl returned non-array JSON', [
+                'response' => substr((string)$response, 0, 500)
+            ]);
+            throwServerException('Trawl returned non-array JSON');
+        }
+
         if (isset($result['error']) === true && $result['error'] === true) {
             $this->log('error', 'Trawl API error', [
                 'message' => $result['message'] ?? 'Unknown',
                 'response' => $result
             ]);
-            throwServerException('API error: ' . ($result['message'] ?? 'Unknown'));
+            throwServerException('API error: ' . (is_string($result['message'] ?? null) === true ? $result['message'] : 'Unknown'));
         }
 
         return $result;
     }
 
+    /**
+     * @param array<string, mixed> $options
+     * @return array{body: string, type: string}
+     */
     public function getBinary(string $url, array $options = []): array
     {
         $this->log('info', "Fetching binary {$url} via Trawl");
@@ -315,17 +335,17 @@ final class TrawlProxy extends ProxyAbstract
 
         $payload = [
             'url' => $url,
-            'maxTimeout' => $options['timeout'] ?? 180000,
-            'maxTier' => $options['max_tier'] ?? 4,
+            'maxTimeout' => (int)($options['timeout'] ?? 180000),
+            'maxTier' => (int)($options['max_tier'] ?? 4),
             'solveEmbeddedCaptchas' => false,
         ];
 
         $cookies = $options['cookies'] ?? [];
-        if ($cookies !== []) {
+        if (is_array($cookies) === true && $cookies !== []) {
             $payload['cookies'] = $cookies;
         }
 
-        if (isset($options['session_id']) === true && $options['session_id'] !== '') {
+        if (isset($options['session_id']) === true && is_string($options['session_id']) === true && $options['session_id'] !== '') {
             $payload['sessionId'] = $options['session_id'];
         }
 
@@ -353,13 +373,18 @@ final class TrawlProxy extends ProxyAbstract
             'pdf' => 'application/pdf',
         ];
 
-        if (isset($mimeMap[strtolower($extension)]) === true) {
-            $type = $mimeMap[strtolower($extension)];
+        $extLower = strtolower($extension);
+        if (isset($mimeMap[$extLower]) === true) {
+            $type = $mimeMap[$extLower];
         }
 
         return ['body' => $body, 'type' => $type];
     }
 
+    /**
+     * @param array<string, mixed> $options
+     * @return array{body: string, type: string}
+     */
     private function getBinaryViaForwardProxy(string $url, array $options): array
     {
         $proxyUrl = "http://{$this->forwardProxyHost}:{$this->forwardProxyPort}";
@@ -379,7 +404,7 @@ final class TrawlProxy extends ProxyAbstract
         ]);
 
         $headers = $options['headers'] ?? [];
-        if ($headers !== []) {
+        if (is_array($headers) === true && $headers !== []) {
             $curlHeaders = [];
             foreach ($headers as $key => $value) {
                 $curlHeaders[] = "{$key}: {$value}";

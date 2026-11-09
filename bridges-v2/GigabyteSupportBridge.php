@@ -21,15 +21,15 @@ final class GigabyteSupportBridge extends BridgeAbstract
                 'name' => 'Support page URL',
                 'type' => 'text',
                 'required' => true,
-                'title' => 'Full URL of the product support page on gigabyte.com (hash fragments like #Support-Bios or #Support-Driver are supported)'
+                'title' => 'Full URL of the product support page on gigabyte.com (hash fragments like #Support-Bios or #Support-Driver are supported)',
             ],
             'hide_download_button' => [
                 'name' => 'Hide download button',
                 'type' => 'checkbox',
                 'defaultValue' => false,
-                'title' => 'Hide the download button from feed items'
-            ]
-        ]
+                'title' => 'Hide the download button from feed items',
+            ],
+        ],
     ];
 
     private const CSS = [
@@ -40,6 +40,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
         'download' => 'display:inline-block;margin-top:10px;padding:8px 16px;background:#ff6600;color:#fff;text-decoration:none;border-radius:4px;font-weight:500',
     ];
 
+    /** @var array{product: string, category: string, fragment: string}|null */
     private ?array $productInfo = null;
     private ?\Dom\HTMLDocument $pageDom = null;
 
@@ -69,9 +70,12 @@ final class GigabyteSupportBridge extends BridgeAbstract
     public function getURI(): string
     {
         $url = $this->getInput('url');
-        return $url !== null ? (string)$url : parent::getURI();
+        return $url !== null ? (string) $url : parent::getURI();
     }
 
+    /**
+     * @return array{product: string, category: string, fragment: string}|null
+     */
     private function getProductInfo(): ?array
     {
         if ($this->productInfo !== null) {
@@ -104,17 +108,23 @@ final class GigabyteSupportBridge extends BridgeAbstract
         $this->productInfo = [
             'product' => array_pop($segments),
             'category' => array_pop($segments),
-            'fragment' => $parsedUrl['fragment'] ?? ''
+            'fragment' => $parsedUrl['fragment'] ?? '',
         ];
 
         return $this->productInfo;
     }
 
+    /**
+     * @param array{product: string, category: string, fragment: string} $info
+     */
     private function supportUrl(array $info): string
     {
         return sprintf('https://www.gigabyte.com/%s/%s/support', $info['category'], $info['product']);
     }
 
+    /**
+     * @return list<string>
+     */
     private function getDownloadTypes(): array
     {
         $info = $this->getProductInfo();
@@ -262,6 +272,9 @@ final class GigabyteSupportBridge extends BridgeAbstract
         return trim($text, ', ');
     }
 
+    /**
+     * @return list<array{type: string, category: string, description: string, version: string, os: string, size: string, date: string, download: string}>
+     */
     private function parseSections(\Dom\HTMLDocument $dom): array
     {
         $items = [];
@@ -274,7 +287,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
             if ($category !== '') {
                 $h2Positions[] = [
                     'node' => $h2Node,
-                    'category' => $category
+                    'category' => $category,
                 ];
             }
         }
@@ -334,8 +347,6 @@ final class GigabyteSupportBridge extends BridgeAbstract
                 $sizeNode = $cells->item($hasOs === true ? 3 : 2);
                 $dateNode = $cells->item($hasOs === true ? 4 : 3);
 
-                // Удалена избыточная проверка, так как $cells->length >= 4 гарантирует наличие элементов 0 и 1
-
                 $downloadUrl = '';
                 $links = $row->querySelectorAll('a');
                 foreach ($links as $link) {
@@ -356,9 +367,9 @@ final class GigabyteSupportBridge extends BridgeAbstract
                     'description' => $this->normalize($descriptionNode->innerHTML ?? '', true),
                     'version' => $this->normalize($versionNode->textContent ?? ''),
                     'os' => $osNode !== null ? $this->normalize($osNode->textContent ?? '') : '',
-                    'size' => $this->normalize($sizeNode->textContent),
-                    'date' => $this->normalize($dateNode->textContent),
-                    'download' => $downloadUrl
+                    'size' => $this->normalize((string) ($sizeNode->textContent ?? '')),
+                    'date' => $this->normalize((string) ($dateNode->textContent ?? '')),
+                    'download' => $downloadUrl,
                 ];
             }
         }
@@ -428,6 +439,11 @@ final class GigabyteSupportBridge extends BridgeAbstract
         );
     }
 
+    /**
+     * @param array{type: string, category: string, description: string, version: string, os: string, size: string, date: string, download: string} $data
+     * @param array{product: string, category: string, fragment: string} $info
+     * @return array{title: string, uri: string, content: string, uid: string, timestamp?: int}
+     */
     private function buildFeedItem(array $data, array $info, bool $hideAttachments): array
     {
         if ($data['type'] === 'bios') {
@@ -468,7 +484,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
             'title' => $itemTitle,
             'uri' => $uri,
             'content' => $content,
-            'uid' => md5($itemTitle . $data['version'])
+            'uid' => md5($itemTitle . $data['version']),
         ];
 
         if (($data['date'] ?? '') !== '') {
@@ -493,7 +509,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
             throwServerException('Failed to fetch support page content');
         }
 
-        $hideAttachments = (bool)$this->getInput('hide_download_button');
+        $hideAttachments = (bool) $this->getInput('hide_download_button');
         $types = $this->getDownloadTypes();
         $allItems = [];
 

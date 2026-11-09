@@ -20,6 +20,10 @@ class SafeBridgeLoader
     private BridgeFactory $bridgeFactory;
     private Logger $logger;
     private CacheInterface $cache;
+
+    /**
+     * @var array<string, array{message: string, file: string, line: int, class: string}>
+     */
     private array $brokenBridges = [];
 
     public function __construct(BridgeFactory $bridgeFactory, Logger $logger, CacheInterface $cache)
@@ -88,7 +92,7 @@ class SafeBridgeLoader
      * warnings even without re-loading all bridges.
      *
      * @param string $bridgeName Bridge class name
-     * @param array $errorInfo Error information array
+     * @param array{message: string, file: string, line: int, class: string} $errorInfo Error information array
      */
     public function restoreBrokenBridge(string $bridgeName, array $errorInfo): void
     {

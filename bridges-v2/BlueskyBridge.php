@@ -50,6 +50,7 @@ final class BlueskyBridge extends BridgeAbstract
         ],
     ];
 
+    /** @var array<string, mixed>|null */
     private ?array $profile = null;
 
     public function getName(): string
@@ -95,6 +96,9 @@ final class BlueskyBridge extends BridgeAbstract
         return htmlspecialchars($value ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
+    /**
+     * @param array<string, mixed> $external
+     */
     private function parseExternal(array $external, string $did): string
     {
         $description = '';
@@ -119,6 +123,9 @@ final class BlueskyBridge extends BridgeAbstract
         return $description;
     }
 
+    /**
+     * @param array<string, mixed> $record
+     */
     private function textToDescription(array $record): string
     {
         if (isset($record['value']) === true) {
@@ -570,6 +577,9 @@ final class BlueskyBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $video
+     */
     private function getPostVideoDescription(array $video, string $authorDID): string
     {
         $videoCID = (string)($video['ref']['$link'] ?? '');
@@ -579,6 +589,9 @@ final class BlueskyBridge extends BridgeAbstract
         return "<figure><video loop {$thumbnail} preload=\"none\" controls src=\"{$videoURL}\" type=\"{$videoMime}\"/></figure>";
     }
 
+    /**
+     * @param array<string, mixed> $image
+     */
     private function getPostImageDescription(array $image): string
     {
         $thumbnailUrl = (string)($image['thumb'] ?? $image['thumbnail'] ?? '');
@@ -587,6 +600,9 @@ final class BlueskyBridge extends BridgeAbstract
         return "<figure><a href=\"{$fullsizeUrl}\"><img src=\"{$thumbnailUrl}\"></a>{$alt}</figure>";
     }
 
+    /**
+     * @param array<string, mixed> $postRecord
+     */
     private function getPostDescription(
         string $postDisplayName,
         string $postAuthorHandle,
@@ -609,6 +625,9 @@ final class BlueskyBridge extends BridgeAbstract
         return $description;
     }
 
+    /**
+     * @param array<string, mixed> $author
+     */
     private function fallbackAuthor(array $author, string $reason): string
     {
         if (($author['handle'] ?? '') === 'handle.invalid') {
@@ -622,6 +641,9 @@ final class BlueskyBridge extends BridgeAbstract
         return (string)($author['handle'] ?? '');
     }
 
+    /**
+     * @param array<string, mixed> $post
+     */
     private function generateVerboseTitle(array $post): string
     {
         $title = '';
@@ -696,6 +718,9 @@ final class BlueskyBridge extends BridgeAbstract
         return (string)$data['did'];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getProfile(string $did): array
     {
         $uri = 'https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=' . urlencode($did);
@@ -722,6 +747,9 @@ final class BlueskyBridge extends BridgeAbstract
         return $data;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getAuthorFeed(string $did, string $filter): array
     {
         $uri = 'https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=' . urlencode($did) . '&filter=' . urlencode($filter) . '&limit=30';
@@ -739,6 +767,9 @@ final class BlueskyBridge extends BridgeAbstract
         return $data;
     }
 
+    /**
+     * @param array<string, mixed> $record
+     */
     private function getListFeedDescription(array $record): string
     {
         $avatar = isset($record['avatar']) === true ? '<img src="' . preg_replace('/\/img\/avatar\//', '/img/avatar_thumbnail/', (string)$record['avatar']) . '">' : '';
@@ -776,6 +807,9 @@ Bluesky {$typeDesc} by <b>{$authorDisplayName}</b> <i>@{$authorHandle}</i>
 END;
     }
 
+    /**
+     * @param array<string, mixed> $record
+     */
     private function getStarterPackDescription(array $record): string
     {
         if (isset($record['record']) === false) {

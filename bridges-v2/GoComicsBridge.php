@@ -42,7 +42,7 @@ final class GoComicsBridge extends BridgeAbstract
         'image' => 'display: block; max-width: 500px; height: auto; margin: 10px 0;',
     ];
 
-    public function collectData()
+    public function collectData(): void
     {
         $comicName = (string)$this->getInput('comicname');
         $limit = (int)($this->getInput('limit') ?? 2);
@@ -111,7 +111,7 @@ final class GoComicsBridge extends BridgeAbstract
         }
     }
 
-    public function getURI()
+    public function getURI(): string
     {
         $comicName = $this->getInput('comicname');
         if ($comicName !== null && $comicName !== '') {
@@ -121,7 +121,7 @@ final class GoComicsBridge extends BridgeAbstract
         return parent::getURI();
     }
 
-    public function getName()
+    public function getName(): string
     {
         $comicName = $this->getInput('comicname');
         if ($comicName !== null && $comicName !== '') {
@@ -134,7 +134,7 @@ final class GoComicsBridge extends BridgeAbstract
     private function fetchPage(string $url): \Dom\HTMLDocument
     {
         try {
-            $html = getContents($url);
+            $html = (string) getContents($url);
         } catch (\HttpException $e) {
             if ($e->getCode() === 403) {
                 $message = '403 Forbidden. GoComics uses Bunny Shield to block this bridge. Try reducing feed update frequency or hosting from a different IP.';

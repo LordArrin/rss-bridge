@@ -370,7 +370,11 @@ CSS,
         return parent::getIcon();
     }
 
-    public function detectParameters($url): ?array
+    /**
+     * @param mixed $url
+     * @return array<string, string>|null
+     */
+    public function detectParameters(mixed $url): ?array
     {
         $re = '/^https?:\/\/(?:(?:t|telegram)\.me\/(?:s\/)?([\w]+)|([\w]+)\.t\.me\/?)$/';
 
@@ -458,6 +462,9 @@ CSS,
         }
     }
 
+    /**
+     * @param array<string, mixed> $item
+     */
     private function hasContent(array $item): bool
     {
         return trim(strip_tags($item['content'] ?? '')) !== ''
@@ -524,8 +531,12 @@ CSS,
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function parseMessage(\Dom\Element $message): array
     {
+        /** @var array<string, mixed> $context */
         $context = ['title' => '', 'author' => '', 'hashtags' => []];
 
         $uri = $this->extractUri($message);
@@ -551,8 +562,8 @@ CSS,
             |> $this->embedMediaInHtml(...)
             |> $this->sanitizeContent(...);
 
-        if ($this->getInput('hide_hashtags') === false && $contentResult['hashtags'] !== []) {
-            $item['categories'] = $contentResult['hashtags'];
+        if ($this->getInput('hide_hashtags') === false && $context['hashtags'] !== []) {
+            $item['categories'] = $context['hashtags'];
         }
 
         return $item;
@@ -574,6 +585,10 @@ CSS,
         return $dt !== '' ? $dt : null;
     }
 
+    /**
+     * @param array<string, mixed> $context
+     * @return array<string, mixed>
+     */
     private function processContent(\Dom\Element $messageDiv, array &$context): array
     {
         foreach ($messageDiv->querySelectorAll(self::SELECTORS['UNSUPPORTED_CONT']) as $fake) {
@@ -666,6 +681,9 @@ CSS,
         ];
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     private function processText(\Dom\Element $textDiv, array &$context): string
     {
         $nested = $textDiv->querySelector(self::SELECTORS['MESSAGE_TEXT']);
@@ -703,6 +721,9 @@ CSS,
         );
     }
 
+    /**
+     * @return array{title: string, html: string}
+     */
     private function splitTitleAndContent(string $html): array
     {
         $html = preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $html);
@@ -857,6 +878,9 @@ CSS,
         );
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     private function processPhoto(\Dom\Element $messageDiv, array &$context): string
     {
         if ($context['title'] === '') {
@@ -876,6 +900,9 @@ CSS,
         return $out;
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     private function processVideo(\Dom\Element $messageDiv, array &$context): string
     {
         if ($context['title'] === '') {
@@ -960,6 +987,9 @@ CSS,
         return $html;
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     private function processSticker(\Dom\Element $messageDiv, array &$context): string
     {
         if ($context['title'] === '') {
@@ -993,6 +1023,9 @@ CSS,
         return '';
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     private function processPoll(\Dom\Element $messageDiv, array &$context): string
     {
         $poll = $messageDiv->querySelector(self::SELECTORS['POLL']);
@@ -1053,6 +1086,9 @@ CSS,
         return $html;
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     private function processLinkPreview(\Dom\Element $messageDiv, array &$context): string
     {
         $preview = $messageDiv->querySelector(self::SELECTORS['LINK_PREVIEW']);
@@ -1086,6 +1122,9 @@ CSS,
         );
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     private function processAttachment(\Dom\Element $messageDiv, array &$context): string
     {
         if ($context['title'] === '') {
@@ -1102,6 +1141,9 @@ CSS,
         return $out;
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     private function processLocation(\Dom\Element $messageDiv, array &$context): string
     {
         if ($context['title'] === '') {
@@ -1122,6 +1164,9 @@ CSS,
         return sprintf('<a href="%s"><img src="%s" /></a>', $linkHref, $imgSrc);
     }
 
+    /**
+     * @return array{html: string, tags: list<string>}
+     */
     private function extractHashtags(string $html): array
     {
         $tags = [];
@@ -1165,6 +1210,9 @@ CSS,
         ];
     }
 
+    /**
+     * @return array{type: string, element: \Dom\Element}|null
+     */
     private function detectNotSupported(\Dom\Element $message): ?array
     {
         $videoPlayer = $message->querySelector(self::SELECTORS['VIDEO_PLAYER_LINK_NS']);
@@ -1196,6 +1244,10 @@ CSS,
         return null;
     }
 
+    /**
+     * @param array<string, mixed> $item
+     * @param array{type: string, element: \Dom\Element} $info
+     */
     private function applyNotSupportedStub(
         array &$item,
         \Dom\Element $message,
@@ -1415,6 +1467,9 @@ CSS,
         );
     }
 
+    /**
+     * @param array<string, mixed> $item
+     */
     private function isBlocked(array $item, \Dom\Element $message): bool
     {
         if ($this->isAd($message) === true) {
@@ -1443,6 +1498,9 @@ CSS,
         return false;
     }
 
+    /**
+     * @param array<string, mixed> $item
+     */
     private function buildSearchHaystack(array $item): string
     {
         return mb_strtolower(
@@ -1459,12 +1517,18 @@ CSS,
         );
     }
 
+    /**
+     * @param array<string, mixed> $item
+     */
     private function isShortPost(array $item): bool
     {
         $plain = trim(($item['title'] ?? '') . ' ' . strip_tags($item['content'] ?? ''));
         return mb_strlen(string: $plain, encoding: 'UTF-8') <= self::SHORT_POST_MAX_LENGTH;
     }
 
+    /**
+     * @param array<string, mixed> $item
+     */
     private function hasExternalTelegramLinks(array $item): bool
     {
         $currentUsername = strtolower($this->getNormalizedUsername());

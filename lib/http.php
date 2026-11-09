@@ -54,13 +54,13 @@ final class IpResolver
         'ff00::/8',
     ];
 
-    /** @var string[] */
+    /** @var list<string> */
     private array $blockedCidrs;
 
-    /** @var string[] */
+    /** @var list<string> */
     private array $allowedCidrs;
 
-    /** @var array<string, array{time: int, ips: string[]}> */
+    /** @var array<string, array{time: int, ips: list<string>}> */
     private static array $cache = [];
 
     private const CACHE_TTL = 60;
@@ -68,8 +68,8 @@ final class IpResolver
     private const MAX_CACHE_ENTRIES = 512;
 
     /**
-     * @param string[]|string|null $blockedCidrs
-     * @param string[]|string|null $allowedCidrs
+     * @param list<string>|string|null $blockedCidrs
+     * @param list<string>|string|null $allowedCidrs
      */
     public function __construct(array|string|null $blockedCidrs = null, array|string|null $allowedCidrs = null)
     {
@@ -127,7 +127,7 @@ final class IpResolver
     /**
      * Resolves a hostname to its IP addresses through the process-wide DNS cache.
      *
-     * @return string[]
+     * @return list<string>
      */
     public function resolve(string $host): array
     {
@@ -323,6 +323,8 @@ final class CurlHttpClient implements HttpClient
 
     /**
      * Checks if the impersonate option is set to opt-out (empty or 'none').
+     *
+     * @param array<int, mixed> $curlOptions
      */
     private static function isOptOut(array $curlOptions): bool
     {
@@ -399,7 +401,7 @@ final class CurlHttpClient implements HttpClient
     /**
      * Builds the CURLOPT_RESOLVE entries that pin a hostname to its DNS-cached, SSRF-vetted IP addresses.
      *
-     * @return string[] Zero or more CURLOPT_RESOLVE entry strings.
+     * @return list<string> Zero or more CURLOPT_RESOLVE entry strings.
      */
     private function buildResolveEntries(string $url, bool $ssrfCheck): array
     {
@@ -520,6 +522,8 @@ final class CurlHttpClient implements HttpClient
 
     /**
      * Performs an HTTP request with SSRF protection and retry logic.
+     *
+     * @param array<string, mixed> $config
      */
     public function request(string $url, array $config = []): Response
     {
@@ -530,7 +534,8 @@ final class CurlHttpClient implements HttpClient
 
         $resolveEntries = $this->buildResolveEntries($url, $ssrfCheck === true);
 
-        $optOutRequested = self::isOptOut($config['curl_options'] ?? []);
+        $curlOptionsRaw = $config['curl_options'] ?? [];
+        $optOutRequested = is_array($curlOptionsRaw) === true ? self::isOptOut($curlOptionsRaw) : false;
         $savedEnv = null;
         if ($optOutRequested === true && getenv('CURL_IMPERSONATE') !== false) {
             $savedEnv = (string)getenv('CURL_IMPERSONATE');
@@ -556,6 +561,9 @@ final class CurlHttpClient implements HttpClient
 
     /**
      * Internal method that performs the actual cURL request with retry logic.
+     *
+     * @param array<string, mixed> $config
+     * @param list<string> $resolveEntries
      */
     private function doRequest(
         \CurlHandle $ch,
@@ -597,8 +605,11 @@ final class CurlHttpClient implements HttpClient
         $deadline = $config['_deadline'] ?? (microtime(true) + $budget);
 
         $httpHeaders = [];
-        foreach ($config['headers'] as $name => $value) {
-            $httpHeaders[] = sprintf('%s: %s', $name, $value);
+        $configHeaders = $config['headers'];
+        if (is_array($configHeaders) === true) {
+            foreach ($configHeaders as $name => $value) {
+                $httpHeaders[] = sprintf('%s: %s', (string)$name, (string)$value);
+            }
         }
 
         $impersonate = self::getImpersonateTarget();
@@ -609,8 +620,8 @@ final class CurlHttpClient implements HttpClient
             CURLOPT_RETURNTRANSFER  => true,
             CURLOPT_FOLLOWLOCATION  => false,
             CURLOPT_MAXREDIRS       => 0,
-            CURLOPT_TIMEOUT         => $config['timeout'],
-            CURLOPT_CONNECTTIMEOUT  => $config['connect_timeout'] ?? min(10, (int)($config['timeout'] / 2)),
+            CURLOPT_TIMEOUT         => (int)$config['timeout'],
+            CURLOPT_CONNECTTIMEOUT  => (int)($config['connect_timeout'] ?? min(10, (int)((int)$config['timeout'] / 2))),
             CURLOPT_NOSIGNAL        => true,
             CURLOPT_ENCODING        => '',
             CURLOPT_PROTOCOLS       => CURLPROTO_HTTP | CURLPROTO_HTTPS,
@@ -626,36 +637,39 @@ final class CurlHttpClient implements HttpClient
         }
 
         if ($config['if_not_modified_since'] !== null) {
-            $curlOptions[CURLOPT_TIMEVALUE] = $config['if_not_modified_since'];
+            $curlOptions[CURLOPT_TIMEVALUE] = (int)$config['if_not_modified_since'];
             $curlOptions[self::timevalueCriticalOption()] = 1;
             $curlOptions[CURLOPT_TIMECONDITION] = CURL_TIMECOND_IFMODSINCE;
         } elseif (($config['if_modified_since'] ?? null) !== null) {
-            $curlOptions[CURLOPT_TIMEVALUE] = $config['if_modified_since'];
+            $curlOptions[CURLOPT_TIMEVALUE] = (int)$config['if_modified_since'];
             $curlOptions[CURLOPT_TIMECONDITION] = CURL_TIMECOND_IFMODSINCE;
         } elseif (($config['if_unmodified_since'] ?? null) !== null) {
-            $curlOptions[CURLOPT_TIMEVALUE] = $config['if_unmodified_since'];
+            $curlOptions[CURLOPT_TIMEVALUE] = (int)$config['if_unmodified_since'];
             $curlOptions[CURLOPT_TIMECONDITION] = CURL_TIMECOND_IFUNMODSINCE;
         } elseif (($config['last_modified'] ?? null) !== null) {
-            $curlOptions[CURLOPT_TIMEVALUE] = $config['last_modified'];
+            $curlOptions[CURLOPT_TIMEVALUE] = (int)$config['last_modified'];
             $curlOptions[CURLOPT_TIMECONDITION] = CURL_TIMECOND_LASTMOD;
         }
 
         if ($config['max_filesize'] !== null) {
-            $curlOptions[CURLOPT_MAXFILESIZE] = $config['max_filesize'];
+            $curlOptions[CURLOPT_MAXFILESIZE] = (int)$config['max_filesize'];
             $curlOptions[CURLOPT_NOPROGRESS] = false;
             if (defined('CURLOPT_XFERINFOFUNCTION') === true) {
                 $curlOptions[CURLOPT_XFERINFOFUNCTION] = function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($config) {
-                    return ($downloaded > $config['max_filesize']) ? 1 : 0;
+                    return ($downloaded > (int)$config['max_filesize']) ? 1 : 0;
                 };
             } else {
                 $curlOptions[CURLOPT_PROGRESSFUNCTION] = function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($config) {
-                    return ($downloaded > $config['max_filesize']) ? -1 : 0;
+                    return ($downloaded > (int)$config['max_filesize']) ? -1 : 0;
                 };
             }
         }
 
-        foreach ($config['curl_options'] as $option => $value) {
-            $curlOptions[$option] = $value;
+        $configCurlOptions = $config['curl_options'];
+        if (is_array($configCurlOptions) === true) {
+            foreach ($configCurlOptions as $option => $value) {
+                $curlOptions[(int)$option] = $value;
+            }
         }
 
         if ($resolveEntries !== []) {
@@ -666,6 +680,7 @@ final class CurlHttpClient implements HttpClient
             throw new \HttpException('Failed to set cURL options: tried to set an illegal curl option');
         }
 
+        /** @var array<string, list<string>> $responseHeaders */
         $responseHeaders = [];
         $headerCallback = function ($ch, $rawHeader) use (&$responseHeaders) {
             $len = strlen($rawHeader);
@@ -821,11 +836,12 @@ final class CurlHttpClient implements HttpClient
         }
 
         if ($statusCode >= 300 && $statusCode < 400 && $statusCode !== 304) {
-            $location = $responseHeaders['location'][count($responseHeaders['location']) - 1] ?? 'unknown';
+            $locationHeaders = $responseHeaders['location'] ?? [];
+            $location = count($locationHeaders) > 0 ? $locationHeaders[count($locationHeaders) - 1] : 'unknown';
             $originalParsed = self::parseHttpUrl($url);
 
             if ($originalParsed === null || $location === 'unknown') {
-                return new Response($body, $statusCode, $responseHeaders);
+                return new Response((string)$body, $statusCode, $responseHeaders);
             }
 
             if (preg_match('#^[a-z][a-z0-9+\-.]*://#i', $location) === 0) {
@@ -857,7 +873,7 @@ final class CurlHttpClient implements HttpClient
             }
 
             if (self::isSameEffectiveDomain($originalParsed['host'], $redirectParsed['host']) === true) {
-                $redirectCount = $config['_redirect_count'] ?? 0;
+                $redirectCount = (int)($config['_redirect_count'] ?? 0);
                 if ($redirectCount >= 5) {
                     throw new \HttpException(sprintf(
                         'Too many redirects for %s (SSRF protection: redirect loop detected)',
@@ -877,14 +893,25 @@ final class CurlHttpClient implements HttpClient
             ));
         }
 
-        return new Response($body, $statusCode, $responseHeaders);
+        return new Response((string)$body, $statusCode, $responseHeaders);
     }
 }
 
 final class Request
 {
+    /**
+     * @var array<int|string, mixed>
+     */
     private array $get;
+
+    /**
+     * @var array<string, mixed>
+     */
     private array $server;
+
+    /**
+     * @var array<string, mixed>
+     */
     private array $attributes;
 
     private function __construct()
@@ -905,11 +932,15 @@ final class Request
 
     /**
      * Creates a Request from CLI arguments.
+     *
+     * @param list<string> $cliArgs
      */
     public static function fromCli(array $cliArgs): self
     {
         $self = new self();
         $self->get = $cliArgs;
+        $self->server = [];
+        $self->attributes = [];
         return $self;
     }
 
@@ -926,7 +957,8 @@ final class Request
      */
     public function server(string $key, ?string $default = null): ?string
     {
-        return $this->server[$key] ?? $default;
+        $value = $this->server[$key] ?? $default;
+        return is_string($value) === true ? $value : $default;
     }
 
     /**
@@ -949,6 +981,8 @@ final class Request
 
     /**
      * Returns all GET parameters as an array.
+     *
+     * @return array<int|string, mixed>
      */
     public function toArray(): array
     {
@@ -1035,8 +1069,15 @@ final class Response
 
     private string $body;
     private int $code;
+
+    /**
+     * @var array<string, list<string>>
+     */
     private array $headers;
 
+    /**
+     * @param array<string, string|list<string>> $headers
+     */
     public function __construct(string $body = '', int $code = 200, array $headers = [])
     {
         $this->body = $body;
@@ -1051,7 +1092,11 @@ final class Response
             if (is_string($value) === true) {
                 $this->headers[$name][] = $value;
             } elseif (is_array($value) === true) {
-                $this->headers[$name] = $value;
+                foreach ($value as $v) {
+                    if (is_string($v) === true) {
+                        $this->headers[$name][] = $v;
+                    }
+                }
             }
         }
 
@@ -1127,6 +1172,8 @@ final class Response
 
     /**
      * Gets all response headers.
+     *
+     * @return array<string, list<string>>
      */
     public function getHeaders(): array
     {
@@ -1135,6 +1182,8 @@ final class Response
 
     /**
      * Gets a specific header value.
+     *
+     * @return string|list<string>|null
      */
     public function getHeader(string $name, bool $all = false): string|array|null
     {

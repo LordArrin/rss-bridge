@@ -27,19 +27,21 @@ interface FormatInterface
     /**
      * Set the feed metadata (name, uri, icon, etc.).
      *
-     * @param array{name?: string, uri?: string, icon?: string} $feed
+     * @param array<string, mixed> $feed
      */
     public function setFeed(array $feed): void;
 
     /**
      * Get the feed metadata.
+     *
+     * @return array<string, mixed>
      */
     public function getFeed(): array;
 
     /**
      * Set the feed items.
      *
-     * @param FeedItem[]|array[] $items
+     * @param list<FeedItem|array<string, mixed>> $items
      */
     public function setItems(array $items): void;
 

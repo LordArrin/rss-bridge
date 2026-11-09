@@ -47,6 +47,9 @@ final class CnHBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return array{item: array{uid: string, author: string, title: string, uri: string, timestamp: int|null, content: string}, nextUrl: string|null}|null
+     */
     private function fetchComicPage(string $url): ?array
     {
         $htmlString = getContents($url);
@@ -72,6 +75,9 @@ final class CnHBridge extends BridgeAbstract
         ];
     }
 
+    /**
+     * @return array{uid: string, author: string, title: string, uri: string, timestamp: int|null, content: string}|null
+     */
     private function extractComicItem(\Dom\HTMLDocument $dom): ?array
     {
         $comicElement = $dom->querySelector('[class*=ComicImage]');
@@ -84,8 +90,8 @@ final class CnHBridge extends BridgeAbstract
             return null;
         }
 
-        $dateText = trim($authorBlocks[0]->textContent);
-        $author = str_replace('by ', '', trim($authorBlocks[1]->textContent));
+        $dateText = trim((string) $authorBlocks[0]->textContent);
+        $author = str_replace('by ', '', trim((string) $authorBlocks[1]->textContent));
 
         $imgNode = $comicElement->querySelector('img');
         $imageSrc = $imgNode?->getAttribute('src');

@@ -10,7 +10,7 @@ interface ProxyInterface
      * Fetch HTML via this proxy.
      *
      * @param string $url URL to fetch
-     * @param array $options Proxy-specific options (cookies, timeout, wait, use_cache, cache_ttl)
+     * @param array<string, mixed> $options Proxy-specific options (cookies, timeout, wait, use_cache, cache_ttl)
      * @return string HTML content
      */
     public function getHtml(string $url, array $options = []): string;
@@ -18,6 +18,8 @@ interface ProxyInterface
     /**
      * Fetch binary content (images, video, files) via this proxy.
      *
+     * @param string $url URL to fetch
+     * @param array<string, mixed> $options Proxy-specific options
      * @return array{body: string, type: string} ['body' => raw bytes, 'type' => MIME type]
      */
     public function getBinary(string $url, array $options = []): array;

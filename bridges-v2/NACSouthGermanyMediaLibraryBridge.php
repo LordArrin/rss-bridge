@@ -10,8 +10,7 @@ final class NACSouthGermanyMediaLibraryBridge extends BridgeAbstract
 {
     public const NAME = 'NAK Süd Mediathek';
     public const URI = 'https://nak-sued.de';
-    public const DESCRIPTION = 'RSS Feed für die Rundfunkbeiträge der NAK Süd auf Bayern 2 und SWR 1.
-        (Technical note: This bridge might not work on certain server instances because of blacklisted IP ranges to the website.)';
+    public const DESCRIPTION = 'RSS Feed für die Rundfunkbeiträge der NAK Süd auf Bayern 2 und SWR 1';
     public const MAINTAINER = 'R3dError';
     public const CACHE_TIMEOUT = 7200;
 
@@ -117,6 +116,10 @@ final class NACSouthGermanyMediaLibraryBridge extends BridgeAbstract
         return $fullUrl;
     }
 
+    /**
+     * @param array<string, mixed> $baseItem
+     * @return array<string, mixed>
+     */
     private function collectSwr1Item(\Dom\Element $parent, array $baseItem): array
     {
         $item = $baseItem;
@@ -141,6 +144,10 @@ final class NACSouthGermanyMediaLibraryBridge extends BridgeAbstract
         return $item;
     }
 
+    /**
+     * @param array<string, mixed> $baseItem
+     * @return array<string, mixed>
+     */
     private function collectBayern2Item(\Dom\Element $parent, array $baseItem): array
     {
         $item = $baseItem;

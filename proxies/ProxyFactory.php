@@ -66,6 +66,8 @@ final class ProxyFactory
     /**
      * Creates a proxy instance directly by type name.
      * Kept for backward compatibility and direct instantiation.
+     *
+     * @param array<string, mixed> $config
      */
     public static function create(string $type, array $config = []): ProxyInterface
     {

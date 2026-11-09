@@ -30,9 +30,9 @@ final class TheGuardianBridge extends FeedExpander
                 'Opinion' => '/uk/commentisfree/rss',
                 'Lifestyle' => '/uk/lifeandstyle/rss',
                 'Culture' => '/uk/culture/rss',
-                'Sports' => '/uk/sport/rss'
-            ]
-        ]
+                'Sports' => '/uk/sport/rss',
+            ],
+        ],
     ]];
 
     private const JUNK_SELECTORS = [
@@ -184,6 +184,9 @@ final class TheGuardianBridge extends FeedExpander
         return $result;
     }
 
+    /**
+     * @return list<string>
+     */
     private function extractTags(\Dom\HTMLDocument $articlePage): array
     {
         foreach ($articlePage->querySelectorAll('meta') as $meta) {

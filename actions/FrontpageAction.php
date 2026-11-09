@@ -94,6 +94,9 @@ final class FrontpageAction implements ActionInterface
         return $response;
     }
 
+    /**
+     * @param array{name: string, uri: string, description: string, parameters: array<string, array<string, mixed>>, domain: string, short_name: string, maintainer: string, cache_timeout: int} $meta
+     */
     public static function renderFromMetadata(
         array $meta,
         string $fullClassName,
@@ -195,6 +198,9 @@ final class FrontpageAction implements ActionInterface
         return $card;
     }
 
+    /**
+     * @param array<string, mixed> $parameters
+     */
     private static function renderForm(
         string $bridgeClassName,
         string $contextName,
@@ -299,6 +305,9 @@ final class FrontpageAction implements ActionInterface
         return $form . "</form>\n\n";
     }
 
+    /**
+     * @param array<string, mixed> $parameter
+     */
     public static function getTextInput(array $parameter, string $id, string $name): string
     {
         $pattern = $parameter['pattern'] ?? null;
@@ -317,6 +326,9 @@ final class FrontpageAction implements ActionInterface
         ]);
     }
 
+    /**
+     * @param array<string, mixed> $parameter
+     */
     public static function getNumberInput(array $parameter, string $id, string $name): string
     {
         $pattern = $parameter['pattern'] ?? null;
@@ -335,6 +347,9 @@ final class FrontpageAction implements ActionInterface
         ]);
     }
 
+    /**
+     * @param array<string, mixed> $parameter
+     */
     public static function getCheckboxInput(array $parameter, string $id, string $name): string
     {
         return html_input([
@@ -345,6 +360,9 @@ final class FrontpageAction implements ActionInterface
         ]);
     }
 
+    /**
+     * @param array<string, mixed> $parameter
+     */
     public static function getListInput(array $parameter, string $id, string $name): string
     {
         $list = sprintf('<select id="%s" name="%s">', htmlspecialchars($id), htmlspecialchars($name)) . "\n";

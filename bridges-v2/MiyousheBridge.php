@@ -142,6 +142,9 @@ final class MiyousheBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     private function getNewsList(string $gids, string $type, int $pageSize, string $lastId): array
     {
         $params = [
@@ -190,6 +193,10 @@ final class MiyousheBridge extends BridgeAbstract
         return $list;
     }
 
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>|null
+     */
     private function getPostContent(array $row, string $defaultGid): ?array
     {
         $post = $row['post'] ?? [];
@@ -290,6 +297,9 @@ final class MiyousheBridge extends BridgeAbstract
         return $feedItem;
     }
 
+    /**
+     * @param list<array{url: string}> $coverList
+     */
     private function renderOfficialDescription(bool $hasCover, array $coverList, string $content): string
     {
         $parts = [];
@@ -297,11 +307,7 @@ final class MiyousheBridge extends BridgeAbstract
         // Add cover images if present
         if ($hasCover === true && count($coverList) > 0) {
             foreach ($coverList as $cover) {
-                if (is_array($cover) === false || isset($cover['url']) === false) {
-                    continue;
-                }
-
-                $url = (string)$cover['url'];
+                $url = $cover['url'];
                 if ($url !== '') {
                     $parts[] = '<img src="' . e($url) . '" loading="lazy" />';
                     $parts[] = '<br />';

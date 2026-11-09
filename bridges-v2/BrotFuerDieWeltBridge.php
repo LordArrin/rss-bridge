@@ -59,6 +59,9 @@ final class BrotFuerDieWeltBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param list<\Dom\Element> $articles
+     */
     private function collectBlogArticles(array $articles): void
     {
         foreach ($articles as $article) {
@@ -141,6 +144,9 @@ final class BrotFuerDieWeltBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param list<\Dom\Element> $articles
+     */
     private function collectPressArticles(array $articles): void
     {
         foreach ($articles as $i => $article) {

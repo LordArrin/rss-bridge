@@ -68,6 +68,9 @@ final class VkVideoBridge extends BridgeAbstract
         return $this->feedName ?? parent::getName();
     }
 
+    /**
+     * @return array<string, string>|null
+     */
     public function detectParameters(string $url): ?array
     {
         if (str_contains($url, '/playlist/') === true) {
@@ -104,6 +107,10 @@ final class VkVideoBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $gallery
+     * @return list<array<string, mixed>>
+     */
     private function collectChannelItems(array $gallery): array
     {
         $skipDescription = (bool)$this->getInput('skip_description');
@@ -122,11 +129,13 @@ final class VkVideoBridge extends BridgeAbstract
             return $tsB <=> $tsA;
         });
 
-        // ИСПРАВЛЕНИЕ: usort уже перестраивает ключи в последовательный список (0, 1, 2...),
-        // поэтому array_values здесь избыточен.
         return $items;
     }
 
+    /**
+     * @param array<string, mixed> $gallery
+     * @return list<array<string, mixed>>
+     */
     private function collectPlaylistItems(array $gallery, string $html): array
     {
         $skipDescription = (bool)$this->getInput('skip_description');
@@ -150,6 +159,10 @@ final class VkVideoBridge extends BridgeAbstract
         return array_values($items);
     }
 
+    /**
+     * @param array<string, mixed> $video
+     * @return array<string, mixed>
+     */
     private function buildItem(array $video, string $uri, bool $skipDescription): array
     {
         $rawTitle = $video['name'] ?? 'Untitled';
@@ -254,6 +267,9 @@ final class VkVideoBridge extends BridgeAbstract
         return $result;
     }
 
+    /**
+     * @return list<string>
+     */
     private function extractHashtags(string $text): array
     {
         if (preg_match_all('/#([\p{L}\p{N}_]+)/u', $text, $matches) === 0) {
@@ -291,6 +307,9 @@ final class VkVideoBridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     private function extractVideoGallery(string $html): ?array
     {
         if (preg_match_all('#<script type="application/ld\+json">(.*?)</script>#s', $html, $matches) === 0) {

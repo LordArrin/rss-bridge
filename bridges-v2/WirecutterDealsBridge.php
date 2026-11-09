@@ -22,9 +22,9 @@ final class WirecutterDealsBridge extends BridgeAbstract
         'image' => 'display: block; max-width: 500px; height: auto; margin: 10px 0;',
     ];
 
-    public function collectData()
+    public function collectData(): void
     {
-        $html = getContents($this->getURI());
+        $html = (string) getContents($this->getURI());
 
         libxml_use_internal_errors(true);
         $dom = \Dom\HTMLDocument::createFromString($html);
@@ -87,6 +87,9 @@ final class WirecutterDealsBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $node
+     */
     private function jsonToHtml(array $node): string
     {
         $type = $node['type'] ?? '';

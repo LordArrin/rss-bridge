@@ -66,6 +66,9 @@ final class UberEngineeringBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     private static function extractArticleFeedFromHtml(string $html, string $path): array
     {
         $scriptId = '__LOCAL_REDUX_STATE_Newsroom_Article Feed Store_' . rawurlencode($path) . '__';
@@ -97,19 +100,19 @@ final class UberEngineeringBridge extends BridgeAbstract
             return '';
         }
 
-        if (strpos($url, 'https://') === 0 || strpos($url, 'http://') === 0) {
+        if (str_starts_with($url, 'https://') === true || str_starts_with($url, 'http://') === true) {
             return $url;
         }
 
-        if (strpos($url, '//') === 0) {
+        if (str_starts_with($url, '//') === true) {
             return 'https:' . $url;
         }
 
-        if (strpos($url, 'www.') === 0) {
+        if (str_starts_with($url, 'www.') === true) {
             return 'https://' . $url;
         }
 
-        if (strpos($url, '/') === 0) {
+        if (str_starts_with($url, '/') === true) {
             return 'https://www.uber.com' . $url;
         }
 

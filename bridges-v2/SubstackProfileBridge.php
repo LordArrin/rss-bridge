@@ -72,6 +72,10 @@ final class SubstackProfileBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $element
+     * @return array<string, mixed>
+     */
     private function processAttachment(array $element): array
     {
         $item = [];
@@ -170,6 +174,9 @@ final class SubstackProfileBridge extends BridgeAbstract
         return $item;
     }
 
+    /**
+     * @param array<string, mixed> $element
+     */
     private function buildMediaHtml(array $element): string
     {
         $html = '';
@@ -232,6 +239,9 @@ final class SubstackProfileBridge extends BridgeAbstract
         return '<hr><h4>Full text:</h4><div>' . $cleanHtml . '</div>';
     }
 
+    /**
+     * @param array<string, mixed> $attachment
+     */
     private function quoteAttachment(array $attachment): string
     {
         $uri = e((string) ($attachment['uri'] ?? '#'));
@@ -250,6 +260,9 @@ final class SubstackProfileBridge extends BridgeAbstract
         return $html;
     }
 
+    /**
+     * @param array<string, mixed> $json
+     */
     private function processBodyJson(array $json): string
     {
         $html = '';

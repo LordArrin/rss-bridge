@@ -35,6 +35,9 @@ final class SQLiteCache extends AbstractCache
     private readonly \SQLite3 $db;
     private readonly int $busyTimeoutMs;
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(Logger $logger, array $config)
     {
         $this->logger = $logger;

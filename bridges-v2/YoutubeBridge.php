@@ -92,6 +92,11 @@ final class YoutubeBridge extends BridgeAbstract
 
     public function collectData(): void
     {
+        if ($this->cache === null) {
+            $this->collectDataInternal();
+            return;
+        }
+
         $cacheKey = 'rate_limit';
         if ($this->cache->get($cacheKey) !== null) {
             throwRateLimitException();
@@ -218,7 +223,9 @@ final class YoutubeBridge extends BridgeAbstract
                     $jsonData = $jsonData->contents->twoColumnBrowseResultsRenderer->tabs[1] ?? null;
                     if ($jsonData !== null && isset($jsonData->tabRenderer->content->richGridRenderer->contents) === true) {
                         $jsonData = $jsonData->tabRenderer->content->richGridRenderer->contents;
-                        $this->fetchItemsFromJsonData($jsonData);
+                        if (is_array($jsonData) === true) {
+                            $this->fetchItemsFromJsonData($jsonData);
+                        }
                     } else {
                         throwServerException('Unable to get data from YouTube');
                     }
@@ -299,6 +306,9 @@ final class YoutubeBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $item
+     */
     private function getItemTimestamp(array $item): int
     {
         $timestamp = $item['timestamp'] ?? null;
@@ -466,6 +476,9 @@ final class YoutubeBridge extends BridgeAbstract
         return urljoin($baseUrl, $rawUrl);
     }
 
+    /**
+     * @return list<array{pos: int, len: int, url: string}>
+     */
     private function ytBridgeGetVideoDescriptionEnhancements(
         object $videoSecondaryInfo,
         string $descriptionContent,
@@ -473,7 +486,7 @@ final class YoutubeBridge extends BridgeAbstract
         string $whitespaceChars
     ): array {
         $commandRuns = $videoSecondaryInfo->attributedDescription->commandRuns ?? [];
-        if (count($commandRuns) <= 0) {
+        if (is_array($commandRuns) === false || count($commandRuns) <= 0) {
             return [];
         }
 
@@ -668,6 +681,10 @@ final class YoutubeBridge extends BridgeAbstract
 
     private function fetch(string $url, bool $cache = false): string
     {
+        if ($this->cache === null) {
+            $cache = false;
+        }
+
         $cacheKey = 'yt_fetch_' . md5($url);
         $ttl = 86400 * 3;
 
@@ -719,6 +736,9 @@ final class YoutubeBridge extends BridgeAbstract
         return $data;
     }
 
+    /**
+     * @param list<object> $jsonData
+     */
     private function fetchItemsFromJsonData(array $jsonData): void
     {
         $durationMinInput = $this->getInput('duration_min');

@@ -25,24 +25,38 @@ abstract class BridgeAbstract
         'title'         => 'Maximum number of items to return',
     ];
 
-    protected $items = [];
-    protected $inputs = [];
-    protected $queriedContext = null;
-    private $configuration = [];
+    /**
+     * @var list<array<string, mixed>>
+     */
+    protected array $items = [];
 
-    protected $cache;
-    protected $logger;
+    /**
+     * @var array<string, array<string, array{value: mixed}>>
+     */
+    protected array $inputs = [];
+    protected ?string $queriedContext = null;
+
+    /**
+     * @var array<string, mixed>
+     */
+    private array $configuration = [];
+
+    protected ?CacheInterface $cache = null;
+    protected ?\RSSBridge\Logger\Logger $logger = null;
     protected ?Response $rawOutput = null;
 
-    public function __construct($cache = null, $logger = null)
+    public function __construct(?CacheInterface $cache = null, ?\RSSBridge\Logger\Logger $logger = null)
     {
         $this->cache = $cache;
         $this->logger = $logger;
     }
 
-    abstract public function collectData();
+    abstract public function collectData(): void;
 
-    public function getFeed()
+    /**
+     * @return array{name: string, uri: string, icon: string}
+     */
+    public function getFeed(): array
     {
         return [
             'name'          => $this->getName(),
@@ -51,17 +65,17 @@ abstract class BridgeAbstract
         ];
     }
 
-    public function getName()
+    public function getName(): string
     {
         return static::NAME ?? $this->getShortName();
     }
 
-    public function getURI()
+    public function getURI(): string
     {
         return static::URI ?? 'https://github.com/LordArrin/rss-bridge/';
     }
 
-    public function getIcon()
+    public function getIcon(): string
     {
         if (is_string(static::URI) === true && static::URI !== '') {
             return rtrim(static::URI, '/') . '/favicon.ico';
@@ -69,37 +83,43 @@ abstract class BridgeAbstract
         return '';
     }
 
-    public function getOption($name)
+    public function getOption(string $name): mixed
     {
         return $this->configuration[$name] ?? null;
     }
 
-    public function getDescription()
+    public function getDescription(): string
     {
         return static::DESCRIPTION;
     }
 
-    public function getMaintainer()
+    public function getMaintainer(): string
     {
         return static::MAINTAINER;
     }
 
-    public function getParameters()
+    /**
+     * @return array<string, array<string, array<string, mixed>>>
+     */
+    public function getParameters(): array
     {
         return static::PARAMETERS;
     }
 
-    public function getItems()
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function getItems(): array
     {
         return $this->items;
     }
 
-    public function getCacheTimeout()
+    public function getCacheTimeout(): int
     {
         return static::CACHE_TIMEOUT;
     }
 
-    public function loadConfiguration()
+    public function loadConfiguration(): void
     {
         foreach (static::CONFIGURATION as $optionName => $optionValue) {
             $section = $this->getShortName();
@@ -118,10 +138,13 @@ abstract class BridgeAbstract
         }
     }
 
-    public function setInput(array $input)
+    /**
+     * @param array<string, mixed> $input
+     */
+    public function setInput(array $input): void
     {
         $contextName = $input['context'] ?? null;
-        if ($contextName !== null) {
+        if ($contextName !== null && is_string($contextName) === true) {
             $this->queriedContext = $contextName;
             unset($input['context']);
         }
@@ -144,19 +167,28 @@ abstract class BridgeAbstract
 
         if ($this->queriedContext === null) {
             $queriedContext = $validator->getQueriedContext($input, $parameters);
-            $this->queriedContext = $queriedContext;
+
+            if ($queriedContext === false) {
+                throw new \Exception('Mixed context parameters');
+            }
+
+            // Исправление: разрешаем как string, так и int (например, 0 для контекста по умолчанию)
+            if (is_string($queriedContext) === true || is_int($queriedContext) === true) {
+                $this->queriedContext = (string) $queriedContext;
+            }
         }
 
         if ($this->queriedContext === null) {
             throwClientException('Required parameter(s) missing');
-        } elseif ($this->queriedContext === false) {
-            throw new \Exception('Mixed context parameters');
         }
 
         $this->setInputWithContext($input, $this->queriedContext);
     }
 
-    private function setInputWithContext(array $input, $queriedContext)
+    /**
+     * @param array<string, mixed> $input
+     */
+    private function setInputWithContext(array $input, string $queriedContext): void
     {
         $parameters = $this->getParameters();
 
@@ -235,7 +267,7 @@ abstract class BridgeAbstract
         }
     }
 
-    protected function getInput($input)
+    protected function getInput(string $input): mixed
     {
         if ($this->queriedContext === null) {
             return null;
@@ -243,7 +275,7 @@ abstract class BridgeAbstract
         return $this->inputs[$this->queriedContext][$input]['value'] ?? null;
     }
 
-    public function getKey($input)
+    public function getKey(string $input): ?string
     {
         if ($this->queriedContext === null) {
             return null;
@@ -260,7 +292,11 @@ abstract class BridgeAbstract
         }
 
         $needle = (string)$this->inputs[$this->queriedContext][$input]['value'];
-        foreach ($contexts[$contextName][$input]['values'] as $first_level_key => $first_level_value) {
+        $values = $contexts[$contextName][$input]['values'] ?? [];
+        if (is_array($values) === false) {
+            return null;
+        }
+        foreach ($values as $first_level_key => $first_level_value) {
             if (is_array($first_level_value) === false && $needle === (string)$first_level_value) {
                 return (string)$first_level_key;
             } elseif (is_array($first_level_value) === true) {
@@ -274,17 +310,23 @@ abstract class BridgeAbstract
         return null;
     }
 
-    protected function loadCacheValue($key, $default = null)
+    protected function loadCacheValue(string $key, mixed $default = null): mixed
     {
+        if ($this->cache === null) {
+            return $default;
+        }
         return $this->cache->get($this->getShortName() . '_' . $key, $default);
     }
 
-    protected function saveCacheValue($key, $value, $ttl = 86400)
+    protected function saveCacheValue(string $key, mixed $value, int $ttl = 86400): void
     {
+        if ($this->cache === null) {
+            return;
+        }
         $this->cache->set($this->getShortName() . '_' . $key, $value, $ttl);
     }
 
-    public function getShortName()
+    public function getShortName(): string
     {
         return (new \ReflectionClass($this))->getShortName();
     }

@@ -123,6 +123,9 @@ final class FimfictionBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array{cookies: list<array{name: string, value: string, domain: string}>, cache_ttl: int} $options
+     */
     private function fetchWithRetry(string $url, array $options, string $context = ''): \Dom\HTMLDocument
     {
         $lastException = null;
@@ -174,6 +177,9 @@ final class FimfictionBridge extends BridgeAbstract
         throw $lastException;
     }
 
+    /**
+     * @return array{cookies: list<array{name: string, value: string, domain: string}>, cache_ttl: int}
+     */
     private function buildProxyOptions(): array
     {
         $options = [
@@ -255,6 +261,9 @@ final class FimfictionBridge extends BridgeAbstract
         return $img !== null ? $img->getAttribute('src') : null;
     }
 
+    /**
+     * @return list<array{title: string, uri: string, timestamp: int}>
+     */
     private function extractChaptersList(\Dom\HTMLDocument $dom, int $limit): array
     {
         $chapterList = $dom->querySelector('ul.chapters');
@@ -316,6 +325,9 @@ final class FimfictionBridge extends BridgeAbstract
         return time();
     }
 
+    /**
+     * @param array{cookies: list<array{name: string, value: string, domain: string}>, cache_ttl: int} $options
+     */
     private function buildFullContent(string $uri, array $options): string
     {
         $options['cache_ttl'] = 604800;

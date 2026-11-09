@@ -70,6 +70,9 @@ final class BoostyBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     private function fetchPosts(): array
     {
         $limitInput = (int) $this->getInput('limit');
@@ -89,6 +92,10 @@ final class BoostyBridge extends BridgeAbstract
         return $data['data'];
     }
 
+    /**
+     * @param array<string, mixed> $p
+     * @return array<string, mixed>|null
+     */
     private function buildItem(array $p): ?array
     {
         if (($p['isPublished'] ?? false) === false) {
@@ -118,6 +125,9 @@ final class BoostyBridge extends BridgeAbstract
         return $this->meta($p, $title, $content);
     }
 
+    /**
+     * @param list<array<string, mixed>> $blocks
+     */
     private function extractFirstSentence(array $blocks): ?string
     {
         foreach ($blocks as $block) {
@@ -154,6 +164,10 @@ final class BoostyBridge extends BridgeAbstract
         return $firstEnd;
     }
 
+    /**
+     * @param list<array<string, mixed>> $blocks
+     * @return list<array<string, mixed>>
+     */
     private function removeFirstSentenceFromBlocks(array $blocks): array
     {
         foreach ($blocks as $index => $block) {
@@ -227,6 +241,9 @@ final class BoostyBridge extends BridgeAbstract
         return array_values($blocks);
     }
 
+    /**
+     * @param array<string, mixed> $p
+     */
     private function isPaid(array $p): bool
     {
         return ($p['subscriptionLevel'] ?? null) !== null
@@ -247,6 +264,9 @@ final class BoostyBridge extends BridgeAbstract
         );
     }
 
+    /**
+     * @param array<string, mixed> $p
+     */
     private function renderPaywall(array $p): string
     {
         $h = '<div' . $this->style('paywall') . '><p' . $this->style('pt') . '>This post requires payment</p>';
@@ -275,6 +295,9 @@ final class BoostyBridge extends BridgeAbstract
         return $h . '</div>';
     }
 
+    /**
+     * @param array<string, mixed> $p
+     */
     private function renderTeaser(array $p): string
     {
         $out = '';
@@ -305,6 +328,10 @@ final class BoostyBridge extends BridgeAbstract
         return $out;
     }
 
+    /**
+     * @param array<string, mixed> $p
+     * @return array<string, mixed>
+     */
     private function meta(array $p, string $title, string $content): array
     {
         $item = [
@@ -321,6 +348,9 @@ final class BoostyBridge extends BridgeAbstract
         return $item;
     }
 
+    /**
+     * @param array<string, mixed> $p
+     */
     private function renderFree(array $p): string
     {
         $out = '';
@@ -370,6 +400,9 @@ final class BoostyBridge extends BridgeAbstract
         return $out;
     }
 
+    /**
+     * @param array<string, mixed> $b
+     */
     private function renderList(array $b): string
     {
         $style = $b['style'] ?? 'unordered';
@@ -389,6 +422,9 @@ final class BoostyBridge extends BridgeAbstract
         return '<' . $tag . $this->style($cssKey) . '>' . $inner . '</' . $tag . '>';
     }
 
+    /**
+     * @param list<array<string, mixed>> $items
+     */
     private function renderListItems(array $items, string $tag, string $cssKey): string
     {
         $h = '';
@@ -406,6 +442,9 @@ final class BoostyBridge extends BridgeAbstract
         return $h;
     }
 
+    /**
+     * @param array<string, mixed> $item
+     */
     private function listItemContent(array $item): string
     {
         $h = '';
@@ -428,6 +467,9 @@ final class BoostyBridge extends BridgeAbstract
         return $h;
     }
 
+    /**
+     * @param array<string, mixed> $b
+     */
     private function renderLink(array $b): string
     {
         $url = $b['url'] ?? '';
@@ -441,6 +483,9 @@ final class BoostyBridge extends BridgeAbstract
         return '<a href="' . e($url) . '">' . $title . '</a>';
     }
 
+    /**
+     * @param array<string, mixed> $b
+     */
     private function renderMedia(array $b): string
     {
         $type = $b['type'] ?? '';
@@ -460,6 +505,9 @@ final class BoostyBridge extends BridgeAbstract
         return '<p><a href="' . $url . '">' . $title . '</a></p>';
     }
 
+    /**
+     * @param array<string, mixed> $poll
+     */
     private function renderPoll(array $poll): string
     {
         $h = '<div' . $this->style('poll') . '>';
@@ -509,6 +557,9 @@ final class BoostyBridge extends BridgeAbstract
         return $h . '</div>';
     }
 
+    /**
+     * @param array<string, mixed> $option
+     */
     private function calculateFraction(array $option, int $total): float
     {
         if (isset($option['fraction']) === true) {
@@ -518,7 +569,11 @@ final class BoostyBridge extends BridgeAbstract
         return $total > 0 ? ($counter / $total) * 100.0 : 0.0;
     }
 
-    private function price(array $cp, $fb = null): ?string
+    /**
+     * @param array<string, string> $cp
+     * @param string|int|null $fb
+     */
+    private function price(array $cp, mixed $fb = null): ?string
     {
         return match (true) {
             isset($cp['RUB']) === true => $cp['RUB'] . ' RUB',

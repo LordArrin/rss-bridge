@@ -147,6 +147,9 @@ final class AppleMusicBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @return list<object>
+     */
     private function getJson(): array
     {
         $limitInput = $this->getInput('limit');
@@ -181,6 +184,9 @@ final class AppleMusicBridge extends BridgeAbstract
         return $json->results;
     }
 
+    /**
+     * @param list<object> $json
+     */
     private function getArtist(array $json): ?object
     {
         foreach ($json as $obj) {

@@ -75,6 +75,9 @@ final class DanbooruBridge extends BridgeAbstract
         return '';
     }
 
+    /**
+     * @return list<string>
+     */
     private function buildHeaders(): array
     {
         if ($this->login !== '' && $this->apiKey !== '') {
@@ -148,6 +151,10 @@ final class DanbooruBridge extends BridgeAbstract
         return preg_replace('/[,\s]+/', ' ', $query) ?? $query;
     }
 
+    /**
+     * @param array<string, mixed> $post
+     * @return list<string>
+     */
     private function pickVariant(array $post): array
     {
         $byType = [];
@@ -193,6 +200,10 @@ final class DanbooruBridge extends BridgeAbstract
         );
     }
 
+    /**
+     * @param array<string, mixed> $post
+     * @return array<string, mixed>|null
+     */
     private function getItemFromElement(array $post): ?array
     {
         $id = $post['id'] ?? null;

@@ -21,34 +21,34 @@ final class SteamAppNewsBridge extends BridgeAbstract
                 'title' => 'App ID (only digits). Find your App ID with steamdb.info',
                 'type' => 'number',
                 'exampleValue' => '730',
-                'required' => true
+                'required' => true,
             ],
             'maxlength' => [
                 'name' => 'Max Length',
                 'title' => 'Maximum length for the content to return, 0 for full content',
                 'type' => 'number',
-                'defaultValue' => 0
+                'defaultValue' => 0,
             ],
             'count' => [
                 'name' => 'Count',
                 'title' => '# of posts to retrieve (default 20)',
                 'type' => 'number',
-                'defaultValue' => 20
+                'defaultValue' => 20,
             ],
             'tags' => [
                 'name' => 'Tag Filter',
                 'title' => 'Comma-separated list of tags to filter by',
                 'type' => 'text',
-                'exampleValue' => 'patchnotes'
-            ]
-        ]
+                'exampleValue' => 'patchnotes',
+            ],
+        ],
     ];
 
     private const KNOWN_TAGS = [
         'h1', 'h2', 'h3', 'p', 'b', 'i', 'u', 'strike', 'spoiler',
         'quote', 'code', 'noparse', 'c', 'hr', 'img', 'url',
         'dynamiclink', 'previewyoutube', 'table', 'tr', 'th', 'td',
-        'list', 'olist'
+        'list', 'olist',
     ];
 
     public function collectData(): void
@@ -84,6 +84,10 @@ final class SteamAppNewsBridge extends BridgeAbstract
         }
     }
 
+    /**
+     * @param array<string, mixed> $json_item
+     * @return array{uri: string, title: string, timestamp: int, author: string, content: string, uid: string}
+     */
     private function collectArticle(array $json_item): array
     {
         $item = [];
