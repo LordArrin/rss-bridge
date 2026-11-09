@@ -23,27 +23,27 @@
 <h4>Configuration</h4>
 <ol>
     <li>
-        <span>Create a MangaDex account if you don't have one: <a href="https://mangadex.org/register" target="_blank" rel="noopener">https://mangadex.org/register</a></span>
+        Create a MangaDex account if you don't have one: <a href="https://mangadex.org/register" target="_blank" rel="noopener">https://mangadex.org/register</a>
     </li>
     <li>
-        <span>Log in and go to your account settings: <a href="https://mangadex.org/settings" target="_blank" rel="noopener">https://mangadex.org/settings</a></span>
+        Log in and go to your account settings: <a href="https://mangadex.org/settings" target="_blank" rel="noopener">https://mangadex.org/settings</a>
     </li>
     <li>
-        <span>Scroll down to the <strong>API Clients</strong> section and click <strong>Create</strong></span>
+        Scroll down to the <strong>API Clients</strong> section and click <strong>Create</strong>
     </li>
     <li>
-        <span>Fill in the form:</span>
+        Fill in the form:
         <ul>
             <li><strong>Name:</strong> Any descriptive name (e.g., "RSS Bridge")</li>
             <li><strong>Type:</strong> Select <strong>Personal Client</strong></li>
         </ul>
-        <span>After approval (usually automatic), your client will appear in the list.</span>
+        After approval (usually automatic), your client will appear in the list.
     </li>
     <li>
-        <span>Copy your <strong>Client ID</strong> (looks like <code>personal-client-xxxxx-xxxxx-xxxxx-xxxxx</code>) and click <strong>Get Secret</strong> to reveal and copy your <strong>Client Secret</strong>.</span>
+        Copy your <strong>Client ID</strong> (looks like <code>personal-client-xxxxx-xxxxx-xxxxx-xxxxx</code>) and click <strong>Get Secret</strong> to reveal and copy your <strong>Client Secret</strong>.
     </li>
     <li>
-        <span>Add your credentials to your <code>/config/.bridges</code> file in the <code>[MangaDexBridge]</code> section:</span>
+        Add your credentials to your <code>/config/.bridges</code> file in the <code>[MangaDexBridge]</code> section:
         <div class="code-block">
             <button type="button" class="copy-btn" aria-label="Copy code">
                 <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
@@ -60,7 +60,7 @@ log_level = "info"</code></pre>
         </div>
     </li>
     <li>
-        <span>Restart your RSS-Bridge container to apply the configuration:</span>
+        Restart your RSS-Bridge container to apply the configuration:
         <div class="code-block">
             <button type="button" class="copy-btn" aria-label="Copy code">
                 <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
@@ -98,13 +98,7 @@ log_level = "info"</code></pre>
 <ul>
     <li><strong>Item Limit</strong> — Maximum number of chapters to fetch (default: 10)</li>
     <li><strong>Chapter Languages</strong> — Comma-separated language codes (e.g., <code>en,jp</code>). Leave empty for all languages.</li>
-    <li><strong>Fetch chapter page images</strong> — Whether to include chapter images in feed content:
-        <ul>
-            <li><code>None</code> — No images (fastest, least bandwidth)</li>
-            <li><code>Data Saver</code> — Compressed images (fallback to full quality if unavailable)</li>
-            <li><code>Full Quality</code> — Original high-resolution images (most bandwidth)</li>
-        </ul>
-    </li>
+    <li><strong>Fetch chapter page images</strong> — Whether to include chapter images in feed content. Options: <code>None</code> (no images, fastest), <code>Data Saver</code> (compressed images with fallback to full quality), or <code>Full Quality</code> (original high-resolution images)</li>
 </ul>
 
 <p><strong>Title Chapters context:</strong></p>
