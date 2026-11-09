@@ -62,12 +62,22 @@ final class BridgeMetadataCache
             // Restore broken bridges list to the loader so FrontpageAction can access it
             if (isset($cached['broken_bridges']) === true && is_array($cached['broken_bridges']) === true) {
                 foreach ($cached['broken_bridges'] as $bridgeName => $errorInfo) {
-                    if (is_string($bridgeName) === true && is_array($errorInfo) === true) {
+                    if (
+                        is_string($bridgeName) === true
+                        && is_array($errorInfo) === true
+                        && isset($errorInfo['message'], $errorInfo['file'], $errorInfo['line'], $errorInfo['class']) === true
+                        && is_string($errorInfo['message']) === true
+                        && is_string($errorInfo['file']) === true
+                        && is_int($errorInfo['line']) === true
+                        && is_string($errorInfo['class']) === true
+                    ) {
                         $loader->restoreBrokenBridge($bridgeName, $errorInfo);
                     }
                 }
             }
-            return $cached['metadata'];
+            /** @var array<string, array{name: string, uri: string, description: string, parameters: array<string, array<string, mixed>>, domain: string, short_name: string, maintainer: string, cache_timeout: int}> $metadata */
+            $metadata = $cached['metadata'];
+            return $metadata;
         }
 
         $result = $this->buildMetadata($factory, $loader);

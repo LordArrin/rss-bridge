@@ -118,7 +118,7 @@ final class GettrBridge extends BridgeAbstract
         }
     }
 
-    private function createContent(\stdClass $post): string
+    private function createContent(object $post): string
     {
         $content = '';
 
@@ -182,7 +182,7 @@ final class GettrBridge extends BridgeAbstract
         return 'https://gettr.com/favicon.ico';
     }
 
-    private function processMetadata(\stdClass $post): void
+    private function processMetadata(object $post): void
     {
         $textLanguage = (string) ($post->txt_lang ?? 'en');
         $replies = (int) ($post->cm ?? 0);

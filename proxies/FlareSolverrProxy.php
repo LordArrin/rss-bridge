@@ -6,8 +6,8 @@ namespace RSSBridge\Proxies;
 
 final class FlareSolverrProxy extends ProxyAbstract
 {
-    private ?string $apiUrl = null;
-    private ?string $sessionName = null;
+    private string $apiUrl = '';
+    private string $sessionName = '';
 
     private const SESSION_FLAG_PREFIX = 'flaresolverr_session_created_';
     private const SESSION_FLAG_TTL = 86400;
@@ -79,7 +79,7 @@ final class FlareSolverrProxy extends ProxyAbstract
             'wait' => $wait,
         ];
 
-        if ($this->sessionName !== null && $this->sessionName !== '') {
+        if ($this->sessionName !== '') {
             $payload['session'] = $this->sessionName;
             $this->ensureSession($domain, $cookies);
         }
@@ -109,7 +109,7 @@ final class FlareSolverrProxy extends ProxyAbstract
 
                 if (str_contains($e->getMessage(), 'session') === true || str_contains($e->getMessage(), 'Session') === true) {
                     $this->log('warning', "FlareSolverr session error on attempt {$attempt}, invalidating cache and retrying");
-                    if ($this->cache !== null && $this->sessionName !== null) {
+                    if ($this->cache !== null && $this->sessionName !== '') {
                         $cacheKey = self::SESSION_FLAG_PREFIX . md5($this->sessionName);
                         $this->cache->delete($cacheKey);
                     }
@@ -151,7 +151,7 @@ final class FlareSolverrProxy extends ProxyAbstract
      */
     private function ensureSession(string $domain, array $cookies): void
     {
-        if ($this->sessionName === null || $this->sessionName === '') {
+        if ($this->sessionName === '') {
             return;
         }
 
@@ -287,7 +287,7 @@ final class FlareSolverrProxy extends ProxyAbstract
             'wait' => (int)($options['wait'] ?? 5000),
         ];
 
-        if ($this->sessionName !== null && $this->sessionName !== '') {
+        if ($this->sessionName !== '') {
             $payload['session'] = $this->sessionName;
         }
 
@@ -335,7 +335,7 @@ final class FlareSolverrProxy extends ProxyAbstract
 
                 if (str_contains($e->getMessage(), 'session') === true || str_contains($e->getMessage(), 'Session') === true) {
                     $this->log('warning', "FlareSolverr session error on attempt {$attempt} for binary, invalidating cache and retrying");
-                    if ($this->cache !== null && $this->sessionName !== null) {
+                    if ($this->cache !== null && $this->sessionName !== '') {
                         $cacheKey = self::SESSION_FLAG_PREFIX . md5($this->sessionName);
                         $this->cache->delete($cacheKey);
                     }

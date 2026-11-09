@@ -224,7 +224,8 @@ final class YoutubeBridge extends BridgeAbstract
                     if ($jsonData !== null && isset($jsonData->tabRenderer->content->richGridRenderer->contents) === true) {
                         $jsonData = $jsonData->tabRenderer->content->richGridRenderer->contents;
                         if (is_array($jsonData) === true) {
-                            $this->fetchItemsFromJsonData($jsonData);
+                            $safeData = array_values(array_filter($jsonData, fn($v) => is_object($v)));
+                            $this->fetchItemsFromJsonData($safeData);
                         }
                     } else {
                         throwServerException('Unable to get data from YouTube');
@@ -265,7 +266,8 @@ final class YoutubeBridge extends BridgeAbstract
 
             if ($item_count > 15 || $filterByDuration === true) {
                 if (is_array($jsonData) === true) {
-                    $this->fetchItemsFromJsonData($jsonData);
+                    $safeData = array_values(array_filter($jsonData, fn($v) => is_object($v)));
+                    $this->fetchItemsFromJsonData($safeData);
                 }
             } else {
                 $xmlString = $this->fetch($url_feed);
@@ -293,7 +295,8 @@ final class YoutubeBridge extends BridgeAbstract
                 $jsonData = $jsonData->contents->twoColumnSearchResultsRenderer->primaryContents;
                 $jsonData = $jsonData->sectionListRenderer->contents[0]->itemSectionRenderer->contents ?? [];
                 if (is_array($jsonData) === true) {
-                    $this->fetchItemsFromJsonData($jsonData);
+                    $safeData = array_values(array_filter($jsonData, fn($v) => is_object($v)));
+                    $this->fetchItemsFromJsonData($safeData);
                 }
             }
 
@@ -452,7 +455,11 @@ final class YoutubeBridge extends BridgeAbstract
 
     private function resolveCommandUrl(object $commandMetadata, string $baseUrl): string
     {
-        $rawUrl = (string) $commandMetadata->url;
+        if (isset($commandMetadata->url) === false || is_string($commandMetadata->url) === false) {
+            return $baseUrl;
+        }
+
+        $rawUrl = $commandMetadata->url;
         $parsed = parse_url($rawUrl);
 
         if ($parsed === false) {
@@ -466,7 +473,11 @@ final class YoutubeBridge extends BridgeAbstract
 
         if ($isRedirect === true) {
             parse_str((string) ($parsed['query'] ?? ''), $queryParts);
-            return urldecode((string) ($queryParts['q'] ?? ''));
+            $q = $queryParts['q'] ?? '';
+            if (is_string($q) === true) {
+                return urldecode($q);
+            }
+            return $baseUrl;
         }
 
         if (array_key_exists('host', $parsed) === true) {
@@ -505,16 +516,26 @@ final class YoutubeBridge extends BridgeAbstract
         $totalLength = 0;
         $maxPositionByStartIndex = [];
         foreach (array_reverse($commandRuns) as $commandRun) {
-            $endPosition = $commandRun->startIndex + $commandRun->length;
+            if (isset($commandRun->startIndex, $commandRun->length) === false) {
+                continue;
+            }
+            $startIndex = (int) $commandRun->startIndex;
+            $length = (int) $commandRun->length;
+
+            $endPosition = $startIndex + $length;
             if ($endPosition < $prevStartPosition) {
                 $totalLength += 1;
             }
-            $totalLength += $commandRun->length;
-            $maxPositionByStartIndex[$commandRun->startIndex] = $totalLength;
-            $prevStartPosition = $commandRun->startIndex;
+            $totalLength += $length;
+            $maxPositionByStartIndex[$startIndex] = $totalLength;
+            $prevStartPosition = $startIndex;
         }
 
         foreach ($commandRuns as $commandRun) {
+            if (isset($commandRun->startIndex, $commandRun->length) === false) {
+                continue;
+            }
+
             $commandMetadata = $commandRun->onTap->innertubeCommand->commandMetadata->webCommandMetadata ?? null;
             if (isset($commandMetadata) === false) {
                 continue;
@@ -533,19 +554,22 @@ final class YoutubeBridge extends BridgeAbstract
                 $minPosition = $prevEnhancement['pos'] + $prevEnhancement['len'];
             }
 
-            $maxPosition = $descriptionContentLength - ($maxPositionByStartIndex[$commandRun->startIndex] ?? 0);
-            $position = min($commandRun->startIndex - $minPositionOffset, $maxPosition);
+            $startIndex = (int) $commandRun->startIndex;
+            $commandLength = (int) $commandRun->length;
+
+            $maxPosition = $descriptionContentLength - ($maxPositionByStartIndex[$startIndex] ?? 0);
+            $position = min($startIndex - $minPositionOffset, $maxPosition);
 
             while ($position >= $minPosition) {
                 $newLinePosition = mb_strpos($descriptionContent, "\n", $position);
-                if ($newLinePosition !== false && $newLinePosition < $position + ($commandRun->length - 1)) {
-                    $position = $newLinePosition - ($commandRun->length - 1);
+                if ($newLinePosition !== false && $newLinePosition < $position + ($commandLength - 1)) {
+                    $position = $newLinePosition - ($commandLength - 1);
                     continue;
                 }
 
                 $firstChar = mb_substr($descriptionContent, $position, 1);
                 $boundaryStart = mb_substr($descriptionContent, $position - 1, 1);
-                $boundaryEndIndex = $position + $commandRun->length;
+                $boundaryEndIndex = $position + $commandLength;
                 $boundaryEnd = mb_substr($descriptionContent, $boundaryEndIndex, 1);
 
                 $boundaryStartIsValid = false;
@@ -571,10 +595,10 @@ final class YoutubeBridge extends BridgeAbstract
                 }
 
                 if ($boundaryStartIsValid === true && $boundaryEndIsValid === true) {
-                    $minPositionOffset = $commandRun->startIndex - $position;
+                    $minPositionOffset = $startIndex - $position;
                     $enhancement = [
-                        'pos' => $position,
-                        'len' => $commandRun->length,
+                        'pos' => (int) $position,
+                        'len' => $commandLength,
                     ];
                     break;
                 }
@@ -839,10 +863,10 @@ final class YoutubeBridge extends BridgeAbstract
                     $durationText = preg_replace('/([\d]{1,2})\:([\d]{2})/', '00:$1:$2', $durationText) ?? $durationText;
                 }
 
-                $hours = 0;
-                $minutes = 0;
-                $seconds = 0;
-                sscanf((string) $durationText, '%d:%d:%d', $hours, $minutes, $seconds);
+                $parts = sscanf((string) $durationText, '%d:%d:%d');
+                $hours = is_array($parts) === true && isset($parts[0]) === true ? (int) $parts[0] : 0;
+                $minutes = is_array($parts) === true && isset($parts[1]) === true ? (int) $parts[1] : 0;
+                $seconds = is_array($parts) === true && isset($parts[2]) === true ? (int) $parts[2] : 0;
                 $duration = $hours * 3600 + $minutes * 60 + $seconds;
 
                 if ($duration < $minimumDurationSeconds || $duration > $maximumDurationSeconds) {

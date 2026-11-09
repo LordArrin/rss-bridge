@@ -91,9 +91,10 @@
                         <p>Attachments:</p>
                         <ul>
                             <?php foreach ($item['enclosures'] as $enclosure): ?>
+                                <?php $lastSlash = strrpos($enclosure, '/'); ?>
                                 <li class="enclosure">
                                     <a href="<?= e($enclosure) ?>" rel="noopener noreferrer nofollow" target="_blank">
-                                        <?= e(substr($enclosure, strrpos($enclosure, '/') + 1)) ?>
+                                        <?= e(substr($enclosure, $lastSlash === false ? 0 : $lastSlash + 1)) ?>
                                     </a>
                                 </li>
                             <?php endforeach; ?>

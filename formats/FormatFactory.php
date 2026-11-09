@@ -42,8 +42,14 @@ final class FormatFactory
         // that aren't in the built-in list
         $formatsDir = __DIR__;
         if (is_dir($formatsDir) === true) {
-            $iterator = new \FilesystemIterator($formatsDir);
+            $iterator = new \FilesystemIterator(
+                $formatsDir,
+                \FilesystemIterator::CURRENT_AS_FILEINFO | \FilesystemIterator::SKIP_DOTS
+            );
             foreach ($iterator as $file) {
+                if ($file instanceof \SplFileInfo === false) {
+                    continue;
+                }
                 if ($file->isFile() === false) {
                     continue;
                 }
@@ -79,13 +85,18 @@ final class FormatFactory
         // Try built-in formats first (PSR-4)
         if (isset(self::BUILTIN_FORMATS[$normalizedName]) === true) {
             $className = self::BUILTIN_FORMATS[$normalizedName];
+            // PHPStan already knows $className is class-string<FormatInterface>,
+            // so the instantiation is strictly typed. No assert needed.
             return new $className();
         }
 
         // Fallback: try to instantiate custom format from same namespace
         $customClassName = __NAMESPACE__ . '\\' . $normalizedName . 'Format';
         if (class_exists($customClassName) === true) {
-            return new $customClassName();
+            $instance = new $customClassName();
+            if ($instance instanceof FormatInterface) {
+                return $instance;
+            }
         }
 
         throw new \InvalidArgumentException(sprintf('Unknown format: %s', $name));

@@ -227,7 +227,10 @@ final class IpResolver
      */
     public static function matches(string $ip, string $cidr): bool
     {
-        [$block, $bitsStr] = str_contains($cidr, '/') === true ? explode('/', $cidr, 2) : [$cidr, null];
+        $parts = explode('/', $cidr, 2);
+        $block = $parts[0];
+        $bitsStr = $parts[1] ?? null;
+
         $ipBin = inet_pton($ip);
         $blockBin = inet_pton($block);
         if ($ipBin === false || $blockBin === false) {
@@ -527,6 +530,10 @@ final class CurlHttpClient implements HttpClient
      */
     public function request(string $url, array $config = []): Response
     {
+        if ($url === '') {
+            throw new \HttpException('URL cannot be empty');
+        }
+
         $ssrfCheck = $config['ssrf_check'] ?? null;
         if ($ssrfCheck === null) {
             $ssrfCheck = self::isSsrfCheckEnabled();
@@ -623,14 +630,13 @@ final class CurlHttpClient implements HttpClient
             CURLOPT_TIMEOUT         => (int)$config['timeout'],
             CURLOPT_CONNECTTIMEOUT  => (int)($config['connect_timeout'] ?? min(10, (int)((int)$config['timeout'] / 2))),
             CURLOPT_NOSIGNAL        => true,
-            CURLOPT_ENCODING        => '',
             CURLOPT_PROTOCOLS       => CURLPROTO_HTTP | CURLPROTO_HTTPS,
             CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
         ];
 
         $configuredUa = $config['useragent'] ?? null;
         if (
-            ($configuredUa !== null && $configuredUa !== '') === true
+            (is_string($configuredUa) === true && $configuredUa !== '')
             && ($impersonate === null || $optOutRequested === true)
         ) {
             $curlOptions[CURLOPT_USERAGENT] = $configuredUa;
@@ -809,6 +815,7 @@ final class CurlHttpClient implements HttpClient
             usleep($delayUs);
 
             curl_reset($ch);
+            assert($url !== '');
             curl_setopt($ch, CURLOPT_URL, $url);
             if (curl_setopt_array($ch, $curlOptions) === false) {
                 throw new \HttpException('Failed to set cURL options: tried to set an illegal curl option');
@@ -900,7 +907,7 @@ final class CurlHttpClient implements HttpClient
 final class Request
 {
     /**
-     * @var array<int|string, mixed>
+     * @var array<string, mixed>
      */
     private array $get;
 
@@ -933,12 +940,16 @@ final class Request
     /**
      * Creates a Request from CLI arguments.
      *
-     * @param list<string> $cliArgs
+     * @param array<int|string, mixed> $cliArgs
      */
     public static function fromCli(array $cliArgs): self
     {
         $self = new self();
-        $self->get = $cliArgs;
+        $get = [];
+        foreach ($cliArgs as $key => $value) {
+            $get[(string) $key] = $value;
+        }
+        $self->get = $get;
         $self->server = [];
         $self->attributes = [];
         return $self;
@@ -982,7 +993,7 @@ final class Request
     /**
      * Returns all GET parameters as an array.
      *
-     * @return array<int|string, mixed>
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
@@ -1183,7 +1194,9 @@ final class Response
     /**
      * Gets a specific header value.
      *
-     * @return string|list<string>|null
+     * @template A of bool
+     * @param A $all
+     * @return (A is true ? list<string>|null : string|null)
      */
     public function getHeader(string $name, bool $all = false): string|array|null
     {

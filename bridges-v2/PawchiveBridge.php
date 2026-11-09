@@ -338,6 +338,10 @@ final class PawchiveBridge extends BridgeAbstract
     private function formatUrlsInText(string $text): string
     {
         $parts = preg_split('/(<[^>]+>)/', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
+        if ($parts === false) {
+            return $text;
+        }
+
         $inAnchor = false;
         $result = '';
         $style = self::CSS['url-link'];

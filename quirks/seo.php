@@ -43,24 +43,11 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
         libxml_use_internal_errors(false);
     }
 
+    /** @var array{uri?: string, title?: string, content?: string, timestamp?: int, enclosures?: array<int, string>, author?: string} $item */
     $item = [];
 
     // == First source of metadata: Meta tags ==
-    // Facebook Open Graph (og:KEY) - https://developers.facebook.com/docs/sharing/webmasters
-    // Twitter (twitter:KEY) - https://developer.twitter.com/en/docs/twitter-for-websites/cards/guides/getting-started
-    // Standard meta tags - https://www.w3schools.com/tags/tag_meta.asp
-    // Standard time tag - https://developer.mozilla.org/en-US/docs/Web/HTML/Element/time
-
-    // Each Entry field mapping defines a list of possible <meta> tags names that contains the expected value
-    // There are various source candidates per type of data, listed from most reliable to least reliable
     static $meta_mappings = [
-        // <meta property="article:KEY" content="VALUE" />
-        // <meta property="og:KEY" content="VALUE" />
-        // <meta property="KEY" content="VALUE" />
-        // <meta name="twitter:KEY" content="VALUE" />
-        // <meta name="KEY" content="VALUE">
-        // <link rel="canonical" href="URL" />
-        // <time datetime="VALUE">text</time>
         'uri' => [
             'og:url',
             'twitter:url',
@@ -125,23 +112,31 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
             // Found something? Extract the value and populate Entry field
             if ($elements->length > 0) {
                 $element = $elements->item(0);
-                $field_value = '';
-                if ($field === 'canonical') {
-                    $field_value = $element->getAttribute('href') ?? '';
-                } elseif ($field === 'time') {
-                    $field_value = $element->getAttribute('datetime') ?? '';
-                } else {
-                    $field_value = $element->getAttribute('content') ?? '';
-                }
-
-                if ($field_value !== '') {
-                    if ($field === 'article:author:first_name' || $field === 'profile:first_name') {
-                        $author_first_name = $field_value;
-                    } elseif ($field === 'article:author:last_name' || $field === 'profile:last_name') {
-                        $author_last_name = $field_value;
+                if ($element !== null) {
+                    $field_value = '';
+                    if ($field === 'canonical') {
+                        $field_value = $element->getAttribute('href') ?? '';
+                    } elseif ($field === 'time') {
+                        $field_value = $element->getAttribute('datetime') ?? '';
                     } else {
-                        $item[$property] = $field_value;
-                        break; // Stop on first match, e.g. og:url has priority over canonical url.
+                        $field_value = $element->getAttribute('content') ?? '';
+                    }
+
+                    if ($field_value !== '') {
+                        if ($field === 'article:author:first_name' || $field === 'profile:first_name') {
+                            $author_first_name = $field_value;
+                        } elseif ($field === 'article:author:last_name' || $field === 'profile:last_name') {
+                            $author_last_name = $field_value;
+                        } else {
+                            if ($property === 'uri' || $property === 'title' || $property === 'content' || $property === 'author') {
+                                $item[$property] = $field_value;
+                            } elseif ($property === 'timestamp') {
+                                $item[$property] = $field_value;
+                            } elseif ($property === 'enclosures') {
+                                $item[$property] = $field_value;
+                            }
+                            break;
+                        }
                     }
                 }
             }
@@ -172,11 +167,6 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
     }
 
     // == Second source of metadata: Embedded JSON ==
-    // JSON linked data - https://www.w3.org/TR/2014/REC-json-ld-20140116/
-    // JSON linked data is COMPLEX and MAY BE LESS RELIABLE than <meta> tags.
-    // Used for fields not found as <meta> tags.
-
-    // ld+json object types that hold article metadata
     static $ldjson_article_types = ['webpage', 'article', 'newsarticle', 'blogposting'];
     static $ldjson_article_mappings = [
         'uri' => ['url', 'mainEntityOfPage'],
@@ -187,12 +177,10 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
         'author' => [['author', 'name'], ['author', '@id'], 'author'],
     ];
 
-    // ld+json object types that hold author metadata
     $ldjson_author_types = ['person', 'organization'];
-    $ldjson_author_mappings = []; // ID => Name
+    $ldjson_author_mappings = [];
     $ldjson_author_id = null;
 
-    // Utility function for checking if JSON array matches one of the desired ld+json object types
     $ldjson_is_of_type = function (array $json, array $allowed_types): bool {
         if (isset($json['@type']) === true) {
             $json_types = $json['@type'];
@@ -208,12 +196,10 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
         return false;
     };
 
-    // Process ld+json objects embedded in the HTML DOM
     $ldjson_scripts = $html->querySelectorAll('script[type="application/ld+json"]');
     foreach ($ldjson_scripts as $html_ldjson_node) {
         $json_raw = json_decode($html_ldjson_node->textContent ?? '', true);
         if (is_array($json_raw) === true) {
-            // The JSON may contain a single object AND/OR several under '@graph'
             $json_items = [$json_raw];
             if (isset($json_raw['@graph']) === true && is_array($json_raw['@graph']) === true) {
                 foreach ($json_raw['@graph'] as $json_raw_sub_item) {
@@ -221,16 +207,13 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
                 }
             }
 
-            // Process each JSON item individually
             foreach ($json_items as $json) {
                 if (is_array($json) === false) {
                     continue;
                 }
 
-                // JSON item that holds an ld+json Article object (or a variant)
                 if ($ldjson_is_of_type($json, $ldjson_article_types) === true) {
                     foreach ($ldjson_article_mappings as $property => $field_list) {
-                        // Skip fields already found as <meta> tags (except Twitter @username)
                         $fieldAlreadySet = isset($item[$property]) === true;
                         $isAuthorField = $property === 'author';
                         $authorIsHandle = (
@@ -246,7 +229,6 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
 
                         foreach ($field_list as $field) {
                             $json_root = $json;
-                            // Navigate inside the JSON object to access nested fields
                             if (is_array($field) === true) {
                                 $json_navigate_ok = true;
                                 while (count($field) > 1) {
@@ -271,7 +253,6 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
                                 $field = $field[0];
                             }
 
-                            // Check for desired field in JSON and populate $item
                             if (is_array($json_root) === true && isset($json_root[$field]) === true) {
                                 $field_value = $json_root[$field];
                                 if (is_array($field_value) === true && isset($field_value[0]) === true) {
@@ -281,14 +262,19 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
                                     if ($property === 'author' && $field === '@id') {
                                         $ldjson_author_id = $field_value;
                                     } else {
-                                        $item[$property] = $field_value;
+                                        if ($property === 'uri' || $property === 'title' || $property === 'content' || $property === 'author') {
+                                            $item[$property] = $field_value;
+                                        } elseif ($property === 'timestamp') {
+                                            $item[$property] = $field_value;
+                                        } elseif ($property === 'enclosures') {
+                                            $item[$property] = $field_value;
+                                        }
                                         break;
                                     }
                                 }
                             }
                         }
                     }
-                // JSON item that holds an ld+json Author object
                 } elseif ($ldjson_is_of_type($json, $ldjson_author_types) === true) {
                     $hasId = isset($json['@id']) === true && is_string($json['@id']) === true;
                     $hasName = isset($json['name']) === true && is_string($json['name']) === true;
@@ -300,7 +286,6 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
         }
     }
 
-    // Attempt to resolve ld+json author if still missing or Twitter @username
     $authorStillNotSet = isset($item['author']) === false;
     $authorStillIsHandle = (
         isset($item['author']) === true
@@ -321,10 +306,14 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
     if (isset($item['enclosures']) === true && is_string($item['enclosures']) === true) {
         $item['enclosures'] = [$item['enclosures']];
     }
+
+    // Convert timestamp to int, remove if invalid
     if (isset($item['timestamp']) === true && is_string($item['timestamp']) === true) {
         $parsed = strtotime($item['timestamp']);
         if ($parsed !== false) {
             $item['timestamp'] = $parsed;
+        } else {
+            unset($item['timestamp']);
         }
     }
 

@@ -58,6 +58,10 @@ final class ProxyFactory
         }
 
         $proxy = new $className($config);
+        if ($proxy instanceof ProxyInterface === false) {
+            throw new \RuntimeException("Proxy class '{$className}' does not implement ProxyInterface.");
+        }
+
         self::$instances[$profileName] = $proxy;
 
         return $proxy;
@@ -78,7 +82,12 @@ final class ProxyFactory
             throw new \RuntimeException("Proxy class not found: {$className}");
         }
 
-        return new $className($config);
+        $proxy = new $className($config);
+        if ($proxy instanceof ProxyInterface === false) {
+            throw new \RuntimeException("Proxy class '{$className}' does not implement ProxyInterface.");
+        }
+
+        return $proxy;
     }
 
     public static function safeFromProfile(string $profileName): ProxyInterface

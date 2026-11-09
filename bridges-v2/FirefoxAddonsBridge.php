@@ -153,12 +153,8 @@ EOD;
         return parent::getName();
     }
 
-    private function removeLinkRedirects(\Dom\Node $node): string
+    private function removeLinkRedirects(\Dom\Element $node): string
     {
-        if ($node instanceof \Dom\Element === false && $node instanceof \Dom\HTMLDocument === false) {
-            return '';
-        }
-
         $outgoingRegex = '/https:\/\/prod\.outgoing\.prod\.webservices\.mozgcp\.net\/v1\/(?:[A-z0-9]+)\//';
         $links = $node->querySelectorAll('a');
         foreach ($links as $a) {

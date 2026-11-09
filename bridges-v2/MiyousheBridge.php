@@ -190,7 +190,7 @@ final class MiyousheBridge extends BridgeAbstract
             throwServerException('Unexpected response structure: "data.list" is not an array');
         }
 
-        return $list;
+        return array_values(array_filter($list, fn($v) => is_array($v)));
     }
 
     /**
@@ -268,10 +268,12 @@ final class MiyousheBridge extends BridgeAbstract
 
         // Build description with cover images
         $hasCover = (bool)($row['post']['has_cover'] ?? false);
-        $coverList = $row['cover_list'] ?? [];
-        if (is_array($coverList) === false) {
-            $coverList = [];
+        $coverListRaw = $row['cover_list'] ?? [];
+        if (is_array($coverListRaw) === false) {
+            $coverListRaw = [];
         }
+
+        $coverList = array_values(array_filter($coverListRaw, fn($v) => is_array($v) === true && isset($v['url']) === true && is_string($v['url']) === true));
 
         $description = $this->renderOfficialDescription($hasCover, $coverList, $content);
 

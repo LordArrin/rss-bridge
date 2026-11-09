@@ -372,7 +372,7 @@ final class ItchBridge extends BridgeAbstract
         $proxyInput = (string) $this->getInput('proxy_profile');
         $this->proxyProfile = $proxyInput !== '' ? $proxyInput : 'none';
 
-        if (preg_match('/^https?:\/\/([a-z0-9-]+)\.itch\.io(?:\/([a-z0-9-]+))?/', $url, $matches) === 0) {
+        if (preg_match('/^https?:\/\/([a-z0-9-]+)\.itch\.io(?:\/([a-z0-9-]+))?/', $url, $matches) !== 1) {
             throw new \ClientException('Invalid Itch.io URL. Please provide a valid developer or game URL.');
         }
 

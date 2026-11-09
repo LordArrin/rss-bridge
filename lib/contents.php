@@ -15,7 +15,7 @@ use RSSBridge\Proxies\ProxyFactory;
 function get_sitemap(string $url): array
 {
     $xmlString = getContents($url);
-    if (is_string($xmlString) === false || $xmlString === '') {
+    if ($xmlString === '') {
         return [];
     }
 
@@ -70,7 +70,7 @@ function get_sitemap(string $url): array
 function responseFreshUntil(Response $response): ?int
 {
     $cacheControl = $response->getHeader('cache-control');
-    if ($cacheControl !== null && $cacheControl !== '') {
+    if (is_string($cacheControl) === true && $cacheControl !== '') {
         $directives = array_map('trim', explode(',', strtolower($cacheControl)));
         foreach (['no-store', 'no-cache', 'must-revalidate'] as $blocking) {
             if (in_array($blocking, $directives, true) === true) {
@@ -81,12 +81,12 @@ function responseFreshUntil(Response $response): ?int
             if (str_starts_with($directive, 'max-age=') === true) {
                 $seconds = (int) substr($directive, strlen('max-age='));
                 $date = $response->getHeader('date');
-                $anchor = $date !== null ? strtotime($date) : false;
+                $anchor = is_string($date) === true ? strtotime($date) : false;
                 if ($anchor === false) {
                     $anchor = time();
                 }
                 $age = $response->getHeader('age');
-                if ($age !== null && $age !== '' && ctype_digit($age) === true) {
+                if (is_string($age) === true && $age !== '' && ctype_digit($age) === true) {
                     $anchor -= (int) $age;
                 }
                 return $anchor + max(0, $seconds);
@@ -95,7 +95,7 @@ function responseFreshUntil(Response $response): ?int
     }
 
     $expires = $response->getHeader('expires');
-    if ($expires !== null && $expires !== '') {
+    if (is_string($expires) === true && $expires !== '') {
         $timestamp = strtotime($expires);
         if ($timestamp === false) {
             return time() - 1;
@@ -109,9 +109,11 @@ function responseFreshUntil(Response $response): ?int
 /**
  * Fetch data from an http url
  *
+ * @template T of bool
  * @param array<string, string>|list<string> $httpHeaders E.g. ['Accept' => 'application/json'] or ['Accept: application/json']
  * @param array<int, mixed> $curlOptions Associative array e.g. [CURLOPT_MAXREDIRS => 3]
- * @return string|Response
+ * @param T $returnFull
+ * @return (T is true ? Response : string)
  */
 function getContents(
     string $url,
@@ -169,11 +171,11 @@ function getContents(
         }
 
         $etag = $cachedResponse->getHeader('etag');
-        if (($etag !== null && $etag !== '') === true) {
+        if (is_string($etag) === true && $etag !== '') {
             $httpHeadersNormalized['if-none-match'] = $etag;
         } else {
             $lastModified = $cachedResponse->getHeader('last-modified');
-            if ($lastModified !== null && $lastModified !== '') {
+            if (is_string($lastModified) === true && $lastModified !== '') {
                 $httpHeadersNormalized['if-modified-since'] = $lastModified;
             }
         }
@@ -201,7 +203,7 @@ function getContents(
         case 201:
         case 202:
             $cacheControl = $response->getHeader('cache-control');
-            if ($cacheControl !== null && $cacheControl !== '') {
+            if (is_string($cacheControl) === true && $cacheControl !== '') {
                 $directives = explode(',', $cacheControl);
                 $directives = array_map('trim', $directives);
                 if (
@@ -255,7 +257,7 @@ function getSimpleHTMLDOM(
     array $opts = []
 ): \Dom\HTMLDocument {
     $html = getContents($url, $header, $opts);
-    if (is_string($html) === false || $html === '') {
+    if ($html === '') {
         throw new \Exception('Unable to parse dom because the http response was the empty string');
     }
 

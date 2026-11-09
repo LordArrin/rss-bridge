@@ -65,6 +65,7 @@ final class FoxNewsTaxonomyBridge extends FeedExpander
             if (is_array($categories) === false) {
                 $categories = [];
             }
+            $categories = array_values(array_filter($categories, fn($v) => is_string($v)));
 
             $uri = strtolower((string) ($item['uri'] ?? ''));
 

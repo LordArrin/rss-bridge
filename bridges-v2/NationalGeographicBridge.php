@@ -86,7 +86,7 @@ final class NationalGeographicBridge extends BridgeAbstract
             return [];
         }
 
-        return $data['tiles'];
+        return array_values(array_filter($data['tiles'], fn($v) => is_array($v)));
     }
 
     private function isFullArticleEnabled(): bool
@@ -248,7 +248,7 @@ final class NationalGeographicBridge extends BridgeAbstract
             return null;
         }
 
-        $filteredData = $this->filterArticleData($frms);
+        $filteredData = $this->filterArticleData(array_values(array_filter($frms, fn($v) => is_array($v))));
         if ($filteredData === null) {
             return null;
         }
@@ -277,7 +277,7 @@ final class NationalGeographicBridge extends BridgeAbstract
         $body = $article['bdy'] ?? [];
         $content = '';
         if (is_array($body) === true) {
-            $content = $this->renderArticleBody($body);
+            $content = $this->renderArticleBody(array_values(array_filter($body, fn($v) => is_array($v))));
         }
 
         return [

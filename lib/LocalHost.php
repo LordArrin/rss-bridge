@@ -222,7 +222,7 @@ final class LocalHost
 
         $path = $parsed['path'] ?? '/';
         $queryString = $parsed['query'] ?? '';
-        $originalHost = $parsed['host'];
+        $originalHost = $parsed['host'] ?? '';
 
         $localUrl = self::LOCAL_ADDRESS . $path;
         if ($queryString !== '') {
@@ -249,14 +249,14 @@ final class LocalHost
             }
         }
 
-        if ($hasHostHeader === false && is_string($originalHost) === true) {
+        if ($hasHostHeader === false && $originalHost !== '') {
             $headers['Host'] = $originalHost;
         }
 
         $config = [
             'timeout'      => $timeoutValue,
             'retries'      => $retriesValue,
-            'curl_options' => $curlOptions + [CURLOPT_ENCODING => ''],
+            'curl_options' => $curlOptions,
             'headers'      => $headers,
             'ssrf_check'   => false,
         ];

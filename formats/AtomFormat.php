@@ -214,6 +214,10 @@ final class AtomFormat extends FormatAbstract
             }
         }
 
-        return $document->saveXml();
+        $xml = $document->saveXml();
+        if ($xml === false) {
+            return '';
+        }
+        return $xml;
     }
 }

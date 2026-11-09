@@ -136,7 +136,7 @@ EOD;
 
         foreach (self::BREACH_TYPES as $type => $message) {
             $breachValue = $breach[$type] ?? null;
-            if (isset($message[$breachValue]) === true) {
+            if (is_bool($breachValue) === true && isset($message[$breachValue]) === true) {
                 $content .= $message[$breachValue] . '.<br>';
             }
         }

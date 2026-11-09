@@ -54,7 +54,8 @@ final class NACSouthGermanyMediaLibraryBridge extends BridgeAbstract
         $month = self::MONTHS[$monthName];
         $dateString = sprintf('%04d-%02d-%02d', $year, $month, $day);
 
-        return strtotime($dateString) !== false ? strtotime($dateString) : null;
+        $timestamp = strtotime($dateString);
+        return $timestamp !== false ? $timestamp : null;
     }
 
     private static function addTimeToTimestamp(?int $timestamp, string $time): ?int

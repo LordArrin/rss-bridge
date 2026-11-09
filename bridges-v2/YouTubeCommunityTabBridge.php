@@ -202,7 +202,10 @@ final class YouTubeCommunityTabBridge extends BridgeAbstract
             $url = $tab->tabRenderer?->endpoint?->commandMetadata?->webCommandMetadata->url ?? '';
             if (is_string($url) === true && str_ends_with($url, 'posts') === true) {
                 $contents = $tab->tabRenderer->content->sectionListRenderer->contents[0]->itemSectionRenderer->contents ?? null;
-                return is_array($contents) === true ? $contents : null;
+                if (is_array($contents) === true) {
+                    return array_values($contents);
+                }
+                return null;
             }
         }
         return null;

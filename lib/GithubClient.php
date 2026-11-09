@@ -40,8 +40,8 @@ final class GithubClient
     {
         $issues = $this->fetch(sprintf('/repos/%s/%s/issues?per_page=30', $owner, $repo));
 
-        return array_values(array_filter($issues, function (array $issue): bool {
-            return isset($issue['pull_request']) === false;
+        return array_values(array_filter($issues, function (mixed $issue): bool {
+            return is_array($issue) === true && isset($issue['pull_request']) === false;
         }));
     }
 
@@ -50,7 +50,8 @@ final class GithubClient
      */
     public function fetchPullRequests(string $owner, string $repo): array
     {
-        return $this->fetch(sprintf('/repos/%s/%s/pulls?per_page=30', $owner, $repo));
+        $result = $this->fetch(sprintf('/repos/%s/%s/pulls?per_page=30', $owner, $repo));
+        return array_values(array_filter($result, fn(mixed $item) => is_array($item)));
     }
 
     /**
@@ -68,7 +69,7 @@ final class GithubClient
     {
         $comments = $this->fetch(sprintf('/repos/%s/%s/issues/%s/comments', $owner, $repo, $id));
 
-        return array_reverse($comments);
+        return array_values(array_reverse(array_filter($comments, fn(mixed $item) => is_array($item))));
     }
 
     /**
@@ -76,7 +77,8 @@ final class GithubClient
      */
     public function fetchReleases(string $owner, string $repo): array
     {
-        return $this->fetch(sprintf('/repos/%s/%s/releases?per_page=100', $owner, $repo));
+        $result = $this->fetch(sprintf('/repos/%s/%s/releases?per_page=100', $owner, $repo));
+        return array_values(array_filter($result, fn(mixed $item) => is_array($item)));
     }
 
     /**
@@ -87,7 +89,8 @@ final class GithubClient
      */
     public function fetchRepositoryEvents(string $owner, string $repo): array
     {
-        return $this->fetch(sprintf('/repos/%s/%s/events?per_page=100', $owner, $repo));
+        $result = $this->fetch(sprintf('/repos/%s/%s/events?per_page=100', $owner, $repo));
+        return array_values(array_filter($result, fn(mixed $item) => is_array($item)));
     }
 
     /**
@@ -102,8 +105,13 @@ final class GithubClient
         $url = '/search/issues?' . http_build_query($params);
         $result = $this->fetch($url);
 
+        $items = $result['items'] ?? [];
+        if (is_array($items) === false) {
+            $items = [];
+        }
+
         return [
-            'items' => $result['items'] ?? [],
+            'items' => array_values(array_filter($items, fn(mixed $item) => is_array($item))),
             'total_count' => (int) ($result['total_count'] ?? 0),
         ];
     }
@@ -112,7 +120,11 @@ final class GithubClient
     {
         try {
             $response = $this->fetch(sprintf('/repos/%s/%s/commits/%s', $owner, $repo, rawurlencode($tagName)));
-            return (string) ($response['commit']['message'] ?? '');
+            $commit = $response['commit'] ?? null;
+            if (is_array($commit) === true) {
+                return (string) ($commit['message'] ?? '');
+            }
+            return '';
         } catch (\HttpException $e) {
             $this->logger->warning(sprintf('github: Failed to fetch commit message for tag %s: %s', $tagName, $e->getMessage()));
             return '';
@@ -124,11 +136,13 @@ final class GithubClient
      */
     public function fetchRateLimit(): array
     {
-        return $this->fetch('/rate_limit');
+        $result = $this->fetch('/rate_limit');
+        /** @var array<string, mixed> $result */
+        return $result;
     }
 
     /**
-     * @return array<string, mixed>|array<int, array<string, mixed>>
+     * @return array<mixed, mixed>
      */
     private function fetch(string $url): array
     {
@@ -193,7 +207,11 @@ final class GithubClient
             throw $e;
         }
 
-        return Json::decode($response->getBody());
+        $decoded = Json::decode($response->getBody());
+        if (is_array($decoded) === false) {
+            throw new \Exception('Invalid JSON response from GitHub API');
+        }
+        return $decoded;
     }
 
     /**

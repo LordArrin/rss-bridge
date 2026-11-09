@@ -21,11 +21,17 @@ class Container implements \ArrayAccess
 
     public function offsetSet(mixed $offset, mixed $value): void
     {
+        if (is_string($offset) === false) {
+            throw new \InvalidArgumentException('Container key must be a string');
+        }
         $this->values[$offset] = $value;
     }
 
     public function offsetGet(mixed $offset): mixed
     {
+        if (is_string($offset) === false) {
+            throw new \InvalidArgumentException('Container key must be a string');
+        }
         if (isset($this->values[$offset]) === false) {
             throw new \Exception(sprintf('Unknown container key: "%s"', $offset));
         }
@@ -37,10 +43,13 @@ class Container implements \ArrayAccess
 
     public function offsetExists(mixed $offset): bool
     {
-        return isset($this->values[$offset]) === true;
+        return is_string($offset) && isset($this->values[$offset]);
     }
 
     public function offsetUnset(mixed $offset): void
     {
+        if (is_string($offset) === true) {
+            unset($this->values[$offset], $this->resolved[$offset]);
+        }
     }
 }

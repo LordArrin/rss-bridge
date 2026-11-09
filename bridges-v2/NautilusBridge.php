@@ -198,9 +198,10 @@ final class NautilusBridge extends FeedExpander
             $content .= '>';
         }
 
-        $blocks = is_array($pageProps['blocks'] ?? null) === true ? $pageProps['blocks'] : (is_array($pageProps['post']['contentBlocks']['blocks'] ?? null) === true ? $pageProps['post']['contentBlocks']['blocks'] : []);
+        $blocksRaw = is_array($pageProps['blocks'] ?? null) === true ? $pageProps['blocks'] : (is_array($pageProps['post']['contentBlocks']['blocks'] ?? null) === true ? $pageProps['post']['contentBlocks']['blocks'] : []);
 
-        // Убрана избыточная проверка is_array($blocks), так как PHPStan уже знает, что $blocks гарантированно является массивом
+        $blocks = array_values(array_filter($blocksRaw, fn($v) => is_array($v)));
+
         if (count($blocks) === 0) {
             return $content;
         }
@@ -359,12 +360,14 @@ final class NautilusBridge extends FeedExpander
             }
 
             if (isset($block['innerBlocks']) === true && is_array($block['innerBlocks']) === true) {
-                $html .= $this->renderBlocks($block['innerBlocks']);
+                $innerBlocks = array_values(array_filter($block['innerBlocks'], fn($v) => is_array($v)));
+                $html .= $this->renderBlocks($innerBlocks);
                 continue;
             }
 
             if (isset($block['blocks']) === true && is_array($block['blocks']) === true) {
-                $html .= $this->renderBlocks($block['blocks']);
+                $subBlocks = array_values(array_filter($block['blocks'], fn($v) => is_array($v)));
+                $html .= $this->renderBlocks($subBlocks);
             }
         }
 

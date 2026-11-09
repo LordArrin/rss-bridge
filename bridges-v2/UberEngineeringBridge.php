@@ -91,7 +91,7 @@ final class UberEngineeringBridge extends BridgeAbstract
             throwServerException('Unable to parse article feed data');
         }
 
-        return $articles;
+        return array_values(array_filter($articles, fn($v) => is_array($v)));
     }
 
     private static function normalizeUrl(string $url): string

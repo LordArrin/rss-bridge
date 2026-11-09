@@ -184,9 +184,12 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $content = $body !== '' ? $this->processMarkdown((string) $body, $owner, $repo) : '';
 
         if ($hideAssets === false && isset($release['assets']) === true && is_array($release['assets']) === true) {
-            $assetsHtml = $this->buildAssetsBlock($release['assets']);
-            if ($assetsHtml !== '') {
-                $content .= $assetsHtml;
+            $assets = array_values(array_filter($release['assets'], fn($v) => is_array($v)));
+            if ($assets !== []) {
+                $assetsHtml = $this->buildAssetsBlock($assets);
+                if ($assetsHtml !== '') {
+                    $content .= $assetsHtml;
+                }
             }
         }
 

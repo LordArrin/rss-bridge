@@ -200,13 +200,18 @@ final class BridgeFactory
 
         try {
             $reflection = new \ReflectionClass($resolved);
+            if ($reflection->isSubclassOf(BridgeAbstract::class) === false) {
+                throw new \Exception(sprintf('Class %s does not extend BridgeAbstract', $resolved));
+            }
             $constructor = $reflection->getConstructor();
 
             if ($constructor !== null && count($constructor->getParameters()) >= 2) {
-                return new $resolved($this->cache, $this->logger);
+                $instance = new $resolved($this->cache, $this->logger);
+            } else {
+                $instance = new $resolved();
             }
-
-            return new $resolved();
+            assert($instance instanceof BridgeAbstract);
+            return $instance;
         } catch (\Throwable $e) {
             throw new \Exception(sprintf('Cannot instantiate bridge %s: %s', $resolved, $e->getMessage()));
         }

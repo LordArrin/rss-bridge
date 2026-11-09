@@ -89,7 +89,7 @@ final class BoostyBridge extends BridgeAbstract
         if (isset($data['data'][0]['user']['avatarUrl']) === true && $data['data'][0]['user']['avatarUrl'] !== '') {
             $this->blogAvatar = (string) $data['data'][0]['user']['avatarUrl'];
         }
-        return $data['data'];
+        return array_values(array_filter($data['data'], fn($v) => is_array($v)));
     }
 
     /**
@@ -414,6 +414,8 @@ final class BoostyBridge extends BridgeAbstract
             return '';
         }
 
+        $items = array_values(array_filter($items, fn($v) => is_array($v)));
+
         $inner = $this->renderListItems($items, $tag, $cssKey);
         if ($inner === '') {
             return '';
@@ -432,7 +434,8 @@ final class BoostyBridge extends BridgeAbstract
             $content = $this->listItemContent($item);
             $nested = '';
             if (isset($item['items']) === true && is_array($item['items']) === true && $item['items'] !== []) {
-                $nested = $this->renderListItems($item['items'], $tag, $cssKey);
+                $nestedItems = array_values(array_filter($item['items'], fn($v) => is_array($v)));
+                $nested = $this->renderListItems($nestedItems, $tag, $cssKey);
             }
             if ($content === '' && $nested === '') {
                 continue;

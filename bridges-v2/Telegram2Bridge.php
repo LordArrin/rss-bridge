@@ -745,6 +745,9 @@ CSS,
             pattern: '/(?:\s*<br\s*\/?>\s*){2,}/i',
             subject: $html
         );
+        if ($paragraphs === false) {
+            $paragraphs = [$html];
+        }
         $firstPlain = $this->htmlToPlain($paragraphs[0]);
 
         if (mb_strlen(string: $firstPlain) <= self::MAX_TITLE_LENGTH) {
@@ -803,6 +806,9 @@ CSS,
         }
 
         $tokens = preg_split(pattern: '/(<[^>]*>)/u', subject: $html, limit: -1, flags: PREG_SPLIT_DELIM_CAPTURE);
+        if ($tokens === false) {
+            return $html;
+        }
         $void = ['br', 'img', 'hr', 'input', 'meta', 'link', 'source'];
 
         $consumed = 0;
@@ -833,7 +839,7 @@ CSS,
             }
 
             preg_match_all('/&[a-zA-Z]+;|&#\d+;|&#x[0-9a-fA-F]+;|./us', $token, $m);
-            $units = $m[0];
+            $units = $m[0] ?? [];
 
             if ($consumed + count($units) <= $limit) {
                 $consumed += count($units);

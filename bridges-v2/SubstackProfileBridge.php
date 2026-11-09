@@ -136,6 +136,7 @@ final class SubstackProfileBridge extends BridgeAbstract
             case 'image':
                 $item['uri'] = (string) ($element['imageUrl'] ?? '');
                 $item['title'] = 'Image';
+                $item['content'] = '';
                 break;
             default:
                 throwServerException('Invalid Substack entry type: ' . $type);

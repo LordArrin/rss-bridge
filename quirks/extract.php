@@ -7,9 +7,15 @@ declare(strict_types=1);
  */
 function extractFromDelimiters(string $string, string $start, string $end): string|false
 {
-    if (strpos($string, $start) !== false) {
-        $section_retrieved = substr($string, strpos($string, $start) + strlen($start));
-        $section_retrieved = substr($section_retrieved, 0, strpos($section_retrieved, $end));
+    $startPos = strpos($string, $start);
+    if ($startPos !== false) {
+        $sectionStart = $startPos + strlen($start);
+        $section_retrieved = substr($string, $sectionStart);
+        $endPos = strpos($section_retrieved, $end);
+        if ($endPos === false) {
+            return false;
+        }
+        $section_retrieved = substr($section_retrieved, 0, $endPos);
         return $section_retrieved;
     }
     return false;
@@ -21,8 +27,14 @@ function extractFromDelimiters(string $string, string $start, string $end): stri
 function stripWithDelimiters(string $string, string $start, string $end): string
 {
     while (strpos($string, $start) !== false) {
-        $section_to_remove = substr($string, strpos($string, $start));
-        $section_to_remove = substr($section_to_remove, 0, strpos($section_to_remove, $end) + strlen($end));
+        $startPos = strpos($string, $start);
+
+        $section_to_remove = substr($string, $startPos);
+        $endPos = strpos($section_to_remove, $end);
+        if ($endPos === false) {
+            break;
+        }
+        $section_to_remove = substr($section_to_remove, 0, $endPos + strlen($end));
         $string = str_replace($section_to_remove, '', $string);
     }
     return $string;
@@ -42,16 +54,26 @@ function stripRecursiveHTMLSection(string $string, string $tag_name, string $tag
             $max_recursion = 100;
             $section_to_remove = null;
             $section_start = strpos($string, $tag_start);
+
             $search_offset = $section_start;
             do {
                 $max_recursion--;
                 $section_end = strpos($string, $close_tag, $search_offset);
+                if ($section_end === false) {
+                    break;
+                }
                 $search_offset = $section_end + $close_tag_length;
-                $section_to_remove = substr($string, $section_start, $section_end - $section_start + $close_tag_length);
+                $section_length = $section_end - $section_start + $close_tag_length;
+                $section_to_remove = substr($string, $section_start, $section_length);
                 $open_tag_count = substr_count($section_to_remove, $open_tag);
                 $close_tag_count = substr_count($section_to_remove, $close_tag);
             } while ($open_tag_count > $close_tag_count && $max_recursion > 0);
-            $string = str_replace($section_to_remove, '', $string);
+
+            if ($section_to_remove !== null) {
+                $string = str_replace($section_to_remove, '', $string);
+            } else {
+                break;
+            }
         }
     }
     return $string;

@@ -117,13 +117,13 @@ abstract class PhilomenaBase extends BridgeAbstract
             $parsedUrl = parse_url($url);
             if (isset($parsedUrl['query']) === true) {
                 parse_str($parsedUrl['query'], $queryParams);
-                if (isset($queryParams['q']) === true) {
+                if (isset($queryParams['q']) === true && is_string($queryParams['q']) === true) {
                     $params['q'] = $queryParams['q'];
                 }
-                if (isset($queryParams['sf']) === true) {
+                if (isset($queryParams['sf']) === true && is_string($queryParams['sf']) === true) {
                     $params['sf'] = $queryParams['sf'];
                 }
-                if (isset($queryParams['sd']) === true) {
+                if (isset($queryParams['sd']) === true && is_string($queryParams['sd']) === true) {
                     $params['sd'] = $queryParams['sd'];
                 }
                 return $params;
@@ -132,8 +132,10 @@ abstract class PhilomenaBase extends BridgeAbstract
 
         $regex = '/^(https?:\/\/)?(www\.)?' . $escapedHost . '\/tags\/([^\/&?\n]+)/';
         if (preg_match($regex, $url, $matches) > 0) {
-            $params['q'] = str_replace('-colon-', ':', urldecode($matches[3]));
-            return $params;
+            if (isset($matches[3]) === true) {
+                $params['q'] = str_replace('-colon-', ':', urldecode($matches[3]));
+                return $params;
+            }
         }
 
         return null;
@@ -236,17 +238,32 @@ abstract class PhilomenaBase extends BridgeAbstract
         }
 
         foreach ($json->images as $post) {
-            $postUri = static::URI . 'images/' . $post->id;
+            if (isset($post->id) === false) {
+                continue;
+            }
+
+            $postId = (int) $post->id;
+            $postUri = static::URI . 'images/' . $postId;
             $artist = $this->extractArtist($post->tags ?? []);
 
-            $title = $artist !== '' ? sprintf('Image %s by %s', $post->id, $artist) : sprintf('Image %s', $post->id);
+            $title = $artist !== '' ? sprintf('Image %d by %s', $postId, $artist) : sprintf('Image %d', $postId);
+
+            $timestamp = time();
+            if (isset($post->created_at) === true && is_string($post->created_at) === true) {
+                $parsed = strtotime($post->created_at);
+                if ($parsed !== false) {
+                    $timestamp = $parsed;
+                }
+            }
+
+            $author = isset($post->uploader) === true ? (string) $post->uploader : 'Anonymous';
 
             $this->items[] = [
                 'uri' => $postUri,
                 'title' => $title,
-                'timestamp' => strtotime($post->created_at),
-                'author' => $post->uploader ?? 'Anonymous',
-                'content' => $this->buildPostHtml($post, $postUri, (bool) $hideTags),
+                'timestamp' => $timestamp,
+                'author' => $author,
+                'content' => $this->buildPostHtml($post, $postUri, $postId, (bool) $hideTags),
             ];
         }
     }
@@ -277,38 +294,38 @@ abstract class PhilomenaBase extends BridgeAbstract
         return '';
     }
 
-    private function buildPostHtml(object $post, string $postUri, bool $hideTags): string
+    private function buildPostHtml(object $post, string $postUri, int $postId, bool $hideTags): string
     {
         $html = '';
 
         $hasMimeType = isset($post->mime_type) === true;
-        $isVideoMimeType = $hasMimeType === true && strpos($post->mime_type, 'video/') === 0;
+        $isVideoMimeType = $hasMimeType === true && strpos((string) $post->mime_type, 'video/') === 0;
 
         $hasFormat = isset($post->format) === true;
-        $isVideoFormat = $hasFormat === true && in_array($post->format, ['webm', 'mp4'], true) === true;
+        $isVideoFormat = $hasFormat === true && in_array((string) $post->format, ['webm', 'mp4'], true) === true;
 
         $isVideo = $isVideoMimeType === true || $isVideoFormat === true;
 
-        $mediaUrl = $post->representations->full ?? '';
-        $thumbUrl = $post->representations->medium ?? $post->representations->small ?? $mediaUrl;
+        $mediaUrl = isset($post->representations->full) === true ? (string) $post->representations->full : '';
+        $thumbUrl = isset($post->representations->medium) === true ? (string) $post->representations->medium : (isset($post->representations->small) === true ? (string) $post->representations->small : $mediaUrl);
 
         if ($isVideo === true && $mediaUrl !== '') {
             $html .= sprintf(
                 '<p><a href="%s"><video controls loop muted preload="metadata" style="max-width:100%%;height:auto;" src="%s"></video></a></p>',
                 $postUri,
-                htmlspecialchars((string) $mediaUrl)
+                htmlspecialchars($mediaUrl)
             );
         } elseif ($thumbUrl !== '') {
             $html .= sprintf(
-                '<p><a href="%s"><img src="%s" alt="Image %s"></a></p>',
+                '<p><a href="%s"><img src="%s" alt="Image %d"></a></p>',
                 $postUri,
-                htmlspecialchars((string) $thumbUrl),
-                (string) $post->id
+                htmlspecialchars($thumbUrl),
+                $postId
             );
         }
 
         $hasDescription = isset($post->description) === true;
-        if ($hasDescription === true && $post->description !== '') {
+        if ($hasDescription === true && is_string($post->description) === true && $post->description !== '') {
             $cleanDesc = $this->cleanDescription($post->description);
             if ($cleanDesc !== '') {
                 $html .= sprintf(
@@ -331,7 +348,7 @@ abstract class PhilomenaBase extends BridgeAbstract
 
         if ($hideTags === false) {
             $hasSources = isset($post->source_urls) === true;
-            if ($hasSources === true && $post->source_urls !== []) {
+            if ($hasSources === true && is_array($post->source_urls) === true && $post->source_urls !== []) {
                 $sources = '';
                 foreach ($post->source_urls as $source) {
                     $sources .= sprintf(
@@ -344,7 +361,7 @@ abstract class PhilomenaBase extends BridgeAbstract
             }
 
             $hasTags = isset($post->tags) === true;
-            if ($hasTags === true && $post->tags !== []) {
+            if ($hasTags === true && is_array($post->tags) === true && $post->tags !== []) {
                 $html .= sprintf(
                     '<p><b>Tags:</b> %s</p>',
                     htmlspecialchars(implode(', ', $post->tags))

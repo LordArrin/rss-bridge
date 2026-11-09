@@ -194,7 +194,12 @@ final class MemcachedCache extends AbstractCache
         // for stale reads or expired chunks).
         if ($isChunked === true) {
             $chunksList = $item['chunks'];
-            $payload = is_array($chunksList) === true ? $this->readChunked($chunksList) : null;
+            $payload = null;
+            if (is_array($chunksList) === true) {
+                /** @var list<string> $safeChunks */
+                $safeChunks = array_values(array_filter($chunksList, 'is_string'));
+                $payload = $this->readChunked($safeChunks);
+            }
 
             if ($payload === null) {
                 // Some chunk was evicted or lost: treat the whole entry as a

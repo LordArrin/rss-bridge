@@ -218,10 +218,7 @@ final class ThreadsBridge extends BridgeAbstract
             return $found;
         }
 
-        $haystackArray = $haystack;
-        if (is_object($haystack) === true) {
-            $haystackArray = (array) $haystack;
-        }
+        $haystackArray = is_array($haystack) === true ? $haystack : (array) $haystack;
 
         $iterator = new \RecursiveArrayIterator(
             $haystackArray,

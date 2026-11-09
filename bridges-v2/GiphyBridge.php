@@ -166,7 +166,7 @@ final class GiphyBridge extends BridgeAbstract
                 continue;
             }
 
-            $this->getGiphyItems($data);
+            $this->getGiphyItems(array_values(array_filter($data, fn($v) => is_object($v))));
         }
 
         usort($this->items, function (array $a, array $b): int {

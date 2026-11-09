@@ -261,5 +261,9 @@ function render_template(string $template, array $context = []): string
         throw $e;
     }
 
-    return ob_get_clean();
+    $result = ob_get_clean();
+    if ($result === false) {
+        return '';
+    }
+    return $result;
 }

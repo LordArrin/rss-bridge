@@ -149,24 +149,16 @@ final class ModrinthBridge extends BridgeAbstract
 
             $item['author'] = 'Modrinth';
 
-            $loaders = $entry->loaders ?? [];
-            $gameVersions = $entry->game_versions ?? [];
-            $files = $entry->files ?? [];
-            $dependencies = $entry->dependencies ?? [];
+            $loadersRaw = $entry->loaders ?? [];
+            $gameVersionsRaw = $entry->game_versions ?? [];
+            $filesRaw = $entry->files ?? [];
+            $dependenciesRaw = $entry->dependencies ?? [];
             $changelog = (string) ($entry->changelog ?? '');
 
-            if (is_array($loaders) === false) {
-                $loaders = [];
-            }
-            if (is_array($gameVersions) === false) {
-                $gameVersions = [];
-            }
-            if (is_array($files) === false) {
-                $files = [];
-            }
-            if (is_array($dependencies) === false) {
-                $dependencies = [];
-            }
+            $loaders = is_array($loadersRaw) === true ? array_values(array_filter($loadersRaw, fn($v) => is_string($v))) : [];
+            $gameVersions = is_array($gameVersionsRaw) === true ? array_values(array_filter($gameVersionsRaw, fn($v) => is_string($v))) : [];
+            $files = is_array($filesRaw) === true ? array_values(array_filter($filesRaw, fn($v) => is_object($v))) : [];
+            $dependencies = is_array($dependenciesRaw) === true ? array_values(array_filter($dependenciesRaw, fn($v) => is_object($v))) : [];
 
             $content = $this->buildCompatibilityBlock($loaders, $gameVersions, $dependencies);
             $content .= $this->buildChangesBlock($changelog);
@@ -304,13 +296,14 @@ final class ModrinthBridge extends BridgeAbstract
             return null;
         }
 
-        $items = array_filter(
+        $items = array_values(array_filter(
             array_map('trim', explode(',', $input)),
             fn(string $v): bool => $v !== ''
-        );
+        ));
 
         if ($items !== []) {
-            return json_encode($items);
+            $encoded = json_encode($items);
+            return $encoded !== false ? $encoded : null;
         }
 
         return null;

@@ -49,7 +49,7 @@
             if (str_starts_with($tg, 'http://') || str_starts_with($tg, 'https://')) {
                 $telegramUrl = $tg;
                 // Extract username from URL for display
-                if (preg_match('#(?:t\.me|telegram\.me)/([a-zA-Z0-9_]+)/?$#', $tg, $matches)) {
+                if (preg_match('#(?:t\.me|telegram\.me)/([a-zA-Z0-9_]+)/?$#', $tg, $matches) === 1) {
                     $telegramDisplay = '@' . $matches[1];
                 } else {
                     $telegramDisplay = $tg;

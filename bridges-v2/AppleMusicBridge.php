@@ -120,7 +120,6 @@ final class AppleMusicBridge extends BridgeAbstract
                 return parent::getIcon();
             }
 
-            // Apple redirects (301) if the artist name in the url is wrong, so use the canonical link.
             $urlParts = explode('?', $artistLinkUrl, 2);
             $url = $urlParts[0];
 
@@ -181,7 +180,7 @@ final class AppleMusicBridge extends BridgeAbstract
             throwServerException('There is no artist with id "' . $artistId . '".');
         }
 
-        return $json->results;
+        return array_values(array_filter($json->results, fn($item) => is_object($item)));
     }
 
     /**

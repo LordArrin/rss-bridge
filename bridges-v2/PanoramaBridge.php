@@ -48,6 +48,9 @@ final class PanoramaBridge extends BridgeAbstract
 
                 $uri = urljoin(self::URI, $href);
                 $path = parse_url($uri, PHP_URL_PATH);
+                if ($path === false) {
+                    $path = null;
+                }
 
                 if ($this->isValidNewsUri($path, $processedUris) === false) {
                     continue;

@@ -85,6 +85,10 @@ abstract class NginxBase extends BridgeAbstract
         $splitPattern = '/(?=Changes with ' . $softwareName . '\s+)/';
         $blocks = preg_split($splitPattern, $content);
 
+        if ($blocks === false) {
+            throw new \Exception('Failed to parse CHANGES');
+        }
+
         $headerPattern = '/^Changes with ' . $softwareName . '\s+(\S+)\s+(\d{1,2}\s+\w+\s+\d{4})/';
         $replacePattern = '/^Changes with ' . $softwareName . '\s+\S+\s+\d{1,2}\s+\w+\s+\d{4}\s*/';
 

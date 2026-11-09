@@ -100,7 +100,7 @@ final class LogicMastersBridge extends BridgeAbstract
             return time();
         }
 
-        return $result;
+        return (int) $result;
     }
 
     private function fetchHtml(string $url): \Dom\HTMLDocument

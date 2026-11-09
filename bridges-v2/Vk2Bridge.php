@@ -133,7 +133,7 @@ final class Vk2Bridge extends BridgeAbstract
      */
     public function detectParameters(mixed $url): ?array
     {
-        if (is_string($url) === false || preg_match(self::URL_REGEX, $url, $m) === 0) {
+        if (is_string($url) === false || preg_match(self::URL_REGEX, $url, $m) === 0 || isset($m[1]) === false) {
             return null;
         }
         $name = strtolower($m[1]);
@@ -435,7 +435,7 @@ final class Vk2Bridge extends BridgeAbstract
                 return $r;
             }
 
-            $errorCode = $r['error']['error_code'] ?? 0;
+            $errorCode = (int) ($r['error']['error_code'] ?? 0);
             $apiError = $this->mapApiErrorCode($errorCode);
 
             if (
@@ -515,7 +515,7 @@ final class Vk2Bridge extends BridgeAbstract
                 continue;
             }
 
-            $fromId = $displayPost['from_id'] ?? $displayPost['owner_id'] ?? 0;
+            $fromId = (int) ($displayPost['from_id'] ?? $displayPost['owner_id'] ?? 0);
             $author = $fromId !== $ownerId ? ($this->ownerNames[$fromId] ?? 'Unknown') : '';
             $isDeleted = ($displayPost['is_deleted'] ?? false) === true;
 
@@ -802,7 +802,7 @@ final class Vk2Bridge extends BridgeAbstract
             }
         }
 
-        return array_unique($urls);
+        return array_values(array_unique($urls));
     }
 
     private function isArticleUrl(string $url, string $groupLower): bool
@@ -1142,7 +1142,8 @@ final class Vk2Bridge extends BridgeAbstract
         }
 
         parse_str($parsed['query'], $queryParams);
-        $as = $queryParams['as'] ?? '';
+        $asRaw = $queryParams['as'] ?? '';
+        $as = is_string($asRaw) === true ? $asRaw : '';
 
         if ($as !== '') {
             $sizes = explode(',', $as);

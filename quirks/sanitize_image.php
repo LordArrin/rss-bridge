@@ -57,6 +57,11 @@ function sanitize_image(
             $targetWidth = (int) round($targetWidth * $ratio);
         }
 
+        // Ensure target dimensions are valid
+        if ($targetWidth < 1 || $targetHeight < 1) {
+            return $binary;
+        }
+
         // Create clean canvas
         $cleanImage = imagecreatetruecolor($targetWidth, $targetHeight);
         if ($cleanImage === false) {

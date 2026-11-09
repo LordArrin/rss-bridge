@@ -254,6 +254,7 @@ final class TgWSProxy extends ProxyAbstract
         bool $includeHeaders
     ): void {
         $this->setupBaseOptions($ch);
+        assert($url !== '');
 
         $options = [
             CURLOPT_URL            => $url,
@@ -528,6 +529,7 @@ final class TgWSProxy extends ProxyAbstract
                 $effConnect = max(1, min($connectTimeout, (int) floor($remaining)));
                 $effRequest = max(1, min($requestTimeout, (int) floor($remaining)));
 
+                assert($url !== '');
                 curl_setopt_array($ch, [
                     CURLOPT_URL            => $url,
                     CURLOPT_CONNECTTIMEOUT => $effConnect,

@@ -265,7 +265,7 @@ final class LiveTennisApiBridge extends BridgeAbstract
     private static function rateLimitException(mixed $response, string $suffix): \Exception
     {
         $retryAfter = null;
-        if ($response !== null && method_exists($response, 'getHeader') === true) {
+        if (is_object($response) === true && method_exists($response, 'getHeader') === true) {
             $retryAfter = $response->getHeader('retry-after');
         }
         $message = 'Rate limited by the Live Tennis API (429).';

@@ -157,20 +157,18 @@ final class SearchFloorBridge extends BridgeAbstract
             }
 
             $href = (string) $linkNode->getAttribute('href');
-            if (preg_match('/\/b\/(\d+)/', $href, $match) === 0) {
-                continue;
+            if (preg_match('/\/b\/(\d+)/', $href, $match) === 1) {
+                $dateNode = $node->querySelector('span.date[data-date]');
+                $dateAttr = $dateNode !== null ? $dateNode->getAttribute('data-date') : null;
+                $timestamp = $dateAttr !== null ? strtotime($dateAttr) : null;
+
+                $books[] = [
+                    'id' => (int) $match[1],
+                    'title' => $this->decodeEntities(trim($linkNode->textContent)),
+                    'uri' => urljoin(self::URI, $href),
+                    'date' => $timestamp !== false ? $timestamp : null,
+                ];
             }
-
-            $dateNode = $node->querySelector('span.date[data-date]');
-            $dateAttr = $dateNode !== null ? $dateNode->getAttribute('data-date') : null;
-            $timestamp = $dateAttr !== null ? strtotime($dateAttr) : null;
-
-            $books[] = [
-                'id' => (int) $match[1],
-                'title' => $this->decodeEntities(trim($linkNode->textContent)),
-                'uri' => urljoin(self::URI, $href),
-                'date' => $timestamp !== false ? $timestamp : null,
-            ];
         }
 
         return $books;
@@ -371,6 +369,9 @@ final class SearchFloorBridge extends BridgeAbstract
         $origH = imagesy($source);
 
         [$newW, $newH] = $this->calculateDimensions($origW, $origH);
+        if ($newW < 1 || $newH < 1) {
+            return $this->fallbackDataUri($data);
+        }
         $resized = imagecreatetruecolor($newW, $newH);
 
         if ($resized === false) {
@@ -378,7 +379,9 @@ final class SearchFloorBridge extends BridgeAbstract
         }
 
         $white = imagecolorallocate($resized, 255, 255, 255);
-        imagefill($resized, 0, 0, $white);
+        if ($white !== false) {
+            imagefill($resized, 0, 0, $white);
+        }
         imagecopyresampled($resized, $source, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
 
         ob_start();

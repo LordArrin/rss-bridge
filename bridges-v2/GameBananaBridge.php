@@ -86,7 +86,6 @@ final class GameBananaBridge extends BridgeAbstract
                 continue;
             }
 
-            // ИСПРАВЛЕНИЕ: Удалена избыточная проверка на null, так как isset() уже это гарантирует
             if (isset($element[self::IDX_NAME]) === false) {
                 continue;
             }
@@ -177,7 +176,7 @@ final class GameBananaBridge extends BridgeAbstract
             return [];
         }
 
-        return $data;
+        return array_values(array_filter($data, fn($v) => is_array($v)));
     }
 
     /**

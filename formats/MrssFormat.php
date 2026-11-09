@@ -182,6 +182,10 @@ final class MrssFormat extends FormatAbstract
             }
         }
 
-        return $document->saveXml();
+        $xml = $document->saveXml();
+        if ($xml === false) {
+            return '';
+        }
+        return $xml;
     }
 }

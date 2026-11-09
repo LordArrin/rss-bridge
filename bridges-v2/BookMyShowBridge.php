@@ -286,6 +286,7 @@ final class BookMyShowBridge extends BridgeAbstract
         if (is_array($dates) === false) {
             $dates = [];
         }
+        $dates = array_values(array_filter($dates, fn($v) => is_array($v)));
 
         $html = $this->getDatesHtml($dates);
 
@@ -297,6 +298,7 @@ final class BookMyShowBridge extends BridgeAbstract
 
         $venues = $event['arrVenues'] ?? [];
         if (is_array($venues) === true) {
+            $venues = array_values(array_filter($venues, fn($v) => is_array($v)));
             $html .= $this->generateVenueHtml($venues);
         }
 
@@ -465,6 +467,11 @@ final class BookMyShowBridge extends BridgeAbstract
             return '';
         }
 
+        $childEvents = array_values(array_filter($childEvents, fn($v) => is_array($v)));
+        if ($childEvents === []) {
+            return '';
+        }
+
         $data = $childEvents[0];
         if (is_array($data) === false) {
             return '';
@@ -566,6 +573,11 @@ final class BookMyShowBridge extends BridgeAbstract
     {
         $childEvents = $eventGroup['ChildEvents'] ?? [];
         if (is_array($childEvents) === false || $childEvents === []) {
+            return null;
+        }
+
+        $childEvents = array_values(array_filter($childEvents, fn($v) => is_array($v)));
+        if ($childEvents === []) {
             return null;
         }
 

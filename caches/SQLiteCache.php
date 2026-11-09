@@ -182,6 +182,9 @@ final class SQLiteCache extends AbstractCache
             }
 
             $stmt = $this->db->prepare('SELECT expiration FROM locks WHERE key = :key');
+            if ($stmt === false) {
+                throw new \RuntimeException('Failed to prepare SQLite statement for lock check');
+            }
             $stmt->bindValue(':key', $lockKey, \SQLITE3_BLOB);
             $result = $stmt->execute();
             $row = $result !== false ? $result->fetchArray(\SQLITE3_ASSOC) : false;
@@ -195,6 +198,9 @@ final class SQLiteCache extends AbstractCache
             $upsert = $this->db->prepare(
                 'INSERT OR REPLACE INTO locks (key, expiration) VALUES (:key, :expiration)'
             );
+            if ($upsert === false) {
+                throw new \RuntimeException('Failed to prepare SQLite statement for lock upsert');
+            }
             $upsert->bindValue(':key', $lockKey, \SQLITE3_BLOB);
             $upsert->bindValue(':expiration', $expiry, \SQLITE3_INTEGER);
             $upsert->execute();
@@ -238,6 +244,9 @@ final class SQLiteCache extends AbstractCache
         $cacheKey = $this->createCacheKey($key);
 
         $stmt = $this->db->prepare('SELECT value, expiration FROM storage WHERE key = :key');
+        if ($stmt === false) {
+            return ['fresh' => null, 'stale' => null];
+        }
         $stmt->bindValue(':key', $cacheKey, \SQLITE3_BLOB);
 
         $result = $stmt->execute();
@@ -297,6 +306,10 @@ final class SQLiteCache extends AbstractCache
         $stmt = $this->db->prepare(
             'INSERT OR REPLACE INTO storage (key, value, expiration) VALUES (:key, :value, :expiration)'
         );
+        if ($stmt === false) {
+            $this->logger->warning('Failed to prepare SQLite statement for set()');
+            return;
+        }
         $stmt->bindValue(':key', $cacheKey, \SQLITE3_BLOB);
         $stmt->bindValue(':value', $blob, \SQLITE3_BLOB);
         $stmt->bindValue(':expiration', $hardExpiration, \SQLITE3_INTEGER);
@@ -313,6 +326,9 @@ final class SQLiteCache extends AbstractCache
         $cacheKey = $this->createCacheKey($key);
 
         $stmt = $this->db->prepare('DELETE FROM storage WHERE key = :key');
+        if ($stmt === false) {
+            return;
+        }
         $stmt->bindValue(':key', $cacheKey, \SQLITE3_BLOB);
 
         try {
@@ -331,23 +347,25 @@ final class SQLiteCache extends AbstractCache
         $now = time();
 
         $stmt = $this->db->prepare('DELETE FROM storage WHERE expiration > 0 AND expiration <= :now');
-        $stmt->bindValue(':now', $now, \SQLITE3_INTEGER);
-
-        try {
-            $stmt->execute();
-        } catch (\Exception $e) {
-            $this->logger->warning(Url::createSaneExceptionMessage($e));
+        if ($stmt !== false) {
+            $stmt->bindValue(':now', $now, \SQLITE3_INTEGER);
+            try {
+                $stmt->execute();
+            } catch (\Exception $e) {
+                $this->logger->warning(Url::createSaneExceptionMessage($e));
+            }
         }
 
         // Expired lock leases are pure garbage: no worker will ever reclaim
         // them through the normal path once the entry is regenerated.
         $locks = $this->db->prepare('DELETE FROM locks WHERE expiration <= :now');
-        $locks->bindValue(':now', $now, \SQLITE3_INTEGER);
-
-        try {
-            $locks->execute();
-        } catch (\Exception $e) {
-            $this->logger->warning(Url::createSaneExceptionMessage($e));
+        if ($locks !== false) {
+            $locks->bindValue(':now', $now, \SQLITE3_INTEGER);
+            try {
+                $locks->execute();
+            } catch (\Exception $e) {
+                $this->logger->warning(Url::createSaneExceptionMessage($e));
+            }
         }
     }
 

@@ -31,11 +31,11 @@ final class SfeedFormat extends FormatAbstract
             $author = (string) ($itemArray['author'] ?? '');
 
             $rawEnclosures = $itemArray['enclosures'] ?? [];
-            $enclosures = is_array($rawEnclosures) === true ? $rawEnclosures : [];
+            $enclosures = is_array($rawEnclosures) === true ? array_values(array_filter($rawEnclosures, fn($v) => is_string($v))) : [];
             $enclosure = $this->getFirstEnclosure($enclosures);
 
             $rawCategories = $itemArray['categories'] ?? [];
-            $categories = is_array($rawCategories) === true ? $rawCategories : [];
+            $categories = is_array($rawCategories) === true ? array_values(array_filter($rawCategories, fn($v) => is_string($v))) : [];
             $categoriesStr = $this->escape($this->getCategories($categories));
 
             $text .= sprintf(

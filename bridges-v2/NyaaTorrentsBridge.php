@@ -96,6 +96,12 @@ final class NyaaTorrentsBridge extends BridgeAbstract
             $item = $feedItem;
             $originalUri = $item['uri'] ?? '';
 
+            if (is_array($originalUri) === true) {
+                $originalUri = (string) ($originalUri[0] ?? '');
+            } else {
+                $originalUri = (string) $originalUri;
+            }
+
             $viewUri = str_replace('.torrent', '', $originalUri);
             $viewUri = str_replace('/download/', '/view/', $viewUri);
             $item['uri'] = $viewUri;

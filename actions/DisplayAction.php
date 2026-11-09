@@ -189,7 +189,9 @@ final class DisplayAction implements ActionInterface
                     $lastModifiedTimestamp = $previousLastModified;
                     $formatObj->setLastModified($previousLastModified);
                     $body = mb_convert_encoding($formatObj->render(), 'UTF-8', 'UTF-8');
-                    $etag = $previousEtag;
+                    if ($previousEtag !== null) {
+                        $etag = $previousEtag;
+                    }
                 }
             }
         }
