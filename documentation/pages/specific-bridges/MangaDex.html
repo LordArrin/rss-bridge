@@ -1,0 +1,126 @@
+<!-- meta:uri:https://mangadex.org/ -->
+<p>This bridge uses the official <a href="https://api.mangadex.org/docs/" target="_blank" rel="noopener">MangaDex API</a> to fetch manga chapters. It provides stable, authenticated access to MangaDex content.</p>
+
+<ul>
+    <li>
+        <strong>API-based.</strong>
+        Uses the official MangaDex API instead of HTML parsing, ensuring stability even when the website layout changes.
+    </li>
+    <li>
+        <strong>Requires MangaDex account.</strong>
+        You must have a registered MangaDex account and create a Personal Client to obtain authentication credentials.
+    </li>
+    <li>
+        <strong>Automatic token management.</strong>
+        The bridge handles OAuth2 authentication, token refresh, and caching automatically. You never need to manually manage tokens.
+    </li>
+    <li>
+        <strong>Image fallback.</strong>
+        When Data Saver images are unavailable (404), the bridge automatically falls back to full-quality images.
+    </li>
+</ul>
+
+<h4>Configuration</h4>
+<ol>
+    <li>
+        <span>Create a MangaDex account if you don't have one: <a href="https://mangadex.org/register" target="_blank" rel="noopener">https://mangadex.org/register</a></span>
+    </li>
+    <li>
+        <span>Log in and go to your account settings: <a href="https://mangadex.org/settings" target="_blank" rel="noopener">https://mangadex.org/settings</a></span>
+    </li>
+    <li>
+        <span>Scroll down to the <strong>API Clients</strong> section and click <strong>Create</strong></span>
+    </li>
+    <li>
+        <span>Fill in the form:</span>
+        <ul>
+            <li><strong>Name:</strong> Any descriptive name (e.g., "RSS Bridge")</li>
+            <li><strong>Type:</strong> Select <strong>Personal Client</strong></li>
+        </ul>
+        <span>After approval (usually automatic), your client will appear in the list.</span>
+    </li>
+    <li>
+        <span>Copy your <strong>Client ID</strong> (looks like <code>personal-client-xxxxx-xxxxx-xxxxx-xxxxx</code>) and click <strong>Get Secret</strong> to reveal and copy your <strong>Client Secret</strong>.</span>
+    </li>
+    <li>
+        <span>Add your credentials to your <code>/config/.bridges</code> file in the <code>[MangaDexBridge]</code> section:</span>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>[MangaDexBridge]
+client_id = "personal-client-xxxxx-xxxxx-xxxxx-xxxxx"
+client_secret = "your-client-secret-here"
+username = "your-mangadex-username"
+password = "your-mangadex-password"
+log_level = "info"</code></pre>
+        </div>
+    </li>
+    <li>
+        <span>Restart your RSS-Bridge container to apply the configuration:</span>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>docker restart rss-bridge</code></pre>
+        </div>
+    </li>
+</ol>
+
+<div class="note info">
+    💡 <strong>Note:</strong> The <code>log_level</code> parameter is optional and defaults to <code>info</code>. Available levels: <code>debug</code>, <code>info</code>, <code>warning</code>, <code>error</code>. Use <code>debug</code> for troubleshooting authentication issues.
+</div>
+
+<div class="note warning">
+    ⚠️ <strong>Security:</strong> Never share your <code>client_secret</code> or password with anyone. MangaDex staff will never ask for your credentials. The bridge stores them securely in your local configuration and uses them only to authenticate with the MangaDex API.
+</div>
+
+<h4>How authentication works</h4>
+<p>The bridge uses the OAuth2 password grant flow as described in the <a href="https://api.mangadex.org/docs/02-authentication/personal-clients/" target="_blank" rel="noopener">MangaDex API documentation</a>:</p>
+<ol>
+    <li>On first request, the bridge exchanges your username and password for an <strong>access token</strong> and a <strong>refresh token</strong></li>
+    <li>The access token is cached for <strong>14 minutes</strong> (tokens expire after 15 minutes)</li>
+    <li>When the access token expires, the bridge automatically refreshes it using the refresh token (no password needed)</li>
+    <li>The refresh token is cached for <strong>30 days</strong>. When it expires, the bridge re-authenticates with your credentials</li>
+</ol>
+
+<p>All token management happens automatically — you never need to manually obtain, copy, or update tokens. Just configure your credentials once and the bridge handles the rest.</p>
+
+<h4>Bridge parameters</h4>
+
+<p><strong>Global parameters:</strong></p>
+<ul>
+    <li><strong>Item Limit</strong> — Maximum number of chapters to fetch (default: 10)</li>
+    <li><strong>Chapter Languages</strong> — Comma-separated language codes (e.g., <code>en,jp</code>). Leave empty for all languages.</li>
+    <li><strong>Fetch chapter page images</strong> — Whether to include chapter images in feed content:
+        <ul>
+            <li><code>None</code> — No images (fastest, least bandwidth)</li>
+            <li><code>Data Saver</code> — Compressed images (fallback to full quality if unavailable)</li>
+            <li><code>Full Quality</code> — Original high-resolution images (most bandwidth)</li>
+        </ul>
+    </li>
+</ul>
+
+<p><strong>Title Chapters context:</strong></p>
+<ul>
+    <li><strong>URL to title page</strong> — Full MangaDex URL of the manga (e.g., <code>https://mangadex.org/title/a96676e5-8ae2-425e-ba8c-0b5c0ab4a1e7/chainsaw-man</code>)</li>
+    <li><strong>Allow external feed items</strong> — Include chapters hosted on external sites</li>
+</ul>
+
+<p><strong>Search Chapters context:</strong></p>
+<ul>
+    <li><strong>Chapter Number</strong> — Filter by specific chapter number (leave empty for all)</li>
+    <li><strong>Group UUID</strong> — Filter by scanlation group (from group page URL)</li>
+    <li><strong>User UUID</strong> — Filter by uploader (from user page URL)</li>
+    <li><strong>Allow external feed items</strong> — Include chapters hosted on external sites</li>
+</ul>
+
+<div class="note info">
+    💡 <strong>Tip:</strong> Authenticated requests have higher rate limits and access to more content than unauthenticated ones. If you experience "403 Forbidden" errors without credentials, configure authentication as described above.
+</div>

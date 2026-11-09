@@ -83,12 +83,36 @@ final class MangaDexBridge extends BridgeAbstract
     ];
 
     public const CONFIGURATION = [
-        'access_token' => [
+        'client_id' => [
             'required' => false,
+        ],
+        'client_secret' => [
+            'required' => false,
+        ],
+        'username' => [
+            'required' => false,
+        ],
+        'password' => [
+            'required' => false,
+        ],
+        'log_level' => [
+            'required' => false,
+            'defaultValue' => 'info',
         ],
     ];
 
     private const API_ROOT = 'https://api.mangadex.org/';
+    private const AUTH_URL = 'https://auth.mangadex.org/realms/mangadex/protocol/openid-connect/token';
+
+    private const ACCESS_TOKEN_TTL = 840;
+    private const REFRESH_TOKEN_TTL = 2592000;
+
+    private const LOG_LEVELS = [
+        'debug' => 1,
+        'info' => 2,
+        'warning' => 3,
+        'error' => 4,
+    ];
 
     private const BASE_HEADERS = [
         'User-Agent: rss-bridge bot (https://github.com/LordArrin/rss-bridge)',
@@ -107,6 +131,7 @@ final class MangaDexBridge extends BridgeAbstract
 
     private string $feedName = '';
     private string $feedURI = '';
+    private int $logLevel = 2;
 
     public function getName(): string
     {
@@ -132,6 +157,8 @@ final class MangaDexBridge extends BridgeAbstract
 
     public function collectData(): void
     {
+        $this->initLogLevel();
+
         $apiUri = $this->getAPI();
         $headers = $this->getHeaders();
 
@@ -471,11 +498,210 @@ final class MangaDexBridge extends BridgeAbstract
     {
         $headers = array_merge(self::BASE_HEADERS, ['Content-Type: application/json']);
 
-        $accessToken = $this->getOption('access_token');
-        if (is_string($accessToken) === true && $accessToken !== '') {
+        $accessToken = $this->getAccessToken();
+        if ($accessToken !== null) {
             $headers[] = 'Authorization: Bearer ' . $accessToken;
         }
 
         return $headers;
+    }
+
+    private function getAccessToken(): ?string
+    {
+        $clientId = $this->getOption('client_id');
+        $clientSecret = $this->getOption('client_secret');
+        $username = $this->getOption('username');
+        $password = $this->getOption('password');
+
+        if (
+            is_string($clientId) === false || $clientId === '' ||
+            is_string($clientSecret) === false || $clientSecret === '' ||
+            is_string($username) === false || $username === '' ||
+            is_string($password) === false || $password === ''
+        ) {
+            $this->logInfo('Credentials not configured, using unauthenticated requests');
+            return null;
+        }
+
+        $accessTokenCacheKey = 'mangadex_access_token';
+        $cachedAccessToken = $this->loadCacheValue($accessTokenCacheKey);
+
+        if (is_string($cachedAccessToken) === true && $cachedAccessToken !== '') {
+            $this->logInfo('Access token found in cache, reusing');
+            return $cachedAccessToken;
+        }
+
+        $refreshTokenCacheKey = 'mangadex_refresh_token';
+        $cachedRefreshToken = $this->loadCacheValue($refreshTokenCacheKey);
+
+        if (is_string($cachedRefreshToken) === true && $cachedRefreshToken !== '') {
+            $this->logInfo('Access token expired, attempting refresh via refresh_token');
+            $newAccessToken = $this->refreshAccessToken($clientId, $clientSecret, $cachedRefreshToken);
+            if ($newAccessToken !== null) {
+                $this->saveCacheValue($accessTokenCacheKey, $newAccessToken, self::ACCESS_TOKEN_TTL);
+                $this->logInfo('Access token successfully refreshed');
+                return $newAccessToken;
+            }
+            $this->logWarning('refresh_token failed or expired, falling back to password authentication');
+        } else {
+            $this->logInfo('No cached tokens found, performing full password authentication');
+        }
+
+        $tokens = $this->authenticateWithPassword($clientId, $clientSecret, $username, $password);
+        if ($tokens === null) {
+            $this->logError('Authentication failed, continuing without token');
+            return null;
+        }
+
+        $this->saveCacheValue($accessTokenCacheKey, $tokens['access_token'], self::ACCESS_TOKEN_TTL);
+        $this->saveCacheValue($refreshTokenCacheKey, $tokens['refresh_token'], self::REFRESH_TOKEN_TTL);
+        $this->logInfo('Authentication successful, tokens obtained and cached');
+
+        return $tokens['access_token'];
+    }
+
+    /**
+     * @return array{access_token: string, refresh_token: string}|null
+     */
+    private function authenticateWithPassword(string $clientId, string $clientSecret, string $username, string $password): ?array
+    {
+        $postData = http_build_query([
+            'grant_type' => 'password',
+            'username' => $username,
+            'password' => $password,
+            'client_id' => $clientId,
+            'client_secret' => $clientSecret,
+        ]);
+
+        $headers = array_merge(self::BASE_HEADERS, ['Content-Type: application/x-www-form-urlencoded']);
+
+        $curlOptions = [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $postData,
+        ];
+
+        try {
+            $this->logDebug('Requesting access token via password grant');
+
+            $response = getContents(self::AUTH_URL, $headers, $curlOptions);
+
+            if (is_string($response) === false) {
+                $this->logError('Auth response is not a string');
+                return null;
+            }
+
+            $data = Json::decode($response, true);
+            if (is_array($data) === false) {
+                $this->logError('Auth response could not be decoded as array');
+                return null;
+            }
+
+            $accessToken = $data['access_token'] ?? '';
+            $refreshToken = $data['refresh_token'] ?? '';
+
+            if (
+                is_string($accessToken) === false || $accessToken === '' ||
+                is_string($refreshToken) === false || $refreshToken === ''
+            ) {
+                $this->logError('Auth response missing access_token or refresh_token');
+                return null;
+            }
+
+            $this->logInfo('Password grant successful');
+
+            return [
+                'access_token' => $accessToken,
+                'refresh_token' => $refreshToken,
+            ];
+        } catch (\Exception $e) {
+            $this->logError('Password authentication failed');
+            return null;
+        }
+    }
+
+    private function refreshAccessToken(string $clientId, string $clientSecret, string $refreshToken): ?string
+    {
+        $postData = http_build_query([
+            'grant_type' => 'refresh_token',
+            'refresh_token' => $refreshToken,
+            'client_id' => $clientId,
+            'client_secret' => $clientSecret,
+        ]);
+
+        $headers = array_merge(self::BASE_HEADERS, ['Content-Type: application/x-www-form-urlencoded']);
+
+        $curlOptions = [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $postData,
+        ];
+
+        try {
+            $this->logDebug('Requesting access token via refresh_token grant');
+
+            $response = getContents(self::AUTH_URL, $headers, $curlOptions);
+
+            if (is_string($response) === false) {
+                $this->logError('Refresh response is not a string');
+                return null;
+            }
+
+            $data = Json::decode($response, true);
+            if (is_array($data) === false) {
+                $this->logError('Refresh response could not be decoded as array');
+                return null;
+            }
+
+            $accessToken = $data['access_token'] ?? '';
+
+            if (is_string($accessToken) === false || $accessToken === '') {
+                $this->logError('Refresh response missing access_token');
+                return null;
+            }
+
+            $this->logInfo('refresh_token grant successful');
+
+            return $accessToken;
+        } catch (\Exception $e) {
+            $this->logError('Token refresh failed');
+            return null;
+        }
+    }
+
+    private function initLogLevel(): void
+    {
+        $level = $this->getOption('log_level');
+        if (is_string($level) === true && isset(self::LOG_LEVELS[$level]) === true) {
+            $this->logLevel = self::LOG_LEVELS[$level];
+        } else {
+            $this->logLevel = self::LOG_LEVELS['info'];
+        }
+    }
+
+    private function logDebug(string $message): void
+    {
+        if ($this->logLevel <= self::LOG_LEVELS['debug']) {
+            $this->logger->debug('MangaDex: ' . $message);
+        }
+    }
+
+    private function logInfo(string $message): void
+    {
+        if ($this->logLevel <= self::LOG_LEVELS['info']) {
+            $this->logger->info('MangaDex: ' . $message);
+        }
+    }
+
+    private function logWarning(string $message): void
+    {
+        if ($this->logLevel <= self::LOG_LEVELS['warning']) {
+            $this->logger->warning('MangaDex: ' . $message);
+        }
+    }
+
+    private function logError(string $message): void
+    {
+        if ($this->logLevel <= self::LOG_LEVELS['error']) {
+            $this->logger->error('MangaDex: ' . $message);
+        }
     }
 }
