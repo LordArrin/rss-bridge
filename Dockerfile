@@ -263,7 +263,7 @@ RUN apk del .build-deps
 # ============================================================
 FROM alpine:${ALPINE_VERSION} AS runtime
 
-ARG IMAGE_VERSION=1.2.8
+ARG IMAGE_VERSION=1.2.9
 ARG VERSION_PLACEHOLDER=__RSSBRIDGE_IMAGE_VERSION__
 ENV CURL_IMPERSONATE=firefox155
 ENV LD_PRELOAD=/usr/lib/libmimalloc-secure.so \
@@ -412,6 +412,8 @@ RUN MIMALLOC_LIB=$(find /usr/lib -maxdepth 1 \( -name 'libmimalloc*.so*' -type f
     ln -sf "$MIMALLOC_LIB" /usr/lib/libmimalloc-secure.so && \
     echo "/usr/lib/libmimalloc-secure.so" > /etc/ld.so.preload
 
+RUN ln -sf /usr/bin/openssl /usr/sbin/openssl
+
 # ============================================================
 # Copy application configs and source
 # ============================================================
@@ -440,7 +442,7 @@ RUN composer install --optimize-autoloader --no-interaction --ignore-platform-re
     chmod +x /app/bin/* && \
     chmod +x /app/docker-entrypoint.sh
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -fsS --compressed "http://localhost/?action=health" || exit 1
 
 EXPOSE 80/tcp 80/udp
