@@ -1,0 +1,82 @@
+<!-- meta:uri:https://pawchive.pw/ -->
+<p>This bridge fetches posts from <a href="https://pawchive.pw/" target="_blank" rel="noopener">Pawchive</a>, a reliable archiving platform for creator content. It currently supports Patreon and Pixiv Fanbox creators.</p>
+
+<ul>
+    <li><p><strong>Multi-service support.</strong> Fetches content seamlessly from all availible services using a unified interface.</p></li>
+    <li><p><strong>Requires Pawchive session.</strong> You must be logged into a Pawchive account and provide your active session cookie for reliable API access.</p></li>
+    <li><p><strong>Smart media handling.</strong> Options to hide videos/attachments or skip text-only posts entirely, saving bandwidth and feed clutter.</p></li>
+    <li><p><strong>Automatic mirror failover.</strong> If the primary Pawchive domain is unreachable, the bridge automatically attempts to fetch data from alternative configured mirrors.</p></li>
+</ul>
+
+<h4>Configuration</h4>
+<ol>
+    <li>
+        <p>Log in to your Pawchive account: <a href="https://pawchive.pw/" target="_blank" rel="noopener">https://pawchive.pw/</a></p>
+    </li>
+    <li>
+        <p>Open your browser's Developer Tools:<br>
+        • <strong>Windows/Linux:</strong> Press <code>F12</code> or <code>Ctrl + Shift + I</code><br>
+        • <strong>macOS:</strong> Press <code>Cmd + Option + I</code></p>
+    </li>
+    <li>
+        <p>Navigate to the Cookies storage section:<br>
+        • <strong>Google Chrome / Edge / Brave:</strong> Go to the <strong>Application</strong> tab → Expand <strong>Storage</strong> → <strong>Cookies</strong> → Select <code>https://pawchive.pw</code>.<br>
+        • <strong>Mozilla Firefox:</strong> Go to the <strong>Storage</strong> tab → Expand <strong>Cookies</strong> → Select <code>https://pawchive.pw</code>.</p>
+    </li>
+    <li>
+        <p>In the cookie table, find the row where the <strong>Name</strong> is exactly <code>session</code>. Double-click the corresponding <strong>Value</strong> and copy the entire string.</p>
+    </li>
+    <li>
+        <p>Add your session cookie to your <code>/config/.bridges</code> file in the <code>[PawchiveBridge]</code> section:</p>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>[PawchiveBridge]
+session = "your-long-session-cookie-string-here"</code></pre>
+        </div>
+    </li>
+    <li>
+        <p>Restart your RSS-Bridge container to apply the configuration:</p>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>docker restart rss-bridge</code></pre>
+        </div>
+    </li>
+</ol>
+
+<div class="note warning">
+    <p>⚠️ <strong>Security:</strong> Your session cookie grants full access to your Pawchive account. <strong>Never share this value with anyone.</strong> The bridge stores it securely in your local configuration and uses it only to authenticate API requests.</p>
+</div>
+
+<h4>How authentication works</h4>
+<p>The bridge uses a stateless session cookie authentication method:</p>
+<ol>
+    <li><p>On every request, the bridge attaches your <code>session</code> cookie to the HTTP headers.</p></li>
+    <li><p>This authenticates you as a logged-in user, granting access to subscriber-only content (if your account has access) and higher API rate limits.</p></li>
+    <li><p>If the primary domain fails, the bridge automatically retries the request against alternative Pawchive mirrors using the same session cookie.</p></li>
+</ol>
+
+<h4>Bridge parameters</h4>
+
+<p><strong>Global parameters:</strong></p>
+<ul>
+    <li><p><strong>Content service:</strong> The platform to fetch from (<code>Patreon</code> or <code>Pixiv Fanbox</code>).</p></li>
+    <li><p><strong>Creator ID:</strong> The numeric or alphanumeric ID of the creator (found in the URL of their Pawchive page).</p></li>
+    <li><p><strong>Search query:</strong> Optional text to filter posts by title or content.</p></li>
+    <li><p><strong>Limit:</strong> Maximum number of posts to fetch (default: 10).</p></li>
+    <li><p><strong>Hide videos &amp; attachments:</strong> If enabled, shows only image previews. Videos, full-size images, and file attachments will be completely hidden to save bandwidth.</p></li>
+    <li><p><strong>Hide posts without media:</strong> If enabled, skips text-only posts entirely, showing only posts that contain images, videos, or files.</p></li>
+</ul>
+
+<div class="note info">
+    <p>💡 <strong>Tip:</strong> You can find the <strong>Creator ID</strong> by looking at the URL of the creator's page on Pawchive. For example, in <code>https://pawchive.pw/patreon/user/1234567</code>, the Creator ID is <code>1234567</code>.</p>
+</div>
