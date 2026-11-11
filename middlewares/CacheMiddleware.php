@@ -86,11 +86,6 @@ final class CacheMiddleware implements Middleware
         }
 
         if (in_array($code, [400, 403, 404], true) === true) {
-            if ($this->isBrokenBridgeRequest($request) === true) {
-                $this->cache->delete($cacheKey);
-                return $response;
-            }
-
             $ttl = 60 + random_int(0, 120);
 
             $retryAfterHint = \HttpException::parseRetryAfter($response->getHeader('retry-after'));
@@ -270,32 +265,6 @@ final class CacheMiddleware implements Middleware
         return str_contains($response->getBody(), 'cURL error') === true;
     }
 
-    private function isBrokenBridgeRequest(Request $request): bool
-    {
-        $bridgeName = $request->get('bridge');
-        if (is_string($bridgeName) === false || $bridgeName === '') {
-            return false;
-        }
-
-        if (class_exists(\RSSBridge\BrokenBridgeStub::class, false) === false) {
-            return false;
-        }
-
-        $normalized = strtolower(\RSSBridge\BridgeFactory::normalizeBridgeName($bridgeName));
-
-        foreach (get_declared_classes() as $className) {
-            if (is_subclass_of($className, \RSSBridge\BrokenBridgeStub::class) === false) {
-                continue;
-            }
-            $stubName = substr($className, -strlen(' (Broken)'));
-            if (strtolower(\RSSBridge\BridgeFactory::normalizeBridgeName($stubName)) === $normalized) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private function resolveMaxAge(Request $request): int
     {
         $attribute = $request->getAttribute('_resolved_cache_timeout');
@@ -424,7 +393,7 @@ final class CacheMiddleware implements Middleware
             unset($params[$key]);
         }
         ksort($params);
-        $encoded = json_encode($params);
+        $encoded = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
         return 'http_' . ($encoded === false ? '{}' : $encoded);
     }
 

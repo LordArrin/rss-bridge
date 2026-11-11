@@ -1066,7 +1066,7 @@ final class Vk2Bridge extends BridgeAbstract
 
             $list->removeAttribute('class');
 
-            $isOrdered = $list->tagName === 'ol';
+            $isOrdered = $list->localName === 'ol';
             $startAttr = $list->getAttribute('start');
 
             $style = 'display: block !important; margin: 1em 0 !important; padding-left: 2em !important; ';
@@ -1094,9 +1094,10 @@ final class Vk2Bridge extends BridgeAbstract
             $li->removeAttribute('class');
 
             $parentList = $li->parentNode;
-            $isOrdered = $parentList instanceof \Dom\Element && $parentList->tagName === 'ol';
+            $isOrdered = $parentList instanceof \Dom\Element && $parentList->localName === 'ol';
 
             $style = 'display: list-item !important; margin: 0.5em 0 !important; ';
+
             if ($isOrdered === true) {
                 $style .= 'list-style-type: decimal !important; ';
             } else {

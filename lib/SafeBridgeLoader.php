@@ -8,12 +8,17 @@ use RSSBridge\Logger\Logger;
 use RSSBridge\Caches\CacheInterface;
 
 /**
- * Safe bridge loader that wraps BridgeFactory to prevent application crashes.
+ * Safe bridge loader that wraps BridgeFactory to prevent application crashes
+ * during bridge instantiation.
  *
- * When a bridge cannot be loaded (due to syntax errors, signature mismatches,
- * or any other fatal failure), this loader returns a {@see BrokenBridgeStub}
- * instead of propagating the exception, allowing the rest of the application
- * to continue functioning.
+ * When a bridge cannot be loaded (due to syntax errors, missing files, or
+ * signature mismatches during instantiation), this loader returns a
+ * {@see BrokenBridgeStub} instead of propagating the exception, allowing
+ * the rest of the application to continue functioning.
+ *
+ * IMPORTANT: This only protects against instantiation and compile-time errors.
+ * Runtime fatal errors inside collectData() (e.g., OOM, calling undefined functions)
+ * will still crash the process unless handled by an outer execution sandbox.
  */
 class SafeBridgeLoader
 {

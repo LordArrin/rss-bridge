@@ -60,9 +60,9 @@ final class BleepingComputerBridge extends FeedExpander
         $bleepImages = $articleBody->querySelectorAll('img[src*="bleepstatic.com"]');
         foreach ($bleepImages as $img) {
             $parent = $img->parentElement;
-            if ($parent !== null && $parent->tagName === 'a') {
+            if ($parent !== null && $parent->localName === 'a') {
                 $grandparent = $parent->parentElement;
-                if ($grandparent !== null && $grandparent->tagName === 'div') {
+                if ($grandparent !== null && $grandparent->localName === 'div') {
                     $grandparent->remove();
                     continue;
                 }
@@ -70,7 +70,7 @@ final class BleepingComputerBridge extends FeedExpander
                 continue;
             }
             $imgParent = $img->parentElement;
-            if ($imgParent !== null && $imgParent->tagName === 'div') {
+            if ($imgParent !== null && $imgParent->localName === 'div') {
                 $imgParent->remove();
             }
         }

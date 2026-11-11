@@ -32,7 +32,7 @@ Before submitting or generating any bridge code, ensure it passes the following 
 
 2. **PHPStan**: Performs static analysis to catch type errors, dead code, and potential bugs. **Level 7 is the minimum required standard.**
    - Configuration: [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon)
-   - Command: `vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=5`
+   - Command: `vendor/bin/phpstan analyse bridges-v2/YourBridge.php`
    - Includes `phpstan-strict-rules` and `phpstan-deprecation-rules`
    - Includes a custom rule `ForbidOldDomApiRule` that **forbids the legacy DOM API** (`DOMDocument`, `DOMNode`, `DOMElement`, `DOMXPath`, ...) and enforces the new `\Dom\*` API (`\Dom\HTMLDocument`, `\Dom\XMLDocument`, `\Dom\Element`, `\Dom\XPath`, ...)
 
@@ -982,7 +982,7 @@ vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php
 vendor/bin/phpcbf --standard=phpcs.xml bridges-v2/YourBridge.php
 
 # Static analysis (Level 7 is mandatory; phpstan.neon already sets it)
-vendor/bin/phpstan analyse bridges-v2/YourBridge.php --level=5
+vendor/bin/phpstan analyse bridges-v2/YourBridge.php
 ```
 
 Or use the Composer shortcuts: `composer lint`, `composer lint:fix`, `composer stan`.

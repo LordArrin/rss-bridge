@@ -107,12 +107,16 @@ abstract class AbstractCache implements CacheInterface
      */
     private function normalizeForJson(mixed $value): mixed
     {
+        if (is_object($value) === true && ($value instanceof Response) === false) {
+            throw new \InvalidArgumentException(
+                'Cache only supports scalars, arrays, and Response objects. Convert objects to arrays before caching (e.g., via json_encode or toArray).'
+            );
+        }
+
         if ($value instanceof Response) {
             $body = $value->getBody();
             $headers = $value->getHeaders();
 
-            // Check if body contains binary data (not valid UTF-8)
-            // mb_check_encoding returns false for binary data like images
             $isBinary = mb_check_encoding($body, 'UTF-8') === false;
 
             if ($isBinary === true) {

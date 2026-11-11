@@ -81,151 +81,14 @@ git clone https://github.com/LordArrin/rss-bridge.git
 cd rss-bridge
 docker build -t yourname/rss-bridge .
 ```
-
-## Configuration
-
-Everything is configured through `/config/config.ini.php`. The container copies this file on startup, so changes require a container restart.
-
-### Authentication
-
-Token-based (passed via the `token` URL parameter):
-
-```ini
-[authentication]
-token = "hunter2"
-```
-
-Or HTTP Basic Authentication:
-
-```ini
-[authentication]
-enable = true
-username = "alice"
-password = "cat"
-```
-
-### Admin notifications (unified system)
-
-All interface notifications — including the legacy admin messages — go through
-the unified notification system in `lib/notifications.php` (`notify_info`,
-`notify_warning`, `notify_error`, rendered once by `render_notifications()` in
-`templates/base.html.php`). The old manual `alert-*` markup is gone.
-
-Admin-defined system message (shown on every page):
-
-```ini
-[system]
-message = "Scheduled maintenance tonight"
-message_url = "https://example.org/status"   ; optional, rendered as safe link
-message_title = "System message"             ; optional heading
-message_level = "warning"                    ; info | warning | error
-```
-
-Multiple messages are supported as well:
-
-```ini
-[system]
-messages[] = { text = "Second notice", title = "Alert", level = "error" }
-messages[] = "Plain info message"
-```
-
-Message text is treated as **plain text**: HTML from config is stripped and all
-output is escaped; URLs are validated (only http(s)/mailto/relative allowed).
-
-### Enabling Bridges
-
-Enable all discovered bridges:
-
-```ini
-[system]
-enabled_bridges[] = *
-```
-
-Or pick specific ones:
-
-```ini
-[system]
-enabled_bridges[] = Telegram2Bridge
-enabled_bridges[] = BoostyBridge
-enabled_bridges[] = RuStoreBridge
-```
-
-### Cache
-
-The default backend is internal `memcached` - it has maximum performance and security. Alternatives include external `memcached`, `sqlite`, `file`, `null`, and `array`.
-
-```ini
-[cache]
-type = "sqlite"
-```
-
-### Error Reporting
-
-```ini
-[error]
-; "feed" - errors appear inside the feed (default)
-; "http" - an HTML error page is returned
-; "none" - errors are silently logged
-output = "feed"
-
-; Number of occurrences before an error is reported
-report_limit = 3
-```
-
-## Proxy Profiles
-
-For more complex scenarios - bypassing Cloudflare, using residential IPs, and similar - use named proxy profiles. Bridges call them via `getProtectedContents()`, `getProtectedSimpleHTMLDOM()`, or `getProtectedBinary()`.
-
-### Direct
-
-A plain direct request with no proxy. Useful when you have a global proxy configured but need a clean IP for a specific site.
-
-```ini
-[proxy_profile_direct]
-type = "Direct"
-```
-
-### FlareSolverr
-
-For sites behind Cloudflare. Requires a running [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) instance.
-
-```ini
-[proxy_profile_flaresolverr]
-type = "FlareSolverr"
-url = "http://flaresolverr:8191"
-timeout = 60000
-```
-
-### TgWS (SOCKS5)
-
-A Telegram SOCKS5 proxy via [TgWS](https://github.com/LordArrin/tg-ws-proxy-docker) - useful for bypassing censorship.
-
-```ini
-[proxy_profile_tgws]
-type = "TgWS"
-socks_url = "socks5h://user:pass@192.168.1.1:14444"
-connect_timeout = 10
-request_timeout = 30
-retries = 3
-```
-
-### Using Profiles in Bridges
-
-```php
-$html = getProtectedContents('https://example.com', 'flaresolverr');
-$dom = getProtectedSimpleHTMLDOM('https://example.com', 'flaresolverr');
-$binary = getProtectedBinary('https://example.com/image.jpg', 'direct');
-```
-
-If a profile is referenced but not defined in `config.ini.php`, `DirectProxy` throws a `ClientException` with a hint about which configuration is missing.
-
 ## Custom Bridges
 
 Place a `.php` file in `/config/bridges-v2/` and restart the container. That's all.
 
 ```text
 ./config/
-├── config.ini.php
+├── .env
+├── .bridges
 └── bridges-v2/
     └── MyCustomBridge.php
 ```
@@ -306,56 +169,6 @@ rss-bridge/
 - `simple_html_dom` has been replaced with the built-in `\Dom\HTMLDocument`
 - All broken/abandoned bridges have been removed or rewritten.
 
-### Migration Steps
-
-```bash
-# 1. Back up the current configuration and legacy bridges
-cp config/config.ini.php config/config.ini.php.bak
-cp -r config/bridges config/bridges.bak
-
-# 2. Pull the new image
-docker compose pull
-
-# 3. Move custom bridges to bridges-v2/ and add the namespace
-#    (see the "Custom Bridges" section above)
-
-# 4. Restart
-docker compose up -d
-
-# 5. Inspect the logs
-docker compose logs -f
-```
-
-## Troubleshooting
-
-### Logs
-
-```bash
-docker logs rss-bridge
-docker logs -f rss-bridge   # follow mode
-```
-
-### Clearing the Cache
-
-```bash
-docker exec rss-bridge php /app/bin/cache-clear      # clear everything
-docker exec rss-bridge php /app/bin/cache-prune      # remove only expired entries
-```
-
-Note that bridge metadata is rebuilt automatically on every container startup, so there is no need to do it manually.
-
-### "FileCache path is not writable" / "attempt to write a readonly database"
-
-Make sure the `./config` directory is writable by the container user:
-
-```bash
-chmod -R 755 ./config
-```
-
-### Bridges marked as "Broken"
-
-This typically indicates an incompatible method signature in one of the bridges. Open the logs and search for `Bridge compatibility error` - the output will point to the offending bridge and the exact compile error.
-
 ## License
 
 This fork is distributed under the [GNU Affero General Public License v3.0](LICENSE).
@@ -370,3 +183,4 @@ Third-party libraries used:
 | [PHP_CodeSniffer](https://github.com/PHPCSStandards/PHP_CodeSniffer) | BSD-3-Clause |
 | [PHPStan](https://phpstan.org/) | MIT |
 | [memcached](https://github.com/memcached/memcached) | Combined - BSD-3-Clause and others |
+| [freenginx](https://freenginx.org/LICENSE) | Combined - BSD-3-Clause and others |

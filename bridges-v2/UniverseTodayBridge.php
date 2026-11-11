@@ -117,7 +117,7 @@ final class UniverseTodayBridge extends FeedExpander
             }
 
             $parent = $img->parentElement;
-            if ($parent instanceof \Dom\Element === true && $parent->tagName === 'figure') {
+            if ($parent instanceof \Dom\Element === true && $parent->localName === 'figure') {
                 continue;
             }
 
@@ -188,7 +188,7 @@ final class UniverseTodayBridge extends FeedExpander
                 continue;
             }
 
-            if ($node->tagName === 'img' || $node->tagName === 'source') {
+            if ($node->localName === 'img' || $node->localName === 'source') {
                 foreach (['data-src', 'data-lazy-src', 'data-original'] as $lazyAttr) {
                     $lazyValue = $node->getAttribute($lazyAttr);
                     if ($lazyValue !== null && $lazyValue !== '' && str_starts_with($lazyValue, 'data:') === false) {
@@ -199,7 +199,7 @@ final class UniverseTodayBridge extends FeedExpander
                 }
             }
 
-            $attrs = $node->tagName === 'a' ? ['href'] : ['src'];
+            $attrs = $node->localName === 'a' ? ['href'] : ['src'];
             foreach ($attrs as $attr) {
                 $value = $node->getAttribute($attr);
                 if ($value === null || $value === '') {

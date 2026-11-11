@@ -111,7 +111,8 @@ function extract_css_background_image(string $style): ?string
 function extract_spa_json_variable(string $html, string $variableName): ?array
 {
     $safeVarName = preg_quote($variableName, '/');
-    $pattern = '/(?:var|let|const)\s+' . $safeVarName . '\s*=\s*(\{.+?\});/s';
+
+    $pattern = '/(?:var|let|const)\s+(?:window\.)?' . $safeVarName . '\s*=\s*(\{(?:[^{}]|(?1))*\})/s';
 
     if (preg_match($pattern, $html, $matches) === 1) {
         try {

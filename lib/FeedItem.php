@@ -225,15 +225,14 @@ class FeedItem
             if (is_string($enclosure) === false) {
                 continue;
             }
-            if (
-                filter_var(
-                    $enclosure,
-                    FILTER_VALIDATE_URL,
-                    FILTER_FLAG_PATH_REQUIRED
-                ) === false
-            ) {
-                continue;
-            } elseif (in_array($enclosure, $this->enclosures, true) === false) {
+
+            if (str_starts_with($enclosure, 'data:') === false) {
+                if (filter_var($enclosure, FILTER_VALIDATE_URL) === false) {
+                    continue;
+                }
+            }
+
+            if (in_array($enclosure, $this->enclosures, true) === false) {
                 $this->enclosures[] = $enclosure;
             }
         }

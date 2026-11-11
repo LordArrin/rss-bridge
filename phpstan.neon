@@ -37,3 +37,4 @@ parameters:
 
 rules:
     - RSSBridge\PHPStan\Rules\ForbidOldDomApiRule
+    - RSSBridge\PHPStan\Rules\DomTagNameComparisonRule

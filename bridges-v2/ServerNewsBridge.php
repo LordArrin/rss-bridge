@@ -186,7 +186,7 @@ final class ServerNewsBridge extends BridgeAbstract
 
         foreach ($article->querySelectorAll('.openGallery, .openGalleryMobile') as $element) {
             $parent = $element->parentElement;
-            if ($parent !== null && $parent->tagName === 'a') {
+            if ($parent !== null && $parent->localName === 'a') {
                 $parent->remove();
             } else {
                 $element->remove();

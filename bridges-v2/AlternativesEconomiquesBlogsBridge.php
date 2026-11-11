@@ -161,7 +161,7 @@ final class AlternativesEconomiquesBlogsBridge extends BridgeAbstract
                 $element->setAttribute('poster', $this->resolveUrl($baseUrl, $poster));
             }
 
-            if ($element->tagName === 'img') {
+            if ($element->localName === 'img') {
                 $dataSrc = $element->getAttribute('data-src');
                 if ($dataSrc !== null && $dataSrc !== '') {
                     $currentSrc = $element->getAttribute('src');

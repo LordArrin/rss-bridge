@@ -163,21 +163,17 @@ function html_option(string $name, string $value, bool $selected = false): strin
  */
 function break_annoying_html_tags(string $html): string
 {
-    $zwnj = "\u{200C}";
     $dangerousTags = 'script|iframe|object|embed|applet|svg|math|link|style|meta|base';
 
-    // 1. Case-insensitive breaking of dangerous tags
-    $html = (string) preg_replace('#<(' . $dangerousTags . ')\b#i', '<' . $zwnj . '$1', $html);
-    $html = (string) preg_replace('#</(' . $dangerousTags . ')\b#i', '</' . $zwnj . '$1', $html);
+    $html = (string) preg_replace('#<(' . $dangerousTags . ')\b#i', '&lt;$1', $html);
+    $html = (string) preg_replace('#</(' . $dangerousTags . ')\b#i', '&lt;/$1', $html);
 
-    // 2. Neutralize inline event handlers (on*="...")
     $html = (string) preg_replace(
         '#\s+on\w+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]*)#i',
         ' data-sanitized-handler',
         $html
     );
 
-    // 3. Neutralize javascript: URLs in href and src attributes
     $html = (string) preg_replace(
         '#\b(href|src)\s*=\s*(?:"[^"]*javascript:[^"]*"|\'[^\']*javascript:[^\']*\'|[^\s>"\']*javascript:[^\s>"\']*)#i',
         '$1="about:blank"',

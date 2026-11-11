@@ -119,11 +119,12 @@ final class FeedParser
         $xmlString = preg_replace("/^$bom/", '', $xmlString) ?? $xmlString;
 
         $problematicStrings = [
-            '&nbsp;',
-            '&raquo;',
-            '&rsquo;',
+            '&nbsp;'  => ' ',
+            '&raquo;' => '»',
+            '&rsquo;' => '’',
         ];
-        return str_replace($problematicStrings, '', $xmlString);
+
+        return str_replace(array_keys($problematicStrings), array_values($problematicStrings), $xmlString);
     }
 
     /**

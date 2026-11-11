@@ -147,17 +147,11 @@ final class MemcachedCache extends AbstractCache
     public function getWithStale(string $key): array
     {
         $cacheKey = $this->createCacheKey($key);
-
-        // Fetch the metadata wrapper first: for chunked entries it contains
-        // only a small list of chunk keys, so we avoid downloading (and
-        // keeping in memory) the full payload when the entry is still fresh.
         $item = $this->conn->get($cacheKey);
 
         $resultCode = $this->conn->getResultCode();
         if ($resultCode !== self::RES_SUCCESS) {
             if ($resultCode !== self::RES_NOTFOUND) {
-                // Server error/timeout: report as miss but log it so failures
-                // are not silently indistinguishable from a cache miss.
                 $this->logger->warning(sprintf(
                     'Memcached get failed (code %d: %s)',
                     $resultCode,
@@ -171,59 +165,50 @@ final class MemcachedCache extends AbstractCache
             return ['fresh' => null, 'stale' => null];
         }
 
-        // Validate that we got a proper array (JSON-decoded wrapper)
         if (is_array($item) === false || array_key_exists('value', $item) === false) {
-            // Corrupt or legacy data: invalidate
             $this->logger->info(sprintf('Discarding invalid cache entry for key "%s"', $key));
             $this->delete($key);
             return ['fresh' => null, 'stale' => null];
         }
 
-        $now = time();
         $value = $item['value'] ?? null;
         $freshUntil = (int) ($item['fresh_until'] ?? 0);
-        $isChunked = isset($item['chunks']) === true && is_array($item['chunks']) === true;
 
-        // Fast path: non-chunked fresh entry - no payload reassembly needed.
-        // The value is already a properly decoded JSON value (could be an object like Response)
-        if ($isChunked === false && ($freshUntil === 0 || $freshUntil > $now)) {
-            return ['fresh' => $value, 'stale' => $value];
-        }
+        $isChunked = is_array($value) === true && isset($value['__chunks']) === true;
 
-        // Chunked entry: reassemble payload from secondary keys (only reached
-        // for stale reads or expired chunks).
-        if ($isChunked === true) {
-            $chunksList = $item['chunks'];
-            $payload = null;
-            if (is_array($chunksList) === true) {
-                /** @var list<string> $safeChunks */
-                $safeChunks = array_values(array_filter($chunksList, 'is_string'));
-                $payload = $this->readChunked($safeChunks);
-            }
-
-            if ($payload === null) {
-                // Some chunk was evicted or lost: treat the whole entry as a
-                // miss instead of serving corrupt/truncated data.
+        if ($isChunked === false) {
+            if (is_string($value) === false) {
+                $this->logger->info(sprintf('Discarding invalid (non-string) cache entry for key "%s"', $key));
+                $this->delete($key);
                 return ['fresh' => null, 'stale' => null];
             }
 
-            // Decode the reassembled JSON payload
             try {
-                $decoded = $this->decode($payload, $key);
-                $value = $decoded['stale']; // We only need the value, decode() already handled fresh/stale logic
+                return $this->decode($value, $key);
             } catch (\Throwable $e) {
-                $this->logger->warning('Failed to decode chunked memcached entry: ' . $e->getMessage());
+                $this->logger->warning('Failed to decode memcached entry: ' . $e->getMessage());
                 return ['fresh' => null, 'stale' => null];
             }
         }
 
-        // fresh_until = 0 means "never expires" (always fresh)
-        $isFresh = ($freshUntil === 0 || $freshUntil > $now);
+        $chunksList = $value['__chunks'];
+        $payload = null;
+        if (is_array($chunksList) === true) {
+            /** @var list<string> $safeChunks */
+            $safeChunks = array_values(array_filter($chunksList, 'is_string'));
+            $payload = $this->readChunked($safeChunks);
+        }
 
-        return [
-            'fresh' => $isFresh === true ? $value : null,
-            'stale' => $value,
-        ];
+        if ($payload === null) {
+            return ['fresh' => null, 'stale' => null];
+        }
+
+        try {
+            return $this->decode($payload, $key);
+        } catch (\Throwable $e) {
+            $this->logger->warning('Failed to decode chunked memcached entry: ' . $e->getMessage());
+            return ['fresh' => null, 'stale' => null];
+        }
     }
 
     public function set(string $key, mixed $value, ?int $ttl = null): void
@@ -234,7 +219,6 @@ final class MemcachedCache extends AbstractCache
 
         $cacheKey = $this->createCacheKey($key);
         $now = time();
-
         $freshUntil = $ttl === null ? 0 : $now + $ttl;
 
         $serverExpiresAt = match (true) {
@@ -243,18 +227,16 @@ final class MemcachedCache extends AbstractCache
             default => $freshUntil + self::DEFAULT_STALE_TTL,
         };
 
-        // Encode the value to JSON using AbstractCache
         try {
-            $encoded = $this->encode($value, 0); // 0 because fresh_until is stored separately in the wrapper
+            $encoded = $this->encode($value, $freshUntil);
         } catch (\JsonException $e) {
             $this->logger->error(sprintf('Failed to JSON encode cache key "%s": %s', $key, $e->getMessage()));
             return;
         }
 
-        $storeValue = $value;
+        $storeValue = $encoded; // FIX: Всегда храним JSON-строку, а не сырой $value
         $chunkKeys = [];
 
-        // Check if the encoded JSON string exceeds chunk size
         if (strlen($encoded) > $this->chunkSize) {
             $parts = str_split($encoded, $this->chunkSize);
 
@@ -288,10 +270,8 @@ final class MemcachedCache extends AbstractCache
                 return;
             }
 
-            // Store only chunk references in the main key
-            $storeValue = [
-                'chunks' => $chunkKeys,
-            ];
+            // Маркер того, что значение разбито на чанки
+            $storeValue = ['__chunks' => $chunkKeys];
         }
 
         $item = [

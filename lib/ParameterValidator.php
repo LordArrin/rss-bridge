@@ -174,15 +174,22 @@ class ParameterValidator
         if ($filteredValue === false) {
             return null;
         }
-        if (in_array($filteredValue, $expectedValues, true) === false) {
-            // Check sub-values?
-            foreach ($expectedValues as $subName => $subValue) {
-                if (is_array($subValue) === true && in_array($filteredValue, $subValue, true) === true) {
-                    return (string)$filteredValue;
+        $filteredValue = (string) $filteredValue;
+
+        $stringifiedExpected = array_map('strval', $expectedValues);
+        if (in_array($filteredValue, $stringifiedExpected, true) === true) {
+            return $filteredValue;
+        }
+
+        foreach ($expectedValues as $subName => $subValue) {
+            if (is_array($subValue) === true) {
+                $stringifiedSub = array_map('strval', $subValue);
+                if (in_array($filteredValue, $stringifiedSub, true) === true) {
+                    return $filteredValue;
                 }
             }
-            return null;
         }
-        return (string)$filteredValue;
+
+        return null;
     }
 }

@@ -101,7 +101,8 @@ abstract class FeedExpander extends BridgeAbstract
      */
     public function getURI(): string
     {
-        return $this->feed['uri'] ?? parent::getURI();
+        $uri = $this->feed['uri'] ?? '';
+        return $uri !== '' ? $uri : parent::getURI();
     }
 
     /**
@@ -110,7 +111,8 @@ abstract class FeedExpander extends BridgeAbstract
      */
     public function getName(): string
     {
-        return $this->feed['title'] ?? parent::getName();
+        $title = $this->feed['title'] ?? '';
+        return $title !== '' ? $title : parent::getName();
     }
 
     /**
@@ -119,6 +121,7 @@ abstract class FeedExpander extends BridgeAbstract
      */
     public function getIcon(): string
     {
-        return $this->feed['icon'] ?? parent::getIcon();
+        $icon = $this->feed['icon'] ?? '';
+        return $icon !== '' ? $icon : parent::getIcon();
     }
 }

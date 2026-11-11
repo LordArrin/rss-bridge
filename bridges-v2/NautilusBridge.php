@@ -283,7 +283,7 @@ final class NautilusBridge extends FeedExpander
             }
 
             $parent = $img->parentElement;
-            if ($parent instanceof \Dom\Element === true && $parent->tagName === 'figure') {
+            if ($parent instanceof \Dom\Element === true && $parent->localName === 'figure') {
                 continue;
             }
 
@@ -317,12 +317,12 @@ final class NautilusBridge extends FeedExpander
                 continue;
             }
 
-            if ($node->tagName === 'a') {
+            if ($node->localName === 'a') {
                 $href = $node->getAttribute('href');
                 if ($href !== null && $href !== '' && str_starts_with($href, 'http') === false) {
                     $node->setAttribute('href', urljoin(self::URI, $href));
                 }
-            } elseif ($node->tagName === 'img' || $node->tagName === 'source') {
+            } elseif ($node->localName === 'img' || $node->localName === 'source') {
                 $src = $node->getAttribute('src');
                 if ($src !== null && $src !== '' && str_starts_with($src, 'http') === false) {
                     $node->setAttribute('src', urljoin(self::URI, $src));

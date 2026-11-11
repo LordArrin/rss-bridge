@@ -114,7 +114,7 @@ final class GoodreadsBridge extends BridgeAbstract
             $coverSrc = '';
             $bookCoverNode = $row->querySelector('.bookCover');
             if ($bookCoverNode !== null) {
-                if ($bookCoverNode->tagName === 'img') {
+                if ($bookCoverNode->localName === 'img') {
                     $coverSrc = $bookCoverNode->getAttribute('data-src') ?? '';
                     if ($coverSrc === '') {
                         $coverSrc = $bookCoverNode->getAttribute('src') ?? '';

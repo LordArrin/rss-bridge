@@ -225,10 +225,16 @@ function getContents(
             if ($cachedResponse instanceof Response) {
                 $freshUntil = responseFreshUntil($response);
                 if ($freshUntil === null) {
-                    $freshUntil = time() + 3600;
+                    $freshUntil = time() + 86400;
                 }
-                $merged = $response->withBody($cachedResponse->getBody());
-                $cache->set($cacheKey, $merged, max(1, $freshUntil - time()));
+
+                $merged = new Response(
+                    $cachedResponse->getBody(),
+                    200,
+                    $response->getHeaders()
+                );
+
+                $cache->set($cacheKey, $merged, max(3600, $freshUntil - time()));
                 $response = $merged;
             }
             break;

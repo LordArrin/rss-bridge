@@ -227,7 +227,7 @@ abstract class HoyoBase extends BridgeAbstract
             $parent = $iframe->parentNode;
             $isInsideVideoFrame = false;
             while ($parent !== null) {
-                if ($parent instanceof \Dom\Element === true && $parent->tagName === 'div') {
+                if ($parent instanceof \Dom\Element === true && $parent->localName === 'div') {
                     $class = $parent->getAttribute('class') ?? '';
                     if (strpos($class, 'ttr-video-frame') !== false) {
                         $isInsideVideoFrame = true;

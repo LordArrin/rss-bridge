@@ -59,7 +59,7 @@ final class DisplayAction implements ActionInterface
         $params = $request->toArray();
         unset($params['token'], $params['action']);
         ksort($params);
-        $cacheKey = 'http_' . json_encode($params);
+        $cacheKey = 'http_' . json_encode($params, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 
         $bridge = $this->safeLoader->createSafely($bridgeClassName);
 
@@ -71,7 +71,6 @@ final class DisplayAction implements ActionInterface
 
         $ttl = $request->get('_cache_timeout');
 
-        // Read custom timeout setting directly from environment
         $customTimeoutEnabled = filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN);
 
         if ($customTimeoutEnabled === true && $ttl !== null) {
@@ -138,7 +137,6 @@ final class DisplayAction implements ActionInterface
                 $this->logger->error(sprintf('Exception in DisplayAction(%s)', $bridge->getShortName()), ['e' => $e]);
             }
 
-            // Read error reporting settings from environment variables
             $errorOutputRaw = getenv('ERROR_OUTPUT');
             $errorOutput = (is_string($errorOutputRaw) === true && $errorOutputRaw !== '') ? $errorOutputRaw : 'http';
 
@@ -176,38 +174,34 @@ final class DisplayAction implements ActionInterface
         ini_set('mbstring.substitute_character', 'none');
         $body = mb_convert_encoding($body, 'UTF-8', 'UTF-8');
 
+        $jsonItems = json_encode($items, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        $itemsHash = md5($jsonItems === false ? '{}' : $jsonItems);
+        $etag = '"' . $itemsHash . '"';
+
         $lastModifiedTimestamp = $now;
-        $etag = self::createETag($body);
         $previousEntry = $this->cache->getWithStale($this->createCacheKey($request))['stale'] ?? null;
+
         if ($previousEntry instanceof Response && $previousEntry->getCode() === 200) {
             $previousEtag = $previousEntry->getHeader('etag');
-            $sameContent = $previousEtag === $etag
-                || ($previousEtag === null && $previousEntry->getBody() === $body);
+
+            $sameContent = $previousEtag === $etag;
+
             if ($sameContent === true) {
                 $previousLastModified = strtotime((string) $previousEntry->getHeader('last-modified'));
                 if ($previousLastModified !== false && $previousLastModified < $now) {
                     $lastModifiedTimestamp = $previousLastModified;
                     $formatObj->setLastModified($previousLastModified);
-                    $body = mb_convert_encoding($formatObj->render(), 'UTF-8', 'UTF-8');
-                    if ($previousEtag !== null) {
-                        $etag = $previousEtag;
-                    }
                 }
             }
         }
 
         $headers = [
             'last-modified' => gmdate('D, d M Y H:i:s \G\M\T', $lastModifiedTimestamp),
-            'etag' => $etag,
+            'etag'          => $etag,
             'content-type'  => $formatObj->getMimeType() . '; charset=UTF-8',
         ];
 
         return new Response($body, 200, $headers);
-    }
-
-    private static function createETag(string $body): string
-    {
-        return '"' . md5($body) . '"';
     }
 
     private function createCacheKey(Request $request): string
@@ -215,7 +209,8 @@ final class DisplayAction implements ActionInterface
         $params = $request->toArray();
         unset($params['token'], $params['action']);
         ksort($params);
-        return 'http_' . json_encode($params);
+        $encoded = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        return 'http_' . ($encoded === false ? '{}' : $encoded);
     }
 
     /**

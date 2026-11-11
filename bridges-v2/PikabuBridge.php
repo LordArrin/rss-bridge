@@ -240,7 +240,7 @@ final class PikabuBridge extends BridgeAbstract
             $img->setAttribute('src', $src);
 
             $parent = $img->parentNode;
-            if ($parent !== null && $parent instanceof \Dom\Element && $parent->tagName === 'a') {
+            if ($parent !== null && $parent instanceof \Dom\Element && $parent->localName === 'a') {
                 if ($parent->parentNode !== null) {
                     $parent->parentNode->replaceChild($img, $parent);
                 }
