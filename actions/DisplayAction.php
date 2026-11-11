@@ -184,13 +184,18 @@ final class DisplayAction implements ActionInterface
         if ($previousEntry instanceof Response && $previousEntry->getCode() === 200) {
             $previousEtag = $previousEntry->getHeader('etag');
 
-            $sameContent = $previousEtag === $etag;
+            $sameContent = ($previousEtag !== null && $previousEtag === $etag)
+                        || ($previousEtag === null && $previousEntry->getBody() === $body);
 
             if ($sameContent === true) {
                 $previousLastModified = strtotime((string) $previousEntry->getHeader('last-modified'));
                 if ($previousLastModified !== false && $previousLastModified < $now) {
                     $lastModifiedTimestamp = $previousLastModified;
                     $formatObj->setLastModified($previousLastModified);
+
+                    if ($previousEtag !== null) {
+                        $etag = $previousEtag;
+                    }
                 }
             }
         }

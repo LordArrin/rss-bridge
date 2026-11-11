@@ -216,7 +216,7 @@ final class AtomFormat extends FormatAbstract
 
         $xml = $document->saveXml();
         if ($xml === false) {
-            return '';
+            throw new \Exception('Failed to render Atom XML feed');
         }
         return $xml;
     }

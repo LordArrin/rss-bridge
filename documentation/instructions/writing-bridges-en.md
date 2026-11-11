@@ -391,7 +391,8 @@ foreach ($dom->querySelectorAll('article.post') as $post) {
 | `$node->innerHTML` | `\Dom\Element` | `string` | Inner HTML |
 | `$node->outerHTML` | `\Dom\Element` | `string` | Element with inner HTML |
 | `$node->getAttribute('href')` | `\Dom\Element` | `?string` | Attribute value |
-| `$node->tagName` | `\Dom\Element` | `string` | Tag name (lowercase) |
+| `$node->tagName` | `\Dom\Element` | `string` | Tag name (**UPPERCASE** in HTML documents) |
+| `$node->localName` | `\Dom\Element` | `string` | Tag name (always **lowercase**, preferred for comparisons) |
 | `$node->parentElement` | `\Dom\Node` | `?\Dom\Element` | Parent element |
 | `$node->childNodes` | `\Dom\Node` | `\Dom\NodeList` | Children |
 
@@ -404,10 +405,13 @@ $date = $post->querySelector('time')?->getAttribute('datetime');
 
 ### Traversing the Tree
 
+> **⚠️ PHPStan trap:** In PHP 8.4+ `\Dom\HTMLDocument`, the `tagName` property returns the tag name in **UPPERCASE** (e.g., `'DIV'`, `'A'`) for HTML documents, following the WHATWG DOM spec. Comparing it to a lowercase string (e.g., `$node->tagName === 'div'`) will **always fail**. Always use `$node->localName` for case-insensitive comparisons.
+
 ```php
 $current = $node;
 while ($current !== null && $current instanceof \Dom\Element) {
-    if ($current->tagName === 'article') {
+    // Use localName for reliable lowercase comparison
+    if ($current->localName === 'article') {
         break;
     }
     $current = $current->parentElement;
@@ -500,7 +504,7 @@ $pollHtml = render_ascii_poll($pollOptions, $totalVoters, 'ascii');
 Extract data from HTML, inline JavaScript, or CSS styles:
 
 ```php
-// Extract text between delimiters (returns false if start delimiter not found)
+// Extract text between delimiters (returns an empty string if start or end delimiter is not found, ensuring strict_types compatibility)
 $data = extractFromDelimiters($html, 'window.data = ', ';');
 
 // Remove sections between delimiters
@@ -516,7 +520,7 @@ $imageUrl = extract_css_background_image($element->getAttribute('style') ?? '');
 
 // Extract a global JSON variable from a SPA HTML page (e.g., ytInitialData).
 // Safely decodes the JSON payload into an associative array, returning null on failure.
-// This avoids writing custom regex for <script> tags and handles strict JSON decoding.
+// Uses a robust regex that handles balanced braces, safely ignoring "};" inside JSON strings.
 $spaData = extract_spa_json_variable($html, 'ytInitialData');
 ```
 
@@ -780,7 +784,7 @@ $this->items[] = [
     'author' => 'Alice',                    // Optional
     'uid' => 'unique-id',                   // Globally unique, optional
     'categories' => ['news', 'tech'],       // Optional
-    'enclosures' => ['https://example.com/image.jpg'], // Optional media
+    'enclosures' => ['https://example.com/image.jpg', 'data:image/png;base64,...'], // Optional media (supports data: URIs)
 ];
 ```
 
@@ -1016,7 +1020,9 @@ If the bridge fails to load, check the container logs:
 docker logs rss-bridge | grep -i "YourBridge"
 ```
 
-Bridges are first loaded inside a sandboxed PHP subprocess (`SafeBridgeLoader` / `BridgeFactory::loadBridgeInSandbox()`), so fatal compile errors (e.g. signature mismatches with the parent class) are reported with the exact file and line instead of crashing the whole application.
+Bridges are loaded safely via `SafeBridgeLoader`, which catches instantiation and compile-time errors (e.g., syntax errors, missing classes, signature mismatches) and returns a `BrokenBridgeStub` instead of crashing the whole application.
+
+> **⚠️ Note:** This protection only applies to the loading/instantiation phase. Runtime fatal errors inside `collectData()` (e.g., calling undefined functions, out of memory) will still crash the process unless handled by an outer execution sandbox or caught explicitly.
 
 Finally, make sure the file is not marked executable in git — CI rejects executable bridge files:
 

@@ -256,7 +256,7 @@ final class LocalHost
         $config = [
             'timeout'      => $timeoutValue,
             'retries'      => $retriesValue,
-            'curl_options' => $curlOptions,
+            'curl_options' => $curlOptions + [CURLOPT_ENCODING => ''],
             'headers'      => $headers,
             'ssrf_check'   => false,
         ];

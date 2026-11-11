@@ -184,7 +184,7 @@ final class MrssFormat extends FormatAbstract
 
         $xml = $document->saveXml();
         if ($xml === false) {
-            return '';
+            throw new \Exception('Failed to render MRSS XML feed');
         }
         return $xml;
     }

@@ -5,20 +5,22 @@ declare(strict_types=1);
 /**
  * Extract the first part of a string matching the specified start and end delimiters.
  */
-function extractFromDelimiters(string $string, string $start, string $end): string|false
+function extractFromDelimiters(string $string, string $start, string $end): string
 {
     $startPos = strpos($string, $start);
     if ($startPos !== false) {
         $sectionStart = $startPos + strlen($start);
         $section_retrieved = substr($string, $sectionStart);
         $endPos = strpos($section_retrieved, $end);
+
         if ($endPos === false) {
-            return false;
+            return '';
         }
-        $section_retrieved = substr($section_retrieved, 0, $endPos);
-        return $section_retrieved;
+
+        return substr($section_retrieved, 0, $endPos);
     }
-    return false;
+
+    return '';
 }
 
 /**

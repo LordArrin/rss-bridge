@@ -193,10 +193,17 @@ final class MemcachedCache extends AbstractCache
 
         $chunksList = $value['__chunks'];
         $payload = null;
+
         if (is_array($chunksList) === true) {
-            /** @var list<string> $safeChunks */
-            $safeChunks = array_values(array_filter($chunksList, 'is_string'));
-            $payload = $this->readChunked($safeChunks);
+            foreach ($chunksList as $chunkKey) {
+                if (is_string($chunkKey) === false) {
+                    $this->logger->warning('Corrupted chunk list in memcached (non-string key), invalidating entry');
+                    $this->delete($key);
+                    return ['fresh' => null, 'stale' => null];
+                }
+            }
+
+            $payload = $this->readChunked(array_values($chunksList));
         }
 
         if ($payload === null) {
@@ -298,10 +305,10 @@ final class MemcachedCache extends AbstractCache
         $item = $this->conn->get($cacheKey);
         if (
             is_array($item) === true
-            && array_key_exists('chunks', $item) === true
-            && is_array($item['chunks']) === true
+            && array_key_exists('__chunks', $item) === true
+            && is_array($item['__chunks']) === true
         ) {
-            foreach ($item['chunks'] as $chunkKey) {
+            foreach ($item['__chunks'] as $chunkKey) {
                 if (is_string($chunkKey) === true) {
                     $this->conn->delete($chunkKey);
                 }
