@@ -9,11 +9,16 @@ declare(strict_types=1);
  * neutralizes polyglot attacks (malicious code embedded in image files),
  * and ensures the image is a valid, clean file.
  *
+ * SECURITY: this function is fail-closed. If the input cannot be sanitized for any
+ * reason (GD missing, undecodable data, encoding failure, ...), it returns a safe
+ * 1x1 transparent WebP placeholder instead of the original bytes, so unsanitized
+ * content is never passed through.
+ *
  * @param string $binary Raw image binary data
  * @param int|null $maxWidth Optional maximum width (null = no resize)
  * @param int|null $maxHeight Optional maximum height (null = no resize)
  * @param int $quality WebP quality (1-100)
- * @return string Sanitized image binary, or original on failure
+ * @return string Sanitized WebP binary, or a safe placeholder on failure
  */
 function sanitize_image(
     string $binary,
@@ -21,21 +26,22 @@ function sanitize_image(
     ?int $maxHeight = null,
     int $quality = 85
 ): string {
-    // Skip if GD not available
+    // Fail-closed: without GD we cannot sanitize, so never return the original.
     if (extension_loaded('gd') === false) {
-        return $binary;
+        return sanitize_image_placeholder();
     }
 
-    // Skip tiny files (likely corrupted or not images)
+    // Too small to be a meaningful image; do not pass untrusted bytes through.
     if (strlen($binary) < 100) {
-        return $binary;
+        return sanitize_image_placeholder();
     }
 
-    // Try to create image from binary
     $sourceImage = @imagecreatefromstring($binary);
     if ($sourceImage === false) {
-        return $binary;
+        return sanitize_image_placeholder();
     }
+
+    $bufferLevel = ob_get_level();
 
     try {
         $width = imagesx($sourceImage);
@@ -57,15 +63,25 @@ function sanitize_image(
             $targetWidth = (int) round($targetWidth * $ratio);
         }
 
-        // Ensure target dimensions are valid
-        if ($targetWidth < 1 || $targetHeight < 1) {
-            return $binary;
+        // Hard limit to prevent GD from failing on massive images (e.g., 2304 x 49853).
+        // 8192px is more than enough for any web display and keeps memory usage safe.
+        // This ensures the image is still sanitized (EXIF/polyglots stripped) rather
+        // than failing and returning a placeholder.
+        $maxDimension = 8192;
+        if ($targetWidth > $maxDimension || $targetHeight > $maxDimension) {
+            $ratio = min($maxDimension / $targetWidth, $maxDimension / $targetHeight);
+            $targetWidth = (int) round($targetWidth * $ratio);
+            $targetHeight = (int) round($targetHeight * $ratio);
         }
+
+        // Clamp to ensure valid dimensions for GD
+        $targetWidth = max(1, $targetWidth);
+        $targetHeight = max(1, $targetHeight);
 
         // Create clean canvas
         $cleanImage = imagecreatetruecolor($targetWidth, $targetHeight);
         if ($cleanImage === false) {
-            return $binary;
+            return sanitize_image_placeholder();
         }
 
         // Preserve transparency
@@ -92,11 +108,24 @@ function sanitize_image(
         $sanitized = ob_get_clean();
 
         if (is_string($sanitized) === false || $sanitized === '') {
-            return $binary;
+            return sanitize_image_placeholder();
         }
 
         return $sanitized;
     } catch (\Throwable $e) {
-        return $binary;
+        // Make sure a failed encode does not leave an output buffer open.
+        while (ob_get_level() > $bufferLevel) {
+            ob_end_clean();
+        }
+        return sanitize_image_placeholder();
     }
+}
+
+/**
+ * A valid 1x1 transparent WebP used as the fail-closed placeholder.
+ */
+function sanitize_image_placeholder(): string
+{
+    // PHPStan strict rules require the second parameter ($strict) to be explicitly set.
+    return (string) base64_decode('UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==', true);
 }

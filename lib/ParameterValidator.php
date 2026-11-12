@@ -37,7 +37,8 @@ class ParameterValidator
                         $input[$name] = $this->validateCheckboxValue($value);
                         break;
                     case 'list':
-                        $input[$name] = $this->validateListValue($value, $contextParameters[$name]['values'] ?? []);
+                        $expectedValues = $contextParameters[$name]['values'] ?? [];
+                        $input[$name] = $this->validateListValue($value, is_array($expectedValues) === true ? $expectedValues : []);
                         break;
                     default:
                     case 'text':
@@ -170,24 +171,30 @@ class ParameterValidator
      */
     private function validateListValue(mixed $value, array $expectedValues): ?string
     {
+        // Array input (e.g. ?param[]=x) is not a valid single list selection.
+        if (is_array($value) === true) {
+            return null;
+        }
+
         $filteredValue = filter_var($value, FILTER_UNSAFE_RAW);
         if ($filteredValue === false) {
             return null;
         }
         $filteredValue = (string) $filteredValue;
 
-        $stringifiedExpected = array_map('strval', $expectedValues);
-        if (in_array($filteredValue, $stringifiedExpected, true) === true) {
-            return $filteredValue;
-        }
-
-        foreach ($expectedValues as $subName => $subValue) {
-            if (is_array($subValue) === true) {
-                $stringifiedSub = array_map('strval', $subValue);
-                if (in_array($filteredValue, $stringifiedSub, true) === true) {
-                    return $filteredValue;
-                }
+        // Flatten option groups (['Group' => ['Label' => 'value', ...], ...]) into a
+        // flat list of stringified scalar values. array_walk_recursive only visits
+        // leaves, so this never casts an array to string (no "Array to string
+        // conversion" warning) and never whitelists the literal string 'Array'.
+        $allowed = [];
+        array_walk_recursive($expectedValues, static function (mixed $item) use (&$allowed): void {
+            if (is_scalar($item) === true) {
+                $allowed[] = (string) $item;
             }
+        });
+
+        if (in_array($filteredValue, $allowed, true) === true) {
+            return $filteredValue;
         }
 
         return null;

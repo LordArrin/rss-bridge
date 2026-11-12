@@ -152,7 +152,13 @@ function getContents(
 
     $requestBodyHash = null;
     if (isset($curlOptions[CURLOPT_POSTFIELDS]) === true) {
-        $requestBodyHash = md5(Json::encode($curlOptions[CURLOPT_POSTFIELDS], false));
+        try {
+            $requestBodyHash = md5(Json::encode($curlOptions[CURLOPT_POSTFIELDS], false));
+        } catch (\JsonException $e) {
+            // Non-JSON-encodable body (e.g. multipart): fall back to a stable hash
+            // so cache keying still works instead of crashing the request.
+            $requestBodyHash = md5(serialize($curlOptions[CURLOPT_POSTFIELDS]));
+        }
     }
     $cacheKey = implode('_', ['server', $url, $requestBodyHash]);
 
@@ -162,6 +168,9 @@ function getContents(
     }
 
     if ($cachedResponse !== null) {
+        // Serve from cache only while the origin's own freshness signals allow it.
+        // This is standard HTTP client caching and is independent of the bridge's
+        // CACHE_TIMEOUT (which controls how often collectData() runs at all).
         $freshUntil = responseFreshUntil($cachedResponse);
         if ($freshUntil !== null && $freshUntil > time()) {
             if ($returnFull === true) {
@@ -225,13 +234,31 @@ function getContents(
             if ($cachedResponse instanceof Response) {
                 $freshUntil = responseFreshUntil($response);
                 if ($freshUntil === null) {
+                    // No freshness signal on the 304: keep the entry around for
+                    // conditional revalidation (the merged response carries no
+                    // max-age, so responseFreshUntil() stays null and every call
+                    // revalidates rather than serving blindly).
                     $freshUntil = time() + 86400;
+                }
+
+                // A 304 has no body and frequently omits entity headers such as
+                // Content-Type. Take fresh validators/Cache-Control/Date from the
+                // 304, but carry entity headers over from the cached 200 so the
+                // merged response stays self-describing for downstream consumers.
+                $mergedHeaders = $response->getHeaders();
+                foreach (['content-type', 'content-language', 'content-disposition'] as $entityHeader) {
+                    if (isset($mergedHeaders[$entityHeader]) === false) {
+                        $cachedValues = $cachedResponse->getHeader($entityHeader, true);
+                        if ($cachedValues !== null && $cachedValues !== []) {
+                            $mergedHeaders[$entityHeader] = $cachedValues;
+                        }
+                    }
                 }
 
                 $merged = new Response(
                     $cachedResponse->getBody(),
                     200,
-                    $response->getHeaders()
+                    $mergedHeaders
                 );
 
                 $cache->set($cacheKey, $merged, max(3600, $freshUntil - time()));

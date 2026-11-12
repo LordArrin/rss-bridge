@@ -425,7 +425,8 @@ final class WikipediaBridge extends BridgeAbstract
                 continue;
             }
 
-            if (in_array($child->tagName, ['h2', 'h3'], true) === true) {
+            // FIX: Use localName instead of tagName, as tagName is UPPERCASE in PHP 8.4+ HTML documents.
+            if (in_array($child->localName, ['h2', 'h3'], true) === true) {
                 $headingText = trim($child->textContent ?? '');
 
                 foreach (self::STOP_SECTIONS as $stopSection) {

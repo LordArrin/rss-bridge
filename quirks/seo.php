@@ -43,7 +43,9 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
         libxml_use_internal_errors(false);
     }
 
-    /** @var array{uri?: string, title?: string, content?: string, timestamp?: int, enclosures?: array<int, string>, author?: string} $item */
+    // Working buffer. We build the final strictly-typed array at the end
+    // to satisfy PHPStan strict rules without relying on @var assertions
+    // on dynamically mutated arrays.
     $item = [];
 
     // == First source of metadata: Meta tags ==
@@ -128,11 +130,9 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
                         } elseif ($field === 'article:author:last_name' || $field === 'profile:last_name') {
                             $author_last_name = $field_value;
                         } else {
-                            if ($property === 'uri' || $property === 'title' || $property === 'content' || $property === 'author') {
-                                $item[$property] = $field_value;
-                            } elseif ($property === 'timestamp') {
-                                $item[$property] = $field_value;
-                            } elseif ($property === 'enclosures') {
+                            if ($property === 'enclosures') {
+                                $item['enclosures'] = [$field_value];
+                            } else {
                                 $item[$property] = $field_value;
                             }
                             break;
@@ -196,6 +196,35 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
         return false;
     };
 
+    // Normalize a JSON-LD "image" value into a list of URL strings. Handles a
+    // plain string, a list of strings, an object like {"url": "..."} /
+    // {"@id": "..."}, and a list of such objects.
+    $ldjson_extract_images = static function (mixed $value): array {
+        if (is_string($value) === true) {
+            return $value !== '' ? [$value] : [];
+        }
+        if (is_array($value) === false) {
+            return [];
+        }
+        if (array_is_list($value) === false) {
+            $value = [$value];
+        }
+        $urls = [];
+        foreach ($value as $candidate) {
+            if (is_string($candidate) === true && $candidate !== '') {
+                $urls[] = $candidate;
+            } elseif (is_array($candidate) === true) {
+                foreach (['url', 'contentUrl', '@id'] as $key) {
+                    if (isset($candidate[$key]) === true && is_string($candidate[$key]) === true && $candidate[$key] !== '') {
+                        $urls[] = $candidate[$key];
+                        break;
+                    }
+                }
+            }
+        }
+        return $urls;
+    };
+
     $ldjson_scripts = $html->querySelectorAll('script[type="application/ld+json"]');
     foreach ($ldjson_scripts as $html_ldjson_node) {
         $json_raw = json_decode($html_ldjson_node->textContent ?? '', true);
@@ -255,20 +284,30 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
 
                             if (is_array($json_root) === true && isset($json_root[$field]) === true) {
                                 $field_value = $json_root[$field];
+
+                                if ($property === 'enclosures') {
+                                    $images = $ldjson_extract_images($field_value);
+                                    if ($images !== []) {
+                                        $item['enclosures'] = $images;
+                                        break;
+                                    }
+                                    continue;
+                                }
+
                                 if (is_array($field_value) === true && isset($field_value[0]) === true) {
                                     $field_value = $field_value[0];
                                 }
+
+                                if ($property === 'timestamp' && is_int($field_value) === true) {
+                                    $item['timestamp'] = $field_value;
+                                    break;
+                                }
+
                                 if (is_string($field_value) === true && $field_value !== '') {
                                     if ($property === 'author' && $field === '@id') {
                                         $ldjson_author_id = $field_value;
                                     } else {
-                                        if ($property === 'uri' || $property === 'title' || $property === 'content' || $property === 'author') {
-                                            $item[$property] = $field_value;
-                                        } elseif ($property === 'timestamp') {
-                                            $item[$property] = $field_value;
-                                        } elseif ($property === 'enclosures') {
-                                            $item[$property] = $field_value;
-                                        }
+                                        $item[$property] = $field_value;
                                         break;
                                     }
                                 }
@@ -302,20 +341,43 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
         $item['author'] = $ldjson_author_mappings[$ldjson_author_id];
     }
 
-    // Adjust item field types
-    if (isset($item['enclosures']) === true && is_string($item['enclosures']) === true) {
-        $item['enclosures'] = [$item['enclosures']];
-    }
+    // == Normalize to the documented return shape ==
+    // We explicitly build the result array to satisfy PHPStan strict rules
+    // without relying on @var assertions on dynamically mutated variables.
+    $result = [];
 
-    // Convert timestamp to int, remove if invalid
-    if (isset($item['timestamp']) === true && is_string($item['timestamp']) === true) {
+    if (isset($item['uri']) === true && is_string($item['uri']) === true) {
+        $result['uri'] = $item['uri'];
+    }
+    if (isset($item['title']) === true && is_string($item['title']) === true) {
+        $result['title'] = $item['title'];
+    }
+    if (isset($item['content']) === true && is_string($item['content']) === true) {
+        $result['content'] = $item['content'];
+    }
+    if (isset($item['author']) === true && is_string($item['author']) === true) {
+        $result['author'] = $item['author'];
+    }
+    if (isset($item['timestamp']) === true && is_int($item['timestamp']) === true) {
+        $result['timestamp'] = $item['timestamp'];
+    } elseif (isset($item['timestamp']) === true && is_string($item['timestamp']) === true) {
         $parsed = strtotime($item['timestamp']);
         if ($parsed !== false) {
-            $item['timestamp'] = $parsed;
-        } else {
-            unset($item['timestamp']);
+            $result['timestamp'] = $parsed;
         }
     }
 
-    return $item;
+    if (isset($item['enclosures']) === true && is_array($item['enclosures']) === true) {
+        $validEnclosures = [];
+        foreach ($item['enclosures'] as $enclosure) {
+            if (is_string($enclosure) === true && $enclosure !== '') {
+                $validEnclosures[] = $enclosure;
+            }
+        }
+        if ($validEnclosures !== []) {
+            $result['enclosures'] = $validEnclosures;
+        }
+    }
+
+    return $result;
 }

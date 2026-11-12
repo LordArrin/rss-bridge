@@ -531,7 +531,9 @@ final class CurlHttpClient implements HttpClient
     public function request(string $url, array $config = []): Response
     {
         if ($url === '') {
-            throw new \HttpException('URL cannot be empty');
+            // Permanent configuration/programming error, not a transient timeout.
+            // An explicit code avoids httpStatusFromException() mapping code 0 to 503.
+            throw new \HttpException('URL cannot be empty', 500);
         }
 
         $ssrfCheck = $config['ssrf_check'] ?? null;
@@ -630,6 +632,9 @@ final class CurlHttpClient implements HttpClient
             CURLOPT_TIMEOUT         => (int)$config['timeout'],
             CURLOPT_CONNECTTIMEOUT  => (int)($config['connect_timeout'] ?? min(10, (int)((int)$config['timeout'] / 2))),
             CURLOPT_NOSIGNAL        => true,
+            // Advertise and transparently decode all supported content encodings.
+            // Callers may override via curl_options; this is the safe default.
+            CURLOPT_ENCODING        => '',
             CURLOPT_PROTOCOLS       => CURLPROTO_HTTP | CURLPROTO_HTTPS,
             CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
         ];
@@ -947,6 +952,9 @@ final class Request
         $self = new self();
         $get = [];
         foreach ($cliArgs as $key => $value) {
+            // Note: PHP coerces numeric-string keys back to integers, so positional
+            // CLI args end up with int keys. Lookups via get('0') still match because
+            // PHP coerces numeric string offsets, so this is transparent to callers.
             $get[(string) $key] = $value;
         }
         $self->get = $get;

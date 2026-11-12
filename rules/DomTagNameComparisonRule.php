@@ -5,112 +5,165 @@ declare(strict_types=1);
 namespace RSSBridge\PHPStan\Rules;
 
 use PhpParser\Node;
+use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\BinaryOp;
+use PhpParser\Node\Expr\FuncCall;
+use PhpParser\Node\Expr\Match_;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
 use PHPStan\Analyser\Scope;
 use PHPStan\Rules\Rule;
 use PHPStan\Rules\RuleErrorBuilder;
 use PHPStan\Type\ObjectType;
+use PHPStan\Type\TypeCombinator;
 
 /**
- * Detects incorrect lowercase string comparisons with the `tagName` property.
- * 
- * In PHP 8.4+ \Dom\HTMLDocument, the `tagName` property returns the tag name 
- * in UPPERCASE (e.g., 'DIV', 'A') for HTML documents, following the WHATWG DOM spec.
- * Comparing it to a lowercase string literal (e.g., $el->tagName === 'div') 
- * will always evaluate to false, causing silent logic failures.
- * 
- * @implements Rule<Node\Expr\BinaryOp>
+ * Flags comparisons of Dom\Element::$tagName against literals containing lowercase letters.
+ *
+ * In PHP 8.4+ \Dom\HTMLDocument, tagName is UPPERCASE ('DIV', 'H2') per the WHATWG DOM spec,
+ * so `$el->tagName === 'div'` is always false. Use $node->localName (always lowercase).
+ *
+ * Covers: ===, ==, !==, !=, in_array() needles, match() arms.
+ * Does NOT track variable indirection ($t = $el->tagName; $t === 'div') — use the grep pass.
+ *
+ * @implements Rule<Node>
  */
 final class DomTagNameComparisonRule implements Rule
 {
     public function getNodeType(): string
     {
-        return BinaryOp::class;
+        return Node::class;
     }
 
     /**
-     * @param BinaryOp $node
      * @return list<\PHPStan\Rules\IdentifierRuleError>
      */
     public function processNode(Node $node, Scope $scope): array
     {
-        // We only care about equality/inequality comparisons
+        if ($node instanceof BinaryOp) {
+            return $this->processBinaryOp($node, $scope);
+        }
+        if ($node instanceof FuncCall) {
+            return $this->processInArray($node, $scope);
+        }
+        if ($node instanceof Match_) {
+            return $this->processMatch($node, $scope);
+        }
+        return [];
+    }
+
+    /**
+     * @return list<\PHPStan\Rules\IdentifierRuleError>
+     */
+    private function processBinaryOp(BinaryOp $node, Scope $scope): array
+    {
         if (
-            !$node instanceof BinaryOp\Identical &&
-            !$node instanceof BinaryOp\Equal &&
-            !$node instanceof BinaryOp\NotIdentical &&
-            !$node instanceof BinaryOp\NotEqual
+            $node instanceof BinaryOp\Identical === false
+            && $node instanceof BinaryOp\Equal === false
+            && $node instanceof BinaryOp\NotIdentical === false
+            && $node instanceof BinaryOp\NotEqual === false
         ) {
             return [];
         }
 
-        $left = $node->left;
-        $right = $node->right;
+        foreach ([[$node->left, $node->right], [$node->right, $node->left]] as [$fetch, $literal]) {
+            if (
+                $fetch instanceof PropertyFetch
+                && $literal instanceof String_
+                && $this->isDomTagNameFetch($fetch, $scope)
+                && $this->hasLowercase($literal->value)
+            ) {
+                return [$this->error($literal->value)];
+            }
+        }
+        return [];
+    }
 
-        // Find which side is the PropertyFetch and which is the String literal
-        $propertyFetch = null;
-        $stringLiteral = null;
-
-        if ($left instanceof PropertyFetch && $right instanceof String_) {
-            $propertyFetch = $left;
-            $stringLiteral = $right;
-        } elseif ($right instanceof PropertyFetch && $left instanceof String_) {
-            $propertyFetch = $right;
-            $stringLiteral = $left;
-        } else {
+    /**
+     * @return list<\PHPStan\Rules\IdentifierRuleError>
+     */
+    private function processInArray(FuncCall $node, Scope $scope): array
+    {
+        if ($node->name instanceof Name === false || strtolower($node->name->toString()) !== 'in_array') {
             return [];
         }
-
-        // Check if the property being accessed is 'tagName'
-        if (!$propertyFetch->name instanceof Identifier || $propertyFetch->name->toString() !== 'tagName') {
+        $args = $node->getArgs();
+        if (count($args) < 2) {
             return [];
         }
-
-        // Check if the string literal contains lowercase letters (the actual bug)
-        // If it's already uppercase (e.g., 'DIV'), it's technically correct, though localName is still preferred.
-        if (strtolower($stringLiteral->value) === $stringLiteral->value && $stringLiteral->value !== strtolower($stringLiteral->value)) {
-            // Wait, the above logic is flawed. Let's do a proper lowercase check:
-        }
-        
-        $isLowercaseString = (strtolower($stringLiteral->value) === $stringLiteral->value) && 
-                             (strtoupper($stringLiteral->value) !== $stringLiteral->value);
-
-        if (!$isLowercaseString) {
+        $needle = $args[0]->value;
+        $haystack = $args[1]->value;
+        if ($needle instanceof PropertyFetch === false || $this->isDomTagNameFetch($needle, $scope) === false) {
             return [];
         }
-
-        // Verify that the variable is actually a DOM Node/Element to avoid false positives
-        $varType = $scope->getType($propertyFetch->var);
-        $isDomType = $varType->isObject()->yes() && (
-            $varType->isSuperTypeOf(new ObjectType('Dom\\Node'))->yes() ||
-            $varType->isSuperTypeOf(new ObjectType('Dom\\Element'))->yes() ||
-            $varType->isSuperTypeOf(new ObjectType('Dom\\HTMLDocument'))->yes()
-        );
-
-        if (!$isDomType) {
+        if ($haystack instanceof Array_ === false) {
             return [];
         }
+        foreach ($haystack->items as $item) {
+            if ($item !== null && $item->value instanceof String_ && $this->hasLowercase($item->value->value)) {
+                return [$this->error($item->value->value)];
+            }
+        }
+        return [];
+    }
 
-        $operator = $node instanceof BinaryOp\Identical || $node instanceof BinaryOp\NotIdentical ? '===' : '==';
-        $suggestedFix = $node instanceof BinaryOp\NotIdentical || $node instanceof BinaryOp\NotEqual ? '!== ' : '=== ';
+    /**
+     * @return list<\PHPStan\Rules\IdentifierRuleError>
+     */
+    private function processMatch(Match_ $node, Scope $scope): array
+    {
+        if ($node->cond instanceof PropertyFetch === false || $this->isDomTagNameFetch($node->cond, $scope) === false) {
+            return [];
+        }
+        foreach ($node->arms as $arm) {
+            if ($arm->conds === null) {
+                continue;
+            }
+            foreach ($arm->conds as $cond) {
+                if ($cond instanceof String_ && $this->hasLowercase($cond->value)) {
+                    return [$this->error($cond->value)];
+                }
+            }
+        }
+        return [];
+    }
 
-        return [
-            RuleErrorBuilder::message(sprintf(
-                'Comparing `tagName` to a lowercase string ("%s") will always fail in PHP 8.4+ HTML documents, as `tagName` returns UPPERCASE (e.g., "%s"). ' .
-                'Use `$node->localName %s"%s"` for case-insensitive lowercase comparison, or `strtolower($node->tagName) %s"%s"`.',
-                $stringLiteral->value,
-                strtoupper($stringLiteral->value),
-                $suggestedFix,
-                strtolower($stringLiteral->value),
-                $suggestedFix,
-                strtolower($stringLiteral->value)
-            ))
-                ->identifier('dom.tagNameLowercaseComparison')
-                ->tip('See: https://wiki.php.net/rfc/domdocument_html5_parser and WHATWG DOM specification for Element.tagName')
-                ->build(),
-        ];
+    private function isDomTagNameFetch(PropertyFetch $node, Scope $scope): bool
+    {
+        if ($node->name instanceof Identifier === false || $node->name->toString() !== 'tagName') {
+            return false;
+        }
+
+        // Strip null so nullable Dom\Element (?Dom\Element) is still recognised.
+        $varType = TypeCombinator::removeNull($scope->getType($node->var));
+        $element = new ObjectType('Dom\Element');
+        $domNode = new ObjectType('Dom\Node');
+
+        // Both directions: exact/subclass (element is supertype of var) and
+        // supertype/mixed (var is supertype of element). Avoids the inverted check.
+        return $element->isSuperTypeOf($varType)->yes()
+            || $domNode->isSuperTypeOf($varType)->yes()
+            || $varType->isSuperTypeOf($element)->yes();
+    }
+
+    private function hasLowercase(string $value): bool
+    {
+        // 'div', 'h2', 'Div' -> true; 'DIV', '123', '' -> false.
+        return $value !== '' && $value !== strtoupper($value);
+    }
+
+    private function error(string $literal): \PHPStan\Rules\IdentifierRuleError
+    {
+        return RuleErrorBuilder::message(sprintf(
+            'Comparing tagName to "%s" will always fail for HTML documents: in PHP 8.4+ \Dom\HTMLDocument '
+            . 'tagName is UPPERCASE ("%s"). Use $node->localName (always lowercase) instead.',
+            $literal,
+            strtoupper($literal)
+        ))
+            ->identifier('dom.tagNameLowercaseComparison')
+            ->tip('Replace ->tagName with ->localName, or wrap with strtolower(). See https://wiki.php.net/rfc/domdocument_html5_parser')
+            ->build();
     }
 }

@@ -56,10 +56,7 @@ final class DisplayAction implements ActionInterface
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Bridge is not enabled!']), 400);
         }
 
-        $params = $request->toArray();
-        unset($params['token'], $params['action']);
-        ksort($params);
-        $cacheKey = 'http_' . json_encode($params, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        $cacheKey = $this->createCacheKey($request);
 
         $bridge = $this->safeLoader->createSafely($bridgeClassName);
 
@@ -193,6 +190,12 @@ final class DisplayAction implements ActionInterface
                     $lastModifiedTimestamp = $previousLastModified;
                     $formatObj->setLastModified($previousLastModified);
 
+                    // Re-render so embedded timestamps (e.g. Atom <updated>) match the
+                    // preserved Last-Modified/ETag. Without this, identical ETags would
+                    // cover different bodies, which violates RFC 9110 and confuses readers.
+                    $body = $formatObj->render();
+                    $body = mb_convert_encoding($body, 'UTF-8', 'UTF-8');
+
                     if ($previousEtag !== null) {
                         $etag = $previousEtag;
                     }
@@ -223,7 +226,7 @@ final class DisplayAction implements ActionInterface
      */
     private function createFeedItemFromException(\Throwable $e, BridgeAbstract $bridge): array
     {
-        $uniqueIdentifier = urlencode((string)(int)(time() / 86400));
+        $uniqueIdentifier = urlencode((string) (int) (time() / 86400));
         $title = sprintf('Bridge returned error %s! (%s)', $e->getCode(), $uniqueIdentifier);
 
         $item = [
@@ -245,10 +248,22 @@ final class DisplayAction implements ActionInterface
     private function logBridgeError(string $bridgeName, int $code): int
     {
         $cacheKey = 'error_reporting_' . $bridgeName . '_' . $code;
-        $report = $this->cache->get($cacheKey);
+        $stored = $this->cache->get($cacheKey);
 
-        if ($report !== false && $report !== null && $report !== '') {
-            $report = Json::decode($report);
+        // A corrupted/legacy error-report entry must not crash the error path.
+        $report = null;
+        if (is_string($stored) === true && $stored !== '') {
+            try {
+                $decoded = Json::decode($stored);
+                if (is_array($decoded) === true && isset($decoded['count']) === true && is_int($decoded['count']) === true) {
+                    $report = $decoded;
+                }
+            } catch (\JsonException $e) {
+                $report = null;
+            }
+        }
+
+        if ($report !== null) {
             $report['time'] = time();
             $report['count']++;
         } else {
@@ -262,7 +277,7 @@ final class DisplayAction implements ActionInterface
         $ttl = 86400 * 5;
         $this->cache->set($cacheKey, Json::encode($report), $ttl);
 
-        return $report['count'];
+        return (int) $report['count'];
     }
 
     private static function createGithubIssueUrl(BridgeAbstract $bridge, \Throwable $e): string

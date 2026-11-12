@@ -28,9 +28,7 @@ function extractFromDelimiters(string $string, string $start, string $end): stri
  */
 function stripWithDelimiters(string $string, string $start, string $end): string
 {
-    while (strpos($string, $start) !== false) {
-        $startPos = strpos($string, $start);
-
+    while (($startPos = strpos($string, $start)) !== false) {
         $section_to_remove = substr($string, $startPos);
         $endPos = strpos($section_to_remove, $end);
         if ($endPos === false) {
@@ -52,11 +50,9 @@ function stripRecursiveHTMLSection(string $string, string $tag_name, string $tag
     $close_tag_length = strlen($close_tag);
 
     if (strpos($tag_start, $open_tag) === 0) {
-        while (strpos($string, $tag_start) !== false) {
+        while (($section_start = strpos($string, $tag_start)) !== false) {
             $max_recursion = 100;
             $section_to_remove = null;
-            $section_start = strpos($string, $tag_start);
-
             $search_offset = $section_start;
             do {
                 $max_recursion--;
@@ -103,8 +99,13 @@ function extract_css_background_image(string $style): ?string
  * Extract a global JSON variable from a SPA HTML page.
  *
  * Modern single-page applications (YouTube, Twitter, etc.) often embed their initial
- * state in a <script> tag as a global variable (e.g., `var ytInitialData = {...};`).
- * This function extracts and decodes the JSON payload for a given variable name.
+ * state in a <script> tag as a global variable (e.g., `var ytInitialData = {...};` or
+ * `window.ytInitialData = {...};`). This function extracts and decodes the JSON payload.
+ *
+ * The opening '{' is located with a cheap regex, then the matching closing brace is
+ * found with an O(n) scan that ignores braces inside JSON strings. This avoids PCRE
+ * recursion/backtrack limits on multi-megabyte payloads and correctly handles '}' or
+ * '{' characters appearing inside string values.
  *
  * @param string $html The raw HTML content.
  * @param string $variableName The name of the JavaScript variable (e.g., 'ytInitialData').
@@ -114,17 +115,62 @@ function extract_spa_json_variable(string $html, string $variableName): ?array
 {
     $safeVarName = preg_quote($variableName, '/');
 
-    $pattern = '/(?:var|let|const)\s+(?:window\.)?' . $safeVarName . '\s*=\s*(\{(?:[^{}]|(?1))*\})/s';
+    // Match `var|let|const NAME = {`, `window.NAME = {`, or a bare `NAME = {`.
+    // The lookbehind prevents matching NAME as a suffix of a longer identifier.
+    $pattern = '/(?:(?:var|let|const)\s+)?(?:window\.)?(?<![\w$])' . $safeVarName . '\s*=\s*\{/s';
 
-    if (preg_match($pattern, $html, $matches) === 1) {
-        try {
-            $decoded = json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
-            if (is_array($decoded) === true) {
-                return $decoded;
+    if (preg_match($pattern, $html, $matches, PREG_OFFSET_CAPTURE) !== 1) {
+        return null;
+    }
+
+    // Byte offset of the opening '{'.
+    $start = $matches[0][1] + strlen($matches[0][0]) - 1;
+    $length = strlen($html);
+    $depth = 0;
+    $inString = false;
+    $escape = false;
+    $end = null;
+
+    for ($i = $start; $i < $length; $i++) {
+        $char = $html[$i];
+
+        if ($inString === true) {
+            if ($escape === true) {
+                $escape = false;
+            } elseif ($char === '\\') {
+                $escape = true;
+            } elseif ($char === '"') {
+                $inString = false;
             }
-        } catch (\JsonException $e) {
-            return null;
+            continue;
         }
+
+        if ($char === '"') {
+            $inString = true;
+        } elseif ($char === '{') {
+            $depth++;
+        } elseif ($char === '}') {
+            $depth--;
+            if ($depth === 0) {
+                $end = $i;
+                break;
+            }
+        }
+    }
+
+    if ($end === null) {
+        return null;
+    }
+
+    $jsonString = substr($html, $start, $end - $start + 1);
+
+    try {
+        $decoded = json_decode($jsonString, true, 512, JSON_THROW_ON_ERROR);
+        if (is_array($decoded) === true) {
+            return $decoded;
+        }
+    } catch (\JsonException $e) {
+        return null;
     }
 
     return null;

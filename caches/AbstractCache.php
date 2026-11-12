@@ -12,6 +12,12 @@ use RSSBridge\Http\Response;
  * Provides JSON serialization/deserialization logic to avoid code duplication
  * and ensure consistent handling of non-JSON-serializable objects (like Response).
  *
+ * Supported values: scalars, arrays (of scalars/arrays), and a single top-level
+ * Response object. Any other object — including objects nested inside arrays or
+ * a Response nested inside an array — is rejected with an InvalidArgumentException.
+ * Objects are never silently serialized, because json_encode() would drop private
+ * state and read-back would silently change their type (object -> array).
+ *
  * All concrete cache classes should extend this class.
  */
 abstract class AbstractCache implements CacheInterface
@@ -45,6 +51,7 @@ abstract class AbstractCache implements CacheInterface
      * @param int|null $freshUntil Unix timestamp when the value becomes stale, or null for forever.
      * @return string JSON-encoded string.
      * @throws \JsonException If encoding fails.
+     * @throws \InvalidArgumentException If the value contains unsupported objects.
      */
     protected function encode(mixed $value, ?int $freshUntil): string
     {
@@ -96,50 +103,73 @@ abstract class AbstractCache implements CacheInterface
     }
 
     /**
-     * Converts non-JSON-serializable objects (like Response) into arrays
-     * before storing them in the cache.
+     * Converts a top-level Response into its array representation and validates
+     * that everything else contains only scalars and arrays.
      *
-     * Binary data (images, files) is automatically base64-encoded to ensure
-     * valid UTF-8 for JSON serialization.
+     * Binary data (images, files) in a Response is automatically base64-encoded to
+     * ensure valid UTF-8 for JSON serialization.
      *
      * @param mixed $value The value to normalize.
+     * @param bool  $isRoot Whether this is the top-level value (only the root may be a Response).
      * @return mixed The normalized value (arrays/scalars pass through unchanged).
+     * @throws \InvalidArgumentException If an unsupported object is encountered.
      */
-    private function normalizeForJson(mixed $value): mixed
+    private function normalizeForJson(mixed $value, bool $isRoot = true): mixed
     {
-        if (is_object($value) === true && ($value instanceof Response) === false) {
+        if ($value instanceof Response) {
+            if ($isRoot === false) {
+                throw new \InvalidArgumentException(
+                    'Nested Response objects are not supported by the cache. Cache the Response as the top-level value instead.'
+                );
+            }
+            return $this->responseToArray($value);
+        }
+
+        if (is_object($value) === true) {
             throw new \InvalidArgumentException(
                 'Cache only supports scalars, arrays, and Response objects. Convert objects to arrays before caching (e.g., via json_encode or toArray).'
             );
         }
 
-        if ($value instanceof Response) {
-            $body = $value->getBody();
-            $headers = $value->getHeaders();
-
-            $isBinary = mb_check_encoding($body, 'UTF-8') === false;
-
-            if ($isBinary === true) {
-                // Encode binary data as base64 to make it JSON-safe
-                return [
-                    '__type' => 'Http\\Response',
-                    'code' => $value->getCode(),
-                    'headers' => $headers,
-                    'body' => base64_encode($body),
-                    'body_encoding' => 'base64',
-                ];
+        if (is_array($value) === true) {
+            foreach ($value as $key => $item) {
+                $value[$key] = $this->normalizeForJson($item, false);
             }
+        }
 
+        return $value;
+    }
+
+    /**
+     * Builds the storable array representation of a Response, base64-encoding
+     * binary bodies so the result is always valid UTF-8 for JSON.
+     *
+     * @return array<string, mixed>
+     */
+    private function responseToArray(Response $value): array
+    {
+        $body = $value->getBody();
+        $headers = $value->getHeaders();
+
+        $isBinary = mb_check_encoding($body, 'UTF-8') === false;
+
+        if ($isBinary === true) {
             return [
                 '__type' => 'Http\\Response',
                 'code' => $value->getCode(),
                 'headers' => $headers,
-                'body' => $body,
-                'body_encoding' => 'utf8',
+                'body' => base64_encode($body),
+                'body_encoding' => 'base64',
             ];
         }
 
-        return $value;
+        return [
+            '__type' => 'Http\\Response',
+            'code' => $value->getCode(),
+            'headers' => $headers,
+            'body' => $body,
+            'body_encoding' => 'utf8',
+        ];
     }
 
     /**
