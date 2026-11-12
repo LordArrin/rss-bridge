@@ -212,15 +212,19 @@ function getContents(
         case 201:
         case 202:
             $cacheControl = $response->getHeader('cache-control');
+            $directives = [];
             if (is_string($cacheControl) === true && $cacheControl !== '') {
-                $directives = explode(',', $cacheControl);
-                $directives = array_map('trim', $directives);
-                if (
-                    in_array('no-cache', $directives, true) === true
-                    || in_array('no-store', $directives, true) === true
-                ) {
-                    break;
-                }
+                $directives = array_map('trim', explode(',', strtolower($cacheControl)));
+            }
+            if (in_array('no-store', $directives, true) === true) {
+                // Storage forbidden: purge any previously cached copy as well.
+                $cache->delete($cacheKey);
+                break;
+            }
+            if (in_array('no-cache', $directives, true) === true) {
+                // Storage allowed, but every use must revalidate; responseFreshUntil()
+                // returns null for no-cache, so the entry is never served blindly.
+                break;
             }
             $cache->set($cacheKey, $response, 86400);
             break;
@@ -232,13 +236,10 @@ function getContents(
             break;
         case 304:
             if ($cachedResponse instanceof Response) {
-                $freshUntil = responseFreshUntil($response);
-                if ($freshUntil === null) {
-                    // No freshness signal on the 304: keep the entry around for
-                    // conditional revalidation (the merged response carries no
-                    // max-age, so responseFreshUntil() stays null and every call
-                    // revalidates rather than serving blindly).
-                    $freshUntil = time() + 86400;
+                $cacheControl = $response->getHeader('cache-control');
+                $directives = [];
+                if (is_string($cacheControl) === true && $cacheControl !== '') {
+                    $directives = array_map('trim', explode(',', strtolower($cacheControl)));
                 }
 
                 // A 304 has no body and frequently omits entity headers such as
@@ -254,14 +255,30 @@ function getContents(
                         }
                     }
                 }
+                // The cached body is already content-decoded (CURLOPT_ENCODING),
+                // so transfer-era framing headers must not leak into the merge.
+                unset($mergedHeaders['content-length'], $mergedHeaders['content-encoding']);
 
+                // The merged response is exposed as 200: callers receive a usable
+                // representation, while validators are refreshed from the 304.
                 $merged = new Response(
                     $cachedResponse->getBody(),
                     200,
                     $mergedHeaders
                 );
 
-                $cache->set($cacheKey, $merged, max(3600, $freshUntil - time()));
+                if (in_array('no-store', $directives, true) === true) {
+                    // Origin explicitly forbids storage: drop the entry entirely.
+                    $cache->delete($cacheKey);
+                } else {
+                    // Storage TTL is NOT a freshness lifetime. responseFreshUntil()
+                    // decides whether the entry may be served without contacting the
+                    // origin; with no max-age/expires it returns null and every call
+                    // revalidates. The TTL only bounds how long validators are kept.
+                    $freshUntil = responseFreshUntil($response);
+                    $storageTtl = $freshUntil === null ? 86400 : max(3600, $freshUntil - time());
+                    $cache->set($cacheKey, $merged, $storageTtl);
+                }
                 $response = $merged;
             }
             break;

@@ -128,9 +128,12 @@ final class JsonFormat extends FormatAbstract
 
         $data['items'] = $items;
 
+        // Invalid UTF-8 (e.g. from a mis-decoded upstream page) is substituted
+        // instead of aborting the whole feed; JSON_THROW_ON_ERROR still surfaces
+        // real encoding failures such as recursion depth.
         $json = json_encode(
             $data,
-            \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_THROW_ON_ERROR
+            \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_INVALID_UTF8_SUBSTITUTE | \JSON_THROW_ON_ERROR
         );
 
         return $json;

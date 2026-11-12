@@ -4,23 +4,29 @@ declare(strict_types=1);
 
 /**
  * Extract the first part of a string matching the specified start and end delimiters.
+ *
+ * Return semantics are kept compatible with upstream RSS-Bridge and custom bridges:
+ * - false: the start delimiter was not found;
+ * - '':    the start delimiter was found but the end delimiter was not (or the section is empty).
+ *
+ * @return string|false The extracted section, '' for an unterminated section, or false when absent
  */
-function extractFromDelimiters(string $string, string $start, string $end): string
+function extractFromDelimiters(string $string, string $start, string $end): string|false
 {
     $startPos = strpos($string, $start);
-    if ($startPos !== false) {
-        $sectionStart = $startPos + strlen($start);
-        $section_retrieved = substr($string, $sectionStart);
-        $endPos = strpos($section_retrieved, $end);
-
-        if ($endPos === false) {
-            return '';
-        }
-
-        return substr($section_retrieved, 0, $endPos);
+    if ($startPos === false) {
+        return false;
     }
 
-    return '';
+    $sectionStart = $startPos + strlen($start);
+    $sectionRetrieved = substr($string, $sectionStart);
+    $endPos = strpos($sectionRetrieved, $end);
+
+    if ($endPos === false) {
+        return '';
+    }
+
+    return substr($sectionRetrieved, 0, $endPos);
 }
 
 /**
@@ -99,7 +105,7 @@ function extract_css_background_image(string $style): ?string
  * Extract a global JSON variable from a SPA HTML page.
  *
  * Modern single-page applications (YouTube, Twitter, etc.) often embed their initial
- * state in a <script> tag as a global variable (e.g., `var ytInitialData = {...};` or
+ * state in a <script> tag as a global variable (e.g. `var ytInitialData = {...};` or
  * `window.ytInitialData = {...};`). This function extracts and decodes the JSON payload.
  *
  * The opening '{' is located with a cheap regex, then the matching closing brace is
@@ -108,7 +114,7 @@ function extract_css_background_image(string $style): ?string
  * '{' characters appearing inside string values.
  *
  * @param string $html The raw HTML content.
- * @param string $variableName The name of the JavaScript variable (e.g., 'ytInitialData').
+ * @param string $variableName The name of the JavaScript variable (e.g. 'ytInitialData').
  * @return array<mixed>|null The decoded JSON as an associative array, or null on failure.
  */
 function extract_spa_json_variable(string $html, string $variableName): ?array

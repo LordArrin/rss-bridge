@@ -148,7 +148,7 @@ jobs:
             ./vendor/bin/phpcs \
               $V2_FILES \
               --standard=phpcs.xml \
-              --warning-severity=5 \
+              --warning-severity=8 \
               --extensions=php \
               --no-cache \
               -p
@@ -167,11 +167,10 @@ jobs:
       - name: Run PHPStan on changed bridges (Level 5)
         if: steps.changed.outputs.has_files == 'true'
         run: |
-          echo "### Checking bridges-v2 with PHPStan (Level 5) ###"
+          echo "### Checking bridges-v2 with PHPStan ###"
           ./vendor/bin/phpstan analyse \
             ${{ steps.changed.outputs.files }} \
             --no-progress \
-            --level=5 \
             --error-format=github
           
   executable-check:

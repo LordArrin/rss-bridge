@@ -183,12 +183,14 @@ class ParameterValidator
         $filteredValue = (string) $filteredValue;
 
         // Flatten option groups (['Group' => ['Label' => 'value', ...], ...]) into a
-        // flat list of stringified scalar values. array_walk_recursive only visits
-        // leaves, so this never casts an array to string (no "Array to string
-        // conversion" warning) and never whitelists the literal string 'Array'.
+        // flat list of stringified values. array_walk_recursive only visits leaves,
+        // so this never casts an array to string (no "Array to string conversion"
+        // warning) and never whitelists the literal string 'Array'. Booleans are
+        // deliberately excluded: (string) false === '' would whitelist empty input
+        // and (string) true === '1' would alias unrelated numeric selections.
         $allowed = [];
         array_walk_recursive($expectedValues, static function (mixed $item) use (&$allowed): void {
-            if (is_scalar($item) === true) {
+            if (is_string($item) === true || is_int($item) === true || is_float($item) === true) {
                 $allowed[] = (string) $item;
             }
         });

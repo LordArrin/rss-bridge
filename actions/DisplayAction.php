@@ -163,45 +163,35 @@ final class DisplayAction implements ActionInterface
 
         $formatObj->setItems($items);
         $formatObj->setFeed($bridge->getFeed());
+
+        // Derive Last-Modified from the content itself (newest item timestamp)
+        // instead of the regeneration time. Identical content then renders
+        // byte-identically (e.g. Atom <updated>), which keeps ETag and
+        // Last-Modified stable across regenerations and consistent with each
+        // other (RFC 9110 sections 8.8.2 / 8.8.3).
         $now = time();
-        $formatObj->setLastModified($now);
+        $lastModifiedTimestamp = 0;
+        foreach ($items as $item) {
+            $itemTimestamp = $item['timestamp'] ?? null;
+            if (is_int($itemTimestamp) === true && $itemTimestamp > $lastModifiedTimestamp) {
+                $lastModifiedTimestamp = $itemTimestamp;
+            }
+        }
+        if ($lastModifiedTimestamp === 0 || $lastModifiedTimestamp > $now) {
+            $lastModifiedTimestamp = $now;
+        }
+        $formatObj->setLastModified($lastModifiedTimestamp);
 
         $body = $formatObj->render();
 
         ini_set('mbstring.substitute_character', 'none');
         $body = mb_convert_encoding($body, 'UTF-8', 'UTF-8');
 
-        $jsonItems = json_encode($items, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
-        $itemsHash = md5($jsonItems === false ? '{}' : $jsonItems);
-        $etag = '"' . $itemsHash . '"';
-
-        $lastModifiedTimestamp = $now;
-        $previousEntry = $this->cache->getWithStale($this->createCacheKey($request))['stale'] ?? null;
-
-        if ($previousEntry instanceof Response && $previousEntry->getCode() === 200) {
-            $previousEtag = $previousEntry->getHeader('etag');
-
-            $sameContent = ($previousEtag !== null && $previousEtag === $etag)
-                        || ($previousEtag === null && $previousEntry->getBody() === $body);
-
-            if ($sameContent === true) {
-                $previousLastModified = strtotime((string) $previousEntry->getHeader('last-modified'));
-                if ($previousLastModified !== false && $previousLastModified < $now) {
-                    $lastModifiedTimestamp = $previousLastModified;
-                    $formatObj->setLastModified($previousLastModified);
-
-                    // Re-render so embedded timestamps (e.g. Atom <updated>) match the
-                    // preserved Last-Modified/ETag. Without this, identical ETags would
-                    // cover different bodies, which violates RFC 9110 and confuses readers.
-                    $body = $formatObj->render();
-                    $body = mb_convert_encoding($body, 'UTF-8', 'UTF-8');
-
-                    if ($previousEtag !== null) {
-                        $etag = $previousEtag;
-                    }
-                }
-            }
-        }
+        // The ETag fingerprints the actual representation: any body change must
+        // change the ETag. Because Last-Modified is content-derived, unchanged
+        // content yields an identical body and therefore a stable ETag, so
+        // conditional requests work without any re-render tricks.
+        $etag = '"' . md5($body) . '"';
 
         $headers = [
             'last-modified' => gmdate('D, d M Y H:i:s \G\M\T', $lastModifiedTimestamp),

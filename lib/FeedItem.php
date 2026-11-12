@@ -6,6 +6,19 @@ namespace RSSBridge;
 
 class FeedItem
 {
+    /**
+     * Maximum accepted length of a data: URI enclosure (base64 text).
+     * 2 MiB of text is roughly 1.5 MiB of binary payload.
+     */
+    private const MAX_DATA_URI_LENGTH = 2097152;
+
+    /**
+     * Only base64-encoded raster image data URIs are accepted as enclosures.
+     * SVG is excluded (scriptable) and the strict base64 charset check prevents
+     * smuggled markup. /D so a trailing newline cannot bypass the anchor.
+     */
+    private const DATA_URI_IMAGE_PATTERN = '/^data:image\/(?:png|jpe?g|gif|webp|avif);base64,[A-Za-z0-9+\/]+={0,2}$/D';
+
     protected ?string $uri = null;
     protected ?string $title = null;
     protected ?int $timestamp = null;
@@ -226,10 +239,18 @@ class FeedItem
                 continue;
             }
 
-            if (str_starts_with($enclosure, 'data:') === false) {
-                if (filter_var($enclosure, FILTER_VALIDATE_URL) === false) {
+            if (str_starts_with($enclosure, 'data:') === true) {
+                // data: URIs are only accepted for base64-encoded raster images,
+                // with a hard size cap. Anything else (text/html, svg+xml, ...)
+                // is rejected to avoid scriptable content and feed bloat.
+                if (strlen($enclosure) > self::MAX_DATA_URI_LENGTH) {
                     continue;
                 }
+                if (preg_match(self::DATA_URI_IMAGE_PATTERN, $enclosure) !== 1) {
+                    continue;
+                }
+            } elseif (filter_var($enclosure, FILTER_VALIDATE_URL) === false) {
+                continue;
             }
 
             if (in_array($enclosure, $this->enclosures, true) === false) {

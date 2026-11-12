@@ -60,7 +60,7 @@ final class GolemBridge extends FeedExpander
         ]
     ]];
     public const LIMIT = 5;
-    public const HEADERS = ['Cookie: golem_consent20=simple|250101;'];
+    public const HEADERS = ['Cookie: golem_consent20=simple|261101;'];
 
     public function collectData(): void
     {

@@ -13,8 +13,14 @@ use PHPStan\Rules\Rule;
 use PHPStan\Rules\RuleErrorBuilder;
 
 /**
- * Forbids usage of legacy DOM API (DOMDocument, DOMNode, etc.)
- * and enforces migration to new Dom\HTMLDocument, Dom\Element, etc.
+ * Forbids usage of the legacy DOM API (DOMDocument, DOMNode, ...) and enforces
+ * migration to the new \Dom\* API (\Dom\HTMLDocument, \Dom\Element, ...).
+ *
+ * IMPORTANT: PHPStan does not dispatch every AST node to Rule<Node> rules.
+ * In particular the Name child of `new X`, static calls and `instanceof` is
+ * never visited on its own, so checking only Name nodes misses the most common
+ * legacy patterns. This rule therefore also inspects the parent expressions
+ * and statements and extracts class names from them directly.
  *
  * @implements Rule<Node>
  */
@@ -74,6 +80,15 @@ final class ForbidOldDomApiRule implements Rule
         'version' => ['DOMEntity'],
     ];
 
+    /**
+     * Dedup guard: a class name can reach this rule both as a standalone Name
+     * node (type hints) and via its parent expression. Report each combination
+     * of file, line and class name only once per analysis run.
+     *
+     * @var array<string, true>
+     */
+    private static array $reported = [];
+
     public function getNodeType(): string
     {
         return Node::class;
@@ -85,12 +100,115 @@ final class ForbidOldDomApiRule implements Rule
      */
     public function processNode(Node $node, Scope $scope): array
     {
+        $errors = [];
+
         if ($node instanceof Name) {
-            return $this->processClassName($node, $scope);
+            $errors = array_merge($errors, $this->processClassName($node, $scope));
+        }
+
+        foreach ($this->extractClassNames($node) as $className) {
+            $errors = array_merge($errors, $this->processClassName($className, $scope));
         }
 
         if ($node instanceof PropertyFetch) {
-            return $this->processPropertyFetch($node, $scope);
+            $errors = array_merge($errors, $this->processPropertyFetch($node, $scope));
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Collects class-name nodes carried by parent expressions/statements whose
+     * Name children are not dispatched to rules individually.
+     *
+     * @return list<Name>
+     */
+    private function extractClassNames(Node $node): array
+    {
+        $names = [];
+
+        if (
+            $node instanceof Node\Expr\New_
+            || $node instanceof Node\Expr\Instanceof_
+            || $node instanceof Node\Expr\StaticCall
+            || $node instanceof Node\Expr\StaticPropertyFetch
+            || $node instanceof Node\Expr\ClassConstFetch
+        ) {
+            if ($node->class instanceof Name) {
+                $names[] = $node->class;
+            }
+
+            return $names;
+        }
+
+        if ($node instanceof Node\Stmt\Catch_) {
+            foreach ($node->types as $type) {
+                if ($type instanceof Name) {
+                    $names[] = $type;
+                }
+            }
+
+            return $names;
+        }
+
+        if ($node instanceof Node\Stmt\Class_) {
+            if ($node->extends instanceof Name) {
+                $names[] = $node->extends;
+            }
+            foreach ($node->implements as $interface) {
+                if ($interface instanceof Name) {
+                    $names[] = $interface;
+                }
+            }
+
+            return $names;
+        }
+
+        if ($node instanceof Node\Stmt\Interface_) {
+            foreach ($node->extends as $interface) {
+                if ($interface instanceof Name) {
+                    $names[] = $interface;
+                }
+            }
+
+            return $names;
+        }
+
+        if ($node instanceof Node\Param) {
+            return $this->extractNamesFromType($node->type);
+        }
+
+        if ($node instanceof Node\Stmt\ClassMethod || $node instanceof Node\Stmt\Function_) {
+            return $this->extractNamesFromType($node->returnType);
+        }
+
+        if ($node instanceof Node\Stmt\Property) {
+            return $this->extractNamesFromType($node->type);
+        }
+
+        return $names;
+    }
+
+    /**
+     * @return list<Name>
+     */
+    private function extractNamesFromType(?Node $type): array
+    {
+        if ($type instanceof Name) {
+            return [$type];
+        }
+
+        if ($type instanceof Node\NullableType) {
+            return $this->extractNamesFromType($type->type);
+        }
+
+        if ($type instanceof Node\UnionType || $type instanceof Node\IntersectionType) {
+            $names = [];
+            foreach ($type->types as $subType) {
+                $names = array_merge($names, $this->extractNamesFromType($subType));
+            }
+
+            return $names;
         }
 
         return [];
@@ -107,6 +225,12 @@ final class ForbidOldDomApiRule implements Rule
         if (in_array($shortName, self::FORBIDDEN_CLASSES, true) === false) {
             return [];
         }
+
+        $dedupKey = $scope->getFile() . ':' . $node->getStartLine() . ':' . $className;
+        if (isset(self::$reported[$dedupKey]) === true) {
+            return [];
+        }
+        self::$reported[$dedupKey] = true;
 
         $replacement = self::REPLACEMENTS[$shortName] ?? 'the new \Dom\* API';
 
@@ -178,6 +302,6 @@ final class ForbidOldDomApiRule implements Rule
     {
         $parts = explode('\\', $className);
 
-        return (string)end($parts);
+        return (string) end($parts);
     }
 }

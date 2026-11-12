@@ -111,10 +111,16 @@ function html_tag(string $name, ?string $content = null, array $attributes = [])
         };
     }
 
-    if ($content !== null && $content !== '') {
+    // Void elements never have content or a closing tag. Non-void elements must
+    // use an explicit closing tag even when empty: HTML5 ignores the "/" in
+    // "<div />" / "<option />", leaving the element open and breaking nesting.
+    $voidElements = ['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'];
+    if (in_array(strtolower($name), $voidElements, true) === true) {
+        $html .= ' />';
+    } elseif ($content !== null && $content !== '') {
         $html .= sprintf('>%s</%s>', e($content), $name);
     } else {
-        $html .= ' />';
+        $html .= sprintf('></%s>', $name);
     }
 
     return $html;
@@ -248,9 +254,9 @@ function is_safe_uri(string $uri): bool
 {
     $uri = trim($uri);
 
-    // Explicit true comparisons for str_starts_with
+    // Empty, fragment-only and root-relative references are safe.
     if ($uri === '' || str_starts_with($uri, '#') === true || str_starts_with($uri, '/') === true) {
-        return true; // Anchors and relative paths are safe
+        return true;
     }
 
     $parsed = parse_url($uri);
@@ -258,18 +264,24 @@ function is_safe_uri(string $uri): bool
         return false; // Malformed URI
     }
 
-    // Explicit true comparison for array_key_exists
     $scheme = array_key_exists('scheme', $parsed) === true ? strtolower((string) $parsed['scheme']) : '';
 
-    // Strict whitelist of allowed schemes
-    $safeSchemes = ['http', 'https', 'mailto', 'ftp'];
-
-    // Allow data: ONLY for images (basic check, explicit true comparison)
-    if ($scheme === 'data') {
-        return str_starts_with($uri, 'data:image/') === true;
+    // No scheme means a relative reference (e.g. "image.jpg", "../a/b", "?q=1").
+    // These are safe and must NOT be stripped, otherwise every bridge emitting
+    // relative href/src loses its links. Guard against scheme-like tricks: a
+    // valid relative first segment cannot contain a colon.
+    if ($scheme === '') {
+        $firstSegment = explode('/', $uri, 2)[0];
+        return str_contains($firstSegment, ':') === false;
     }
 
-    // Explicit true comparison for in_array
+    // Allow data: ONLY for base64 raster images. SVG (scriptable) and any other
+    // data: payload are rejected to avoid XSS via href/src navigation.
+    if ($scheme === 'data') {
+        return preg_match('/^data:image\/(?:png|jpe?g|gif|webp|avif);base64,/i', $uri) === 1;
+    }
+
+    $safeSchemes = ['http', 'https', 'mailto', 'ftp'];
     return in_array($scheme, $safeSchemes, true) === true;
 }
 
@@ -334,8 +346,10 @@ function truncate_html_preserve_tags(string $html, int $limit, string $marker = 
         return '';
     }
 
-    $plainTextLength = mb_strlen(strip_tags($html), 'UTF-8');
-    if ($plainTextLength <= $limit) {
+    // Measure visible characters with entities decoded so "&amp;" counts as one
+    // character, consistent with the entity-aware truncation below.
+    $plainText = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    if (mb_strlen($plainText, 'UTF-8') <= $limit) {
         return $html;
     }
 
@@ -377,15 +391,23 @@ function truncate_html_preserve_tags(string $html, int $limit, string $marker = 
                 $output .= $token;
             }
         } else {
-            $textLength = mb_strlen($token, 'UTF-8');
+            // Split text into atomic units: a whole HTML entity counts as one
+            // visible character, every other character as one. This prevents
+            // cutting an entity in half (e.g. "&am" + marker) and keeps the
+            // visible-character count consistent with the early check above.
+            $units = [$token];
+            if (preg_match_all('/&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);|./us', $token, $m) !== false) {
+                $units = $m[0];
+            }
+            $textLength = count($units);
             if ($consumed + $textLength <= $limit) {
                 $consumed += $textLength;
                 $output .= $token;
             } else {
                 $remaining = $limit - $consumed;
-                $cut = mb_substr($token, 0, $remaining, 'UTF-8');
+                $cut = implode('', array_slice($units, 0, $remaining));
                 $lastSpace = mb_strrpos($cut, ' ', 0, 'UTF-8');
-                if ($lastSpace !== false && $lastSpace > ($remaining * 0.5)) {
+                if ($lastSpace !== false && $lastSpace > (mb_strlen($cut, 'UTF-8') * 0.5)) {
                     $cut = mb_substr($cut, 0, $lastSpace, 'UTF-8');
                 }
                 $output .= rtrim($cut) . $marker;

@@ -72,8 +72,8 @@ final class DomTagNameComparisonRule implements Rule
             if (
                 $fetch instanceof PropertyFetch
                 && $literal instanceof String_
-                && $this->isDomTagNameFetch($fetch, $scope)
-                && $this->hasLowercase($literal->value)
+                && $this->isDomTagNameFetch($fetch, $scope) === true
+                && $this->hasLowercase($literal->value) === true
             ) {
                 return [$this->error($literal->value)];
             }
@@ -102,7 +102,7 @@ final class DomTagNameComparisonRule implements Rule
             return [];
         }
         foreach ($haystack->items as $item) {
-            if ($item !== null && $item->value instanceof String_ && $this->hasLowercase($item->value->value)) {
+            if ($item !== null && $item->value instanceof String_ && $this->hasLowercase($item->value->value) === true) {
                 return [$this->error($item->value->value)];
             }
         }
@@ -122,7 +122,7 @@ final class DomTagNameComparisonRule implements Rule
                 continue;
             }
             foreach ($arm->conds as $cond) {
-                if ($cond instanceof String_ && $this->hasLowercase($cond->value)) {
+                if ($cond instanceof String_ && $this->hasLowercase($cond->value) === true) {
                     return [$this->error($cond->value)];
                 }
             }
@@ -143,9 +143,9 @@ final class DomTagNameComparisonRule implements Rule
 
         // Both directions: exact/subclass (element is supertype of var) and
         // supertype/mixed (var is supertype of element). Avoids the inverted check.
-        return $element->isSuperTypeOf($varType)->yes()
-            || $domNode->isSuperTypeOf($varType)->yes()
-            || $varType->isSuperTypeOf($element)->yes();
+        return $element->isSuperTypeOf($varType)->yes() === true
+            || $domNode->isSuperTypeOf($varType)->yes() === true
+            || $varType->isSuperTypeOf($element)->yes() === true;
     }
 
     private function hasLowercase(string $value): bool
@@ -157,8 +157,7 @@ final class DomTagNameComparisonRule implements Rule
     private function error(string $literal): \PHPStan\Rules\IdentifierRuleError
     {
         return RuleErrorBuilder::message(sprintf(
-            'Comparing tagName to "%s" will always fail for HTML documents: in PHP 8.4+ \Dom\HTMLDocument '
-            . 'tagName is UPPERCASE ("%s"). Use $node->localName (always lowercase) instead.',
+            'Comparing tagName to "%s" will always fail for HTML documents: in PHP 8.4+ \Dom\HTMLDocument tagName is UPPERCASE ("%s"). Use $node->localName (always lowercase) instead.',
             $literal,
             strtoupper($literal)
         ))

@@ -172,7 +172,6 @@ final class MemcachedCache extends AbstractCache
         }
 
         $value = $item['value'] ?? null;
-        $freshUntil = (int) ($item['fresh_until'] ?? 0);
 
         $isChunked = is_array($value) === true && isset($value['__chunks']) === true;
 
@@ -301,14 +300,16 @@ final class MemcachedCache extends AbstractCache
     {
         $cacheKey = $this->createCacheKey($key);
 
-        // If this is a chunked entry, delete its chunks too
+        // If this is a chunked entry, delete its chunks too. The chunk marker
+        // lives in $item['value']['__chunks'] (see set()), not at the top level.
         $item = $this->conn->get($cacheKey);
+        $value = is_array($item) === true ? ($item['value'] ?? null) : null;
         if (
-            is_array($item) === true
-            && array_key_exists('__chunks', $item) === true
-            && is_array($item['__chunks']) === true
+            is_array($value) === true
+            && array_key_exists('__chunks', $value) === true
+            && is_array($value['__chunks']) === true
         ) {
-            foreach ($item['__chunks'] as $chunkKey) {
+            foreach ($value['__chunks'] as $chunkKey) {
                 if (is_string($chunkKey) === true) {
                     $this->conn->delete($chunkKey);
                 }
