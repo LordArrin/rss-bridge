@@ -29,7 +29,7 @@ parameters:
         - quirks/template.php
         - quirks/unicode.php
 
-    #treatPhpDocTypesAsCertain: false
+    treatPhpDocTypesAsCertain: false
 
     ignoreErrors:
 

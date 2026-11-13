@@ -1,5 +1,4 @@
 ARG ALPINE_VERSION=3.24
-FROM alpine:${ALPINE_VERSION} AS builder
 
 # Versions
 ARG CURL_VERSION=2.3.2
@@ -10,6 +9,8 @@ ARG MIMALLOC_VERSION=3.6.1
 ARG ZLIB_NG_VERSION=2.3.3
 ARG LIBEVENT_VERSION=2.2.2-alpha
 ARG MEMCACHED_VERSION=1.6.45
+ARG IMAGE_VERSION=1.2.9
+ARG VERSION_PLACEHOLDER=__RSSBRIDGE_IMAGE_VERSION__
 
 # URLs
 ARG BROTLI_URL=https://github.com/wxx9248/ngx_brotli.git
@@ -27,14 +28,193 @@ ARG ARM_CFI_FLAGS="-mbranch-protection=standard"
 ARG BUILD_JOBS=0
 ARG ENABLE_LTO=ON
 
-# ============================================================
-# Stage 1: Build curl-impersonate
-# ============================================================
-RUN set -euxo pipefail && \
-    apk update && \
-    apk add --no-cache --virtual .curl-build-deps \
-      build-base linux-headers cmake ninja make patch autoconf automake pkgconfig libtool gperf \
-      xz-libs xz-dev xz-static python3 python3-dev go bzip2 unzip git curl bash ca-certificates patchelf && \
+FROM alpine:${ALPINE_VERSION} AS builder
+
+ARG CURL_VERSION NGINX_VERSION OPENSSL_VERSION PCRE_VERSION MIMALLOC_VERSION
+ARG ZLIB_NG_VERSION LIBEVENT_VERSION MEMCACHED_VERSION
+ARG BROTLI_URL HEADERS_MORE_URL
+ARG X86_MARCH X86_MTUNE X86_CFI_FLAGS
+ARG ARM_MARCH ARM_MTUNE ARM_CFI_FLAGS
+ARG BUILD_JOBS ENABLE_LTO
+
+SHELL ["/bin/ash", "-euo", "pipefail", "-c"]
+WORKDIR /tmp
+
+# Toolchain
+RUN apk update && apk upgrade --no-cache && \
+    apk add --no-cache \
+        build-base linux-headers fortify-headers ccache \
+        wget perl git mold cmake pkgconfig
+
+ENV CCACHE_DIR=/ccache \
+    CCACHE_MAXSIZE=2G \
+    PATH=/usr/lib/ccache:$PATH
+
+# Shared compile flags -> /tmp/env.sh, sourced by every build step
+RUN <<'SCRIPT'
+set -eu
+
+if [ "$BUILD_JOBS" = "0" ]; then NB_PROC="$(nproc)"; else NB_PROC="$BUILD_JOBS"; fi
+if [ "$ENABLE_LTO" = "ON" ]; then LTO_FLAG="-flto=auto"; else LTO_FLAG=""; fi
+
+case "$(uname -m)" in
+    x86_64)  MARCH="$X86_MARCH"; MTUNE="$X86_MTUNE"; CFI_FLAGS="$X86_CFI_FLAGS" ;;
+    aarch64) MARCH="$ARM_MARCH"; MTUNE="$ARM_MTUNE"; CFI_FLAGS="$ARM_CFI_FLAGS" ;;
+    *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
+esac
+
+HARDENING_CFLAGS="-fstack-protector-strong -fstack-clash-protection --param=ssp-buffer-size=4 \
+-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 ${CFI_FLAGS} \
+-fno-plt -fno-semantic-interposition -ftrivial-auto-var-init=zero -fzero-call-used-regs=used-gpr \
+-ftrapv -fno-delete-null-pointer-checks -fipa-pta -fno-math-errno -fmerge-all-constants -fomit-frame-pointer"
+
+cat > /tmp/env.sh <<EOF
+export NB_PROC='$NB_PROC'
+export LTO_FLAG='$LTO_FLAG'
+export MARCH='$MARCH' MTUNE='$MTUNE' CFI_FLAGS='$CFI_FLAGS'
+export HARDENING_CFLAGS='$HARDENING_CFLAGS'
+export OPT_CFLAGS='-O3 -march=$MARCH -mtune=$MTUNE -pipe $LTO_FLAG $HARDENING_CFLAGS'
+export OPT_LDFLAGS='-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wl,-z,defs $CFI_FLAGS $LTO_FLAG'
+export CC='ccache gcc' CXX='ccache g++'
+EOF
+
+echo "build-env: $(uname -m) march=$MARCH mtune=$MTUNE jobs=$NB_PROC lto='$LTO_FLAG'"
+SCRIPT
+
+# PCRE2
+RUN --mount=type=cache,target=/ccache \
+    . /tmp/env.sh && \
+    wget -O - --tries=3 https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE_VERSION}/pcre2-${PCRE_VERSION}.tar.gz | tar xzf - -C /tmp && \
+    cd /tmp/pcre2-${PCRE_VERSION} && \
+    mkdir -p build && cd build && \
+    cmake \
+        -DCMAKE_INSTALL_PREFIX=/usr/local/pcre2 \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_STATIC_LIBS=ON \
+        -DPCRE2_SUPPORT_JIT=ON \
+        -DPCRE2_SUPPORT_UNICODE=ON \
+        -DPCRE2_BUILD_PCRE2GREP=OFF \
+        -DPCRE2_BUILD_TESTS=OFF \
+        -DCMAKE_C_FLAGS="$OPT_CFLAGS -fPIC" \
+        -DCMAKE_EXE_LINKER_FLAGS="$OPT_LDFLAGS" \
+        .. && \
+    make -j "$NB_PROC" && make install
+
+# zlib-ng
+RUN --mount=type=cache,target=/ccache \
+    . /tmp/env.sh && \
+    git clone --depth 1 -b ${ZLIB_NG_VERSION} https://github.com/zlib-ng/zlib-ng.git /tmp/zlib-ng && \
+    cd /tmp/zlib-ng && \
+    mkdir -p build && cd build && \
+    cmake \
+        -DCMAKE_INSTALL_PREFIX=/usr/local/zlib-ng \
+        -DZLIB_COMPAT=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_TESTING=OFF \
+        -DWITH_OPTIM=ON \
+        -DWITH_NEW_STRATEGIES=ON \
+        -DCMAKE_C_FLAGS="$OPT_CFLAGS -fPIC" \
+        -DCMAKE_EXE_LINKER_FLAGS="$OPT_LDFLAGS" \
+        .. && \
+    make -j "$NB_PROC" && make install && \
+    ln -sf /usr/local/zlib-ng/include/zlib.h /usr/include/zlib.h && \
+    ln -sf /usr/local/zlib-ng/include/zconf.h /usr/include/zconf.h
+
+# Brotli static deps for ngx_brotli
+RUN --mount=type=cache,target=/ccache \
+    . /tmp/env.sh && \
+    git clone --depth 1 ${BROTLI_URL} /tmp/ngx_brotli && \
+    cd /tmp/ngx_brotli && \
+    git submodule update --init && \
+    cd /tmp/ngx_brotli/deps/brotli && \
+    mkdir -p out && cd out && \
+    cmake \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_C_FLAGS="$OPT_CFLAGS -fPIC" \
+        -DCMAKE_CXX_FLAGS="$OPT_CFLAGS -fPIC" \
+        -DCMAKE_EXE_LINKER_FLAGS="$OPT_LDFLAGS" \
+        -DCMAKE_INSTALL_PREFIX=./installed \
+        .. && \
+    cmake --build . --config Release --target brotlienc brotlidec brotlicommon --parallel "$NB_PROC" && \
+    make install
+
+# mimalloc
+RUN --mount=type=cache,target=/ccache \
+    . /tmp/env.sh && \
+    git clone --depth 1 -b v${MIMALLOC_VERSION} https://github.com/microsoft/mimalloc.git /tmp/mimalloc && \
+    cd /tmp/mimalloc && \
+    mkdir -p out/release && cd out/release && \
+    cmake \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DMI_SECURE=ON \
+        -DMI_BUILD_SHARED=ON \
+        -DMI_BUILD_STATIC=OFF \
+        -DMI_BUILD_TESTS=OFF \
+        -DMI_BUILD_OBJECT=OFF \
+        -DMI_LIBC_MUSL=ON \
+        -DCMAKE_INSTALL_PREFIX=/tmp/mimalloc-install \
+        -DCMAKE_C_FLAGS="$OPT_CFLAGS -fPIC" \
+        -DCMAKE_SHARED_LINKER_FLAGS="$OPT_LDFLAGS" \
+        ../.. && \
+    make -j "$NB_PROC" && make install
+
+# libevent (memcached dependency)
+RUN --mount=type=cache,target=/ccache \
+    . /tmp/env.sh && \
+    wget -O - --tries=3 https://github.com/libevent/libevent/releases/download/release-${LIBEVENT_VERSION}/libevent-${LIBEVENT_VERSION}.tar.gz | tar zxf - -C /tmp && \
+    cd /tmp/libevent-${LIBEVENT_VERSION} && \
+    ./configure \
+        --prefix=/usr/local/libevent \
+        --disable-shared \
+        --enable-static \
+        --disable-openssl \
+        CFLAGS="$OPT_CFLAGS -fPIC" \
+        LDFLAGS="$OPT_LDFLAGS" && \
+    make -j "$NB_PROC" && make install
+
+# memcached 
+RUN --mount=type=cache,target=/ccache \
+    . /tmp/env.sh && \
+    wget -O - --tries=3 https://memcached.org/files/memcached-${MEMCACHED_VERSION}.tar.gz | tar zxf - -C /tmp && \
+    cd /tmp/memcached-${MEMCACHED_VERSION} && \
+    ./configure \
+        --prefix=/usr/local/memcached \
+        --disable-coverage \
+        --enable-static \
+        --disable-dependency-tracking \
+        --with-libevent=/usr/local/libevent \
+        CFLAGS="$OPT_CFLAGS" \
+        LDFLAGS="$OPT_LDFLAGS -static" && \
+    make -j "$NB_PROC" && \
+    if ! file memcached | grep -E 'statically linked|static-pie linked' >/dev/null; then \
+        echo "GATE FAILED: memcached is not statically linked:" >&2; \
+        file memcached >&2; \
+        exit 1; \
+    fi && \
+    strip --strip-unneeded memcached && \
+    make install
+
+# OpenSSL (shared: also replaces system libs in the runtime stage)
+RUN --mount=type=cache,target=/ccache \
+    . /tmp/env.sh && \
+    wget -O - --tries=3 https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz | tar xzf - -C /tmp && \
+    cd /tmp/openssl-${OPENSSL_VERSION} && \
+    LDFLAGS="$OPT_LDFLAGS" ./config \
+        --prefix=/usr/local/ssl \
+        --openssldir=/usr/local/ssl \
+        shared \
+        enable-quic enable-tfo enable-ktls no-tests \
+        -O3 -march=${MARCH} -mtune=${MTUNE} -pipe -fomit-frame-pointer \
+        ${HARDENING_CFLAGS} -Wformat-security -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 \
+        -DOPENSSL_TLS_SECURITY_LEVEL=3 ${CFI_FLAGS} -fuse-ld=mold ${LTO_FLAG} && \
+    make -j "$NB_PROC" && make install_sw install_ssldirs
+
+# curl-impersonate (BoringSSL-based; expensive and bumped often — kept late).
+# Build environment intentionally self-contained: no ccache/CC override here.
+RUN apk add --no-cache --virtual .curl-build-deps \
+        build-base linux-headers cmake ninja make patch autoconf automake pkgconfig libtool gperf \
+        xz-libs xz-dev xz-static python3 python3-dev go bzip2 unzip git curl bash ca-certificates patchelf && \
     cd /tmp && \
     git clone --depth 1 -b v${CURL_VERSION} https://github.com/lexiforest/curl-impersonate.git /tmp/curl-impersonate && \
     cd /tmp/curl-impersonate && \
@@ -63,208 +243,183 @@ RUN set -euxo pipefail && \
     make build BUILD_DIR=build CMAKE_CONFIGURE_ARGS="$BUILD_ARGS" JOBS=$NB_PROC && \
     make checkbuild BUILD_DIR=build CMAKE_CONFIGURE_ARGS="$BUILD_ARGS" JOBS=$NB_PROC && \
     make install-strip BUILD_DIR=build CMAKE_CONFIGURE_ARGS="$BUILD_ARGS" JOBS=$NB_PROC && \
-    IMP_LIB=$(ls /tmp/curl-install/lib*/libcurl-impersonate*.so* 2>/dev/null | head -n 1) && \
-    if [ -n "$IMP_LIB" ]; then \
-      patchelf --set-soname libcurl.so.4 "$IMP_LIB"; \
+    test -x /tmp/curl-install/bin/curl-impersonate || \
+        { echo "GATE FAILED: curl-impersonate binary missing" >&2; exit 1; } && \
+    set -- /tmp/curl-install/lib*/libcurl-impersonate*.so* && \
+    if [ -e "$1" ]; then patchelf --set-soname libcurl.so.4 "$1"; fi && \
+    if ! strings /tmp/curl-install/lib*/libcurl-impersonate*.so* | grep 'BoringSSL' >/dev/null; then \
+        echo "GATE FAILED: BoringSSL signature missing (wrong TLS backend linked?)" >&2; exit 1; \
     fi && \
     apk del .curl-build-deps
 
-# ============================================================
-# Stage 2: Prepare build environment + create env.sh + download sources
-# ============================================================
-RUN set -euxo pipefail && \
-    apk update && \
-    apk upgrade --no-cache && \
-    build_pkgs="build-base linux-headers fortify-headers ccache wget perl git mold cmake pkgconfig" && \
-    apk --no-cache add --virtual .build-deps ${build_pkgs} && \
-    if [ "$BUILD_JOBS" = "0" ]; then NB_PROC=$(grep -c ^processor /proc/cpuinfo); else NB_PROC="$BUILD_JOBS"; fi && \
-    if [ "$ENABLE_LTO" = "ON" ]; then LTO_FLAG="-flto=auto"; else LTO_FLAG=""; fi && \
-    ARCH=$(uname -m) && \
-    case "$ARCH" in \
-      x86_64) MARCH="${X86_MARCH}"; MTUNE="${X86_MTUNE}"; CFI_FLAGS="${X86_CFI_FLAGS}" ;; \
-      aarch64) MARCH="${ARM_MARCH}"; MTUNE="${ARM_MTUNE}"; CFI_FLAGS="${ARM_CFI_FLAGS}" ;; \
-    esac && \
-    HARDENING_CFLAGS="-fstack-protector-strong -fstack-clash-protection --param=ssp-buffer-size=4 -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 ${CFI_FLAGS} -fno-plt -fno-semantic-interposition -ftrivial-auto-var-init=zero -fzero-call-used-regs=used-gpr -ftrapv -fno-delete-null-pointer-checks -fipa-pta -fno-math-errno -fmerge-all-constants -fomit-frame-pointer" && \
-    OPT_CFLAGS="-O3 -march=${MARCH} -mtune=${MTUNE} -pipe ${LTO_FLAG} ${HARDENING_CFLAGS}" && \
-    OPT_LDFLAGS="-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wl,-z,defs ${CFI_FLAGS} ${LTO_FLAG}" && \
-    printf "NB_PROC='%s'\n" "$NB_PROC" > /tmp/env.sh && \
-    printf "LTO_FLAG='%s'\n" "$LTO_FLAG" >> /tmp/env.sh && \
-    printf "MARCH='%s'\n" "$MARCH" >> /tmp/env.sh && \
-    printf "MTUNE='%s'\n" "$MTUNE" >> /tmp/env.sh && \
-    printf "CFI_FLAGS='%s'\n" "$CFI_FLAGS" >> /tmp/env.sh && \
-    printf "HARDENING_CFLAGS='%s'\n" "$HARDENING_CFLAGS" >> /tmp/env.sh && \
-    printf "OPT_CFLAGS='%s'\n" "$OPT_CFLAGS" >> /tmp/env.sh && \
-    printf "OPT_LDFLAGS='%s'\n" "$OPT_LDFLAGS" >> /tmp/env.sh && \
-    chmod +x /tmp/env.sh && \
-    cd /tmp && \
-    wget -O - https://freenginx.org/download/freenginx-${NGINX_VERSION}.tar.gz --tries=3 | tar zxf - -C /tmp && \
-    wget -O - https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz --tries=3 | tar xzf - -C /tmp && \
-    wget -O - https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE_VERSION}/pcre2-${PCRE_VERSION}.tar.gz --tries=3 | tar xzf - -C /tmp && \
-    wget -O - https://github.com/libevent/libevent/releases/download/release-${LIBEVENT_VERSION}/libevent-${LIBEVENT_VERSION}.tar.gz --tries=3 | tar zxf - -C /tmp && \
-    wget -O - https://memcached.org/files/memcached-${MEMCACHED_VERSION}.tar.gz --tries=3 | tar zxf - -C /tmp && \
-    git clone --depth 1 ${BROTLI_URL} /tmp/ngx_brotli && \
-    git clone --depth 1 ${HEADERS_MORE_URL} /tmp/ngx_headers_more && \
-    git clone --depth 1 -b v${MIMALLOC_VERSION} https://github.com/microsoft/mimalloc.git /tmp/mimalloc && \
-    git clone --depth 1 -b ${ZLIB_NG_VERSION} https://github.com/zlib-ng/zlib-ng.git /tmp/zlib-ng
+# nginx modules
+RUN git clone --depth 1 ${HEADERS_MORE_URL} /tmp/ngx_headers_more
 
-# ============================================================
-# Stage 3: Build Brotli (for nginx module)
-# ============================================================
-RUN set -euxo pipefail && \
-    . /tmp/env.sh && \
-    export CC="ccache gcc" CXX="ccache g++" && \
-    cd /tmp/ngx_brotli && git submodule update --init && \
-    cd /tmp/ngx_brotli/deps/brotli && mkdir -p out && cd out && \
-    cmake \
-      -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
-      -DCMAKE_C_FLAGS="$OPT_CFLAGS -fPIC" -DCMAKE_CXX_FLAGS="$OPT_CFLAGS -fPIC" \
-      -DCMAKE_EXE_LINKER_FLAGS="$OPT_LDFLAGS" -DCMAKE_INSTALL_PREFIX=./installed \
-      .. && \
-    cmake --build . --config Release --target brotlienc brotlidec brotlicommon --parallel $NB_PROC && \
-    make install
+# freenginx source
+RUN wget -O - --tries=3 https://freenginx.org/download/freenginx-${NGINX_VERSION}.tar.gz | tar zxf - -C /tmp
 
-# ============================================================
-# Stage 4: Build PCRE2
-# ============================================================
-RUN set -euxo pipefail && \
-    . /tmp/env.sh && \
-    export CC="ccache gcc" CXX="ccache g++" && \
-    cd /tmp/pcre2-${PCRE_VERSION} && mkdir -p build && cd build && \
-    cmake \
-      -DCMAKE_INSTALL_PREFIX=/usr/local/pcre2 -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
-      -DPCRE2_SUPPORT_JIT=ON -DPCRE2_SUPPORT_UNICODE=ON -DPCRE2_BUILD_PCRE2GREP=OFF -DPCRE2_BUILD_TESTS=OFF \
-      -DCMAKE_C_FLAGS="$OPT_CFLAGS -fPIC" -DCMAKE_EXE_LINKER_FLAGS="$OPT_LDFLAGS" \
-      .. && \
-    PATH="/usr/lib/ccache:${PATH}" make -j $NB_PROC && make install
+# Fingerprinting patches: remove Server header (h1/h2/h3) and error-page footer.
+# grep assertions fail the build if upstream changes the patched code.
+RUN <<'SCRIPT'
+set -eu
+cd "/tmp/freenginx-${NGINX_VERSION}"
 
-# ============================================================
-# Stage 5: Build Mimalloc
-# ============================================================
-RUN set -euxo pipefail && \
-    . /tmp/env.sh && \
-    export CC="ccache gcc" CXX="ccache g++" && \
-    cd /tmp/mimalloc && mkdir -p out/release && cd out/release && \
-    cmake -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON -DMI_BUILD_SHARED=ON -DMI_BUILD_STATIC=OFF \
-          -DMI_BUILD_TESTS=OFF -DMI_BUILD_OBJECT=OFF -DMI_LIBC_MUSL=ON \
-          -DCMAKE_INSTALL_PREFIX=/tmp/mimalloc-install -DCMAKE_C_FLAGS="$OPT_CFLAGS -fPIC" \
-          -DCMAKE_SHARED_LINKER_FLAGS="$OPT_LDFLAGS" \
-          ../.. && \
-    PATH="/usr/lib/ccache:${PATH}" make -j $NB_PROC && make install
+h1=src/http/ngx_http_header_filter_module.c
+h2=src/http/v2/ngx_http_v2_filter_module.c
+h3=src/http/v3/ngx_http_v3_filter_module.c
+sp=src/http/ngx_http_special_response.c
 
-# ============================================================
-# Stage 6: Build OpenSSL
-# ============================================================
-RUN set -euxo pipefail && \
-    . /tmp/env.sh && \
-    export CC="ccache gcc" CXX="ccache g++" && \
-    cd /tmp/openssl-${OPENSSL_VERSION} && \
-    LDFLAGS="$OPT_LDFLAGS" ./config \
-      --prefix=/usr/local/ssl --openssldir=/usr/local/ssl \
-      shared \
-      enable-quic enable-tfo enable-ktls no-tests \
-      -O3 -march=${MARCH} -mtune=${MTUNE} -pipe -fomit-frame-pointer \
-      ${HARDENING_CFLAGS} -Wformat-security -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 \
-      -DOPENSSL_TLS_SECURITY_LEVEL=3 ${CFI_FLAGS} -fuse-ld=mold ${LTO_FLAG} && \
-    PATH="/usr/lib/ccache:${PATH}" make -j $NB_PROC && make install_sw install_ssldirs
+for f in "$h1" "$h2" "$h3"; do
+    grep -q 'r->headers_out.server == NULL' "$f" || \
+        { echo "ERROR: pattern not found in $f — update the patch" >&2; exit 1; }
+    sed -i 's@r->headers_out.server == NULL@0@g' "$f"
+done
 
-# ============================================================
-# Stage 7: Build zlib-ng
-# ============================================================
-RUN set -euxo pipefail && \
-    . /tmp/env.sh && \
-    export CC="ccache gcc" CXX="ccache g++" && \
-    cd /tmp/zlib-ng && mkdir -p build && cd build && \
-    cmake \
-      -DCMAKE_INSTALL_PREFIX=/usr/local/zlib-ng -DZLIB_COMPAT=ON -DBUILD_SHARED_LIBS=OFF \
-      -DBUILD_TESTING=OFF -DWITH_OPTIM=ON -DWITH_NEW_STRATEGIES=ON \
-      -DCMAKE_C_FLAGS="$OPT_CFLAGS -fPIC" -DCMAKE_EXE_LINKER_FLAGS="$OPT_LDFLAGS" \
-      .. && \
-    PATH="/usr/lib/ccache:${PATH}" make -j $NB_PROC && make install && \
-    ln -sf /usr/local/zlib-ng/include/zlib.h /usr/include/zlib.h && \
-    ln -sf /usr/local/zlib-ng/include/zconf.h /usr/include/zconf.h
+# Footer is macro-concatenated: "<hr><center>" NGINX_NAME "</center>".
+# Strip all three variants (NGINX_VER / NGINX_VER_BUILD / NGINX_NAME).
+grep -Eq '"<hr><center>"[[:space:]]+NGINX_(VER_BUILD|VER|NAME)[[:space:]]+"</center>"' "$sp" || \
+    { echo "ERROR: footer pattern not found in $sp" >&2; exit 1; }
+sed -E -i 's@"<hr><center>"[[:space:]]+NGINX_(VER_BUILD|VER|NAME)[[:space:]]+"</center>"@@g' "$sp"
 
-# ============================================================
-# Stage 8: Build libevent (memcached dependency)
-# ============================================================
-RUN set -euxo pipefail && \
-    . /tmp/env.sh && \
-    export CC="ccache gcc" CXX="ccache g++" && \
-    cd /tmp/libevent-${LIBEVENT_VERSION} && \
-    ./configure \
-      --prefix=/usr/local/libevent \
-      --disable-shared \
-      --enable-static \
-      --disable-openssl \
-      CFLAGS="$OPT_CFLAGS -fPIC" \
-      LDFLAGS="$OPT_LDFLAGS" && \
-    PATH="/usr/lib/ccache:${PATH}" make -j $NB_PROC && make install
+if grep -q 'r->headers_out.server == NULL' "$h1" "$h2" "$h3" || grep -q '<hr><center>' "$sp"; then
+    echo "ERROR: fingerprinting patches were not applied" >&2
+    exit 1
+fi
+echo "fingerprinting patches: OK"
+SCRIPT
 
-# ============================================================
-# Stage 9: Build Memcached
-# ============================================================
-RUN set -euxo pipefail && \
+# Configure + build freenginx
+RUN --mount=type=cache,target=/ccache \
     . /tmp/env.sh && \
-    export CC="ccache gcc" CXX="ccache g++" && \
-    cd /tmp/memcached-${MEMCACHED_VERSION} && \
-    ./configure \
-      --prefix=/usr/local/memcached \
-      --disable-coverage \
-      --enable-static \
-      --disable-dependency-tracking \
-      --with-libevent=/usr/local/libevent \
-      CFLAGS="$OPT_CFLAGS" \
-      LDFLAGS="$OPT_LDFLAGS -static" && \
-    PATH="/usr/lib/ccache:${PATH}" make -j $NB_PROC && \
-    strip --strip-unneeded memcached && \
-    make install
-
-# ============================================================
-# Stage 10: Build Freenginx
-# ============================================================
-RUN set -euxo pipefail && \
-    . /tmp/env.sh && \
-    export CC="ccache gcc" CXX="ccache g++" && \
     cd /tmp/freenginx-${NGINX_VERSION} && \
     ./configure \
-      --prefix=/usr/share/nginx --sbin-path=/usr/sbin/nginx \
-      --conf-path=/etc/nginx/nginx.conf \
-      --error-log-path=/var/log/nginx/error.log \
-      --http-log-path=/var/log/nginx/access.log \
-      --pid-path=/var/run/nginx.pid \
-      --lock-path=/var/run/nginx.lock \
-      --http-client-body-temp-path=/var/lib/nginx/tmp/client_body \
-      --http-proxy-temp-path=/var/lib/nginx/tmp/proxy \
-      --http-fastcgi-temp-path=/var/lib/nginx/tmp/fastcgi \
-      --http-uwsgi-temp-path=/var/lib/nginx/tmp/uwsgi \
-      --http-scgi-temp-path=/var/lib/nginx/tmp/scgi \
-      --with-compat --with-http_auth_request_module --with-http_gunzip_module \
-      --with-http_gzip_static_module --with-http_realip_module --with-http_secure_link_module \
-      --with-http_slice_module --with-http_ssl_module --with-http_sub_module \
-      --with-http_v2_module --with-http_v3_module --with-stream --with-stream_realip_module \
-      --with-stream_ssl_module --with-stream_ssl_preread_module \
-      --without-http_autoindex_module --without-http_browser_module --without-http_empty_gif_module \
-      --without-http_memcached_module --without-http_split_clients_module --without-http_ssi_module \
-      --without-http_userid_module --with-file-aio --with-threads \
-      --add-module=/tmp/ngx_brotli --add-module=/tmp/ngx_headers_more \
-      --with-cc-opt="-I/usr/local/ssl/include -I/usr/local/zlib-ng/include -I/usr/local/pcre2/include $OPT_CFLAGS -fPIE -grecord-gcc-switches -Wformat-security -Wno-error=strict-aliasing -Wno-error=vla-parameter" \
-      --with-ld-opt="-L/usr/local/ssl/lib64 -L/usr/local/ssl/lib -L/usr/local/zlib-ng/lib -L/usr/local/pcre2/lib -Wl,-rpath,/usr/local/ssl/lib64 -Wl,-rpath,/usr/local/ssl/lib -fuse-ld=mold -Wl,-pie $OPT_LDFLAGS" \
-      --with-pcre-jit && \
-    PATH="/usr/lib/ccache:${PATH}" make -j $NB_PROC && \
-    strip --strip-unneeded objs/nginx && \
-    make install
+        --prefix=/usr/share/nginx --sbin-path=/usr/sbin/nginx \
+        --conf-path=/etc/nginx/nginx.conf \
+        --error-log-path=/var/log/nginx/error.log \
+        --http-log-path=/var/log/nginx/access.log \
+        --pid-path=/var/run/nginx.pid \
+        --lock-path=/var/run/nginx.lock \
+        --http-client-body-temp-path=/var/lib/nginx/tmp/client_body \
+        --http-proxy-temp-path=/var/lib/nginx/tmp/proxy \
+        --http-fastcgi-temp-path=/var/lib/nginx/tmp/fastcgi \
+        --http-uwsgi-temp-path=/var/lib/nginx/tmp/uwsgi \
+        --http-scgi-temp-path=/var/lib/nginx/tmp/scgi \
+        --with-compat --with-http_auth_request_module --with-http_gunzip_module \
+        --with-http_gzip_static_module --with-http_realip_module --with-http_secure_link_module \
+        --with-http_slice_module --with-http_ssl_module --with-http_sub_module \
+        --with-http_v2_module --with-http_v3_module --with-stream --with-stream_realip_module \
+        --with-stream_ssl_module --with-stream_ssl_preread_module \
+        --without-http_autoindex_module --without-http_browser_module --without-http_empty_gif_module \
+        --without-http_memcached_module --without-http_split_clients_module --without-http_ssi_module \
+        --without-http_userid_module --with-file-aio --with-threads \
+        --add-module=/tmp/ngx_brotli --add-module=/tmp/ngx_headers_more \
+        --with-cc-opt="-I/usr/local/ssl/include -I/usr/local/zlib-ng/include -I/usr/local/pcre2/include $OPT_CFLAGS -fPIE -grecord-gcc-switches -Wformat-security -Wno-error=strict-aliasing -Wno-error=vla-parameter" \
+        --with-ld-opt="-L/usr/local/ssl/lib64 -L/usr/local/ssl/lib -L/usr/local/zlib-ng/lib -L/usr/local/pcre2/lib -Wl,-rpath,/usr/local/ssl/lib64 -Wl,-rpath,/usr/local/ssl/lib -fuse-ld=mold -Wl,-pie $OPT_LDFLAGS" \
+        --with-pcre-jit && \
+    make -j "$NB_PROC"
 
-# ============================================================
-# Stage 11: Cleanup build dependencies
-# ============================================================
-RUN apk del .build-deps
+# Hardening gates: fail the build if a promised protection is missing.
+# Symbol gates run on the unstripped binary.
+# NOTE: never use `producer | grep -q` here: under pipefail, grep -q exits
+# on the first match, the producer dies with SIGPIPE (141) and the gate
+# fails even on success. `grep ... >/dev/null` consumes the full input.
+RUN --mount=type=cache,target=/ccache <<'SCRIPT'
+set -eu
+. /tmp/env.sh
+cd "/tmp/freenginx-${NGINX_VERSION}"
+BIN=objs/nginx
 
-# ============================================================
-# Runtime stage
-# ============================================================
+fail() { echo "HARDENING GATE FAILED: $*" >&2; exit 1; }
+
+# PIE (full ASLR)
+file "$BIN" | grep 'pie executable' >/dev/null || fail "binary is not PIE"
+
+# Full RELRO: GNU_RELRO segment + immediate binding
+readelf -lW "$BIN" | grep 'GNU_RELRO' >/dev/null || fail "no GNU_RELRO segment"
+readelf -dW "$BIN" | grep 'NOW' >/dev/null || fail "no BIND_NOW (partial RELRO only)"
+
+# Non-executable stack
+readelf -lW "$BIN" | grep 'GNU_STACK' >/dev/null || fail "no GNU_STACK segment"
+if readelf -lW "$BIN" | grep 'GNU_STACK' | grep 'RWE' >/dev/null; then
+    fail "executable stack"
+fi
+
+# Stack protector (matches __stack_chk_fail and __stack_chk_fail_local)
+readelf -sW "$BIN" | grep '__stack_chk_fail' >/dev/null || fail "stack protector dropped"
+
+# OpenSSL is SHARED here: the version string lives in libcrypto, not nginx
+strings /usr/local/ssl/lib*/libcrypto.so | grep "OpenSSL ${OPENSSL_VERSION}" >/dev/null || \
+    fail "OpenSSL ${OPENSSL_VERSION} not found in libcrypto"
+readelf -dW "$BIN" | grep 'libssl' >/dev/null || fail "nginx is not linked against libssl"
+
+# zlib-ng instead of stock zlib (static, embedded into nginx)
+strings "$BIN" | grep 'zlib-ng' >/dev/null || fail "zlib-ng signature missing"
+
+# PCRE2 JIT compiled in
+readelf -sW "$BIN" | grep 'pcre2_jit_compile' >/dev/null || fail "PCRE2 JIT missing"
+
+# GCC LTO bytecode in our objects (when LTO is enabled)
+if [ -n "$LTO_FLAG" ]; then
+    readelf -SW objs/src/core/nginx.o | grep '\.gnu\.lto_' >/dev/null || fail "no LTO bytecode in nginx.o"
+fi
+
+# CFI instrumentation in our own objects (when CFI flags are set).
+# The final-binary note is AND-merged with distro crt objects; Alpine gcc
+# is built with --disable-cet, so the note is lost at link time. musl does
+# not activate CET at runtime either — gate our objects, report the rest.
+if [ -n "$CFI_FLAGS" ]; then
+    case "$(uname -m)" in
+        x86_64)
+            readelf -n objs/src/core/nginx.o | grep 'IBT' >/dev/null || fail "IBT missing in nginx.o"
+            readelf -n objs/src/core/nginx.o | grep 'SHSTK' >/dev/null || fail "SHSTK missing in nginx.o"
+            readelf -n "$BIN" | grep 'IBT' >/dev/null || \
+                echo "NOTE: CET note lost at link time (unmarked distro crt objects)"
+            ;;
+        aarch64)
+            readelf -n objs/src/core/nginx.o | grep 'BTI' >/dev/null || fail "BTI missing in nginx.o"
+            readelf -n objs/src/core/nginx.o | grep 'PAC' >/dev/null || fail "PAC missing in nginx.o"
+            readelf -n "$BIN" | grep 'BTI' >/dev/null || \
+                echo "NOTE: BTI note lost at link time (unmarked OpenSSL asm / distro crt)"
+            ;;
+    esac
+fi
+
+# FORTIFY functional probe: an out-of-bounds copy into a known-size heap
+# buffer must trap. Alpine uses fortify-headers (inline checks + ud2),
+# so there are no __*_chk symbols to grep for.
+cat > /tmp/fortify-probe.c <<'EOF'
+#include <stdlib.h>
+#include <string.h>
+int main(void) {
+    char *b = malloc(4);
+    volatile char sink;
+    if (!b) return 2;
+    memcpy(b, "aaaaaaaa", 8);
+    sink = b[0];
+    (void)sink;
+    return 0;
+}
+EOF
+cc $OPT_CFLAGS -o /tmp/fortify-probe /tmp/fortify-probe.c
+if /tmp/fortify-probe; then
+    fail "FORTIFY probe survived an out-of-bounds copy"
+fi
+echo "hardening gates: OK"
+
+strip --strip-unneeded "$BIN"
+make install
+/usr/sbin/nginx -V
+ccache -s
+SCRIPT
+
+# =============================================================================
+# Runtime (unchanged logic; default shell kept so ls|head pipelines stay safe)
+# =============================================================================
 FROM alpine:${ALPINE_VERSION} AS runtime
 
-ARG IMAGE_VERSION=1.2.9
-ARG VERSION_PLACEHOLDER=__RSSBRIDGE_IMAGE_VERSION__
+ARG IMAGE_VERSION
+ARG VERSION_PLACEHOLDER
+
 ENV CURL_IMPERSONATE=firefox155
 ENV LD_PRELOAD=/usr/lib/libmimalloc-secure.so \
     MIMALLOC_PURGE_DELAY=210 \
@@ -275,7 +430,7 @@ LABEL org.opencontainers.image.title="RSS Bridge" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.source="https://github.com/LordArrin/rss-bridge"
 
-# Install runtime dependencies + users
+# Runtime dependencies + users
 RUN set -xe && \
     apk update && \
     apk upgrade --no-cache && \
@@ -350,9 +505,7 @@ RUN set -xe && \
     chmod 770 /var/run/memcached && \
     rm -rf /var/cache/apk/*
 
-# ============================================================
-# Copy OpenSSL libraries
-# ============================================================
+# Replace system OpenSSL with the custom build
 RUN rm -f /usr/lib/libssl.so* /usr/lib/libcrypto.so*
 COPY --from=builder /usr/local/ssl/lib*/libssl.so* /usr/lib/
 COPY --from=builder /usr/local/ssl/lib*/libcrypto.so* /usr/lib/
@@ -368,9 +521,7 @@ RUN SSL_LIB=$(ls /usr/lib/libssl.so* | grep -v '\.so$' | head -n1) && \
     echo "libssl3" >> /etc/apk/protected_paths.d/lst && \
     echo "libcrypto3" >> /etc/apk/protected_paths.d/lst
 
-# ============================================================
-# Copy curl-impersonate
-# ============================================================
+# Replace system curl with curl-impersonate
 COPY --from=builder /tmp/curl-install/ /tmp/curl-install/
 
 RUN rm -f /usr/lib/libcurl.so.4 /usr/lib/libcurl.so.* && \
@@ -386,9 +537,7 @@ RUN rm -f /usr/lib/libcurl.so.4 /usr/lib/libcurl.so.* && \
     echo "libcurl" >> /etc/apk/protected_paths.d/lst && \
     rm -rf /tmp/curl-install
 
-# ============================================================
-# Copy Freenginx
-# ============================================================
+# Freenginx
 COPY --from=builder /usr/sbin/nginx /usr/sbin/nginx
 COPY --from=builder /etc/nginx/mime.types /etc/nginx/
 COPY --from=builder /etc/nginx/fastcgi_params /etc/nginx/
@@ -398,25 +547,20 @@ COPY --from=builder /etc/nginx/win-utf /etc/nginx/
 COPY --from=builder /etc/nginx/koi-utf /etc/nginx/
 COPY --from=builder /etc/nginx/koi-win /etc/nginx/
 
-# ============================================================
-# Copy Memcached
-# ============================================================
+# Memcached
 COPY --from=builder /usr/local/memcached/bin/memcached /usr/local/bin/memcached
 
-# ============================================================
-# Copy Mimalloc
-# ============================================================
+# Mimalloc: fail on a broken preload instead of silently running without it
 COPY --from=builder /tmp/mimalloc-install/lib*/libmimalloc* /usr/lib/
 
 RUN MIMALLOC_LIB=$(find /usr/lib -maxdepth 1 \( -name 'libmimalloc*.so*' -type f -o -type l \) | head -n1) && \
+    test -n "$MIMALLOC_LIB" && test -e "$MIMALLOC_LIB" && \
     ln -sf "$MIMALLOC_LIB" /usr/lib/libmimalloc-secure.so && \
     echo "/usr/lib/libmimalloc-secure.so" > /etc/ld.so.preload
 
 RUN ln -sf /usr/bin/openssl /usr/sbin/openssl
 
-# ============================================================
-# Copy application configs and source
-# ============================================================
+# Application configs and source
 COPY ./config/php-fpm.conf /etc/php85/php-fpm.conf
 COPY ./config/php-fpm-pool.conf.template /app/config/php-fpm-pool.conf.template
 COPY ./config/php.ini /etc/php85/conf.d/rss-bridge.ini
@@ -432,16 +576,17 @@ COPY --chown=nginx:nginx ./ /app/
 
 WORKDIR /app
 
-# Generate immutable version artifact from build argument.
+# Immutable version artifact
 RUN echo -n "${IMAGE_VERSION}" > /app/VERSION && \
     chown nginx:nginx /app/VERSION && \
     chmod 444 /app/VERSION
 
 RUN composer install --optimize-autoloader --no-interaction --ignore-platform-reqs --classmap-authoritative && \
-    sed -i "s/__RSSBRIDGE_IMAGE_VERSION__/${IMAGE_VERSION}/g" /app/index.html && \
+    sed -i "s/${VERSION_PLACEHOLDER}/${IMAGE_VERSION}/g" /app/index.html && \
     chmod +x /app/bin/* && \
     chmod +x /app/docker-entrypoint.sh
 
+# App-level healthcheck: covers nginx + PHP-FPM, not just nginx config
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -fsS --compressed "http://localhost/?action=health" || exit 1
 
