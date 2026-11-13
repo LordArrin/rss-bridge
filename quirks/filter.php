@@ -54,10 +54,6 @@ function matches_keyword_rules(string $haystack, string $rules): bool
                 $splitResult
             );
 
-            if ($parts === []) {
-                continue;
-            }
-
             $allMatch = true;
             foreach ($parts as $part) {
                 if (str_contains($haystack, $part) === false) {

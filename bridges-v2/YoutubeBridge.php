@@ -342,7 +342,7 @@ final class YoutubeBridge extends BridgeAbstract
             return '';
         }
 
-        $title = trim($titleNode->textContent);
+        $title = trim((string) $titleNode->textContent);
         return str_replace(' - YouTube', '', $title);
     }
 
@@ -646,15 +646,17 @@ final class YoutubeBridge extends BridgeAbstract
         $mediaNs = 'http://search.yahoo.com/mrss/';
 
         $titleNodes = $root->getElementsByTagNameNS($atomNs, 'title');
-        if (count($titleNodes) > 0) {
-            $this->feedName = $this->decodeTitle($titleNodes->item(0)->textContent);
+        $firstTitleNode = $titleNodes->item(0);
+        if ($firstTitleNode !== null) {
+            $this->feedName = $this->decodeTitle((string) $firstTitleNode->textContent);
         }
 
         $entries = $root->getElementsByTagNameNS($atomNs, 'entry');
 
         foreach ($entries as $element) {
             $idNodes = $element->getElementsByTagNameNS($atomNs, 'id');
-            $idStr = count($idNodes) > 0 ? $idNodes->item(0)->textContent : '';
+            $firstIdNode = $idNodes->item(0);
+            $idStr = $firstIdNode !== null ? (string) $firstIdNode->textContent : '';
             $videoId = str_replace('yt:video:', '', $idStr);
 
             if (str_contains($videoId, 'googleads') === true) {
@@ -662,25 +664,28 @@ final class YoutubeBridge extends BridgeAbstract
             }
 
             $titleNodes = $element->getElementsByTagNameNS($atomNs, 'title');
-            $title = count($titleNodes) > 0 ? $this->decodeTitle($titleNodes->item(0)->textContent) : 'Untitled';
+            $firstTitleNode = $titleNodes->item(0);
+            $title = $firstTitleNode !== null ? $this->decodeTitle((string) $firstTitleNode->textContent) : 'Untitled';
 
             $authorName = '';
             $authorNodes = $element->getElementsByTagNameNS($atomNs, 'author');
-            if (count($authorNodes) > 0) {
-                $authorElement = $authorNodes->item(0);
-                $nameNodes = $authorElement->getElementsByTagNameNS($atomNs, 'name');
-                if (count($nameNodes) > 0) {
-                    $authorName = $nameNodes->item(0)->textContent;
+            $firstAuthorNode = $authorNodes->item(0);
+            if ($firstAuthorNode !== null) {
+                $nameNodes = $firstAuthorNode->getElementsByTagNameNS($atomNs, 'name');
+                $firstNameNode = $nameNodes->item(0);
+                if ($firstNameNode !== null) {
+                    $authorName = (string) $firstNameNode->textContent;
                 }
             }
 
             $desc = '';
             $mediaGroupNodes = $element->getElementsByTagNameNS($mediaNs, 'group');
-            if (count($mediaGroupNodes) > 0) {
-                $mediaGroup = $mediaGroupNodes->item(0);
-                $descNodes = $mediaGroup->getElementsByTagNameNS($mediaNs, 'description');
-                if (count($descNodes) > 0) {
-                    $desc = $descNodes->item(0)->textContent;
+            $firstMediaGroupNode = $mediaGroupNodes->item(0);
+            if ($firstMediaGroupNode !== null) {
+                $descNodes = $firstMediaGroupNode->getElementsByTagNameNS($mediaNs, 'description');
+                $firstDescNode = $descNodes->item(0);
+                if ($firstDescNode !== null) {
+                    $desc = (string) $firstDescNode->textContent;
                 }
             }
 
@@ -689,7 +694,8 @@ final class YoutubeBridge extends BridgeAbstract
             $desc = preg_replace(self::URI_REGEX, '<a href="$1" target="_blank">$1</a> ', $desc) ?? $desc;
 
             $publishedNodes = $element->getElementsByTagNameNS($atomNs, 'published');
-            $published = count($publishedNodes) > 0 ? $publishedNodes->item(0)->textContent : '';
+            $firstPublishedNode = $publishedNodes->item(0);
+            $published = $firstPublishedNode !== null ? (string) $firstPublishedNode->textContent : '';
 
             $time = time();
             if ($published !== '') {

@@ -31,7 +31,7 @@ final class DirectProxy extends ProxyAbstract
         }
 
         try {
-            return (string) getContents($url, $headers, $curlOptions);
+            return getContents($url, $headers, $curlOptions);
         } catch (\Exception $e) {
             throw new \RuntimeException(
                 "Direct request failed for {$url}. This site may require browser-based proxy (check docs). Original error: {$e->getMessage()}"
@@ -59,10 +59,6 @@ final class DirectProxy extends ProxyAbstract
 
         try {
             $response = getContents($url, [], $curlOptions, true);
-
-            if (is_string($response) === true) {
-                throw new \RuntimeException("Unexpected string response for {$url}");
-            }
 
             $body = $response->getBody();
             $headers = $response->getHeaders();

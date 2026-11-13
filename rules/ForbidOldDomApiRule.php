@@ -143,9 +143,7 @@ final class ForbidOldDomApiRule implements Rule
 
         if ($node instanceof Node\Stmt\Catch_) {
             foreach ($node->types as $type) {
-                if ($type instanceof Name) {
-                    $names[] = $type;
-                }
+                $names[] = $type;
             }
 
             return $names;
@@ -156,9 +154,7 @@ final class ForbidOldDomApiRule implements Rule
                 $names[] = $node->extends;
             }
             foreach ($node->implements as $interface) {
-                if ($interface instanceof Name) {
-                    $names[] = $interface;
-                }
+                $names[] = $interface;
             }
 
             return $names;
@@ -166,9 +162,7 @@ final class ForbidOldDomApiRule implements Rule
 
         if ($node instanceof Node\Stmt\Interface_) {
             foreach ($node->extends as $interface) {
-                if ($interface instanceof Name) {
-                    $names[] = $interface;
-                }
+                $names[] = $interface;
             }
 
             return $names;
@@ -302,6 +296,6 @@ final class ForbidOldDomApiRule implements Rule
     {
         $parts = explode('\\', $className);
 
-        return (string) end($parts);
+        return end($parts);
     }
 }

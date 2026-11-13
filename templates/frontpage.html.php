@@ -34,10 +34,10 @@
         // Read admin contacts directly from environment variables
         // (validated at container startup by /bin/load-env)
         $adminEmailRaw = getenv('ADMIN_EMAIL');
-        $adminEmail = ($adminEmailRaw === false) ? '' : trim((string) $adminEmailRaw);
+        $adminEmail = is_string($adminEmailRaw) ? trim($adminEmailRaw) : '';
 
         $adminTelegramRaw = getenv('ADMIN_TELEGRAM');
-        $adminTelegram = ($adminTelegramRaw === false) ? '' : trim((string) $adminTelegramRaw);
+        $adminTelegram = is_string($adminTelegramRaw) ? trim($adminTelegramRaw) : '';
 
         // Normalize Telegram handle to URL and display form
         $telegramUrl = '';
@@ -46,7 +46,7 @@
             $tg = $adminTelegram;
 
             // Already a full URL
-            if (str_starts_with($tg, 'http://') || str_starts_with($tg, 'https://')) {
+            if (str_starts_with($tg, 'http://') === true || str_starts_with($tg, 'https://') === true) {
                 $telegramUrl = $tg;
                 // Extract username from URL for display
                 if (preg_match('#(?:t\.me|telegram\.me)/([a-zA-Z0-9_]+)/?$#', $tg, $matches) === 1) {

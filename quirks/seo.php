@@ -282,12 +282,12 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
                                 $field = $field[0];
                             }
 
-                            if (is_array($json_root) === true && isset($json_root[$field]) === true) {
+                            if (is_array($json_root) === true && array_key_exists($field, $json_root) === true) {
                                 $field_value = $json_root[$field];
 
                                 if ($property === 'enclosures') {
                                     $images = $ldjson_extract_images($field_value);
-                                    if ($images !== []) {
+                                    if (count($images) > 0) {
                                         $item['enclosures'] = $images;
                                         break;
                                     }
@@ -303,13 +303,14 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
                                     break;
                                 }
 
-                                if (is_string($field_value) === true && $field_value !== '') {
+                                $stringValue = is_string($field_value) === true ? $field_value : '';
+                                if ($stringValue !== '') {
                                     if ($property === 'author' && $field === '@id') {
-                                        $ldjson_author_id = $field_value;
+                                        $ldjson_author_id = $stringValue;
                                     } else {
-                                        $item[$property] = $field_value;
-                                        break;
+                                        $item[$property] = $stringValue;
                                     }
+                                    break;
                                 }
                             }
                         }
@@ -368,15 +369,7 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
     }
 
     if (isset($item['enclosures']) === true && is_array($item['enclosures']) === true) {
-        $validEnclosures = [];
-        foreach ($item['enclosures'] as $enclosure) {
-            if (is_string($enclosure) === true && $enclosure !== '') {
-                $validEnclosures[] = $enclosure;
-            }
-        }
-        if ($validEnclosures !== []) {
-            $result['enclosures'] = $validEnclosures;
-        }
+        $result['enclosures'] = $item['enclosures'];
     }
 
     return $result;

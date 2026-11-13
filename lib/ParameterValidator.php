@@ -114,25 +114,31 @@ class ParameterValidator
         }
         unset($queriedContexts['global']);
 
-        switch (array_sum($queriedContexts)) {
+        // Count matches explicitly to avoid array_search type narrowing issues
+        $matchCount = 0;
+        $matchedContext = null;
+        foreach ($queriedContexts as $contextName => $queried) {
+            if ($queried === true) {
+                $matchCount++;
+                $matchedContext = $contextName;
+            }
+        }
+
+        switch ($matchCount) {
             case 0:
                 // Found no match, is there a context without parameters?
                 if (isset($input['context']) === true) {
-                    return (string)$input['context'];
+                    return (string) $input['context'];
                 }
-                foreach ($queriedContexts as $context2 => $queried) {
+                foreach ($queriedContexts as $contextName => $queried) {
                     if ($queried === null) {
-                        return (string)$context2;
+                        return $contextName;
                     }
                 }
                 return null;
             case 1:
                 // Found unique match
-                $key = array_search(true, $queriedContexts, true);
-                if (is_string($key) === true || is_int($key) === true) {
-                    return $key;
-                }
-                return false;
+                return $matchedContext;
             default:
                 return false;
         }
@@ -141,24 +147,17 @@ class ParameterValidator
     private function validateTextValue(mixed $value, ?string $pattern = null): ?string
     {
         if ($pattern === null) {
-            // No filtering taking place
             $filteredValue = filter_var($value, FILTER_UNSAFE_RAW);
         } else {
-            $filteredValue = filter_var((string)$value, FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => '/^' . $pattern . '$/']]);
+            $filteredValue = filter_var((string) $value, FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => '/^' . $pattern . '$/']]);
         }
-        if ($filteredValue === false) {
-            return null;
-        }
-        return (string)$filteredValue;
+        return $filteredValue === false ? null : $filteredValue;
     }
 
     private function validateNumberValue(mixed $value): ?int
     {
         $filteredValue = filter_var($value, FILTER_VALIDATE_INT);
-        if ($filteredValue === false) {
-            return null;
-        }
-        return (int)$filteredValue;
+        return $filteredValue === false ? null : $filteredValue;
     }
 
     private function validateCheckboxValue(mixed $value): ?bool
@@ -171,7 +170,6 @@ class ParameterValidator
      */
     private function validateListValue(mixed $value, array $expectedValues): ?string
     {
-        // Array input (e.g. ?param[]=x) is not a valid single list selection.
         if (is_array($value) === true) {
             return null;
         }
@@ -180,14 +178,7 @@ class ParameterValidator
         if ($filteredValue === false) {
             return null;
         }
-        $filteredValue = (string) $filteredValue;
 
-        // Flatten option groups (['Group' => ['Label' => 'value', ...], ...]) into a
-        // flat list of stringified values. array_walk_recursive only visits leaves,
-        // so this never casts an array to string (no "Array to string conversion"
-        // warning) and never whitelists the literal string 'Array'. Booleans are
-        // deliberately excluded: (string) false === '' would whitelist empty input
-        // and (string) true === '1' would alias unrelated numeric selections.
         $allowed = [];
         array_walk_recursive($expectedValues, static function (mixed $item) use (&$allowed): void {
             if (is_string($item) === true || is_int($item) === true || is_float($item) === true) {

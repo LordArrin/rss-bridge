@@ -80,7 +80,7 @@ final class IpResolver
                 $blockedCidrs = explode(',', $blockedCidrs);
             }
             foreach ($blockedCidrs as $cidr) {
-                $cidr = trim((string)$cidr);
+                $cidr = trim($cidr);
                 $normalizedCidr = self::normalizeToCidr($cidr);
                 if ($normalizedCidr !== '' && self::isValidCidr($normalizedCidr) === true) {
                     $mergedBlocked[] = $normalizedCidr;
@@ -96,7 +96,7 @@ final class IpResolver
                 $allowedCidrs = explode(',', $allowedCidrs);
             }
             foreach ($allowedCidrs as $cidr) {
-                $cidr = trim((string)$cidr);
+                $cidr = trim($cidr);
                 $normalizedCidr = self::normalizeToCidr($cidr);
                 if ($normalizedCidr !== '' && self::isValidCidr($normalizedCidr) === true) {
                     $mergedAllowed[] = $normalizedCidr;
@@ -304,7 +304,7 @@ final class CurlHttpClient implements HttpClient
 
     private static function resolveOption(): int
     {
-        return defined('CURLOPT_RESOLVE') === true ? (int)constant('CURLOPT_RESOLVE') : self::RESOLVE_OPT;
+        return defined('CURLOPT_RESOLVE') === true ? constant('CURLOPT_RESOLVE') : self::RESOLVE_OPT;
     }
 
     private static function timevalueCriticalOption(): int
@@ -395,7 +395,7 @@ final class CurlHttpClient implements HttpClient
 
         return [
             'host' => $host,
-            'port' => (int)($parts['port'] ?? ($scheme === 'https' ? 443 : 80)),
+            'port' => $parts['port'] ?? ($scheme === 'https' ? 443 : 80),
             'scheme' => $scheme,
             'path' => $parts['path'] ?? '/',
         ];
@@ -503,6 +503,7 @@ final class CurlHttpClient implements HttpClient
 
     /**
      * Checks if two hosts belong to the same effective domain.
+     *
      */
     private static function isSameEffectiveDomain(string $host1, string $host2): bool
     {
@@ -663,15 +664,15 @@ final class CurlHttpClient implements HttpClient
         }
 
         if ($config['max_filesize'] !== null) {
-            $curlOptions[CURLOPT_MAXFILESIZE] = (int)$config['max_filesize'];
+            $curlOptions[CURLOPT_MAXFILESIZE] = $config['max_filesize'];
             $curlOptions[CURLOPT_NOPROGRESS] = false;
             if (defined('CURLOPT_XFERINFOFUNCTION') === true) {
                 $curlOptions[CURLOPT_XFERINFOFUNCTION] = function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($config) {
-                    return ($downloaded > (int)$config['max_filesize']) ? 1 : 0;
+                    return ($downloaded > $config['max_filesize']) ? 1 : 0;
                 };
             } else {
                 $curlOptions[CURLOPT_PROGRESSFUNCTION] = function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($config) {
-                    return ($downloaded > (int)$config['max_filesize']) ? -1 : 0;
+                    return ($downloaded > $config['max_filesize']) ? -1 : 0;
                 };
             }
         }
@@ -831,7 +832,7 @@ final class CurlHttpClient implements HttpClient
             curl_setopt($ch, CURLOPT_HEADERFUNCTION, $headerCallback);
         }
 
-        $statusCode = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $statusCode = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
 
         if ($savedEnv !== null) {
             putenv('CURL_IMPERSONATE=' . $savedEnv);
@@ -848,6 +849,7 @@ final class CurlHttpClient implements HttpClient
         }
 
         if ($statusCode >= 300 && $statusCode < 400 && $statusCode !== 304) {
+            /** @var array<string, list<string>> $responseHeaders */
             $locationHeaders = $responseHeaders['location'] ?? [];
             $location = count($locationHeaders) > 0 ? $locationHeaders[count($locationHeaders) - 1] : 'unknown';
             $originalParsed = self::parseHttpUrl($url);
@@ -1104,17 +1106,15 @@ final class Response
         $this->headers = [];
 
         foreach ($headers as $name => $value) {
-            $name = mb_strtolower((string)$name);
-            if (isset($this->headers[$name]) === false) {
-                $this->headers[$name] = [];
+            $normalizedName = mb_strtolower($name);
+            if (isset($this->headers[$normalizedName]) === false) {
+                $this->headers[$normalizedName] = [];
             }
             if (is_string($value) === true) {
-                $this->headers[$name][] = $value;
-            } elseif (is_array($value) === true) {
+                $this->headers[$normalizedName][] = $value;
+            } else {
                 foreach ($value as $v) {
-                    if (is_string($v) === true) {
-                        $this->headers[$name][] = $v;
-                    }
+                    $this->headers[$normalizedName][] = $v;
                 }
             }
         }

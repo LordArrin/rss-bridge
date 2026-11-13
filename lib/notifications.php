@@ -195,24 +195,26 @@ function notification_body_html(string $body, array $links): string
     // htmlspecialchars does not escape curly braces, so placeholders survive escaping.
     $escaped = htmlspecialchars($body, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
-        return preg_replace_callback('/\{(\d+)\}/', function (array $m) use ($links): string {
-            $index = (int) $m[1];
-            if (isset($links[$index]) === false || is_array($links[$index]) === false) {
-                return $m[0]; // leave unknown placeholder as-is
-            }
-            $link = $links[$index];
-            $url = notification_safe_url((string) ($link['url'] ?? ''));
-            $label = htmlspecialchars((string) ($link['label'] ?? $url ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            if ($url === null) {
-                return $label; // unsafe URL: render label as plain text
-            }
-            $safeUrl = htmlspecialchars($url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            return sprintf(
-                '<a href="%s" target="_blank" rel="noopener noreferrer nofollow">%s</a>',
-                $safeUrl,
-                $label
-            );
-        }, $escaped) ?? $escaped;
+    return preg_replace_callback('/\{(\d+)\}/', function (array $m) use ($links): string {
+        $index = (int) $m[1];
+        if (isset($links[$index]) === false) {
+            return $m[0]; // leave unknown placeholder as-is
+        }
+        $link = $links[$index];
+        $url = notification_safe_url($link['url']);
+        $label = htmlspecialchars($link['label'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+        if ($url === null) {
+            return $label; // unsafe URL: render label as plain text
+        }
+
+        $safeUrl = htmlspecialchars($url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        return sprintf(
+            '<a href="%s" target="_blank" rel="noopener noreferrer nofollow">%s</a>',
+            $safeUrl,
+            $label
+        );
+    }, $escaped) ?? $escaped;
 }
 
 /**

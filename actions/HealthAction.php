@@ -162,7 +162,7 @@ final class HealthAction implements ActionInterface
             $type = getenv($envKey);
 
             // Explicit strict comparisons to satisfy PHPCS
-            if ($type !== false && trim((string) $type) !== '') {
+            if ($type !== false && trim($type) !== '') {
                 $profiles[] = $profileName;
             }
         }

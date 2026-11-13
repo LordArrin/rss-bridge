@@ -207,11 +207,11 @@ function render_draftjs_to_html(string $jsonContent): string
                 $hi = unpack('v', $units[$i])[1] ?? 0;
                 if ($hi >= 0xD800 && $hi <= 0xDBFF && $i + 1 < $unitCount) {
                     $converted = mb_convert_encoding($units[$i] . $units[$i + 1], 'UTF-8', 'UTF-16LE');
-                    $output .= e($converted !== false ? $converted : '');
+                    $output .= e($converted);
                     $output .= $tagsByPos[++$i] ?? '';
                 } else {
                     $converted = mb_convert_encoding($units[$i], 'UTF-8', 'UTF-16LE');
-                    $output .= e($converted !== false ? $converted : '');
+                    $output .= e($converted);
                 }
             }
         }

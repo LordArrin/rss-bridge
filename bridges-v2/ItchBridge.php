@@ -71,7 +71,6 @@ final class ItchBridge extends BridgeAbstract
                 'type' => 'list',
                 'values' => [
                     'None (fastest, no proxy)' => 'none',
-                    //'FlareSolverr (slower, bypasses Cloudflare)' => 'flaresolverr', // disabled for now
                     'Trawl' => 'trawl',
                 ],
                 'required' => true,
@@ -162,7 +161,7 @@ final class ItchBridge extends BridgeAbstract
                     throw new \Exception('Received empty HTML response');
                 }
 
-                if ($attempt > 1) {
+                if ($attempt > 1 && $this->logger !== null) {
                     $this->logger->info(sprintf(
                         'ItchBridge: %s succeeded on attempt %d/%d for %s via %s',
                         $context,
@@ -177,15 +176,17 @@ final class ItchBridge extends BridgeAbstract
             } catch (\Throwable $e) {
                 $lastException = $e;
 
-                $this->logger->warning(sprintf(
-                    'ItchBridge: %s attempt %d/%d failed for %s via %s: %s',
-                    $context,
-                    $attempt,
-                    self::MAX_RETRIES,
-                    $url,
-                    $this->proxyProfile,
-                    $e->getMessage()
-                ));
+                if ($this->logger !== null) {
+                    $this->logger->warning(sprintf(
+                        'ItchBridge: %s attempt %d/%d failed for %s via %s: %s',
+                        $context,
+                        $attempt,
+                        self::MAX_RETRIES,
+                        $url,
+                        $this->proxyProfile,
+                        $e->getMessage()
+                    ));
+                }
 
                 if ($attempt < self::MAX_RETRIES) {
                     $delay = self::RETRY_DELAY_US * (2 ** ($attempt - 1));
@@ -194,7 +195,10 @@ final class ItchBridge extends BridgeAbstract
             }
         }
 
-        throw $lastException;
+        if ($lastException !== null) {
+            throw $lastException;
+        }
+        throw new \RuntimeException(sprintf('%s failed completely without a specific exception', $context));
     }
 
     private function checkYouTubeThumbnail(string $videoId): string
@@ -225,7 +229,7 @@ final class ItchBridge extends BridgeAbstract
                     $thumbnailUrl = $maxResUrl;
                 }
             }
-        } catch (\Exception $e) {
+        } catch (\Exception) {
             // Fallback to hqdefault on error
         }
 
@@ -358,7 +362,9 @@ final class ItchBridge extends BridgeAbstract
 
             return '';
         } catch (\Exception $e) {
-            $this->logger->warning('ItchBridge: Failed to fetch full article: ' . $e->getMessage());
+            if ($this->logger !== null) {
+                $this->logger->warning('ItchBridge: Failed to fetch full article: ' . $e->getMessage());
+            }
             return '';
         }
     }

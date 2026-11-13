@@ -80,7 +80,7 @@ final class TgWSProxy extends ProxyAbstract
             (int) $this->config['request_timeout'],
             (int) $this->config['retries'],
             (int) $this->config['budget_seconds'],
-            ($this->config['fallback_direct'] ?? false) === true ? 'yes' : 'no'
+            $this->config['fallback_direct'] === true ? 'yes' : 'no'
         ));
     }
 
@@ -181,7 +181,7 @@ final class TgWSProxy extends ProxyAbstract
         $scheme = strtolower($parsed['scheme'] ?? 'https');
         $port = $parsed['port'] ?? ($scheme === 'https' ? 443 : 80);
 
-        if ((int) $port !== 443) {
+        if ($port !== 443) {
             throw new \RuntimeException(sprintf(
                 'TgWSProxy only supports port 443 (got %d for %s). URL will be automatically upgraded to HTTPS if possible.',
                 $port,

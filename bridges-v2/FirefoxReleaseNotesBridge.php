@@ -72,7 +72,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
     private function fetchReleaseLinks(): array
     {
         $cacheKey = 'firefox_releases_list';
-        $cached = $this->cache->get($cacheKey);
+        $cached = $this->loadCacheValue($cacheKey);
         if ($cached !== null) {
             return $cached;
         }
@@ -99,7 +99,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
             }
         }
 
-        $this->cache->set($cacheKey, $releases, self::RELEASES_LIST_CACHE_TTL);
+        $this->saveCacheValue($cacheKey, $releases, self::RELEASES_LIST_CACHE_TTL);
 
         return $releases;
     }
@@ -132,13 +132,13 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         ];
 
         $cacheKey = 'firefox_release_notes_' . md5($release['url']);
-        $cachedHtml = $this->cache->get($cacheKey);
+        $cachedHtml = $this->loadCacheValue($cacheKey);
 
         if ($cachedHtml === null) {
             try {
                 $html = getContents($release['url']);
                 if ($html !== '') {
-                    $this->cache->set($cacheKey, $html, self::RELEASE_NOTES_CACHE_TTL);
+                    $this->saveCacheValue($cacheKey, $html, self::RELEASE_NOTES_CACHE_TTL);
                     $cachedHtml = $html;
                 }
             } catch (\Exception $e) {
@@ -170,7 +170,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
     {
         $dateElement = $html->querySelector('.c-release-date');
         if ($dateElement !== null) {
-            $dateText = trim($dateElement->textContent);
+            $dateText = trim((string) $dateElement->textContent);
             $timestamp = strtotime($dateText);
             if ($timestamp !== false) {
                 return $timestamp;
@@ -179,8 +179,8 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
 
         $timeTag = $html->querySelector('time');
         if ($timeTag !== null) {
-            $datetime = $timeTag->getAttribute('datetime');
-            $dateText = ($datetime !== '') ? $datetime : $timeTag->textContent;
+            $datetime = (string) ($timeTag->getAttribute('datetime') ?? '');
+            $dateText = $datetime !== '' ? $datetime : (string) $timeTag->textContent;
             $timestamp = strtotime($dateText);
             if ($timestamp !== false) {
                 return $timestamp;
@@ -205,7 +205,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         $parts = [];
 
         $firstText = $html->querySelector('.c-release-first-text');
-        if ($firstText !== null && trim($firstText->textContent) !== '') {
+        if ($firstText !== null && trim((string) $firstText->textContent) !== '') {
             $parts[] = $this->cleanHtml($firstText->innerHTML);
         }
 
@@ -225,7 +225,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
                 continue;
             }
 
-            $title = trim($heading->textContent);
+            $title = trim((string) $heading->textContent);
             if ($title === '') {
                 continue;
             }
@@ -302,7 +302,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
         }
 
         foreach ($wrapper->querySelectorAll('a[href]') as $link) {
-            $href = $link->getAttribute('href');
+            $href = (string) ($link->getAttribute('href') ?? '');
             if ($href !== '' && str_starts_with($href, '/') === true) {
                 $link->setAttribute('href', urljoin(self::URI, $href));
             }

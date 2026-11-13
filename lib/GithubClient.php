@@ -166,10 +166,10 @@ final class GithubClient
             /** @var Response $response */
             $response = getContents(self::BASE . $url, $headers, [], true);
 
-            $limit = (string) ($response->getHeader('x-ratelimit-limit') ?? 'unknown');
-            $remaining = (string) ($response->getHeader('x-ratelimit-remaining') ?? 'unknown');
-            $used = (string) ($response->getHeader('x-ratelimit-used') ?? 'unknown');
-            $reset = (string) ($response->getHeader('x-ratelimit-reset') ?? 'unknown');
+            $limit = ($response->getHeader('x-ratelimit-limit') ?? 'unknown');
+            $remaining = ($response->getHeader('x-ratelimit-remaining') ?? 'unknown');
+            $used = ($response->getHeader('x-ratelimit-used') ?? 'unknown');
+            $reset = ($response->getHeader('x-ratelimit-reset') ?? 'unknown');
 
             $this->logger->info(sprintf(
                 'github: limit=%s, remaining=%s, used=%s, reset=%s (%s)',

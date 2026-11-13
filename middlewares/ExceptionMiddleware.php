@@ -68,7 +68,7 @@ final class ExceptionMiddleware implements Middleware
             return false;
         }
 
-        $code = (int) $e->getCode();
+        $code = $e->getCode();
         if (in_array($code, [408, 504], true) === true) {
             return true;
         }

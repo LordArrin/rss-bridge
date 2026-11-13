@@ -38,7 +38,7 @@ final class SponsrBridge extends BridgeAbstract
             throwClientException('Author URL or ID is required');
         }
 
-        $authorSlug = $this->normalizeAuthorSlug((string)$input);
+        $authorSlug = $this->normalizeAuthorSlug((string) $input);
         if ($authorSlug === '') {
             throwClientException('Invalid author URL or ID format');
         }
@@ -54,7 +54,7 @@ final class SponsrBridge extends BridgeAbstract
             throwServerException('Could not find __NEXT_DATA__ script');
         }
 
-        $jsonData = json_decode($nextDataScript->textContent, true);
+        $jsonData = json_decode((string) $nextDataScript->textContent, true);
 
         if ($jsonData === null || isset($jsonData['props']['pageProps']['posts']['list']) === false) {
             throwServerException('Could not parse post data');
@@ -63,22 +63,22 @@ final class SponsrBridge extends BridgeAbstract
         $posts = $jsonData['props']['pageProps']['posts']['list'];
         $project = $jsonData['props']['pageProps']['project'];
 
-        $this->feedTitle = $project['project_title'] ?? 'Sponsr.ru';
+        $this->feedTitle = (string) ($project['project_title'] ?? 'Sponsr.ru');
 
         $avatarImg = $html->querySelector('.ant-avatar-image img');
         if ($avatarImg !== null) {
-            $this->feedIcon = $avatarImg->getAttribute('src');
+            $this->feedIcon = $avatarImg->getAttribute('src') ?? '';
         }
 
         $listItems = $html->querySelectorAll('li[class*="index_listItem"]');
 
         foreach ($posts as $post) {
-            $postId = $post['id'];
-            $postTitle = $post['title'];
-            $postDate = $post['date'];
+            $postId = (string) ($post['id'] ?? '');
+            $postTitle = (string) ($post['title'] ?? '');
+            $postDate = (string) ($post['date'] ?? '');
             $postImage = $post['image'] ?? null;
-            $postDuration = $post['duration_video'] ?? 0;
-            $isAvailable = $post['available'] ?? false;
+            $postDuration = (int) ($post['duration_video'] ?? 0);
+            $isAvailable = (bool) ($post['available'] ?? false);
 
             $postUrl = $authorUrl . $postId . '/';
             $timestamp = strtotime($postDate);
@@ -110,12 +110,12 @@ final class SponsrBridge extends BridgeAbstract
                     if ($article !== null && $article->getAttribute('id') === 'feed-post-' . $postId) {
                         $levelChip = $listItem->querySelector('[class*="index_levelChipWrapper"]');
                         if ($levelChip !== null) {
-                            $levelName = trim($levelChip->textContent);
+                            $levelName = trim((string) $levelChip->textContent);
                         }
 
                         $paywallBtn = $listItem->querySelector('[class*="postPaywall_subscribeBtn"]');
                         if ($paywallBtn !== null) {
-                            $btnText = $paywallBtn->textContent;
+                            $btnText = (string) $paywallBtn->textContent;
                             if (preg_match('/(\d+)\s*?/', $btnText, $matches) === 1) {
                                 $levelPrice = $matches[1];
                             }
@@ -139,7 +139,7 @@ final class SponsrBridge extends BridgeAbstract
                 'title' => $postTitle,
                 'uri' => $postUrl,
                 'content' => $content,
-                'timestamp' => $timestamp,
+                'timestamp' => $timestamp !== false ? $timestamp : time(),
                 'uid' => 'sponsr-' . $postId
             ];
         }
@@ -192,7 +192,7 @@ final class SponsrBridge extends BridgeAbstract
         }
 
         libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
+        $dom = \Dom\HTMLDocument::createFromString((string) $html);
         libxml_use_internal_errors(false);
 
         return $dom;

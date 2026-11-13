@@ -149,7 +149,7 @@ abstract class PhilomenaBase extends BridgeAbstract
         $tagsArray = [];
 
         if ($q !== '') {
-            $qNormalized = preg_replace('/[\s,]+/', ', ', $q);
+            $qNormalized = preg_replace('/[\s,]+/', ', ', $q) ?? $q;
             $tagsArray = array_filter(
                 array_map('trim', explode(',', $qNormalized)),
                 fn(string $v): bool => $v !== ''
@@ -157,7 +157,7 @@ abstract class PhilomenaBase extends BridgeAbstract
         }
 
         if ($excludeTags !== '') {
-            $excludesNormalized = preg_replace('/[\s,]+/', ', ', $excludeTags);
+            $excludesNormalized = preg_replace('/[\s,]+/', ', ', $excludeTags) ?? $excludeTags;
             $excludesArray = array_filter(
                 array_map('trim', explode(',', $excludesNormalized)),
                 fn(string $v): bool => $v !== ''
@@ -384,10 +384,10 @@ abstract class PhilomenaBase extends BridgeAbstract
             '/^[-*_]{3,}$/m' => '',
         ];
 
-        $text = preg_replace(array_keys($patterns), array_values($patterns), $text);
+        $text = preg_replace(array_keys($patterns), array_values($patterns), $text) ?? $text;
         $text = str_replace(['*', '\\'], '', $text);
-        $text = preg_replace('/[^\x00-\x7F\x{0400}-\x{04FF}\p{P}\s]/u', '', $text);
-        $text = preg_replace(['/\n{3,}/', '/ {2,}/'], ["\n\n", ' '], $text);
+        $text = preg_replace('/[^\x00-\x7F\x{0400}-\x{04FF}\p{P}\s]/u', '', $text) ?? $text;
+        $text = preg_replace(['/\n{3,}/', '/ {2,}/'], ["\n\n", ' '], $text) ?? $text;
 
         return trim($text);
     }

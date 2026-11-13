@@ -72,30 +72,30 @@ final class FrontpageAction implements ActionInterface
             notify_error(
                 sprintf(
                     'Bridge "%s" failed to load and has been disabled. Reason: %s',
-                    (string) $brokenName,
-                    $brokenInfo['message'] ?? 'Unknown error'
+                    $brokenName,
+                    $brokenInfo['message']
                 ),
                 'Broken bridge',
                 'SafeBridgeLoader',
                 [],
                 [[
-                'label' => $this->bridgeFactory->getShortClassName((string) $brokenName),
-                'url'   => './?action=list',
+                    'label' => $this->bridgeFactory->getShortClassName($brokenName),
+                    'url'   => './?action=list',
                 ]]
             );
         }
 
         $response = new Response(render(__DIR__ . '/../templates/frontpage.html.php', [
-            'bridges'           => $body,
-            'active_bridges'    => $activeBridges,
-            'total_bridges'     => count($bridgeClassNames),
+            'bridges'        => $body,
+            'active_bridges' => $activeBridges,
+            'total_bridges'  => count($bridgeClassNames),
         ]));
 
         return $response;
     }
 
     /**
-     * @param array{name: string, uri: string, description: string, parameters: array<string, array<string, mixed>>, domain: string, short_name: string, maintainer: string, cache_timeout: int} $meta
+     * @param array{name: string, uri: string, description: string, parameters: array<int|string, array<string, mixed>>, domain: string, short_name: string, maintainer: string, cache_timeout: int} $meta
      */
     public static function renderFromMetadata(
         array $meta,
@@ -124,8 +124,8 @@ final class FrontpageAction implements ActionInterface
         // Read custom timeout setting directly from environment
         if (filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN) === true) {
             $parameters['global']['_cache_timeout'] = [
-                'name' => 'Cache timeout in seconds',
-                'type' => 'number',
+                'name'         => 'Cache timeout in seconds',
+                'type'         => 'number',
                 'defaultValue' => $meta['cache_timeout']
             ];
         }
@@ -177,13 +177,12 @@ final class FrontpageAction implements ActionInterface
                     $contextParameters = array_merge($contextParameters, $parameters['global']);
                 }
 
-                $contextNameStr = is_numeric($contextName) === true ? (string) $contextName : $contextName;
-
                 if (is_numeric($contextName) === false) {
-                    $card .= '<h5>' . $e($contextNameStr) . "</h5>\n";
+                    $card .= '<h5>' . $e($contextName) . "</h5>\n";
                 }
 
-                $card .= self::renderForm($shortClassName, $contextNameStr, $contextParameters, $token);
+                // Cast is now valid because PHPDoc says $contextName can be int|string
+                $card .= self::renderForm($shortClassName, (string) $contextName, $contextParameters, $token);
             }
         }
 
@@ -199,7 +198,7 @@ final class FrontpageAction implements ActionInterface
     }
 
     /**
-     * @param array<string, mixed> $parameters
+     * @param array<int|string, mixed> $parameters
      */
     private static function renderForm(
         string $bridgeClassName,
@@ -242,7 +241,8 @@ final class FrontpageAction implements ActionInterface
                 $parameter['defaultValue'] = '';
             }
 
-            $idStr = is_numeric($id) === true ? (string) $id : $id;
+            // Cast is now valid because PHPDoc says $id can be int|string
+            $idStr = (string) $id;
             $idArg = 'arg-' . urlencode($bridgeClassName) . '-' . urlencode($contextName) . '-' . urlencode($idStr);
 
             $form .= html_tag('label', $parameter['name'], ['for' => $idArg]) . "\n";
@@ -280,12 +280,12 @@ final class FrontpageAction implements ActionInterface
             if ($tooltipLines !== []) {
                 $tooltipText = implode("\n\n", $tooltipLines);
                 $params = [
-                    'class'       => 'info',
-                    'title'       => $tooltipText,
-                    'tabindex'    => '0',
-                    'role'        => 'button',
-                    'aria-label'  => 'More information about ' . $parameter['name'],
-                    'data-for'    => $idArg,
+                    'class'      => 'info',
+                    'title'      => $tooltipText,
+                    'tabindex'   => '0',
+                    'role'       => 'button',
+                    'aria-label' => 'More information about ' . $parameter['name'],
+                    'data-for'   => $idArg,
                 ];
                 $form .= html_tag('i', 'i', $params) . "\n";
             } else {
@@ -296,10 +296,10 @@ final class FrontpageAction implements ActionInterface
         $form .= "</div>\n\n";
 
         $form .= html_tag('button', 'Generate feed', [
-            'type'          => 'submit',
-            'name'          => 'format',
-            'value'         => 'Html',
-            'formtarget'    => '_blank',
+            'type'       => 'submit',
+            'name'       => 'format',
+            'value'      => 'Html',
+            'formtarget' => '_blank',
         ]) . "\n";
 
         return $form . "</form>\n\n";
@@ -315,14 +315,14 @@ final class FrontpageAction implements ActionInterface
         $required = $parameter['required'] ?? false;
 
         return html_input([
-        'id'            => $id,
-        'type'          => 'text',
-        'value'         => $parameter['defaultValue'],
-        'placeholder'   => $parameter['exampleValue'],
-        'name'          => $name,
-        'pattern'       => $pattern,
-        'checked'       => $checked,
-        'required'      => $required,
+            'id'          => $id,
+            'type'        => 'text',
+            'value'       => $parameter['defaultValue'],
+            'placeholder' => $parameter['exampleValue'],
+            'name'        => $name,
+            'pattern'     => $pattern,
+            'checked'     => $checked,
+            'required'    => $required,
         ]);
     }
 
@@ -336,14 +336,14 @@ final class FrontpageAction implements ActionInterface
         $required = $parameter['required'] ?? false;
 
         return html_input([
-        'id'            => $id,
-        'type'          => 'number',
-        'value'         => $parameter['defaultValue'],
-        'placeholder'   => $parameter['exampleValue'],
-        'name'          => $name,
-        'pattern'       => $pattern,
-        'checked'       => $checked,
-        'required'      => $required,
+            'id'          => $id,
+            'type'        => 'number',
+            'value'       => $parameter['defaultValue'],
+            'placeholder' => $parameter['exampleValue'],
+            'name'        => $name,
+            'pattern'     => $pattern,
+            'checked'     => $checked,
+            'required'    => $required,
         ]);
     }
 
@@ -353,10 +353,10 @@ final class FrontpageAction implements ActionInterface
     public static function getCheckboxInput(array $parameter, string $id, string $name): string
     {
         return html_input([
-        'id'        => $id,
-        'type'      => 'checkbox',
-        'name'      => $name,
-        'checked'   => $parameter['defaultValue'] === 'checked',
+            'id'      => $id,
+            'type'    => 'checkbox',
+            'name'    => $name,
+            'checked' => $parameter['defaultValue'] === 'checked',
         ]);
     }
 
@@ -367,28 +367,32 @@ final class FrontpageAction implements ActionInterface
     {
         $list = sprintf('<select id="%s" name="%s">', htmlspecialchars($id), htmlspecialchars($name)) . "\n";
 
-        foreach ($parameter['values'] as $name => $value) {
+        foreach ($parameter['values'] as $key => $value) {
             if (is_array($value) === true) {
-                $list .= '<optgroup label="' . htmlspecialchars((string) $name) . '">';
-                foreach ($value as $subname => $subvalue) {
+                $list .= '<optgroup label="' . htmlspecialchars((string) $key) . '">';
+                foreach ($value as $subkey => $subvalue) {
+                    $subkeyStr = (string) $subkey;
+                    $subvalueStr = (string) $subvalue;
                     if (
-                        $parameter['defaultValue'] === $subname
+                        $parameter['defaultValue'] === $subkey
                         || $parameter['defaultValue'] === $subvalue
                     ) {
-                        $list .= html_option((string) $subname, (string) $subvalue, true) . "\n";
+                        $list .= html_option($subkeyStr, $subvalueStr, true) . "\n";
                     } else {
-                        $list .= html_option((string) $subname, (string) $subvalue) . "\n";
+                        $list .= html_option($subkeyStr, $subvalueStr) . "\n";
                     }
                 }
                 $list .= '</optgroup>';
             } else {
+                $keyStr = (string) $key;
+                $valueStr = (string) $value;
                 if (
-                    $parameter['defaultValue'] === $name
+                    $parameter['defaultValue'] === $key
                     || $parameter['defaultValue'] === $value
                 ) {
-                    $list .= html_option((string) $name, (string) $value, true) . "\n";
+                    $list .= html_option($keyStr, $valueStr, true) . "\n";
                 } else {
-                    $list .= html_option((string) $name, (string) $value) . "\n";
+                    $list .= html_option($keyStr, $valueStr) . "\n";
                 }
             }
         }

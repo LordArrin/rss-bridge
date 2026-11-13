@@ -63,15 +63,12 @@ abstract class FeedExpander extends BridgeAbstract
             throw new \Exception(sprintf('Failed to parse xml from %s: %s', $url, Url::createSaneExceptionMessage($e)));
         }
 
-        $rawItems = $this->feed['items'] ?? [];
-        $items = is_array($rawItems) === true ? array_slice($rawItems, 0, $maxItems) : [];
+        $items = array_slice($this->feed['items'], 0, $maxItems);
 
         foreach ($items as $item) {
-            if (is_array($item) === true) {
-                $parsedItem = $this->parseItem($item);
-                if ($parsedItem !== false && $parsedItem !== []) {
-                    $this->items[] = $parsedItem;
-                }
+            $parsedItem = $this->parseItem($item);
+            if ($parsedItem !== false && $parsedItem !== []) {
+                $this->items[] = $parsedItem;
             }
         }
     }

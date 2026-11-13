@@ -95,7 +95,7 @@ final class MrssFormat extends FormatAbstract
                     $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
                 }
             } else {
-                $element = $document->createElement((string) $feedKey);
+                $element = $document->createElement($feedKey);
                 $channel->appendChild($element);
                 $element->appendChild($document->createTextNode((string) $feedValue));
             }
@@ -171,14 +171,14 @@ final class MrssFormat extends FormatAbstract
             foreach ($item->getEnclosures() as $enclosure) {
                 $entryEnclosure = $document->createElementNS(self::MRSS_NS, 'content');
                 $entry->appendChild($entryEnclosure);
-                $entryEnclosure->setAttribute('url', (string) $enclosure);
+                $entryEnclosure->setAttribute('url', $enclosure);
                 $entryEnclosure->setAttribute('type', Url::parseMimeType($enclosure));
             }
 
             foreach ($item->getCategories() as $category) {
                 $entryCategory = $document->createElement('category');
                 $entry->appendChild($entryCategory);
-                $entryCategory->appendChild($document->createTextNode((string) $category));
+                $entryCategory->appendChild($document->createTextNode($category));
             }
         }
 

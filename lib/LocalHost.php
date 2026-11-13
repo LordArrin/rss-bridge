@@ -102,13 +102,13 @@ final class LocalHost
             throwClientException(sprintf('LocalHost: URL must include scheme and host: %s', $url));
         }
 
-        $scheme = strtolower((string) $parsed['scheme']);
+        $scheme = strtolower($parsed['scheme']);
         if ($scheme !== 'http' && $scheme !== 'https') {
             throwClientException(sprintf('LocalHost: unsupported scheme "%s"', $scheme));
         }
 
         $host = $parsed['host'];
-        if (is_string($host) === false || $host === '') {
+        if ($host === '') {
             throwClientException(sprintf('LocalHost: invalid host in URL: %s', $url));
         }
 
@@ -122,7 +122,7 @@ final class LocalHost
 
         $hasPort = isset($parsed['port']);
         if ($hasPort === true && self::$domainPort !== null) {
-            $urlPort = (int) $parsed['port'];
+            $urlPort = $parsed['port'];
             if ($urlPort !== self::$domainPort) {
                 throwClientException(sprintf(
                     'LocalHost: port mismatch (expected %d, got %d)',
@@ -133,7 +133,7 @@ final class LocalHost
         }
 
         $path = $parsed['path'] ?? '/';
-        if (is_string($path) === false || str_starts_with($path, '/') === false) {
+        if (str_starts_with($path, '/') === false) {
             throwClientException(sprintf('LocalHost: invalid path in URL: %s', $url));
         }
 
@@ -142,7 +142,7 @@ final class LocalHost
             throwClientException(sprintf('LocalHost: missing query string: %s', $url));
         }
 
-        parse_str((string) $parsed['query'], $query);
+        parse_str($parsed['query'], $query);
         $action = $query['action'] ?? null;
         $bridge = $query['bridge'] ?? null;
 
@@ -181,14 +181,14 @@ final class LocalHost
         }
 
         $host = $parsed['host'];
-        if (is_string($host) === false || $host === '') {
+        if ($host === '') {
             return;
         }
 
         self::$domainHost = strtolower($host);
         $hasPort = isset($parsed['port']);
         if ($hasPort === true) {
-            self::$domainPort = (int) $parsed['port'];
+            self::$domainPort = $parsed['port'];
         }
     }
 
@@ -233,12 +233,12 @@ final class LocalHost
         $hasHostHeader = false;
         foreach ($httpHeaders as $key => $value) {
             if (is_string($key) === true) {
-                $headers[$key] = (string) $value;
+                $headers[$key] = $value;
                 if (strcasecmp($key, 'Host') === 0) {
                     $hasHostHeader = true;
                 }
             } else {
-                $parts = explode(':', (string) $value, 2);
+                $parts = explode(':', $value, 2);
                 if (count($parts) === 2) {
                     $headerName = trim($parts[0]);
                     $headers[$headerName] = trim($parts[1]);

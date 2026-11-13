@@ -55,9 +55,7 @@ final class FeedParser
                 }
             }
             foreach ($root->querySelectorAll('item') as $item) {
-                if ($item instanceof \Dom\Element === true) {
-                    $feed['items'][] = $this->parseRss1Item($item);
-                }
+                $feed['items'][] = $this->parseRss1Item($item);
             }
         } elseif ($rootName === 'rss') {
             $channel = $root->querySelector('channel');
@@ -75,9 +73,7 @@ final class FeedParser
                 }
             }
             foreach ($root->querySelectorAll('channel > item') as $item) {
-                if ($item instanceof \Dom\Element === true) {
-                    $feed['items'][] = $this->parseRss2Item($item);
-                }
+                $feed['items'][] = $this->parseRss2Item($item);
             }
         } elseif ($rootName === 'feed') {
             $titleNode = $root->querySelector('title');
@@ -102,9 +98,7 @@ final class FeedParser
             }
 
             foreach ($root->querySelectorAll('entry') as $item) {
-                if ($item instanceof \Dom\Element === true) {
-                    $feed['items'][] = $this->parseAtomItem($item);
-                }
+                $feed['items'][] = $this->parseAtomItem($item);
             }
         } else {
             throw new \Exception('Unable to detect feed format');
@@ -177,9 +171,6 @@ final class FeedParser
         }
 
         foreach ($feedItem->querySelectorAll('link') as $link) {
-            if ($link instanceof \Dom\Element === false) {
-                continue;
-            }
             $rel = $this->getNodeAttr($link, 'rel');
             $href = $this->getNodeAttr($link, 'href');
             if ($href === null) {

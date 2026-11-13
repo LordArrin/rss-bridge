@@ -238,7 +238,7 @@ function httpStatusFromException(\Throwable $e): array
     }
 
     if ($e instanceof \HttpException) {
-        $code = (int) $e->getCode();
+        $code = $e->getCode();
         $isTimeout = $code === 0 || $code === 408 || $code === 504
             || str_contains($e->getMessage(), 'cURL error') === true;
 

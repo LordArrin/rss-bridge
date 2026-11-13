@@ -127,5 +127,5 @@ function sanitize_image(
 function sanitize_image_placeholder(): string
 {
     // PHPStan strict rules require the second parameter ($strict) to be explicitly set.
-    return (string) base64_decode('UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==', true);
+    return base64_decode('UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==', true);
 }

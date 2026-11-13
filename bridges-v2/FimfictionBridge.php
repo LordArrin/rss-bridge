@@ -142,7 +142,7 @@ final class FimfictionBridge extends BridgeAbstract
                 $dom = \Dom\HTMLDocument::createFromString($html);
                 libxml_use_internal_errors(false);
 
-                if ($attempt > 1) {
+                if ($attempt > 1 && $this->logger !== null) {
                     $this->logger->info(sprintf(
                         'FimfictionBridge: %s succeeded on attempt %d/%d for %s via %s',
                         $context,
@@ -157,15 +157,17 @@ final class FimfictionBridge extends BridgeAbstract
             } catch (\Throwable $e) {
                 $lastException = $e;
 
-                $this->logger->warning(sprintf(
-                    'FimfictionBridge: %s attempt %d/%d failed for %s via %s: %s',
-                    $context,
-                    $attempt,
-                    self::MAX_RETRIES,
-                    $url,
-                    $this->proxyProfile,
-                    $e->getMessage()
-                ));
+                if ($this->logger !== null) {
+                    $this->logger->warning(sprintf(
+                        'FimfictionBridge: %s attempt %d/%d failed for %s via %s: %s',
+                        $context,
+                        $attempt,
+                        self::MAX_RETRIES,
+                        $url,
+                        $this->proxyProfile,
+                        $e->getMessage()
+                    ));
+                }
 
                 if ($attempt < self::MAX_RETRIES) {
                     $delay = self::RETRY_DELAY_US * (2 ** ($attempt - 1));
@@ -174,7 +176,10 @@ final class FimfictionBridge extends BridgeAbstract
             }
         }
 
-        throw $lastException;
+        if ($lastException !== null) {
+            throw $lastException;
+        }
+        throw new \RuntimeException(sprintf('%s failed completely without a specific exception', $context));
     }
 
     /**
@@ -210,7 +215,7 @@ final class FimfictionBridge extends BridgeAbstract
 
     private function detectStoryError(\Dom\HTMLDocument $dom): ?string
     {
-        $text = $dom->documentElement->textContent;
+        $text = (string) $dom->documentElement->textContent;
 
         return match (true) {
             stripos($text, 'Story not found') !== false => 'This story has been deleted or does not exist.',
@@ -225,14 +230,14 @@ final class FimfictionBridge extends BridgeAbstract
     {
         $titleNode = $dom->querySelector('a.story_name');
         if ($titleNode !== null) {
-            $title = trim($titleNode->textContent);
+            $title = trim((string) $titleNode->textContent);
             if ($title !== '') {
                 return $title;
             }
         }
 
         $pageTitleNode = $dom->querySelector('title');
-        $pageTitle = $pageTitleNode !== null ? trim($pageTitleNode->textContent) : 'Unknown Story';
+        $pageTitle = $pageTitleNode !== null ? trim((string) $pageTitleNode->textContent) : 'Unknown Story';
         return str_replace(' - Fimfiction', '', $pageTitle);
     }
 
@@ -241,7 +246,7 @@ final class FimfictionBridge extends BridgeAbstract
         $authorNode = $dom->querySelector('div.info-container a[href*="/user/"]') ?? $dom->querySelector('a[href*="/user/"]');
 
         if ($authorNode !== null) {
-            $author = trim($authorNode->textContent);
+            $author = trim((string) $authorNode->textContent);
             if ($author !== '') {
                 return $author;
             }
@@ -289,7 +294,7 @@ final class FimfictionBridge extends BridgeAbstract
             }
 
             $chapters[] = [
-                'title'     => trim($link->textContent),
+                'title'     => trim((string) $link->textContent),
                 'uri'       => $uri,
                 'timestamp' => $this->extractTimestamp($chapter) + $index,
             ];
@@ -313,7 +318,7 @@ final class FimfictionBridge extends BridgeAbstract
             return time();
         }
 
-        $fullText = $dateElem->textContent;
+        $fullText = (string) $dateElem->textContent;
 
         if (preg_match('/(\d{1,2})(?:st|nd|rd|th)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})/', $fullText, $matches) === 1) {
             $timestamp = strtotime("{$matches[1]} {$matches[2]} {$matches[3]}");
@@ -374,8 +379,8 @@ final class FimfictionBridge extends BridgeAbstract
         $dangerousTags = ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select'];
 
         foreach ($dangerousTags as $tag) {
-            $content = preg_replace('/<' . $tag . '[^>]*>.*?<\/' . $tag . '>/is', '', $content);
-            $content = preg_replace('/<' . $tag . '[^>]*\/?>/is', '', $content);
+            $content = (string) preg_replace('/<' . $tag . '[^>]*>.*?<\/' . $tag . '>/is', '', $content);
+            $content = (string) preg_replace('/<' . $tag . '[^>]*\/?>/is', '', $content);
         }
 
         return $content;

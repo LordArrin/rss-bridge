@@ -71,11 +71,11 @@ final class Url
         $trace = [];
         foreach ($frames as $frame) {
             $trace[] = [
-                'file'     => self::sanitizeRoot((string)($frame['file'] ?? '')),
-                'line'     => isset($frame['line']) === true ? (int)$frame['line'] : null,
-                'class'    => isset($frame['class']) === true ? (string)$frame['class'] : null,
-                'type'     => isset($frame['type']) === true ? (string)$frame['type'] : null,
-                'function' => isset($frame['function']) === true ? (string)$frame['function'] : null,
+                'file'     => self::sanitizeRoot(($frame['file'] ?? '')),
+                'line'     => isset($frame['line']) === true ? $frame['line'] : null,
+                'class'    => isset($frame['class']) === true ? $frame['class'] : null,
+                'type'     => isset($frame['type']) === true ? $frame['type'] : null,
+                'function' => isset($frame['function']) === true ? $frame['function'] : null,
             ];
         }
         return $trace;

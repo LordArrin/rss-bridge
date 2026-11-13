@@ -93,7 +93,7 @@ final class NACSouthGermanyMediaLibraryBridge extends BridgeAbstract
     private function getBayern2AudioUrl(string $playerUri): ?string
     {
         $cacheKey = 'nac_player_' . md5($playerUri);
-        $cached = $this->cache->get($cacheKey);
+        $cached = $this->loadCacheValue($cacheKey);
 
         if ($cached !== null) {
             return (string) $cached;
@@ -106,13 +106,13 @@ final class NACSouthGermanyMediaLibraryBridge extends BridgeAbstract
             return null;
         }
 
-        $sourceUri = $source->getAttribute('src');
-        if ($sourceUri === null || $sourceUri === '') {
+        $sourceUri = (string) ($source->getAttribute('src') ?? '');
+        if ($sourceUri === '') {
             return null;
         }
 
         $fullUrl = urljoin(self::URI, $sourceUri);
-        $this->cache->set($cacheKey, $fullUrl, 86400);
+        $this->saveCacheValue($cacheKey, $fullUrl, 86400);
 
         return $fullUrl;
     }
@@ -177,7 +177,7 @@ final class NACSouthGermanyMediaLibraryBridge extends BridgeAbstract
 
         foreach ($page->querySelectorAll('div.flex-columns.entry') as $parent) {
             $titleNode = $parent->querySelector('h2');
-            $title = $titleNode !== null ? trim($titleNode->textContent) : '';
+            $title = $titleNode !== null ? trim((string) $titleNode->textContent) : '';
 
             $contentBlocks = $parent->querySelectorAll('div');
             $contentBlock = $contentBlocks[2] ?? null;
@@ -185,7 +185,7 @@ final class NACSouthGermanyMediaLibraryBridge extends BridgeAbstract
             $content = '';
             if ($contentBlock !== null) {
                 foreach ($contentBlock->querySelectorAll('li, p') as $element) {
-                    $text = trim($element->textContent);
+                    $text = trim((string) $element->textContent);
                     if ($text !== '') {
                         $content .= '<p>' . htmlspecialchars($text, ENT_QUOTES, 'UTF-8') . '</p>';
                     }

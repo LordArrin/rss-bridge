@@ -80,6 +80,9 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $limitInput = $this->getInput('limit');
         $limit = max(1, min(self::MAX_LIMIT, (int) ($limitInput !== null ? $limitInput : 10)));
 
+        if ($this->cache === null || $this->logger === null) {
+            throw new \RuntimeException('Cache and logger are required for GitHub API requests');
+        }
         $client = new GithubClient($this->cache, $this->logger);
 
         try {
@@ -259,6 +262,9 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
     private function fetchTagCommitMessage(string $owner, string $repo, string $tagName): string
     {
+        if ($this->cache === null || $this->logger === null) {
+            throw new \RuntimeException('Cache and logger are required for GitHub API requests');
+        }
         $client = new GithubClient($this->cache, $this->logger);
         return $client->fetchTagCommitMessage($owner, $repo, $tagName);
     }
@@ -281,20 +287,22 @@ final class GitHubReleaseBridge extends BridgeAbstract
     {
         $repoUrl = sprintf('%s/%s/%s/issues', self::URI, rawurlencode($owner), rawurlencode($repo));
 
-        $markdown = preg_replace(
+        $result1 = preg_replace(
             '/(?<!\w)@([a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38})(?!\w)/',
             '[@$1](' . self::URI . '/$1)',
             $markdown
         );
+        $markdown = $result1 !== null ? $result1 : $markdown;
 
-        $markdown = preg_replace(
+        $result2 = preg_replace(
             '/(?<!\w)#(\d+)(?!\w)/',
             '[#$1](' . $repoUrl . '/$1)',
             $markdown
         );
+        $markdown = $result2 !== null ? $result2 : $markdown;
 
-        $result = preg_replace('/:[a-zA-Z0-9_+\-]+:/', '', $markdown);
-        return $result !== null ? $result : $markdown;
+        $result3 = preg_replace('/:[a-zA-Z0-9_+\-]+:/', '', $markdown);
+        return $result3 !== null ? $result3 : $markdown;
     }
 
     private function transformMarkdownAlerts(string $markdown): string
@@ -466,7 +474,10 @@ final class GitHubReleaseBridge extends BridgeAbstract
         while ($element->firstChild !== null) {
             $element->removeChild($element->firstChild);
         }
-        $element->appendChild($element->ownerDocument->createTextNode($text));
+        $ownerDoc = $element->ownerDocument;
+        if ($ownerDoc !== null) {
+            $element->appendChild($ownerDoc->createTextNode($text));
+        }
     }
 
     private function applyListStyles(\Dom\XPath $xpath): void

@@ -244,7 +244,7 @@ CSS,
     private function getNormalizedUsername(): string
     {
         if ($this->cachedNormalizedUsername === null) {
-            $this->cachedNormalizedUsername = ltrim(trim((string) ($this->getInput('username') ?? '')), '@');
+            $this->cachedNormalizedUsername = ltrim(trim($this->getInput('username') ?? ''), '@');
         }
         return $this->cachedNormalizedUsername;
     }
@@ -279,7 +279,7 @@ CSS,
             if ($this->feedName === '') {
                 $el = $dom->querySelector(self::SELECTORS['CHANNEL_TITLE']);
                 $this->feedName = htmlspecialchars_decode(
-                    $el !== null ? $el->textContent ?? '' : '',
+                    $el !== null ? $el->textContent : '',
                     flags: ENT_QUOTES
                 );
             }
@@ -391,7 +391,6 @@ CSS,
     private function withRetry(\Closure $fn, string $context, string $url = ''): mixed
     {
         $deadline = microtime(true) + self::RETRY_BUDGET_SECONDS;
-
         $lastException = null;
 
         for ($i = 0; $i < self::PROXY_RETRIES; $i++) {
@@ -407,7 +406,7 @@ CSS,
 
                 $remaining = $deadline - microtime(true);
                 if ($remaining <= 1.0 || $i >= self::PROXY_RETRIES - 1) {
-                    if ($remaining <= 1.0) {
+                    if ($remaining <= 1.0 && $this->logger !== null) {
                         $this->logger->warning(sprintf(
                             '%s retry budget (%ds) exhausted after %d attempt(s)%s: %s',
                             $context,
@@ -420,14 +419,16 @@ CSS,
                     break;
                 }
 
-                $this->logger->warning(sprintf(
-                    '%s failed (attempt %d/%d)%s: %s',
-                    $context,
-                    $i + 1,
-                    self::PROXY_RETRIES,
-                    $url !== '' ? " for {$url}" : '',
-                    $errorMsg
-                ));
+                if ($this->logger !== null) {
+                    $this->logger->warning(sprintf(
+                        '%s failed (attempt %d/%d)%s: %s',
+                        $context,
+                        $i + 1,
+                        self::PROXY_RETRIES,
+                        $url !== '' ? " for {$url}" : '',
+                        $errorMsg
+                    ));
+                }
 
                 $delayUs = min(($i + 1) * 500000, 2000000);
                 $delayUs = min($delayUs, (int) (($remaining - 1.0) * 1000000));
@@ -435,7 +436,10 @@ CSS,
             }
         }
 
-        throw $lastException;
+        if ($lastException !== null) {
+            throw $lastException;
+        }
+        throw new \RuntimeException(sprintf('%s failed completely without a specific exception', $context));
     }
 
     private function isFatalError(string $errorMsg): bool
@@ -495,11 +499,13 @@ CSS,
                     $url
                 );
             } catch (\Throwable $e) {
-                $this->logger->warning(sprintf(
-                    'TgWSProxy failed for %s: %s, falling back to direct',
-                    $url,
-                    $e->getMessage()
-                ));
+                if ($this->logger !== null) {
+                    $this->logger->warning(sprintf(
+                        'TgWSProxy failed for %s: %s, falling back to direct',
+                        $url,
+                        $e->getMessage()
+                    ));
+                }
             }
         }
 
@@ -526,7 +532,7 @@ CSS,
                 'Direct page fetch',
                 $url
             );
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             return null;
         }
     }
@@ -582,7 +588,7 @@ CSS,
             return null;
         }
         $dt = $el->getAttribute('datetime');
-        return $dt !== '' ? $dt : null;
+        return ($dt !== null && $dt !== '') ? $dt : null;
     }
 
     /**
@@ -699,7 +705,7 @@ CSS,
 
         $plain = $this->htmlToPlain($inner);
 
-        if (mb_strlen(string: $plain, encoding: 'UTF-8') <= self::MAX_TITLE_LENGTH) {
+        if (mb_strlen($plain, 'UTF-8') <= self::MAX_TITLE_LENGTH) {
             $context['title'] = $plain;
             return '';
         }
@@ -711,7 +717,7 @@ CSS,
             return '';
         }
 
-        $dir = $textDiv->getAttribute('dir');
+        $dir = $textDiv->getAttribute('dir') ?? '';
         $attr = $dir !== '' ? ' dir="' . $dir . '"' : '';
 
         return sprintf(
@@ -726,49 +732,46 @@ CSS,
      */
     private function splitTitleAndContent(string $html): array
     {
-        $html = preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $html);
+        $html = preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $html) ?? $html;
 
         if (preg_match('/<br\s*\/?>/i', $html, $m, PREG_OFFSET_CAPTURE) === 1) {
-            $firstLineHtml = substr(string: $html, offset: 0, length: $m[0][1]);
+            $firstLineHtml = substr($html, 0, $m[0][1]);
             $firstLinePlain = $this->htmlToPlain($firstLineHtml);
 
-            if ($firstLinePlain !== '' && mb_strlen(string: $firstLinePlain) <= self::MAX_TITLE_LENGTH) {
-                $restHtml = substr(string: $html, offset: $m[0][1] + strlen($m[0][0]));
+            if ($firstLinePlain !== '' && mb_strlen($firstLinePlain) <= self::MAX_TITLE_LENGTH) {
+                $restHtml = substr($html, $m[0][1] + strlen($m[0][0]));
                 return [
                     'title' => $firstLinePlain,
-                    'html' => trim(preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $restHtml))
+                    'html' => trim(preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $restHtml) ?? '')
                 ];
             }
         }
 
-        $paragraphs = preg_split(
-            pattern: '/(?:\s*<br\s*\/?>\s*){2,}/i',
-            subject: $html
-        );
+        $paragraphs = preg_split('/(?:\s*<br\s*\/?>\s*){2,}/i', $html);
         if ($paragraphs === false) {
             $paragraphs = [$html];
         }
         $firstPlain = $this->htmlToPlain($paragraphs[0]);
 
-        if (mb_strlen(string: $firstPlain) <= self::MAX_TITLE_LENGTH) {
+        if (mb_strlen($firstPlain) <= self::MAX_TITLE_LENGTH) {
             return [
                 'title' => $firstPlain,
-                'html' => trim(implode(separator: '<br /><br />', array: array_slice(array: $paragraphs, offset: 1)))
+                'html' => trim(implode('<br /><br />', array_slice($paragraphs, 1)))
             ];
         }
 
         $prefix = $this->truncateAtWord($firstPlain, self::MAX_TITLE_LENGTH);
 
-        $remainder = trim(mb_substr(string: $firstPlain, start: mb_strlen($prefix)));
+        $remainder = trim(mb_substr($firstPlain, mb_strlen($prefix)));
         if ($remainder !== '' && preg_match('/^[\s\p{P}]/u', $remainder) === 0 && preg_match('/[\s\p{P}]$/u', $prefix) === 0) {
-            $sp = mb_strrpos(haystack: $prefix, needle: ' ');
+            $sp = mb_strrpos($prefix, ' ');
             if ($sp !== false && $sp > self::MIN_TITLE_SPACE_POS) {
-                $prefix = rtrim(mb_substr(string: $prefix, start: 0, length: $sp));
+                $prefix = rtrim(mb_substr($prefix, 0, $sp));
             }
         }
 
         $firstHtml = $this->removeTextPrefix($paragraphs[0], $prefix);
-        $restHtml = implode(separator: '<br /><br />', array: array_slice(array: $paragraphs, offset: 1));
+        $restHtml = implode('<br /><br />', array_slice($paragraphs, 1));
         $contentHtml = trim($firstHtml . ($restHtml !== '' ? '<br /><br />' . $restHtml : ''));
 
         return ['title' => $prefix . '...', 'html' => $contentHtml];
@@ -776,23 +779,24 @@ CSS,
 
     private function htmlToPlain(string $html): string
     {
+        $stripped = strip_tags(preg_replace('/<br\s*\/?>/i', ' ', $html) ?? $html);
         return html_entity_decode(
-            string: preg_replace('/\s+/u', ' ', strip_tags(preg_replace('/<br\s*\/?>/i', ' ', $html))),
+            preg_replace('/\s+/u', ' ', $stripped) ?? $stripped,
             flags: ENT_QUOTES | ENT_HTML5
         );
     }
 
     private function truncateAtWord(string $text, int $length): string
     {
-        if (mb_strlen(string: $text) <= $length) {
+        if (mb_strlen($text) <= $length) {
             return $text;
         }
 
-        $cut = mb_substr(string: $text, start: 0, length: $length);
-        $sp = mb_strrpos(haystack: $cut, needle: ' ');
+        $cut = mb_substr($text, 0, $length);
+        $sp = mb_strrpos($cut, ' ');
 
         if ($sp !== false && $sp > self::MIN_TITLE_SPACE_POS) {
-            return rtrim(mb_substr(string: $cut, start: 0, length: $sp));
+            return rtrim(mb_substr($cut, 0, $sp));
         }
 
         return rtrim($cut);
@@ -800,12 +804,12 @@ CSS,
 
     private function removeTextPrefix(string $html, string $prefix): string
     {
-        $limit = mb_strlen(string: $prefix);
+        $limit = mb_strlen($prefix);
         if ($limit <= 0) {
             return $html;
         }
 
-        $tokens = preg_split(pattern: '/(<[^>]*>)/u', subject: $html, limit: -1, flags: PREG_SPLIT_DELIM_CAPTURE);
+        $tokens = preg_split('/(<[^>]*>)/u', $html, -1, PREG_SPLIT_DELIM_CAPTURE);
         if ($tokens === false) {
             return $html;
         }
@@ -826,8 +830,8 @@ CSS,
                 if (preg_match('/^<\s*\/\s*(\w+)/u', $token, $m) === 1) {
                     $tag = strtolower($m[1]);
                     $stack = array_values(array_filter(
-                        array: $stack,
-                        callback: fn($s) => $s['tag'] !== $tag
+                        $stack,
+                        fn($s) => $s['tag'] !== $tag
                     ));
                 } elseif (preg_match('/^<\s*(\w+)/u', $token, $m) === 1) {
                     $tag = strtolower($m[1]);
@@ -849,30 +853,30 @@ CSS,
             $cut = true;
             $skip = $limit - $consumed;
 
-            $out .= implode('', array_column(array: $stack, column_key: 'html'))
-                . implode('', array_slice(array: $units, offset: $skip));
+            $out .= implode('', array_column($stack, 'html'))
+                . implode('', array_slice($units, $skip));
         }
 
         if ($cut === false) {
             return '';
         }
 
-        return '... ' . ltrim(preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $out));
+        return '... ' . ltrim(preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $out) ?? '');
     }
 
     private function processReply(\Dom\Element $reply): string
     {
         $replyText = $this->getPlaintext($reply, self::SELECTORS['REPLY_TEXT']);
         $author = $this->getPlaintext($reply, self::SELECTORS['REPLY_AUTHOR']);
-        $href = htmlspecialchars($reply->getAttribute('href') ?? '', flags: ENT_QUOTES);
+        $href = htmlspecialchars($reply->getAttribute('href') ?? '', ENT_QUOTES);
 
         if ($replyText !== '') {
             $displayText = htmlspecialchars(
-                string: $this->truncateAtWord($replyText, self::MAX_TITLE_LENGTH),
-                flags: ENT_QUOTES
+                $this->truncateAtWord($replyText, self::MAX_TITLE_LENGTH),
+                ENT_QUOTES
             );
         } else {
-            $displayText = htmlspecialchars(string: $author, flags: ENT_QUOTES);
+            $displayText = htmlspecialchars($author, ENT_QUOTES);
         }
 
         return sprintf(
@@ -940,14 +944,12 @@ CSS,
         }
 
         $postHref = '';
-        $playerStyle = '';
         if ($player !== null) {
             $playerHref = $player->getAttribute('href') ?? '';
-            $playerStyle = $player->getAttribute('style') ?? '';
 
             if ($playerHref !== '') {
                 $postHref = $playerHref;
-                if (str_starts_with(haystack: $postHref, needle: 'http') === false) {
+                if (str_starts_with($postHref, 'http') === false) {
                     $postHref = sprintf('%s/%s', self::URI, ltrim($postHref, '/'));
                 }
             }
@@ -961,12 +963,7 @@ CSS,
         }
 
         $href = $postHref !== '' ? $postHref : '#';
-
-        if ($this->feedName !== '') {
-            $channel = htmlspecialchars(string: $this->feedName, flags: ENT_QUOTES);
-        } else {
-            $channel = '@' . $this->getNormalizedUsername();
-        }
+        $channel = $this->feedName !== '' ? htmlspecialchars($this->feedName, ENT_QUOTES) : '@' . $this->getNormalizedUsername();
 
         $duration = $this->getPlaintext($messageDiv, self::SELECTORS['VIDEO_DURATION_TIME']);
         if ($duration === '') {
@@ -975,12 +972,7 @@ CSS,
         if ($duration === '') {
             $duration = $this->getPlaintext($messageDiv, self::SELECTORS['VIDEO_DURATION_FALLBACK']);
         }
-        $duration = htmlspecialchars(string: $duration, flags: ENT_QUOTES);
-
-        $label = 'Video: ' . $channel;
-        if ($duration !== '') {
-            $label .= ' (' . $duration . ')';
-        }
+        $duration = htmlspecialchars($duration, ENT_QUOTES);
 
         $html = '';
 
@@ -988,7 +980,7 @@ CSS,
             $html .= sprintf('<a href="%s"><img src="%s" style="%s" /></a><br />', $href, $poster, self::CSS['video']);
         }
 
-        $html .= sprintf('<a href="%s">%s</a>', $href, $label);
+        $html .= sprintf('<a href="%s">Video: %s%s</a>', $href, $channel, $duration !== '' ? ' (' . $duration . ')' : '');
 
         return $html;
     }
@@ -1047,7 +1039,7 @@ CSS,
         }
 
         $html = sprintf('<div style="%s">', self::CSS['poll']);
-        $html .= sprintf('<p style="%s">%s</p>', self::CSS['poll_t'], htmlspecialchars(string: $title, flags: ENT_QUOTES));
+        $html .= sprintf('<p style="%s">%s</p>', self::CSS['poll_t'], htmlspecialchars($title, ENT_QUOTES));
 
         foreach ($poll->querySelectorAll(self::SELECTORS['POLL_OPTION']) as $opt) {
             $percent = $this->getPlaintext($opt, self::SELECTORS['POLL_PERCENT']);
@@ -1055,36 +1047,33 @@ CSS,
 
             $pct = max(0, min(100, (int) str_replace('%', '', $percent)));
             $filled = (int) round($pct / 5);
-            $bar = '[' . str_repeat(string: '#', times: $filled) . str_repeat(string: '.', times: 20 - $filled) . ']';
+            $bar = '[' . str_repeat('#', $filled) . str_repeat('.', 20 - $filled) . ']';
 
             $html .= sprintf('<div style="%s">', self::CSS['poll_o']);
-            $html .= sprintf('<b>%d%%</b> %s<br />', $pct, htmlspecialchars(string: $text, flags: ENT_QUOTES));
+            $html .= sprintf('<b>%d%%</b> %s<br />', $pct, htmlspecialchars($text, ENT_QUOTES));
             $html .= sprintf('<code>%s</code>', $bar);
             $html .= '</div>';
         }
 
         $footer = [];
 
-        $voters = htmlspecialchars(
-            string: $this->getPlaintext($messageDiv, self::SELECTORS['VOTERS']),
-            flags: ENT_QUOTES
-        );
+        $voters = htmlspecialchars($this->getPlaintext($messageDiv, self::SELECTORS['VOTERS']), ENT_QUOTES);
         if ($voters !== '') {
             $footer[] = $voters . ' voters';
         }
 
-        if (str_contains(haystack: $type, needle: 'anonymous') === true) {
+        if (str_contains($type, 'anonymous') === true) {
             $footer[] = 'Anonymous';
         }
-        if (str_contains(haystack: $type, needle: 'quiz') === true) {
+        if (str_contains($type, 'quiz') === true) {
             $footer[] = 'Quiz';
         }
-        if (str_contains(haystack: $type, needle: 'multiple') === true) {
+        if (str_contains($type, 'multiple') === true) {
             $footer[] = 'Multiple choice';
         }
 
         if ($footer !== []) {
-            $html .= sprintf('<p style="%s">%s</p>', self::CSS['poll_f'], implode(separator: ' &#183; ', array: $footer));
+            $html .= sprintf('<p style="%s">%s</p>', self::CSS['poll_f'], implode(' &#183; ', $footer));
         }
 
         $html .= '</div>';
@@ -1112,9 +1101,9 @@ CSS,
             }
         }
 
-        $title = htmlspecialchars(string: $this->getPlaintext($preview, self::SELECTORS['LINK_PREVIEW_TITLE']), flags: ENT_QUOTES);
-        $site = htmlspecialchars(string: $this->getPlaintext($preview, self::SELECTORS['LINK_PREVIEW_SITE']), flags: ENT_QUOTES);
-        $desc = htmlspecialchars(string: $this->getPlaintext($preview, self::SELECTORS['LINK_PREVIEW_DESC']), flags: ENT_QUOTES);
+        $title = htmlspecialchars($this->getPlaintext($preview, self::SELECTORS['LINK_PREVIEW_TITLE']), ENT_QUOTES);
+        $site = htmlspecialchars($this->getPlaintext($preview, self::SELECTORS['LINK_PREVIEW_SITE']), ENT_QUOTES);
+        $desc = htmlspecialchars($this->getPlaintext($preview, self::SELECTORS['LINK_PREVIEW_DESC']), ENT_QUOTES);
         $previewHref = $preview->getAttribute('href') ?? '';
 
         return sprintf(
@@ -1139,8 +1128,8 @@ CSS,
 
         $out = 'File attachments:<br />';
         foreach ($messageDiv->querySelectorAll(self::SELECTORS['DOCUMENT']) as $doc) {
-            $docTitle = htmlspecialchars(string: $this->getPlaintext($doc, self::SELECTORS['DOCUMENT_TITLE']), flags: ENT_QUOTES);
-            $docExtra = htmlspecialchars(string: $this->getPlaintext($doc, self::SELECTORS['DOCUMENT_EXTRA']), flags: ENT_QUOTES);
+            $docTitle = htmlspecialchars($this->getPlaintext($doc, self::SELECTORS['DOCUMENT_TITLE']), ENT_QUOTES);
+            $docExtra = htmlspecialchars($this->getPlaintext($doc, self::SELECTORS['DOCUMENT_EXTRA']), ENT_QUOTES);
             $out .= sprintf('%s - %s<br />', $docTitle, $docExtra);
         }
 
@@ -1177,38 +1166,31 @@ CSS,
     {
         $tags = [];
 
-        if (
-            preg_match_all(
-                pattern: '/<a\s[^>]*href="\?q=%23[^"]*"[^>]*>(.*?)<\/a>/is',
-                subject: $html,
-                matches: $matches,
-                flags: PREG_SET_ORDER
-            ) > 0
-        ) {
+        if (preg_match_all('/<a\s[^>]*href="\?q=%23[^"]*"[^>]*>(.*?)<\/a>/is', $html, $matches, PREG_SET_ORDER) > 0) {
             foreach ($matches as $m) {
                 $text = trim(strip_tags($m[1]));
                 if ($text !== '' && $text[0] === '#') {
-                    $tags[] = mb_substr(string: $text, start: 1, encoding: 'UTF-8');
+                    $tags[] = mb_substr($text, 1, encoding: 'UTF-8');
                 }
             }
         }
 
         $html = preg_replace_callback(
-            pattern: '/<a\s[^>]*href="\?q=%23[^"]*"[^>]*>(.*?)<\/a>/is',
-            callback: function (array $m): string {
+            '/<a\s[^>]*href="\?q=%23[^"]*"[^>]*>(.*?)<\/a>/is',
+            function (array $m): string {
                 $text = trim(strip_tags($m[1]));
                 if ($text !== '' && $text[0] === '#') {
                     return '';
                 }
                 return $m[0];
             },
-            subject: $html
-        );
+            $html
+        ) ?? $html;
 
-        $html = preg_replace('/<b>\s*<\/b>/i', '', $html);
-        $html = preg_replace('/ {2,}/', ' ', $html);
-        $html = preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $html);
-        $html = preg_replace('/\s*(?:<br\s*\/?>)+\s*$/i', '', $html);
+        $html = preg_replace('/<b>\s*<\/b>/i', '', $html) ?? $html;
+        $html = preg_replace('/ {2,}/', ' ', $html) ?? $html;
+        $html = preg_replace('/^(?:\s*<br\s*\/?>)+\s*/i', '', $html) ?? $html;
+        $html = preg_replace('/\s*(?:<br\s*\/?>)+\s*$/i', '', $html) ?? $html;
 
         return [
             'html' => $html,
@@ -1283,11 +1265,11 @@ CSS,
         } else {
             $stub = $this->renderUnsupported($item['uri'] ?? '#', $stubLabel);
             if (preg_match('/(<br\s*\/?>\s*){2,}\s*<\/div>\s*$/i', $item['content']) === 1) {
-                $item['content'] = preg_replace('/\s*<\/div>\s*$/', $stub . '</div>', $item['content']);
+                $item['content'] = preg_replace('/\s*<\/div>\s*$/', $stub . '</div>', $item['content']) ?? $item['content'];
             } elseif (preg_match('/<br\s*\/?>\s*<\/div>\s*$/i', $item['content']) === 1) {
-                $item['content'] = preg_replace('/\s*<\/div>\s*$/', '<br />' . $stub . '</div>', $item['content']);
+                $item['content'] = preg_replace('/\s*<\/div>\s*$/', '<br />' . $stub . '</div>', $item['content']) ?? $item['content'];
             } else {
-                $item['content'] = preg_replace('/\s*<\/div>\s*$/', '<br /><br />' . $stub . '</div>', $item['content']);
+                $item['content'] = preg_replace('/\s*<\/div>\s*$/', '<br /><br />' . $stub . '</div>', $item['content']) ?? $item['content'];
             }
         }
     }
@@ -1297,7 +1279,7 @@ CSS,
         $label = $message->querySelector(self::SELECTORS['UNSUPPORTED_LABEL']);
         $text = $label !== null ? trim($label->textContent) : '';
 
-        if (str_contains(haystack: $text, needle: 'too big') === true || str_contains(haystack: $text, needle: 'too large') === true) {
+        if (str_contains($text, 'too big') === true || str_contains($text, 'too large') === true) {
             return self::UNSUPPORTED_REASON_TOO_BIG;
         }
 
@@ -1320,18 +1302,18 @@ CSS,
 
     private function removeViewInTelegram(string $html): string
     {
-        $html = preg_replace('/<a[^>]*>\s*<\/a>/', '', $html);
-        $html = preg_replace('/(<br\s*\/?>){3,}/i', '<br /><br />', $html);
+        $html = preg_replace('/<a[^>]*>\s*<\/a>/', '', $html) ?? $html;
+        $html = preg_replace('/(<br\s*\/?>){3,}/i', '<br /><br />', $html) ?? $html;
 
-        return trim(string: $html);
+        return trim($html);
     }
 
     private function normalizeText(string $html): string
     {
-        $html = preg_replace('/<tg-emoji[^>]*>(.*?)<\/tg-emoji>/is', '$1', $html);
-        $html = preg_replace('/<i\s[^>]*class="emoji"[^>]*>(.*?)<\/i>/is', '$1', $html);
+        $html = preg_replace('/<tg-emoji[^>]*>(.*?)<\/tg-emoji>/is', '$1', $html) ?? $html;
+        $html = preg_replace('/<i\s[^>]*class="emoji"[^>]*>(.*?)<\/i>/is', '$1', $html) ?? $html;
 
-        $html = preg_replace('/[\x{00A0}\x{1680}\x{2000}-\x{200A}\x{202F}\x{205F}\x{3000}]/u', ' ', $html);
+        $html = preg_replace('/[\x{00A0}\x{1680}\x{2000}-\x{200A}\x{202F}\x{205F}\x{3000}]/u', ' ', $html) ?? $html;
         $html = strip_invisible_unicode($html);
 
         if (class_exists(\Normalizer::class) === true) {
@@ -1342,83 +1324,77 @@ CSS,
         }
 
         $html = preg_replace_callback(
-            pattern: '/href\s*=\s*["\'](https?:\/\/[^"\']+)["\']/i',
-            callback: function (array $m): string {
-                $url = preg_replace(
-                    '/[?&](utm_\w+|fbclid|gclid|yclid|dclid|tg_rhash)=[^&]*/',
-                    '',
-                    $m[1]
-                );
-                $url = preg_replace('/\?$/', '', $url);
+            '/href\s*=\s*["\'](https?:\/\/[^"\']+)["\']/i',
+            function (array $m): string {
+                $url = preg_replace('/[?&](utm_\w+|fbclid|gclid|yclid|dclid|tg_rhash)=[^&]*/', '', $m[1]) ?? $m[1];
+                $url = preg_replace('/\?$/', '', $url) ?? $url;
 
                 return sprintf('href="%s"', $url);
             },
-            subject: $html
-        );
+            $html
+        ) ?? $html;
 
-        return preg_replace('/ {2,}/', ' ', $html);
+        return preg_replace('/ {2,}/', ' ', $html) ?? $html;
     }
 
     private function sanitizeContent(string $html): string
     {
-        $html = preg_replace('/\s+on\w+\s*=\s*"[^"]*"/i', '', $html);
-        $html = preg_replace('/\s+on\w+\s*=\s*\'[^\']*\'/i', '', $html);
-        $html = preg_replace('/\s+on\w+\s*=\s*[^\s>]+/i', '', $html);
+        $html = preg_replace('/\s+on\w+\s*=\s*"[^"]*"/i', '', $html) ?? $html;
+        $html = preg_replace('/\s+on\w+\s*=\s*\'[^\']*\'/i', '', $html) ?? $html;
+        $html = preg_replace('/\s+on\w+\s*=\s*[^\s>]+/i', '', $html) ?? $html;
 
         $html = preg_replace_callback(
-            pattern: '/(href|src)\s*=\s*["\']([^"\']*)["\']/i',
-            callback: function (array $m): string {
+            '/(href|src)\s*=\s*["\']([^"\']*)["\']/i',
+            function (array $m): string {
                 $url = $m[2];
 
                 if (preg_match('/^\s*(javascript|vbscript|data(?!:(?:image|video|audio)\/))/i', $url) === 1) {
                     return sprintf('%s="#"', $m[1]);
                 }
 
-                if (str_starts_with(haystack: $url, needle: '?') === true || str_starts_with(haystack: $url, needle: '/') === true) {
+                if (str_starts_with($url, '?') === true || str_starts_with($url, '/') === true) {
                     return sprintf('%s="%s/s/%s%s"', $m[1], self::URI, $this->getNormalizedUsername(), $url);
                 }
 
                 return sprintf('%s="%s"', $m[1], $url);
             },
-            subject: $html
-        );
+            $html
+        ) ?? $html;
 
-        $html = preg_replace('/\s+(class|id|data-[\w-]+)\s*=\s*["\'][^"\']*["\']/i', '', $html);
-        $html = preg_replace('/\sexpandable(?=[\s>])/i', '', $html);
+        $html = preg_replace('/\s+(class|id|data-[\w-]+)\s*=\s*["\'][^"\']*["\']/i', '', $html) ?? $html;
+        $html = preg_replace('/\sexpandable(?=[\s>])/i', '', $html) ?? $html;
 
         $html = preg_replace_callback(
-            pattern: '/\s+style\s*=\s*["\']([^"\']*)["\']/i',
-            callback: function (array $m): string {
-                $val = $m[1];
-                $val = preg_replace('/expression\s*\(/i', '', $val);
-                $val = preg_replace('/javascript\s*:/i', '', $val);
-                $val = preg_replace('/vbscript\s*:/i', '', $val);
-                $val = preg_replace('/behavior\s*:/i', '', $val);
-                $val = preg_replace('/@import\b/i', '', $val);
-                $val = preg_replace('/url\s*\(\s*["\']?\s*javascript:/i', 'url(', $val);
-                $val = trim(string: $val);
+            '/\s+style\s*=\s*["\']([^"\']*)["\']/i',
+            function (array $m): string {
+                $val = preg_replace('/expression\s*\(/i', '', $m[1]) ?? $m[1];
+                $val = preg_replace('/javascript\s*:/i', '', $val) ?? $val;
+                $val = preg_replace('/vbscript\s*:/i', '', $val) ?? $val;
+                $val = preg_replace('/behavior\s*:/i', '', $val) ?? $val;
+                $val = preg_replace('/@import\b/i', '', $val) ?? $val;
+                $val = preg_replace('/url\s*\(\s*["\']?\s*javascript:/i', 'url(', $val) ?? $val;
+                $val = trim($val);
                 if ($val === '') {
                     return '';
                 }
-                return sprintf(' style="%s"', htmlspecialchars(string: $val, flags: ENT_QUOTES));
+                return sprintf(' style="%s"', htmlspecialchars($val, ENT_QUOTES));
             },
-            subject: $html
-        );
+            $html
+        ) ?? $html;
 
-        $html = preg_replace('/<\/?tg-spoiler>/i', '', $html);
-
-        $html = strip_tags(string: $html, allowed_tags: self::ALLOWED_TAGS);
+        $html = preg_replace('/<\/?tg-spoiler>/i', '', $html) ?? $html;
+        $html = strip_tags($html, self::ALLOWED_TAGS);
 
         $html = preg_replace(
             '/<blockquote(\s[^>]*)?>/i',
             sprintf('<blockquote$1 style="%s">', self::CSS['quote']),
             $html
-        );
+        ) ?? $html;
 
-        $html = preg_replace('/<a[^>]*>\s*<\/a>/', '', $html);
-        $html = preg_replace('/(<br\s*\/?>){3,}/i', '<br /><br />', $html);
+        $html = preg_replace('/<a[^>]*>\s*<\/a>/', '', $html) ?? $html;
+        $html = preg_replace('/(<br\s*\/?>){3,}/i', '<br /><br />', $html) ?? $html;
 
-        return sprintf('<div style="%s">%s</div>', self::CSS['wrapper'], trim(string: $html));
+        return sprintf('<div style="%s">%s</div>', self::CSS['wrapper'], trim($html));
     }
 
     private function shouldEmbedMedia(): bool
@@ -1491,12 +1467,12 @@ CSS,
 
         $haystack = $this->buildSearchHaystack($item);
 
-        $exclude = trim((string) ($this->getInput('exclude_keywords') ?? ''));
+        $exclude = trim($this->getInput('exclude_keywords') ?? '');
         if ($exclude !== '' && matches_keyword_rules($haystack, $exclude) === true) {
             return true;
         }
 
-        $include = trim((string) ($this->getInput('include_keywords') ?? ''));
+        $include = trim($this->getInput('include_keywords') ?? '');
         if ($include !== '' && matches_keyword_rules($haystack, $include) === false) {
             return true;
         }
@@ -1510,16 +1486,16 @@ CSS,
     private function buildSearchHaystack(array $item): string
     {
         return mb_strtolower(
-            string: trim(($item['title'] ?? '') . ' ' . strip_tags($item['content'] ?? '')),
-            encoding: 'UTF-8'
+            trim(($item['title'] ?? '') . ' ' . strip_tags($item['content'] ?? '')),
+            'UTF-8'
         );
     }
 
     private function isAd(\Dom\Element $message): bool
     {
         return array_any(
-            array: iterator_to_array($message->querySelectorAll(self::SELECTORS['ANY_WITH_CLASS'])),
-            callback: fn($el) => str_contains(haystack: $el->getAttribute('class') ?? '', needle: 'sponsored')
+            iterator_to_array($message->querySelectorAll(self::SELECTORS['ANY_WITH_CLASS'])),
+            fn($el) => str_contains($el->getAttribute('class') ?? '', 'sponsored')
         );
     }
 
@@ -1529,7 +1505,7 @@ CSS,
     private function isShortPost(array $item): bool
     {
         $plain = trim(($item['title'] ?? '') . ' ' . strip_tags($item['content'] ?? ''));
-        return mb_strlen(string: $plain, encoding: 'UTF-8') <= self::SHORT_POST_MAX_LENGTH;
+        return mb_strlen($plain, 'UTF-8') <= self::SHORT_POST_MAX_LENGTH;
     }
 
     /**
@@ -1570,11 +1546,11 @@ CSS,
     private function extractChannelIcon(\Dom\HTMLDocument $dom): string
     {
         $meta = array_find(
-            array: iterator_to_array($dom->querySelectorAll(self::SELECTORS['META_TAGS'])),
-            callback: fn($m) => $m->getAttribute('property') === 'og:image'
+            iterator_to_array($dom->querySelectorAll(self::SELECTORS['META_TAGS'])),
+            fn($m) => $m->getAttribute('property') === 'og:image'
         );
         if ($meta !== null) {
-            $content = trim(string: $meta->getAttribute('content') ?? '');
+            $content = trim($meta->getAttribute('content') ?? '');
             if ($content !== '') {
                 return $content;
             }
@@ -1582,7 +1558,7 @@ CSS,
 
         $el = $dom->querySelector(self::SELECTORS['PAGE_PHOTO_IMG']);
         if ($el !== null) {
-            $src = trim(string: $el->getAttribute('src') ?? '');
+            $src = trim($el->getAttribute('src') ?? '');
             if ($src !== '') {
                 return $src;
             }
@@ -1595,7 +1571,7 @@ CSS,
     {
         $author = $fwd->querySelector(self::SELECTORS['FORWARDED_AUTHOR']);
         if ($author !== null) {
-            $text = trim(string: $author->textContent);
+            $text = trim($author->textContent);
             if ($text !== '') {
                 return $text;
             }
@@ -1608,7 +1584,7 @@ CSS,
     {
         $el = $element->querySelector($selector);
         if ($el !== null) {
-            return trim(string: $el->textContent);
+            return trim($el->textContent);
         }
         return '';
     }

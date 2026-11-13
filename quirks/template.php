@@ -7,7 +7,7 @@ declare(strict_types=1);
  *
  * This file provides a simple two-level template rendering system
  * for generating HTML pages in RSS-Bridge. Templates are plain PHP
- * files that receive variables via extract() and output HTML.
+ * files that receive variables via explicit assignment and output HTML.
  *
  * The rendering process:
  * 1. render() wraps content in base.html.php layout
@@ -52,8 +52,12 @@ function render(string $template, array $context = []): string
         if (is_array($message) === false) {
             continue;
         }
-        $level = strtolower((string) ($message['level'] ?? 'info'));
-        $body = strip_tags((string) ($message['body'] ?? ''));
+        $msgLevel = $message['level'] ?? null;
+        $level = is_string($msgLevel) === true ? strtolower($msgLevel) : 'info';
+
+        $msgBody = $message['body'] ?? null;
+        $body = is_string($msgBody) === true ? strip_tags($msgBody) : '';
+
         switch ($level) {
             case 'warning':
                 notify_warning($body, null, 'admin');
@@ -74,7 +78,7 @@ function render(string $template, array $context = []): string
         foreach ($systemMessages as $sm) {
             $body = $sm['body'];
             $links = $adminLinks;
-            if (($sm['url'] ?? '') !== '') {
+            if ($sm['url'] !== '') {
                 // Append the message link as a {N} placeholder resolved by the renderer.
                 $links[] = ['label' => $sm['url_label'], 'url' => $sm['url']];
                 $body .= sprintf(' {%d}', count($links) - 1);
@@ -90,10 +94,10 @@ function render(string $template, array $context = []): string
 
     // Debug information in dev environment (unified notifications)
     $appEnv = getenv('APP_ENV');
-    if ($appEnv !== false && $appEnv === 'DEV') {
+    if (is_string($appEnv) === true && $appEnv === 'DEV') {
         notify_warning('System environment: dev', 'Debug mode', 'admin');
         $cacheTypeRaw = getenv('CACHE_TYPE');
-        $cacheType = ($cacheTypeRaw !== false && $cacheTypeRaw !== '') ? (string) $cacheTypeRaw : 'file';
+        $cacheType = is_string($cacheTypeRaw) === true ? $cacheTypeRaw : 'file';
         notify_info(
             sprintf('Cache type: %s', $cacheType),
             'Debug info',
@@ -134,11 +138,15 @@ function get_admin_system_messages(): array
     // 1. Check for multi-message JSON environment variable FIRST
     // If present and valid, it takes precedence and single message vars are ignored
     $messagesJson = getenv('SYSTEM_MESSAGES');
-    if ($messagesJson !== false && trim((string) $messagesJson) !== '') {
-        $decoded = json_decode((string) $messagesJson, true);
+    if (is_string($messagesJson) === true && trim($messagesJson) !== '') {
+        $decoded = json_decode($messagesJson, true);
         if (is_array($decoded) === true) {
             foreach ($decoded as $item) {
-                $text = trim((string) ($item['text'] ?? ''));
+                if (is_array($item) === false) {
+                    continue;
+                }
+
+                $text = is_string($item['text'] ?? null) === true ? trim($item['text']) : '';
                 if ($text === '') {
                     continue;
                 }
@@ -147,10 +155,14 @@ function get_admin_system_messages(): array
                 $validLevels = ['info', 'warning', 'error'];
                 $safeLevel = in_array($level, $validLevels, true) === true ? $level : 'info';
 
+                $url = is_string($item['url'] ?? null) === true ? trim($item['url']) : '';
+                $titleRaw = $item['title'] ?? 'System message';
+                $title = is_string($titleRaw) === true ? strip_tags(trim($titleRaw)) : 'System message';
+
                 $result[] = [
                     'body'      => strip_tags($text),
-                    'url'       => trim((string) ($item['url'] ?? '')),
-                    'title'     => strip_tags(trim((string) ($item['title'] ?? 'System message'))),
+                    'url'       => $url,
+                    'title'     => $title,
                     'level'     => $safeLevel,
                     'url_label' => 'Details',
                 ];
@@ -165,20 +177,20 @@ function get_admin_system_messages(): array
 
     // 2. Fallback to single message environment variables (only if SYSTEM_MESSAGES is empty/invalid)
     $message = getenv('SYSTEM_MESSAGE');
-    if ($message !== false && trim((string) $message) !== '') {
+    if (is_string($message) === true && trim($message) !== '') {
         $levelRaw = getenv('SYSTEM_MESSAGE_LEVEL');
-        $level = ($levelRaw !== false && $levelRaw !== '') ? (string) $levelRaw : 'info';
+        $level = is_string($levelRaw) === true && $levelRaw !== '' ? $levelRaw : 'info';
         $validLevels = ['info', 'warning', 'error'];
         $safeLevel = in_array($level, $validLevels, true) === true ? $level : 'info';
 
         $urlRaw = getenv('SYSTEM_MESSAGE_URL');
-        $url = ($urlRaw !== false && $urlRaw !== '') ? (string) $urlRaw : '';
+        $url = is_string($urlRaw) === true && $urlRaw !== '' ? $urlRaw : '';
 
         $titleRaw = getenv('SYSTEM_MESSAGE_TITLE');
-        $title = ($titleRaw !== false && $titleRaw !== '') ? (string) $titleRaw : 'System message';
+        $title = is_string($titleRaw) === true && $titleRaw !== '' ? $titleRaw : 'System message';
 
         $result[] = [
-            'body'      => strip_tags(trim((string) $message)),
+            'body'      => strip_tags(trim($message)),
             'url'       => $url,
             'title'     => strip_tags(trim($title)),
             'level'     => $safeLevel,
@@ -203,14 +215,14 @@ function get_admin_contact_links(): array
     $links = [];
 
     $adminEmailRaw = getenv('ADMIN_EMAIL');
-    $email = ($adminEmailRaw === false) ? '' : trim((string) $adminEmailRaw);
+    $email = is_string($adminEmailRaw) === true ? trim($adminEmailRaw) : '';
 
     if ($email !== '') {
         $links[] = ['label' => 'Contact admin', 'url' => 'mailto:' . $email];
     }
 
     $adminTelegramRaw = getenv('ADMIN_TELEGRAM');
-    $telegram = ($adminTelegramRaw === false) ? '' : trim((string) $adminTelegramRaw);
+    $telegram = is_string($adminTelegramRaw) === true ? trim($adminTelegramRaw) : '';
 
     if ($telegram !== '') {
         // Normalize: remove @ if present, then construct t.me URL
@@ -225,14 +237,14 @@ function get_admin_contact_links(): array
  * Render a single PHP template file with context variables.
  *
  * This function executes a template file in an isolated scope with
- * variables extracted from the $context array. The template can use
+ * variables explicitly assigned from the $context array. The template can use
  * any variable passed in $context as a local variable.
  *
  * IMPORTANT: Never pass user input as $template or as keys in $context,
  * as this could lead to arbitrary file inclusion or variable injection.
  *
  * @param string $template Template filename or absolute path.
- * @param array<string, mixed> $context Variables to extract into template scope.
+ * @param array<string, mixed> $context Variables to assign into template scope.
  * @return string The rendered template output.
  * @throws \Exception If template file is not found or 'template' key is used in context.
  */
@@ -243,9 +255,12 @@ function render_template(string $template, array $context = []): string
     }
 
     $templateFilepath = __DIR__ . '/../templates/' . $template;
-    // phpcs:disable Generic.PHP.ForbiddenFunctions.Found
+
+    // Extract context variables into local scope for template compatibility.
+    // This is the only way to maintain backward compatibility with existing
+    // templates that expect local variables (e.g., $bridges, $active_bridges).
+    // phpcs:ignore Generic.PHP.ForbiddenFunctions.Found
     extract($context);
-    // phpcs:enable
 
     ob_start();
     try {
@@ -262,8 +277,5 @@ function render_template(string $template, array $context = []): string
     }
 
     $result = ob_get_clean();
-    if ($result === false) {
-        return '';
-    }
-    return $result;
+    return is_string($result) === true ? $result : '';
 }

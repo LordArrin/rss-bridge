@@ -97,16 +97,16 @@ final class MSISupportBridge extends BridgeAbstract
             fn(string $s): bool => $s !== ''
         ));
 
-        if (count($segments) < 2) {
-            return null;
-        }
-
         if (end($segments) === 'support') {
             array_pop($segments);
         }
 
-        $product = array_pop($segments);
-        $category = array_pop($segments);
+        if (count($segments) < 2) {
+            return null;
+        }
+
+        $product = (string) array_pop($segments);
+        $category = (string) array_pop($segments);
 
         $subProduct = '';
         if (isset($parsedUrl['query']) === true && $parsedUrl['query'] !== '') {
@@ -120,7 +120,7 @@ final class MSISupportBridge extends BridgeAbstract
         $this->productInfo = [
             'product'     => $product,
             'category'    => $category,
-            'fragment'    => $parsedUrl['fragment'] ?? '',
+            'fragment'    => (string) ($parsedUrl['fragment'] ?? ''),
             'sub_product' => $subProduct
         ];
 
@@ -196,9 +196,9 @@ final class MSISupportBridge extends BridgeAbstract
         };
 
         $text = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $text = preg_replace('/\s*(?:style|on\w+)\s*=\s*(["\']).*?\1/i', '', $text);
+        $text = (string) preg_replace('/\s*(?:style|on\w+)\s*=\s*(["\']).*?\1/i', '', $text);
         $text = strip_tags($text, '<a><br><p>');
-        $text = preg_replace_callback('/<a\s+([^>]*?)>/is', $callback, $text);
+        $text = (string) preg_replace_callback('/<a\s+([^>]*?)>/is', $callback, $text);
         $text = nl2br($text);
 
         return $text;

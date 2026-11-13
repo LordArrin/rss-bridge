@@ -37,13 +37,18 @@ final class IXBTGamesBridge extends BridgeAbstract
 
     public function collectData(): void
     {
-        $digestsOnly = (bool)$this->getInput('digests_only');
+        $digestsOnly = (bool) $this->getInput('digests_only');
         $limitInput = $this->getInput('limit');
-        $limitValue = ($limitInput !== null) ? (int)$limitInput : 20;
+        $limitValue = ($limitInput !== null) ? (int) $limitInput : 20;
         $limit = ($digestsOnly === true) ? 3 : $limitValue;
 
         $dom = getSimpleHTMLDOM('https://ixbt.games/news/');
         $newsContainer = $dom->querySelector('div.news');
+
+        if ($newsContainer === null) {
+            throw new \Exception('News container not found');
+        }
+
         $cards = $newsContainer->querySelectorAll('div.card');
         $count = 0;
 
@@ -61,11 +66,15 @@ final class IXBTGamesBridge extends BridgeAbstract
                 continue;
             }
 
-            $title = trim($heading->textContent);
-            $href = $link->getAttribute('href');
+            $title = trim((string) $heading->textContent);
+
+            $href = (string) ($link->getAttribute('href') ?? '');
+
             $uri = (str_starts_with($href, 'http') === true) ? $href : self::URI . ltrim($href, '/');
+
             $previewImage = $this->buildPreviewImage($img, $title);
-            $relativeTime = ($timeSpan !== null) ? trim($timeSpan->textContent) : '';
+
+            $relativeTime = ($timeSpan !== null) ? trim((string) $timeSpan->textContent) : '';
             $articleContent = $this->fetchArticleContent($uri, $previewImage);
 
             if ($digestsOnly === true && $this->isDigest($title, $articleContent) === false) {
@@ -90,7 +99,7 @@ final class IXBTGamesBridge extends BridgeAbstract
             return '';
         }
 
-        $src = $img->getAttribute('src');
+        $src = (string) ($img->getAttribute('src') ?? '');
         if ($src === '') {
             return '';
         }
@@ -174,7 +183,7 @@ final class IXBTGamesBridge extends BridgeAbstract
     {
         $embeds = $element->querySelectorAll('.content-block--embed[data-service="youtube"]');
         foreach ($embeds as $embed) {
-            $embedUrl = $embed->getAttribute('data-embed-url');
+            $embedUrl = (string) ($embed->getAttribute('data-embed-url') ?? '');
             if ($embedUrl === '') {
                 $embed->remove();
                 continue;
@@ -192,7 +201,7 @@ final class IXBTGamesBridge extends BridgeAbstract
             $html = $this->buildYouTubePreview($videoUrl, $thumbnailUrl);
 
             $parent = $embed->parentNode;
-            if ($parent !== null) {
+            if ($parent !== null && $parent->ownerDocument !== null) {
                 $fragment = $parent->ownerDocument->createDocumentFragment();
                 $fragment->appendXml($html);
                 $parent->replaceChild($fragment, $embed);
@@ -251,7 +260,7 @@ final class IXBTGamesBridge extends BridgeAbstract
         $paragraphs = $element->querySelectorAll('p');
         foreach ($paragraphs as $p) {
             $this->normalizeNodeText($p);
-            if (trim($p->textContent) === '') {
+            if (trim((string) $p->textContent) === '') {
                 $p->remove();
             }
         }
@@ -261,7 +270,7 @@ final class IXBTGamesBridge extends BridgeAbstract
     {
         foreach ($node->childNodes as $child) {
             if (($child instanceof \Dom\Text) === true) {
-                $text = preg_replace('/\s+/', ' ', $child->textContent);
+                $text = preg_replace('/\s+/', ' ', (string) $child->textContent);
                 $child->textContent = $text;
             } elseif (($child instanceof \Dom\Element) === true) {
                 $this->normalizeNodeText($child);
@@ -302,7 +311,7 @@ final class IXBTGamesBridge extends BridgeAbstract
                 continue;
             }
 
-            if (trim($link->textContent) === '') {
+            if (trim((string) $link->textContent) === '') {
                 $link->remove();
             }
         }
@@ -310,7 +319,7 @@ final class IXBTGamesBridge extends BridgeAbstract
 
     private function processYouTubeIframes(string $html): string
     {
-        return preg_replace_callback(
+        $result = preg_replace_callback(
             '/<iframe[^>]*src=["\'](?:https?:)?\/\/(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]+)[^"\']*["\'][^>]*>/i',
             function ($matches) {
                 $videoId = $matches[1];
@@ -321,6 +330,7 @@ final class IXBTGamesBridge extends BridgeAbstract
             },
             $html
         );
+        return $result ?? $html;
     }
 
     private function processImages(string $html): string
@@ -337,7 +347,7 @@ final class IXBTGamesBridge extends BridgeAbstract
         $this->limitImageSize($wrapper);
         $this->alignTextLeft($wrapper);
 
-        return $wrapper->innerHTML;
+        return (string) $wrapper->innerHTML;
     }
 
     private function limitImageSize(\Dom\Node $node): void
@@ -367,7 +377,7 @@ final class IXBTGamesBridge extends BridgeAbstract
                 continue;
             }
 
-            $style = $element->getAttribute('style') ?? '';
+            $style = (string) ($element->getAttribute('style') ?? '');
             if ($style !== '') {
                 $newStyle = preg_replace('/text-align\s*:\s*center\s*;?/i', '', $style);
                 if (is_string($newStyle) === true && $newStyle !== $style) {
@@ -393,13 +403,13 @@ final class IXBTGamesBridge extends BridgeAbstract
         $relativeTime = mb_strtolower($relativeTime);
 
         if (preg_match('/(\d+)\s*мин/', $relativeTime, $matches) === 1) {
-            return time() - (int)$matches[1] * 60;
+            return time() - (int) $matches[1] * 60;
         }
         if (preg_match('/(\d+)\s*ч/', $relativeTime, $matches) === 1) {
-            return time() - (int)$matches[1] * 3600;
+            return time() - (int) $matches[1] * 3600;
         }
         if (preg_match('/(\d+)\s*д/', $relativeTime, $matches) === 1) {
-            return time() - (int)$matches[1] * 86400;
+            return time() - (int) $matches[1] * 86400;
         }
         if (preg_match('/(\d{2}):(\d{2})/', $relativeTime, $matches) === 1) {
             $today = date('Y-m-d');

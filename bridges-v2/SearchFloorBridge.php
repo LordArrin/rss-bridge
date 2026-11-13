@@ -164,7 +164,7 @@ final class SearchFloorBridge extends BridgeAbstract
 
                 $books[] = [
                     'id' => (int) $match[1],
-                    'title' => $this->decodeEntities(trim($linkNode->textContent)),
+                    'title' => $this->decodeEntities(trim((string) $linkNode->textContent)),
                     'uri' => urljoin(self::URI, $href),
                     'date' => $timestamp !== false ? $timestamp : null,
                 ];
@@ -184,7 +184,7 @@ final class SearchFloorBridge extends BridgeAbstract
             return null;
         }
 
-        $rawTitle = $this->decodeEntities(trim($titleNode->textContent));
+        $rawTitle = $this->decodeEntities(trim((string) $titleNode->textContent));
         $parts = explode('/', $rawTitle, 2);
         $title = trim($parts[0]);
         $author = trim($parts[1] ?? '');
@@ -242,7 +242,8 @@ final class SearchFloorBridge extends BridgeAbstract
     private function fetchBookMeta(int $bookId): array
     {
         $cacheKey = 'searchfloor_book_meta_' . $bookId;
-        $cached = $this->cache->get($cacheKey);
+
+        $cached = $this->loadCacheValue($cacheKey);
         if ($cached !== null) {
             return $cached;
         }
@@ -270,7 +271,7 @@ final class SearchFloorBridge extends BridgeAbstract
             'chapter' => $this->findChapter($html),
         ];
 
-        $this->cache->set($cacheKey, $meta, self::CACHE_TIMEOUT);
+        $this->saveCacheValue($cacheKey, $meta, self::CACHE_TIMEOUT);
 
         return $meta;
     }
@@ -279,7 +280,7 @@ final class SearchFloorBridge extends BridgeAbstract
     {
         $chapterNode = $html->querySelector('.alert.alert-warning.alert-dismissible.fade.show') ?? $html->querySelector('[data-bs-title="Последняя глава"]');
 
-        return $chapterNode !== null ? trim($chapterNode->textContent) : '';
+        return $chapterNode !== null ? trim((string) $chapterNode->textContent) : '';
     }
 
     private function buildItemTitle(string $bookTitle, string $chapter): string

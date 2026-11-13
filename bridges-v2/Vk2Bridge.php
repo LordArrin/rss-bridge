@@ -145,7 +145,7 @@ final class Vk2Bridge extends BridgeAbstract
 
     public function collectData(): void
     {
-        if ($this->cache->get($this->getRateLimitCacheKey()) === true) {
+        if ($this->loadCacheValue($this->getRateLimitCacheKey()) === true) {
             throwRateLimitException();
         }
 
@@ -191,7 +191,7 @@ final class Vk2Bridge extends BridgeAbstract
                 }
                 if (
                     ($post['is_deleted'] ?? false) === true
-                    && trim($post['text'] ?? '') === ''
+                    && trim((string) ($post['text'] ?? '')) === ''
                     && ($post['attachments'] ?? []) === []
                 ) {
                     continue;
@@ -247,7 +247,7 @@ final class Vk2Bridge extends BridgeAbstract
             [, $text] = $this->splitFirstLine($text);
         }
 
-        $text = trim($text ?? '');
+        $text = trim((string) $text);
         $ret = '';
 
         if ($text !== '') {
@@ -259,7 +259,7 @@ final class Vk2Bridge extends BridgeAbstract
                 $placeholders,
                 $counter,
                 '/\[([^\]|]+)\|([^\]]+)\]/u',
-                fn(array $m): string => $this->resolveVkLink(trim($m[1]), $m[2])
+                fn(array $m): string => $this->resolveVkLink(trim((string) $m[1]), $m[2])
             );
 
             $text = $this->applyPlaceholders(
@@ -365,7 +365,7 @@ final class Vk2Bridge extends BridgeAbstract
             ),
             'donut_link' => $this->renderLinkCard($d['url'] ?? '#', $d['text'] ?? 'VK Donut'),
             'textlive', 'textpost', 'textpost_publish' => (function () use ($d): string {
-                $preview = mb_substr($d['text'] ?? '', 0, self::MAX_PREVIEW_LENGTH);
+                $preview = mb_substr((string) ($d['text'] ?? ''), 0, self::MAX_PREVIEW_LENGTH);
                 $extra = $preview !== '' ? "<p><small>{$this->e($preview)}</small></p>" : '';
                 return $this->renderLinkCard($d['url'] ?? '#', $d['title'] ?? 'Text broadcast', '', $extra);
             })(),
@@ -448,7 +448,7 @@ final class Vk2Bridge extends BridgeAbstract
             }
 
             if ($apiError === self::ERR_CAPTCHA_NEEDED) {
-                $this->cache->set($this->getRateLimitCacheKey(), true, 300);
+                $this->saveCacheValue($this->getRateLimitCacheKey(), true, 300);
                 $this->handleError(self::ERR_CAPTCHA_NEEDED, $r['error']['error_msg'] ?? 'Captcha needed');
             }
 
@@ -469,7 +469,7 @@ final class Vk2Bridge extends BridgeAbstract
             }
 
             if (isset(self::RATE_LIMIT_DELAYS[$errorCode]) === true) {
-                $this->cache->set($this->getRateLimitCacheKey(), true, self::RATE_LIMIT_DELAYS[$errorCode]);
+                $this->saveCacheValue($this->getRateLimitCacheKey(), true, self::RATE_LIMIT_DELAYS[$errorCode]);
             }
 
             $this->handleError(
@@ -508,7 +508,7 @@ final class Vk2Bridge extends BridgeAbstract
             $cacheKey = 'vk2_post_' . md5(
                 $uri . '|' . ($displayPost['date'] ?? '') . '|' . ($displayPost['edited'] ?? '')
             );
-            $cachedItem = $this->cache->get($cacheKey);
+            $cachedItem = $this->loadCacheValue($cacheKey);
 
             if ($cachedItem !== null) {
                 $this->items[] = $cachedItem;
@@ -533,7 +533,7 @@ final class Vk2Bridge extends BridgeAbstract
                 'uid' => sprintf('vk:wall%d_%d', $displayPost['owner_id'] ?? 0, $displayPost['id'] ?? 0),
             ];
 
-            $this->cache->set($cacheKey, $item, self::CACHE_TIMEOUT);
+            $this->saveCacheValue($cacheKey, $item, self::CACHE_TIMEOUT);
             $this->items[] = $item;
         }
 
@@ -585,7 +585,7 @@ final class Vk2Bridge extends BridgeAbstract
     private function cacheOwnerData(array $response, int $ownerId): void
     {
         foreach ($response['profiles'] ?? [] as $profile) {
-            $this->ownerNames[$profile['id']] = trim(($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? ''));
+            $this->ownerNames[$profile['id']] = trim((string) ($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? ''));
             if ($profile['id'] === $ownerId) {
                 $this->iconUrl = $profile['photo_100'] ?? $profile['photo_50'] ?? $this->iconUrl;
             }
@@ -618,7 +618,7 @@ final class Vk2Bridge extends BridgeAbstract
         }
 
         $cacheKey = 'vk2_owner_' . md5(strtolower($u));
-        $cached = $this->cache->get($cacheKey);
+        $cached = $this->loadCacheValue($cacheKey);
 
         if (is_array($cached) === true && isset($cached['ownerId']) === true) {
             $this->iconUrl = $cached['iconUrl'] ?? null;
@@ -631,7 +631,7 @@ final class Vk2Bridge extends BridgeAbstract
         if ($group !== null && isset($group['id']) === true) {
             $ownerId = -(int) $group['id'];
             $this->iconUrl = $group['photo_200'] ?? $group['photo_100'] ?? $group['photo_50'] ?? null;
-            $this->cache->set($cacheKey, ['ownerId' => $ownerId, 'iconUrl' => $this->iconUrl], 86400);
+            $this->saveCacheValue($cacheKey, ['ownerId' => $ownerId, 'iconUrl' => $this->iconUrl], 86400);
             return $ownerId;
         }
 
@@ -640,7 +640,7 @@ final class Vk2Bridge extends BridgeAbstract
         if (isset($r['response'][0]['id']) === true) {
             $user = $r['response'][0];
             $this->iconUrl = $user['photo_100'] ?? $user['photo_50'] ?? null;
-            $this->cache->set($cacheKey, ['ownerId' => $user['id'], 'iconUrl' => $this->iconUrl], 86400);
+            $this->saveCacheValue($cacheKey, ['ownerId' => $user['id'], 'iconUrl' => $this->iconUrl], 86400);
             return $user['id'];
         }
 
@@ -822,7 +822,7 @@ final class Vk2Bridge extends BridgeAbstract
     {
         $normalized = $this->normalizeArticleUrl($url);
         $cacheKey = 'vk2_article_' . md5($normalized);
-        $cached = $this->cache->get($cacheKey);
+        $cached = $this->loadCacheValue($cacheKey);
 
         if ($cached !== null) {
             $cached['timestamp'] = $parentTimestamp;
@@ -886,7 +886,7 @@ final class Vk2Bridge extends BridgeAbstract
             'categories' => ['article'],
         ];
 
-        $this->cache->set($cacheKey, $article, self::CACHE_TIMEOUT);
+        $this->saveCacheValue($cacheKey, $article, self::CACHE_TIMEOUT);
 
         return $article;
     }
@@ -904,7 +904,7 @@ final class Vk2Bridge extends BridgeAbstract
             if ($element === null) {
                 continue;
             }
-            $title = trim($element->textContent);
+            $title = trim((string) $element->textContent);
             if ($title !== '') {
                 return $title;
             }
@@ -920,7 +920,7 @@ final class Vk2Bridge extends BridgeAbstract
 
         $titleTag = $dom->querySelector('title');
         if ($titleTag !== null) {
-            $text = trim($titleTag->textContent);
+            $text = trim((string) $titleTag->textContent);
             if ($text !== '') {
                 return $text;
             }
@@ -984,7 +984,7 @@ final class Vk2Bridge extends BridgeAbstract
                     $dataOriginal = $img->getAttribute('data-original');
 
                     foreach ([$dataFull, $dataOriginal, $dataSrc, $src] as $candidate) {
-                        if ($candidate !== null && $candidate !== '' && preg_match('/^(?:data:|javascript:)/i', $candidate) === 0) {
+                        if ($candidate !== null && $candidate !== '' && preg_match('/^(?:data:|javascript:)/i', (string) $candidate) === 0) {
                             $bestUrl = $candidate;
                             break;
                         }
@@ -992,14 +992,17 @@ final class Vk2Bridge extends BridgeAbstract
                 }
 
                 if ($bestUrl !== null) {
-                    $newImg = $articleBlock->ownerDocument->createElement('img');
-                    $newImg->setAttribute('src', $this->fixVkArticleImageUrl($bestUrl));
-                    $alt = $img->getAttribute('alt');
-                    if ($alt !== null) {
-                        $newImg->setAttribute('alt', $alt);
+                    $ownerDoc = $articleBlock->ownerDocument;
+                    if ($ownerDoc !== null) {
+                        $newImg = $ownerDoc->createElement('img');
+                        $newImg->setAttribute('src', $this->fixVkArticleImageUrl($bestUrl));
+                        $alt = $img->getAttribute('alt');
+                        if ($alt !== null) {
+                            $newImg->setAttribute('alt', $alt);
+                        }
+                        $newImg->setAttribute('style', 'display: block; max-width: 1400px; width: auto; height: auto;');
+                        $parent->insertBefore($newImg, $figure);
                     }
-                    $newImg->setAttribute('style', 'display: block; max-width: 1400px; width: auto; height: auto;');
-                    $parent->insertBefore($newImg, $figure);
                 }
             }
 
@@ -1015,13 +1018,16 @@ final class Vk2Bridge extends BridgeAbstract
                     }
                 }
                 if ($captionText === '') {
-                    $captionText = trim($caption->textContent);
+                    $captionText = trim((string) $caption->textContent);
                 }
                 if ($captionText !== '') {
-                    $wrapper = $articleBlock->ownerDocument->createElement('p');
-                    $wrapper->textContent = $captionText;
-                    $wrapper->setAttribute('style', 'font-style: italic; font-size: 0.9em; color: #666; text-align: center;');
-                    $parent->insertBefore($wrapper, $figure);
+                    $ownerDoc = $articleBlock->ownerDocument;
+                    if ($ownerDoc !== null) {
+                        $wrapper = $ownerDoc->createElement('p');
+                        $wrapper->textContent = $captionText;
+                        $wrapper->setAttribute('style', 'font-style: italic; font-size: 0.9em; color: #666; text-align: center;');
+                        $parent->insertBefore($wrapper, $figure);
+                    }
                 }
             }
 
@@ -1036,7 +1042,7 @@ final class Vk2Bridge extends BridgeAbstract
 
             $bestSrc = null;
             foreach ([$dataFull, $dataOriginal, $dataSrc, $src] as $candidate) {
-                if ($candidate !== null && $candidate !== '' && preg_match('/^(?:data:|javascript:)/i', $candidate) === 0) {
+                if ($candidate !== null && $candidate !== '' && preg_match('/^(?:data:|javascript:)/i', (string) $candidate) === 0) {
                     $bestSrc = $candidate;
                     break;
                 }
@@ -1348,8 +1354,8 @@ final class Vk2Bridge extends BridgeAbstract
     private function renderWall(array $d): string
     {
         $text = $d['text'] ?? '';
-        $preview = mb_substr($text, 0, self::MAX_PREVIEW_LENGTH);
-        if (mb_strlen($text) > self::MAX_PREVIEW_LENGTH) {
+        $preview = mb_substr((string) $text, 0, self::MAX_PREVIEW_LENGTH);
+        if (mb_strlen((string) $text) > self::MAX_PREVIEW_LENGTH) {
             $preview .= '...';
         }
         return '<p><strong>Attached post:</strong><br>' . $this->linkHtml($this->getPostURI($d), $this->e($preview)) . '</p>';
@@ -1412,7 +1418,7 @@ final class Vk2Bridge extends BridgeAbstract
         $html .= "<p>{$this->link($url, $display)}</p>";
 
         if (($d['podcast_description'] ?? '') !== '') {
-            $html .= '<p><small>' . $this->e(mb_substr($d['podcast_description'], 0, self::MAX_PREVIEW_LENGTH)) . '</small></p>';
+            $html .= '<p><small>' . $this->e(mb_substr((string) $d['podcast_description'], 0, self::MAX_PREVIEW_LENGTH)) . '</small></p>';
         }
 
         return $html;
@@ -1472,7 +1478,12 @@ final class Vk2Bridge extends BridgeAbstract
             return ['', $text];
         }
 
-        $cleanLine = preg_replace('/\[([^\]|]+)\|([^\]]+)\]/u', '$2', trim($lines[$meaningfulIndex]));
+        $originalLine = trim($lines[$meaningfulIndex]);
+        $cleanLine = preg_replace('/\[([^\]|]+)\|([^\]]+)\]/u', '$2', $originalLine);
+
+        if ($cleanLine === null) {
+            $cleanLine = $originalLine;
+        }
 
         if (trim($cleanLine) === '') {
             return ['', $text];

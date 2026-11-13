@@ -30,9 +30,6 @@ function get_sitemap(string $url): array
 
     $urls = [];
     foreach ($doc->querySelectorAll('url') as $urlNode) {
-        if ($urlNode instanceof \Dom\Element === false) {
-            continue;
-        }
         $locNode = $urlNode->querySelector('loc');
         $lastmodNode = $urlNode->querySelector('lastmod');
         $changefreqNode = $urlNode->querySelector('changefreq');
@@ -141,9 +138,9 @@ function getContents(
     $httpHeadersNormalized = [];
     foreach ($httpHeaders as $key => $value) {
         if (is_string($key) === true) {
-            $httpHeadersNormalized[$key] = (string) $value;
+            $httpHeadersNormalized[$key] = $value;
         } else {
-            $parts = explode(':', (string) $value, 2);
+            $parts = explode(':', $value, 2);
             if (count($parts) === 2) {
                 $httpHeadersNormalized[trim($parts[0])] = trim($parts[1]);
             }

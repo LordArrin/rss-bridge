@@ -13,7 +13,7 @@ final class TokenAuthenticationMiddleware implements Middleware
     {
         // Read token directly from environment variables
         $tokenRaw = getenv('AUTHENTICATION_TOKEN');
-        $token = ($tokenRaw !== false && $tokenRaw !== '') ? (string) $tokenRaw : '';
+        $token = ($tokenRaw !== false && $tokenRaw !== '') ? $tokenRaw : '';
 
         // If no token is configured, bypass authentication
         if ($token === '') {

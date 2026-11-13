@@ -264,7 +264,7 @@ function is_safe_uri(string $uri): bool
         return false; // Malformed URI
     }
 
-    $scheme = array_key_exists('scheme', $parsed) === true ? strtolower((string) $parsed['scheme']) : '';
+    $scheme = array_key_exists('scheme', $parsed) === true ? strtolower($parsed['scheme']) : '';
 
     // No scheme means a relative reference (e.g. "image.jpg", "../a/b", "?q=1").
     // These are safe and must NOT be stripped, otherwise every bridge emitting
@@ -443,17 +443,17 @@ function render_ascii_poll(array $options, int $totalVoters = 0, string $barStyl
 
     if ($totalVoters === 0) {
         foreach ($options as $opt) {
-            $totalVoters += (int) ($opt['votes'] ?? 0);
+            $totalVoters += $opt['votes'];
         }
     }
 
     $html = '<div class="rss-poll" style="font-family: monospace; line-height: 1.5;">';
 
     foreach ($options as $opt) {
-        $text = e((string) ($opt['text'] ?? 'Unknown'));
-        $votes = (int) ($opt['votes'] ?? 0);
+        $text = e($opt['text']);
+        $votes = $opt['votes'];
 
-        $percent = isset($opt['percent']) === true ? (float) $opt['percent'] : 0.0;
+        $percent = $opt['percent'] ?? 0.0;
         if ($percent === 0.0 && $totalVoters > 0) {
             $percent = ($votes / $totalVoters) * 100.0;
         }

@@ -77,13 +77,13 @@ final class DisplayAction implements ActionInterface
             $ttl = $bridge->getCacheTimeout();
         }
 
-        $request = $request->withAttribute('_resolved_cache_timeout', (int) $ttl);
+        $request = $request->withAttribute('_resolved_cache_timeout', $ttl);
 
         $response = $this->createResponse($request, $bridge, $format);
 
         if ($response->getCode() === 200) {
-            if ((int) $ttl > 0) {
-                $this->cache->set($cacheKey, $response, (int) $ttl);
+            if ($ttl > 0) {
+                $this->cache->set($cacheKey, $response, $ttl);
             }
         }
 
@@ -126,7 +126,7 @@ final class DisplayAction implements ActionInterface
 
             if ($e instanceof \HttpException) {
                 $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
-                $code = (int) $e->getCode();
+                $code = $e->getCode();
                 if ($code >= 400 && $code <= 599) {
                     return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $statusCode, $headers);
                 }
@@ -281,9 +281,6 @@ final class DisplayAction implements ActionInterface
         $maintainers = array_map('trim', $maintainers);
 
         $phpVer = phpversion();
-        if ($phpVer === false || $phpVer === '') {
-            $phpVer = 'Unknown';
-        }
 
         $queryString = $_SERVER['QUERY_STRING'] ?? '';
         $query = [
@@ -299,7 +296,7 @@ final class DisplayAction implements ActionInterface
                 implode(', @', $maintainers),
             ),
             'labels' => 'Bridge-Broken',
-            'assignee' => $maintainers[0] ?? 'unknown',
+            'assignee' => $maintainers[0],
         ];
 
         return 'https://github.com/LordArrin/rss-bridge/issues/new?' . http_build_query($query);

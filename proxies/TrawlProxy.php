@@ -54,7 +54,7 @@ final class TrawlProxy extends ProxyAbstract
 
         if ($this->useForwardProxy === true) {
             $parsed = parse_url($this->apiUrl);
-            $this->forwardProxyHost = is_array($parsed) === true && isset($parsed['host']) === true ? (string)$parsed['host'] : 'localhost';
+            $this->forwardProxyHost = is_array($parsed) === true && isset($parsed['host']) === true ? $parsed['host'] : 'localhost';
             $this->forwardProxyPort = (int)($this->config['forward_proxy_port'] ?? 8192);
         }
 
@@ -281,7 +281,7 @@ final class TrawlProxy extends ProxyAbstract
         }
 
         $response = curl_exec($ch);
-        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
 
         if ($response === false || ($httpCode !== 200 && $httpCode !== 201)) {
@@ -413,7 +413,7 @@ final class TrawlProxy extends ProxyAbstract
         }
 
         $response = curl_exec($ch);
-        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
         $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
 

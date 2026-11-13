@@ -155,7 +155,7 @@ final class MemcachedCache extends AbstractCache
                 $this->logger->warning(sprintf(
                     'Memcached get failed (code %d: %s)',
                     $resultCode,
-                    (string) $this->conn->getResultMessage()
+                    $this->conn->getResultMessage()
                 ));
             }
             return ['fresh' => null, 'stale' => null];
@@ -336,7 +336,7 @@ final class MemcachedCache extends AbstractCache
             $this->logger->warning(sprintf(
                 'Memcached chunked get failed (code %d: %s)',
                 $resultCode,
-                (string) $this->conn->getResultMessage()
+                $this->conn->getResultMessage()
             ));
             return null;
         }
@@ -432,8 +432,7 @@ final class MemcachedCache extends AbstractCache
      */
     public function getStats(): array
     {
-        $stats = $this->conn->getStats();
-        return is_array($stats) === true ? $stats : [];
+        return $this->conn->getStats();
     }
 
     protected function createCacheKey(string $key): string

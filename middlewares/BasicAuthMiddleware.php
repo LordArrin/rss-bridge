@@ -63,13 +63,13 @@ final class BasicAuthMiddleware implements Middleware
     private function getCredentials(): array
     {
         $usernameRaw = getenv('AUTHENTICATION_USERNAME');
-        $username = ($usernameRaw !== false && $usernameRaw !== '') ? (string) $usernameRaw : 'admin';
+        $username = ($usernameRaw !== false && $usernameRaw !== '') ? $usernameRaw : 'admin';
 
         $passwordRaw = getenv('AUTHENTICATION_PASSWORD');
-        $password = ($passwordRaw !== false) ? (string) $passwordRaw : '';
+        $password = ($passwordRaw !== false) ? $passwordRaw : '';
 
         $passwordHashRaw = getenv('AUTHENTICATION_PASSWORD_HASH');
-        $passwordHash = ($passwordHashRaw !== false) ? (string) $passwordHashRaw : '';
+        $passwordHash = ($passwordHashRaw !== false) ? $passwordHashRaw : '';
 
         return [$username, $password, $passwordHash];
     }

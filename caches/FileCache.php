@@ -208,7 +208,7 @@ final class FileCache extends AbstractCache
             }
 
             $hardExpiration = $fileMtime + self::DEFAULT_STALE_TTL;
-            if ($hardExpiration !== 0 && $hardExpiration <= $now) {
+            if ($hardExpiration <= $now) {
                 unlink($cacheFile);
             }
         }

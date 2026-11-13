@@ -222,7 +222,7 @@ final class FlareSolverrProxy extends ProxyAbstract
         $response = '';
         try {
             $response = curl_exec($ch);
-            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $error = curl_error($ch);
 
             if ($response === false || $httpCode !== 200) {

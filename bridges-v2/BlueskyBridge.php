@@ -699,8 +699,8 @@ final class BlueskyBridge extends BridgeAbstract
     {
         $uri = 'https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=' . urlencode($handle);
 
-        $cached = $this->cache->get($uri);
-        if ($cached !== null && is_array($cached) === true && isset($cached['did']) === true) {
+        $cached = $this->loadCacheValue($uri);
+        if (is_array($cached) === true && isset($cached['did']) === true) {
             return (string)$cached['did'];
         }
 
@@ -714,7 +714,7 @@ final class BlueskyBridge extends BridgeAbstract
             throwClientException('Failed to resolve Bluesky handle.');
         }
 
-        $this->cache->set($uri, $data, 7 * 24 * 60 * 60);
+        $this->saveCacheValue($uri, $data, 7 * 24 * 60 * 60);
         return (string)$data['did'];
     }
 
@@ -725,8 +725,8 @@ final class BlueskyBridge extends BridgeAbstract
     {
         $uri = 'https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=' . urlencode($did);
 
-        $cached = $this->cache->get($uri);
-        if ($cached !== null && is_array($cached) === true && isset($cached['did']) === true) {
+        $cached = $this->loadCacheValue($uri);
+        if (is_array($cached) === true && isset($cached['did']) === true) {
             return $cached;
         }
 
@@ -741,7 +741,7 @@ final class BlueskyBridge extends BridgeAbstract
         }
 
         if (isset($data['did']) === true && (string)$data['did'] === $did) {
-            $this->cache->set($uri, $data, 86400);
+            $this->saveCacheValue($uri, $data, 86400);
         }
 
         return $data;

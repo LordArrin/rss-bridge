@@ -168,10 +168,6 @@ function media_embed_fetch_binary(
             // Fall back to direct fetch
             $response = getContents($url, [], [], true);
 
-            if (is_string($response) === true) {
-                throw new \RuntimeException('Unexpected string response');
-            }
-
             $body = $response->getBody();
 
             if ($body === '') {
@@ -180,7 +176,7 @@ function media_embed_fetch_binary(
 
             $headers = $response->getHeaders();
             $contentType = $headers['content-type'][0] ?? 'application/octet-stream';
-            $type = trim(explode(';', (string) $contentType)[0]);
+            $type = trim(explode(';', $contentType)[0]);
 
             // Sanitize images to strip EXIF and neutralize polyglot attacks
             if (str_starts_with($type, 'image/') === true) {

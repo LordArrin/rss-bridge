@@ -83,10 +83,10 @@ $container['logger'] = function () {
 
     // Reading logging config directly from environment with explicit checks
     $filePathRaw = getenv('LOG_FILE_PATH');
-    $filePath = ($filePathRaw !== false && $filePathRaw !== '') ? (string) $filePathRaw : '';
+    $filePath = ($filePathRaw !== false && $filePathRaw !== '') ? $filePathRaw : '';
 
     $fileLevelRaw = getenv('LOG_FILE_LEVEL');
-    $fileLevel = ($fileLevelRaw !== false && $fileLevelRaw !== '') ? (string) $fileLevelRaw : '';
+    $fileLevel = ($fileLevelRaw !== false && $fileLevelRaw !== '') ? $fileLevelRaw : '';
 
     if ($filePath !== '' && $fileLevel !== '') {
         $level = array_flip(Logger::LEVEL_NAMES)[strtoupper($fileLevel)] ?? Logger::INFO;
@@ -102,7 +102,7 @@ $container['cache'] = function ($c) {
     // CacheFactory::create() now handles reading CACHE_TYPE internally if null is passed.
     // We pass it explicitly here for clarity, falling back to null if not set.
     $cacheTypeRaw = getenv('CACHE_TYPE');
-    $cacheType = ($cacheTypeRaw !== false && $cacheTypeRaw !== '') ? (string) $cacheTypeRaw : null;
+    $cacheType = ($cacheTypeRaw !== false && $cacheTypeRaw !== '') ? $cacheTypeRaw : null;
 
     return $cacheFactory->create($cacheType);
 };

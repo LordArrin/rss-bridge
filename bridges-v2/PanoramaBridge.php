@@ -88,13 +88,13 @@ final class PanoramaBridge extends BridgeAbstract
     private function fetchHtmlCached(string $url, int $ttl): ?\Dom\HTMLDocument
     {
         $cacheKey = 'panorama_article_' . md5($url);
-        $cachedHtml = $this->cache->get($cacheKey);
+        $cachedHtml = $this->loadCacheValue($cacheKey);
 
         if ($cachedHtml === null) {
             try {
                 $htmlString = getContents($url);
                 if ($htmlString !== '') {
-                    $this->cache->set($cacheKey, $htmlString, $ttl);
+                    $this->saveCacheValue($cacheKey, $htmlString, $ttl);
                     $cachedHtml = $htmlString;
                 }
             } catch (\Exception $e) {
@@ -185,7 +185,7 @@ final class PanoramaBridge extends BridgeAbstract
     private function extractPreviewTitle(\Dom\Element $card): string
     {
         $titleDiv = $card->querySelector('div.font-semibold');
-        return $titleDiv !== null ? trim($titleDiv->textContent) : '';
+        return $titleDiv !== null ? trim((string) $titleDiv->textContent) : '';
     }
 
     private function extractPreviewImage(\Dom\Element $card): string
@@ -195,7 +195,7 @@ final class PanoramaBridge extends BridgeAbstract
             return '';
         }
 
-        $src = $imgTag->getAttribute('src');
+        $src = $imgTag->getAttribute('src') ?? '';
         return $src !== '' ? $this->normalizeUrl($src) : '';
     }
 
@@ -203,12 +203,12 @@ final class PanoramaBridge extends BridgeAbstract
     {
         $h1 = $articleHTML->querySelector('h1[itemprop="headline"]');
         if ($h1 !== null) {
-            return trim($h1->textContent);
+            return trim((string) $h1->textContent);
         }
 
         $ogTitle = $articleHTML->querySelector('meta[property="og:title"]');
         if ($ogTitle !== null) {
-            $content = $ogTitle->getAttribute('content');
+            $content = (string) ($ogTitle->getAttribute('content') ?? '');
             return $content !== '' ? trim($content) : $fallbackTitle;
         }
 
@@ -219,7 +219,7 @@ final class PanoramaBridge extends BridgeAbstract
     {
         $publishedTime = $articleHTML->querySelector('meta[property="article:published_time"]');
         if ($publishedTime !== null) {
-            $content = $publishedTime->getAttribute('content');
+            $content = (string) ($publishedTime->getAttribute('content') ?? '');
             if ($content !== '') {
                 $timestamp = strtotime($content);
                 if ($timestamp !== false) {
@@ -235,7 +235,7 @@ final class PanoramaBridge extends BridgeAbstract
     {
         $authorTag = $articleHTML->querySelector('meta[property="article:author"]');
         if ($authorTag !== null) {
-            $content = $authorTag->getAttribute('content');
+            $content = (string) ($authorTag->getAttribute('content') ?? '');
             return $content !== '' ? $content : self::DEFAULT_AUTHOR;
         }
 
@@ -246,7 +246,7 @@ final class PanoramaBridge extends BridgeAbstract
     {
         $ogImage = $articleHTML->querySelector('meta[property="og:image"]');
         if ($ogImage !== null) {
-            $content = $ogImage->getAttribute('content');
+            $content = (string) ($ogImage->getAttribute('content') ?? '');
             if ($content !== '') {
                 $imageUrl = trim($content);
                 if ($imageUrl !== '') {
@@ -287,12 +287,12 @@ final class PanoramaBridge extends BridgeAbstract
                 $junk->remove();
             }
 
-            return $contentElem->innerHTML;
+            return (string) $contentElem->innerHTML;
         }
 
         $ogDesc = $articleHTML->querySelector('meta[property="og:description"]');
         if ($ogDesc !== null) {
-            $content = $ogDesc->getAttribute('content');
+            $content = (string) ($ogDesc->getAttribute('content') ?? '');
             if ($content !== '') {
                 $description = trim($content);
                 if ($description !== '') {

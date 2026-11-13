@@ -70,7 +70,7 @@ abstract class FormatAbstract implements FormatInterface
             if ($item instanceof FeedItem) {
                 $this->items[] = $item;
             } else {
-                $this->items[] = FeedItem::fromArray((array) $item);
+                $this->items[] = FeedItem::fromArray($item);
             }
         }
     }

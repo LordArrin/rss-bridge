@@ -59,7 +59,7 @@ abstract class NginxBase extends BridgeAbstract
     public function collectData(): void
     {
         $source = $this->getInput('source');
-        $limit = (int)$this->getInput('limit');
+        $limit = (int) $this->getInput('limit');
         if ($limit === 0) {
             $limit = 20;
         }
@@ -103,7 +103,7 @@ abstract class NginxBase extends BridgeAbstract
             }
 
             $version = $m[1];
-            $changes = preg_replace($replacePattern, '', $block);
+            $changes = (string) preg_replace($replacePattern, '', $block);
 
             $items = $this->parseChangeItems($changes);
             $categories = $this->groupItemsByCategory($items);
@@ -153,8 +153,8 @@ abstract class NginxBase extends BridgeAbstract
 
     private function normalizeItem(string $item): string
     {
-        $item = preg_replace('/Thanks to [^.]+\./', '', $item);
-        $item = preg_replace('/\s+/', ' ', trim($item));
+        $item = (string) preg_replace('/Thanks to [^.]+\./', '', $item);
+        $item = (string) preg_replace('/\s+/', ' ', trim($item));
 
         if (preg_match('/^(\w+):\s*(.+)$/', $item, $m) === 1) {
             return $m[1] . ': ' . $this->capitalizeFirst($m[2]);
@@ -181,7 +181,7 @@ abstract class NginxBase extends BridgeAbstract
         $categories = [];
         foreach ($items as $item) {
             if (preg_match('/^(\w+):\s*/', $item, $m) === 1) {
-                $categories[$m[1]][] = preg_replace('/^\w+:\s*/', '', $item);
+                $categories[$m[1]][] = (string) preg_replace('/^\w+:\s*/', '', $item);
             } else {
                 $categories['Other'][] = $item;
             }
@@ -245,8 +245,8 @@ abstract class NginxBase extends BridgeAbstract
                 continue;
             }
 
-            $dateText = trim($cells[0]->textContent);
-            $content = trim($cells[1]->innerHTML);
+            $dateText = trim((string) $cells[0]->textContent);
+            $content = trim((string) $cells[1]->innerHTML);
 
             if ($dateText === '' || $content === '') {
                 continue;
@@ -260,11 +260,11 @@ abstract class NginxBase extends BridgeAbstract
             if ($wrapper !== null) {
                 foreach ($wrapper->querySelectorAll('a[href]') as $link) {
                     $href = $link->getAttribute('href');
-                    if ($href !== '' && str_starts_with($href, '/') === true) {
+                    if ($href !== null && str_starts_with($href, '/') === true) {
                         $link->setAttribute('href', urljoin($this->getURI(), $href));
                     }
                 }
-                $content = $wrapper->innerHTML;
+                $content = (string) $wrapper->innerHTML;
             }
 
             $this->items[] = [

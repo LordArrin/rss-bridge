@@ -102,7 +102,7 @@ final class DomTagNameComparisonRule implements Rule
             return [];
         }
         foreach ($haystack->items as $item) {
-            if ($item !== null && $item->value instanceof String_ && $this->hasLowercase($item->value->value) === true) {
+            if ($item->value instanceof String_ && $this->hasLowercase($item->value->value) === true) {
                 return [$this->error($item->value->value)];
             }
         }

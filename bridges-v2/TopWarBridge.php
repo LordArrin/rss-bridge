@@ -129,9 +129,9 @@ final class TopWarBridge extends BridgeAbstract
 
     private function fixEscapedIframes(string $html): string
     {
-        $html = preg_replace('/&lt;(iframe\s[^>]*)\s*&gt;/i', '<$1>', $html);
-        $html = preg_replace('/&lt;\/iframe\s*&gt;/i', '</iframe>', $html);
-        $html = preg_replace('/<[\x{200B}-\x{200D}\x{FEFF}\x{200C}]iframe/iu', '<iframe', $html);
+        $html = preg_replace('/&lt;(iframe\s[^>]*)\s*&gt;/i', '<$1>', $html) ?? $html;
+        $html = preg_replace('/&lt;\/iframe\s*&gt;/i', '</iframe>', $html) ?? $html;
+        $html = preg_replace('/<[\x{200B}-\x{200D}\x{FEFF}\x{200C}]iframe/iu', '<iframe', $html) ?? $html;
 
         return $html;
     }
@@ -146,7 +146,7 @@ final class TopWarBridge extends BridgeAbstract
                 continue;
             }
 
-            $src = $img->getAttribute('src');
+            $src = (string) ($img->getAttribute('src') ?? '');
             if ($src !== '' && str_starts_with($src, 'http') === false) {
                 $src = 'https://topwar.ru' . $src;
                 $img->setAttribute('src', $src);
@@ -163,21 +163,24 @@ final class TopWarBridge extends BridgeAbstract
 
             $nextSibling = $imgContainer->nextSibling;
 
-            while ($nextSibling !== null && $nextSibling->nodeType === XML_TEXT_NODE && trim($nextSibling->textContent ?? '') === '') {
+            while ($nextSibling !== null && $nextSibling->nodeType === XML_TEXT_NODE && trim((string) ($nextSibling->textContent ?? '')) === '') {
                 $nextSibling = $nextSibling->nextSibling;
             }
 
             if ($nextSibling instanceof \Dom\Element) {
                 $tagName = $nextSibling->tagName ?? '';
                 if ($tagName === 'div' || $tagName === 'span') {
-                    $captionText = trim($nextSibling->textContent ?? '');
+                    $captionText = trim((string) ($nextSibling->textContent ?? ''));
                     if ($captionText !== '' && strlen($captionText) < 500) {
-                        $captionWrapper = $articleBody->ownerDocument->createElement('div');
-                        $captionWrapper->setAttribute('style', 'font-size: 0.9em; margin-top: 8px; margin-bottom: 15px;');
-                        $captionWrapper->textContent = $captionText;
+                        $ownerDoc = $articleBody->ownerDocument;
+                        if ($ownerDoc !== null) {
+                            $captionWrapper = $ownerDoc->createElement('div');
+                            $captionWrapper->setAttribute('style', 'font-size: 0.9em; margin-top: 8px; margin-bottom: 15px;');
+                            $captionWrapper->textContent = $captionText;
 
-                        $imgContainer->parentNode?->insertBefore($captionWrapper, $nextSibling->nextSibling);
-                        $nextSibling->parentNode?->removeChild($nextSibling);
+                            $imgContainer->parentNode?->insertBefore($captionWrapper, $nextSibling->nextSibling);
+                            $nextSibling->parentNode?->removeChild($nextSibling);
+                        }
                     }
                 }
             }

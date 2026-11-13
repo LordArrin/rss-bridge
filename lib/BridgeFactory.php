@@ -108,8 +108,8 @@ final class BridgeFactory
         $enabledRaw = getenv('ENABLED_BRIDGES');
         $disabledRaw = getenv('DISABLED_BRIDGES');
 
-        $enabledList = $this->parseBridgeList($enabledRaw === false ? '' : (string) $enabledRaw);
-        $disabledList = $this->parseBridgeList($disabledRaw === false ? '' : (string) $disabledRaw);
+        $enabledList = $this->parseBridgeList($enabledRaw === false ? '' : $enabledRaw);
+        $disabledList = $this->parseBridgeList($disabledRaw === false ? '' : $disabledRaw);
 
         $resolvedEnabled = [];
 

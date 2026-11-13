@@ -157,6 +157,6 @@ final class CacheFactory
     private function getEnv(string $key, string $default = ''): string
     {
         $value = getenv($key);
-        return ($value !== false && $value !== '') ? (string) $value : $default;
+        return ($value !== false && $value !== '') ? $value : $default;
     }
 }

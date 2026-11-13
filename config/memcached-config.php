@@ -23,10 +23,10 @@ declare(strict_types=1);
 
 // Read normalized environment variables (set by /bin/load-env)
 $cacheTypeRaw = getenv('CACHE_TYPE');
-$cacheType = ($cacheTypeRaw !== false && $cacheTypeRaw !== '') ? (string) $cacheTypeRaw : 'memcached';
+$cacheType = ($cacheTypeRaw !== false && $cacheTypeRaw !== '') ? $cacheTypeRaw : 'memcached';
 
 $memcachedTypeRaw = getenv('CACHE_MEMCACHED_TYPE');
-$memcachedType = ($memcachedTypeRaw !== false && $memcachedTypeRaw !== '') ? (string) $memcachedTypeRaw : 'internal';
+$memcachedType = ($memcachedTypeRaw !== false && $memcachedTypeRaw !== '') ? $memcachedTypeRaw : 'internal';
 
 // If caching is disabled or uses a different backend, output safe defaults
 // and exit cleanly so the calling shell script doesn't fail.
@@ -43,7 +43,7 @@ if ($memcachedType === 'internal') {
 
     // Tuning settings (already validated and canonicalized by /bin/load-env)
     $memoryRaw = getenv('MEMCACHED_MEMORY');
-    $memory = ($memoryRaw !== false && $memoryRaw !== '') ? (string) $memoryRaw : '512m';
+    $memory = ($memoryRaw !== false && $memoryRaw !== '') ? $memoryRaw : '512m';
 
     $maxConnectionsRaw = getenv('MEMCACHED_CONNECTIONS');
     $maxConnections = ($maxConnectionsRaw !== false && $maxConnectionsRaw !== '') ? (int) $maxConnectionsRaw : 1024;
@@ -64,7 +64,6 @@ if ($memcachedType === 'internal') {
         $memBytes = match ($memSuffix) {
             'm' => $memValue * 1048576,
             'g' => $memValue * 1073741824,
-            default => $memValue * 1048576, // Fallback to MB
         };
 
         $safeItemBytes = (int) floor($memBytes * 0.45);
@@ -101,7 +100,7 @@ if ($memcachedType === 'internal') {
 } else {
     // External mode: read settings from environment variables
     $hostRaw = getenv('CACHE_MEMCACHED_HOST');
-    $host = ($hostRaw !== false && $hostRaw !== '') ? (string) $hostRaw : '127.0.0.1';
+    $host = ($hostRaw !== false && $hostRaw !== '') ? $hostRaw : '127.0.0.1';
 
     $portRaw = getenv('CACHE_MEMCACHED_PORT');
     $port = ($portRaw !== false && $portRaw !== '') ? (int) $portRaw : 11211;
