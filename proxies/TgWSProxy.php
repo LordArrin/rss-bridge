@@ -55,7 +55,8 @@ final class TgWSProxy extends ProxyAbstract
 
     protected function initialize(): void
     {
-        $this->proxyUrl = $this->config['socks_url'] ?? null;
+        $socksUrl = $this->config['socks_url'] ?? null;
+        $this->proxyUrl = is_string($socksUrl) === true && $socksUrl !== '' ? $socksUrl : null;
 
         if (isset($this->config['connect_timeout']) === false) {
             $this->config['connect_timeout'] = 5;
@@ -76,10 +77,10 @@ final class TgWSProxy extends ProxyAbstract
         $this->log('info', sprintf(
             'TgWSProxy initialized: proxy=%s, connect_timeout=%ds, request_timeout=%ds, retries=%d, budget=%ds, fallback_direct=%s',
             $this->maskProxyUrl($this->proxyUrl),
-            (int) $this->config['connect_timeout'],
-            (int) $this->config['request_timeout'],
-            (int) $this->config['retries'],
-            (int) $this->config['budget_seconds'],
+            self::toInt($this->config['connect_timeout'], 5),
+            self::toInt($this->config['request_timeout'], 20),
+            self::toInt($this->config['retries'], 2),
+            self::toInt($this->config['budget_seconds'], self::MAX_BUDGET_SECONDS),
             $this->config['fallback_direct'] === true ? 'yes' : 'no'
         ));
     }
@@ -146,30 +147,36 @@ final class TgWSProxy extends ProxyAbstract
      */
     private function buildUrl(array $parsed): string
     {
-        $url = $parsed['scheme'] . '://';
+        $url = self::toString($parsed['scheme'] ?? 'https', 'https') . '://';
 
-        if (isset($parsed['user']) === true) {
-            $url .= $parsed['user'];
-            if (isset($parsed['pass']) === true) {
-                $url .= ':' . $parsed['pass'];
+        $user = self::toString($parsed['user'] ?? '');
+        if ($user !== '') {
+            $url .= $user;
+            $pass = self::toString($parsed['pass'] ?? '');
+            if ($pass !== '') {
+                $url .= ':' . $pass;
             }
             $url .= '@';
         }
 
-        $url .= $parsed['host'];
+        $url .= self::toString($parsed['host'] ?? '');
 
-        if (isset($parsed['port']) === true) {
-            $url .= ':' . $parsed['port'];
+        $port = self::toInt($parsed['port'] ?? 0, 0);
+        if ($port > 0) {
+            $url .= ':' . $port;
         }
 
-        $url .= $parsed['path'] ?? '/';
+        $path = self::toString($parsed['path'] ?? '/');
+        $url .= $path !== '' ? $path : '/';
 
-        if (isset($parsed['query']) === true) {
-            $url .= '?' . $parsed['query'];
+        $query = self::toString($parsed['query'] ?? '');
+        if ($query !== '') {
+            $url .= '?' . $query;
         }
 
-        if (isset($parsed['fragment']) === true) {
-            $url .= '#' . $parsed['fragment'];
+        $fragment = self::toString($parsed['fragment'] ?? '');
+        if ($fragment !== '') {
+            $url .= '#' . $fragment;
         }
 
         return $url;
@@ -178,6 +185,10 @@ final class TgWSProxy extends ProxyAbstract
     private function assertPort443(string $url): void
     {
         $parsed = parse_url($url);
+        if ($parsed === false) {
+            return;
+        }
+
         $scheme = strtolower($parsed['scheme'] ?? 'https');
         $port = $parsed['port'] ?? ($scheme === 'https' ? 443 : 80);
 
@@ -296,11 +307,11 @@ final class TgWSProxy extends ProxyAbstract
             throw $e;
         }
 
-        $connectTimeout = (int) ($this->config['connect_timeout'] ?? 5);
-        $requestTimeout = (int) ($this->config['request_timeout'] ?? 20);
-        $maxRetries = (int) ($this->config['retries'] ?? 2);
+        $connectTimeout = self::toInt($this->config['connect_timeout'] ?? 5, 5);
+        $requestTimeout = self::toInt($this->config['request_timeout'] ?? 20, 20);
+        $maxRetries = self::toInt($this->config['retries'] ?? 2, 2);
         $budget = min(
-            max(1, (int) ($this->config['budget_seconds'] ?? self::MAX_BUDGET_SECONDS)),
+            max(1, self::toInt($this->config['budget_seconds'] ?? self::MAX_BUDGET_SECONDS, self::MAX_BUDGET_SECONDS)),
             self::MAX_BUDGET_SECONDS
         );
         $deadline = microtime(true) + $budget;
@@ -440,17 +451,19 @@ final class TgWSProxy extends ProxyAbstract
             throw $e;
         }
 
-        $cacheTtl = $options['cache_ttl'] ?? 86400;
-        $useCache = $options['use_cache'] ?? true;
+        $cacheTtl = self::toInt($options['cache_ttl'] ?? 86400, 86400);
+        $useCache = self::toBool($options['use_cache'] ?? true, true);
 
+        /** @var array{fresh: mixed, stale: mixed} $cached */
         $cached = ['fresh' => null, 'stale' => null];
 
         if ($useCache === true && $this->cache instanceof \RSSBridge\Caches\CacheInterface) {
             $cacheKey = $this->buildCacheKey('binary_' . $url, $options);
             $cached = $this->cache->getWithStale($cacheKey);
 
-            if ($this->isValidBinaryPayload($cached['fresh']) === true) {
-                return $cached['fresh'];
+            $fresh = $this->normalizeBinaryPayload($cached['fresh']);
+            if ($fresh !== null) {
+                return $fresh;
             }
         }
 
@@ -468,17 +481,16 @@ final class TgWSProxy extends ProxyAbstract
 
             return $payload;
         } catch (\Throwable $e) {
-            if (
-                $useCache === true
-                && $this->cache instanceof \RSSBridge\Caches\CacheInterface
-                && $this->isValidBinaryPayload($cached['stale']) === true
-            ) {
-                $this->log('warning', sprintf(
-                    'Returning stale binary cache for %s due to proxy error: %s',
-                    $url,
-                    $e->getMessage()
-                ));
-                return $cached['stale'];
+            if ($useCache === true && $this->cache instanceof \RSSBridge\Caches\CacheInterface) {
+                $stale = $this->normalizeBinaryPayload($cached['stale']);
+                if ($stale !== null) {
+                    $this->log('warning', sprintf(
+                        'Returning stale binary cache for %s due to proxy error: %s',
+                        $url,
+                        $e->getMessage()
+                    ));
+                    return $stale;
+                }
             }
 
             throw $e;
@@ -491,14 +503,14 @@ final class TgWSProxy extends ProxyAbstract
      */
     private function doFetchBinaryInternal(string $url, array $options): array
     {
-        $connectTimeout = (int) ($this->config['connect_timeout'] ?? 5);
+        $connectTimeout = self::toInt($this->config['connect_timeout'] ?? 5, 5);
         $requestTimeout = min(
-            (int) ($options['timeout'] ?? ($this->config['binary_request_timeout'] ?? 30)),
+            self::toInt($options['timeout'] ?? ($this->config['binary_request_timeout'] ?? 30), 30),
             60
         );
-        $maxRetries = (int) ($this->config['retries'] ?? 2);
+        $maxRetries = self::toInt($this->config['retries'] ?? 2, 2);
         $budget = min(
-            max(1, (int) ($this->config['budget_seconds'] ?? self::MAX_BUDGET_SECONDS)),
+            max(1, self::toInt($this->config['budget_seconds'] ?? self::MAX_BUDGET_SECONDS, self::MAX_BUDGET_SECONDS)),
             self::MAX_BUDGET_SECONDS
         );
         $deadline = microtime(true) + $budget;

@@ -313,6 +313,84 @@ final class CurlHttpClient implements HttpClient
     }
 
     /**
+     * Reads a mixed config value as int.
+     */
+    private static function toInt(mixed $value, int $default): int
+    {
+        if (is_int($value) === true) {
+            return $value;
+        }
+        if (is_float($value) === true) {
+            return (int) $value;
+        }
+        if (is_string($value) === true && is_numeric($value) === true) {
+            return (int) $value;
+        }
+        if (is_bool($value) === true) {
+            return $value === true ? 1 : 0;
+        }
+        return $default;
+    }
+
+    /**
+     * Reads a mixed config value as float.
+     */
+    private static function toFloat(mixed $value, float $default): float
+    {
+        if (is_float($value) === true) {
+            return $value;
+        }
+        if (is_int($value) === true) {
+            return (float) $value;
+        }
+        if (is_string($value) === true && is_numeric($value) === true) {
+            return (float) $value;
+        }
+        return $default;
+    }
+
+    /**
+     * Reads a mixed scalar as string (non-scalar values become '').
+     */
+    private static function scalarToString(mixed $value): string
+    {
+        if (is_string($value) === true) {
+            return $value;
+        }
+        if (is_int($value) === true || is_float($value) === true) {
+            return (string) $value;
+        }
+        if (is_bool($value) === true) {
+            return $value === true ? '1' : '';
+        }
+        return '';
+    }
+
+    /**
+     * Normalizes caller-supplied cURL options to integer keys.
+     * Non-numeric string keys are skipped instead of collapsing to 0.
+     *
+     * @return array<int, mixed>
+     */
+    private static function normalizeCurlOptions(mixed $options): array
+    {
+        if (is_array($options) === false) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($options as $key => $value) {
+            if (is_int($key) === true) {
+                $normalized[$key] = $value;
+            } elseif (is_numeric($key) === true) {
+                $normalized[(int) $key] = $value;
+            }
+        }
+
+        return $normalized;
+    }
+
+    /**
      * Gets the CURL_IMPERSONATE environment variable target.
      */
     public static function getImpersonateTarget(): ?string
@@ -335,7 +413,7 @@ final class CurlHttpClient implements HttpClient
         if (array_key_exists($opt, $curlOptions) === false) {
             return false;
         }
-        $explicit = strtolower(trim((string)$curlOptions[$opt]));
+        $explicit = strtolower(trim(self::scalarToString($curlOptions[$opt])));
         return $explicit === '' || $explicit === 'none';
     }
 
@@ -690,8 +768,7 @@ final class CurlHttpClient implements HttpClient
 
         $resolveEntries = $this->buildResolveEntries($url, $ssrfCheck === true);
 
-        $curlOptionsRaw = $config['curl_options'] ?? [];
-        $optOutRequested = is_array($curlOptionsRaw) === true ? self::isOptOut($curlOptionsRaw) : false;
+        $optOutRequested = self::isOptOut(self::normalizeCurlOptions($config['curl_options'] ?? []));
         $savedEnv = null;
         if ($optOutRequested === true && getenv('CURL_IMPERSONATE') !== false) {
             $savedEnv = (string)getenv('CURL_IMPERSONATE');
@@ -730,7 +807,9 @@ final class CurlHttpClient implements HttpClient
         ?string $savedEnv
     ): Response {
         if ($optOutRequested === true) {
-            $config['curl_options'][self::impersonateOption()] = '';
+            $impersonateOptions = self::normalizeCurlOptions($config['curl_options'] ?? []);
+            $impersonateOptions[self::impersonateOption()] = '';
+            $config['curl_options'] = $impersonateOptions;
         }
 
         $defaultConfig = [
@@ -751,20 +830,25 @@ final class CurlHttpClient implements HttpClient
 
         $config = array_merge($defaultConfig, $config);
 
-        $budget = ((int)$config['timeout'] * (1 + (int)$config['retries'])) * 1.35;
+        // Resolve the mixed config scalars once, then reuse the typed locals.
+        $timeoutSeconds = self::toInt($config['timeout'] ?? 5, 5);
+        $retryCount = self::toInt($config['retries'] ?? 2, 2);
+        $connectTimeout = self::toInt($config['connect_timeout'] ?? null, min(10, intdiv($timeoutSeconds, 2)));
+
+        $budget = ($timeoutSeconds * (1 + $retryCount)) * 1.35;
 
         $maxExec = (int)ini_get('max_execution_time');
         if ($maxExec > 0) {
             $budget = min($budget, max(1.0, $maxExec - 2.0));
         }
 
-        $deadline = $config['_deadline'] ?? (microtime(true) + $budget);
+        $deadline = self::toFloat($config['_deadline'] ?? null, microtime(true) + $budget);
 
         $httpHeaders = [];
         $configHeaders = $config['headers'];
         if (is_array($configHeaders) === true) {
             foreach ($configHeaders as $name => $value) {
-                $httpHeaders[] = sprintf('%s: %s', (string)$name, (string)$value);
+                $httpHeaders[] = sprintf('%s: %s', (string)$name, self::scalarToString($value));
             }
         }
 
@@ -776,8 +860,8 @@ final class CurlHttpClient implements HttpClient
             CURLOPT_RETURNTRANSFER  => true,
             CURLOPT_FOLLOWLOCATION  => false,
             CURLOPT_MAXREDIRS       => 0,
-            CURLOPT_TIMEOUT         => (int)$config['timeout'],
-            CURLOPT_CONNECTTIMEOUT  => (int)($config['connect_timeout'] ?? min(10, (int)((int)$config['timeout'] / 2))),
+            CURLOPT_TIMEOUT         => $timeoutSeconds,
+            CURLOPT_CONNECTTIMEOUT  => $connectTimeout,
             CURLOPT_NOSIGNAL        => true,
             // Advertise and transparently decode all supported content encodings.
             // Callers may override via curl_options; this is the safe default.
@@ -795,17 +879,17 @@ final class CurlHttpClient implements HttpClient
         }
 
         if ($config['if_not_modified_since'] !== null) {
-            $curlOptions[CURLOPT_TIMEVALUE] = (int)$config['if_not_modified_since'];
+            $curlOptions[CURLOPT_TIMEVALUE] = self::toInt($config['if_not_modified_since'], 0);
             $curlOptions[self::timevalueCriticalOption()] = 1;
             $curlOptions[CURLOPT_TIMECONDITION] = CURL_TIMECOND_IFMODSINCE;
         } elseif (($config['if_modified_since'] ?? null) !== null) {
-            $curlOptions[CURLOPT_TIMEVALUE] = (int)$config['if_modified_since'];
+            $curlOptions[CURLOPT_TIMEVALUE] = self::toInt($config['if_modified_since'], 0);
             $curlOptions[CURLOPT_TIMECONDITION] = CURL_TIMECOND_IFMODSINCE;
         } elseif (($config['if_unmodified_since'] ?? null) !== null) {
-            $curlOptions[CURLOPT_TIMEVALUE] = (int)$config['if_unmodified_since'];
+            $curlOptions[CURLOPT_TIMEVALUE] = self::toInt($config['if_unmodified_since'], 0);
             $curlOptions[CURLOPT_TIMECONDITION] = CURL_TIMECOND_IFUNMODSINCE;
         } elseif (($config['last_modified'] ?? null) !== null) {
-            $curlOptions[CURLOPT_TIMEVALUE] = (int)$config['last_modified'];
+            $curlOptions[CURLOPT_TIMEVALUE] = self::toInt($config['last_modified'], 0);
             $curlOptions[CURLOPT_TIMECONDITION] = CURL_TIMECOND_LASTMOD;
         }
 
@@ -823,11 +907,8 @@ final class CurlHttpClient implements HttpClient
             }
         }
 
-        $configCurlOptions = $config['curl_options'];
-        if (is_array($configCurlOptions) === true) {
-            foreach ($configCurlOptions as $option => $value) {
-                $curlOptions[(int)$option] = $value;
-            }
+        foreach (self::normalizeCurlOptions($config['curl_options'] ?? []) as $option => $value) {
+            $curlOptions[$option] = $value;
         }
 
         if ($resolveEntries !== []) {
@@ -863,7 +944,7 @@ final class CurlHttpClient implements HttpClient
 
         curl_setopt($ch, CURLOPT_HEADERFUNCTION, $headerCallback);
 
-        $maxAttempts = 1 + (int)$config['retries'];
+        $maxAttempts = 1 + $retryCount;
         $lastError = '';
         $lastErrno = 0;
         $body = false;
@@ -888,7 +969,7 @@ final class CurlHttpClient implements HttpClient
         } else {
             $transientErrnos[] = 96;
         }
-        if ((int)$config['retries'] === 0) {
+        if ($retryCount === 0) {
             $maxAttempts = 2;
         }
 
@@ -903,9 +984,11 @@ final class CurlHttpClient implements HttpClient
                 }
                 break;
             }
-            $attemptTimeout = min((int)$config['timeout'], (int)ceil($remaining));
+            $attemptTimeout = min($timeoutSeconds, (int)ceil($remaining));
+            // Honour a caller-supplied CURLOPT_CONNECTTIMEOUT override if present.
+            $effectiveConnectTimeout = self::toInt($curlOptions[CURLOPT_CONNECTTIMEOUT] ?? $connectTimeout, $connectTimeout);
             $attemptConnectTimeout = min(
-                (int)$curlOptions[CURLOPT_CONNECTTIMEOUT],
+                $effectiveConnectTimeout,
                 max(1, $attemptTimeout - 1)
             );
             curl_setopt($ch, CURLOPT_TIMEOUT, $attemptTimeout);
@@ -942,7 +1025,7 @@ final class CurlHttpClient implements HttpClient
             }
 
             $isTransient = in_array($lastErrno, $transientErrnos, true) === true;
-            if ((int)$config['retries'] === 0 && $isTransient === false) {
+            if ($retryCount === 0 && $isTransient === false) {
                 break;
             }
 
@@ -1019,7 +1102,7 @@ final class CurlHttpClient implements HttpClient
             }
 
             if (self::isSameEffectiveDomain($originalParsed['host'], $redirectParsed['host']) === true) {
-                $redirectCount = (int)($config['_redirect_count'] ?? 0);
+                $redirectCount = self::toInt($config['_redirect_count'] ?? 0, 0);
                 if ($redirectCount >= 5) {
                     throw new \HttpException(sprintf(
                         'Too many redirects for %s (SSRF protection: redirect loop detected)',
@@ -1178,7 +1261,7 @@ final class Response
         // Client errors
         400 => 'Bad Request',
         401 => 'Unauthorized',
-        402 => 'Payment Required',
+        402 => 'Not Acceptable',
         403 => 'Forbidden',
         404 => 'Not Found',
         405 => 'Method Not Allowed',

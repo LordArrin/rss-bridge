@@ -75,10 +75,49 @@ final class AsahiShimbunAJWBridge extends BridgeAbstract
                 }
             }
 
-            $item = [];
-
             $href = $element->getAttribute('href') ?? '';
+            if ($href === '') {
+                continue;
+            }
+
+            $item = [];
             $item['uri'] = $baseDomain . $href;
+
+            // Try multiple selectors for the date element
+            $dateFound = false;
+            foreach (['span.EnDate', '.date', 'time', '.time', '.datetime'] as $selector) {
+                $eDate = $element->querySelector($selector);
+                if ($eDate !== null) {
+                    $dateText = trim($eDate->textContent ?? '');
+                    if ($dateText !== '') {
+                        $parsed = strtotime($dateText);
+                        if ($parsed !== false) {
+                            $item['timestamp'] = $parsed;
+                        }
+                    }
+                    $eDate->remove();
+                    $dateFound = true;
+                    break;
+                }
+            }
+
+            // If no dedicated date element found, try to extract from the text itself
+            if ($dateFound === false) {
+                $fullText = trim($element->textContent ?? '');
+                if (preg_match('/(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}/', $fullText, $matches) === 1) {
+                    $parsed = strtotime($matches[0]);
+                    if ($parsed !== false) {
+                        $item['timestamp'] = $parsed;
+                    }
+                }
+            }
+
+            $isVideo = false;
+            $eVideo = $element->querySelector('span.EnVideo');
+            if ($eVideo !== null) {
+                $eVideo->remove();
+                $isVideo = true;
+            }
 
             $eLead = $element->querySelector('span.Lead');
             if ($eLead !== null) {
@@ -88,22 +127,8 @@ final class AsahiShimbunAJWBridge extends BridgeAbstract
                 $item['content'] = $element->innerHTML ?? '';
             }
 
-            $eDate = $element->querySelector('span.EnDate');
-            if ($eDate !== null) {
-                $dateText = trim($eDate->textContent ?? '');
-                if ($dateText !== '') {
-                    $parsed = strtotime($dateText);
-                    if ($parsed !== false) {
-                        $item['timestamp'] = $parsed;
-                    }
-                }
-                $eDate->remove();
-            }
-
-            $eVideo = $element->querySelector('span.EnVideo');
-            if ($eVideo !== null) {
-                $eVideo->remove();
-                $element->innerHTML = 'VIDEO: ' . ($element->innerHTML ?? '');
+            if ($isVideo === true) {
+                $item['content'] = 'VIDEO: ' . $item['content'];
             }
 
             $eTitle = $element->querySelector('.title');
@@ -113,7 +138,7 @@ final class AsahiShimbunAJWBridge extends BridgeAbstract
                 $item['title'] = trim($element->innerHTML ?? '');
             }
 
-            if ($item['title'] === '' || $href === '') {
+            if ($item['title'] === '') {
                 continue;
             }
 

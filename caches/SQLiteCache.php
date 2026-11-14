@@ -50,13 +50,14 @@ final class SQLiteCache extends AbstractCache
 
         $config = array_merge($default, $config);
 
-        if ((bool) $config['file'] === false) {
+        $fileRaw = $config['file'] ?? null;
+        if (is_string($fileRaw) === false || $fileRaw === '') {
             throw new \Exception('SQLiteCache needs a file path');
         }
 
         $this->enablePurge = (bool) $config['enable_purge'];
 
-        $file = (string) $config['file'];
+        $file = $fileRaw;
 
         $dir = dirname($file);
         if ($dir === '.') {
@@ -84,8 +85,16 @@ final class SQLiteCache extends AbstractCache
         // workers racing to initialize the schema on first requests would hit
         // SQLITE_BUSY immediately and crash the request with an uncaught
         // "database is locked" exception.
-        $this->db->busyTimeout((int) $config['timeout']);
-        $this->busyTimeoutMs = (int) $config['timeout'];
+        $timeoutRaw = $config['timeout'] ?? 5000;
+        $timeoutMs = 5000;
+        if (is_int($timeoutRaw) === true) {
+            $timeoutMs = $timeoutRaw;
+        } elseif (is_string($timeoutRaw) === true && is_numeric($timeoutRaw) === true) {
+            $timeoutMs = (int) $timeoutRaw;
+        }
+
+        $this->db->busyTimeout($timeoutMs);
+        $this->busyTimeoutMs = $timeoutMs;
 
         // WAL mode for better concurrent access. Must be set before creating
         // tables so the whole database is born in WAL. It still needs the
@@ -189,10 +198,20 @@ final class SQLiteCache extends AbstractCache
             $result = $stmt->execute();
             $row = $result !== false ? $result->fetchArray(\SQLITE3_ASSOC) : false;
 
-            if ($row !== false && (int) $row['expiration'] > $now) {
-                // Live lease held by another worker.
-                $this->db->exec('ROLLBACK');
-                return false;
+            if ($row !== false) {
+                $expirationRaw = $row['expiration'] ?? 0;
+                $expiration = 0;
+                if (is_int($expirationRaw) === true) {
+                    $expiration = $expirationRaw;
+                } elseif (is_string($expirationRaw) === true && is_numeric($expirationRaw) === true) {
+                    $expiration = (int) $expirationRaw;
+                }
+
+                if ($expiration > $now) {
+                    // Live lease held by another worker.
+                    $this->db->exec('ROLLBACK');
+                    return false;
+                }
             }
 
             $upsert = $this->db->prepare(
@@ -259,7 +278,14 @@ final class SQLiteCache extends AbstractCache
             return ['fresh' => null, 'stale' => null];
         }
 
-        $hardExpiration = (int) $row['expiration'];
+        $expirationRaw = $row['expiration'] ?? 0;
+        $hardExpiration = 0;
+        if (is_int($expirationRaw) === true) {
+            $hardExpiration = $expirationRaw;
+        } elseif (is_string($expirationRaw) === true && is_numeric($expirationRaw) === true) {
+            $hardExpiration = (int) $expirationRaw;
+        }
+
         $now = time();
 
         // Hard-expired: data is too old even for stale serving
@@ -267,7 +293,8 @@ final class SQLiteCache extends AbstractCache
             return ['fresh' => null, 'stale' => null];
         }
 
-        $blob = (string) $row['value'];
+        $valueRaw = $row['value'] ?? '';
+        $blob = is_string($valueRaw) === true ? $valueRaw : '';
 
         // Use AbstractCache::decode() for JSON deserialization
         $decoded = $this->decode($blob, $key);

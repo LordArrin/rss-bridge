@@ -17,9 +17,10 @@ final class OglafBridge extends FeedExpander
     public const PARAMETERS = [
         '' => [
             'limit' => [
-                'name' => 'limit (max 20)',
+                'name' => 'Limit',
                 'type' => 'number',
                 'defaultValue' => 10,
+                'title' => 'Maximum number of posts to fetch, max 20',
                 'required' => true,
             ]
         ]

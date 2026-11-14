@@ -76,31 +76,92 @@ final class BastaBridge extends BridgeAbstract
                 }
             }
 
-            $content = $this->fetchArticleContent($uri);
+            $articleData = $this->fetchArticleData($uri);
 
             $this->items[] = [
                 'title'     => $title,
                 'uri'       => $uri,
                 'timestamp' => $timestamp,
-                'content'   => $content,
+                'author'    => $articleData['author'],
+                'content'   => $articleData['content'],
             ];
 
             $count++;
         }
     }
 
-    private function fetchArticleContent(string $uri): string
+    /**
+     * @return array{content: string, author: string}
+     */
+    private function fetchArticleData(string $uri): array
     {
         $html = getContents($uri);
         if ($html === '') {
-            return '';
+            return ['content' => '', 'author' => ''];
         }
 
         libxml_use_internal_errors(true);
         $dom = \Dom\HTMLDocument::createFromString($html);
         libxml_use_internal_errors(false);
 
+        // Extract author before modifying the DOM
+        $author = '';
+        $authorBlock = $dom->querySelector('.mb-1.c-cartouche-authors');
+        if ($authorBlock !== null) {
+            $author = trim($authorBlock->textContent ?? '');
+        }
+
+        // Main article container. Falls back to the legacy SPIP "div.texte"
+        // for older layouts.
+        $content = $dom->querySelector('.o-main-content.o-content');
+        if ($content === null) {
+            $content = $dom->querySelector('div.texte');
+        }
+        if ($content === null) {
+            return ['content' => '', 'author' => $author];
+        }
+
+        $this->removeJunk($content);
+        $this->normalizeMedia($content);
+        $this->resolveRelativeUrls($content);
+
+        return [
+            'content' => $content->innerHTML,
+            'author' => $author,
+        ];
+    }
+
+    /**
+     * Removes site chrome and promotional blocks, but KEEPS the article's own
+     * photo blocks (.o-content-logo lead image and .spip_document inline photos).
+     */
+    private function removeJunk(\Dom\Element $content): void
+    {
         $junkSelectors = [
+            // Structural chrome around the body.
+            '.o-content-footer',
+            '.o-content-aside',
+            'aside',
+            'form',
+            '.ajax-form-container',
+            '.formulaire_spip',
+
+            // Interactive maps and embedded widgets.
+            '.carto',
+            'iframe',
+
+            // Donation / newsletter / "Sur le même sujet" widgets.
+            '.c-call--don',
+            '.c-call--newsletter',
+            '.c-call--modele',
+            '.c-encart',
+            '.c-encart--liens',
+            '.c-encart--memesujet',
+            '.c-encart--memesujet-logo',
+            '.o-push',
+            '.o-push--aside',
+
+            // Legacy related-content blocks.
             '.sur-le-meme-sujet',
             '.meme-sujet',
             '.same-topic',
@@ -110,37 +171,131 @@ final class BastaBridge extends BridgeAbstract
             '.related-articles',
             '.articles-lies',
             '[data-role="related"]',
-            'svg[aria-hidden="true"]',
-            '.spip_document',
+
+            // Inline markup that has no place in a feed.
+            'script',
+            'style',
+            'noscript',
+            'svg',
+            '.fb-like',
+            '.twitter-tweet',
         ];
 
         foreach ($junkSelectors as $selector) {
-            foreach ($dom->querySelectorAll($selector) as $junk) {
+            foreach (iterator_to_array($content->querySelectorAll($selector)) as $junk) {
                 $junk->remove();
             }
         }
-
-        $this->resolveRelativeUrls($dom->documentElement);
-
-        $texte = $dom->querySelector('div.texte');
-        if ($texte === null) {
-            return '';
-        }
-
-        return $texte->innerHTML;
     }
 
-    private function resolveRelativeUrls(?\Dom\Element $container): void
+    /**
+     * Feed readers do not understand <picture>/srcset. Unwrap <picture> into its
+     * fallback <img>, restore lazy-loaded sources, and drop the responsive
+     * attributes so only a plain absolute src remains.
+     */
+    private function normalizeMedia(\Dom\Element $content): void
     {
-        if ($container === null) {
+        foreach (iterator_to_array($content->querySelectorAll('picture')) as $picture) {
+            $parent = $picture->parentNode;
+            if ($parent === null) {
+                continue;
+            }
+            $img = $picture->querySelector('img');
+            if ($img !== null) {
+                $parent->insertBefore($img, $picture);
+            }
+            $picture->remove();
+        }
+
+        foreach ($content->querySelectorAll('img') as $img) {
+            $this->restoreLazyImage($img);
+
+            foreach (['srcset', 'sizes', 'loading', 'onload', 'style', 'class', 'data-src', 'data-srcset'] as $attr) {
+                if ($img->hasAttribute($attr) === true) {
+                    $img->removeAttribute($attr);
+                }
+            }
+
+            $img->setAttribute('style', 'max-width:100%;height:auto;');
+        }
+    }
+
+    /**
+     * Replaces a placeholder src (empty or data: URI) with the real image URL
+     * found in one of the lazy-loading attributes.
+     */
+    private function restoreLazyImage(\Dom\Element $img): void
+    {
+        $src = $img->getAttribute('src') ?? '';
+        if ($src !== '' && str_starts_with($src, 'data:') === false) {
             return;
         }
 
+        foreach (['data-src', 'data-original', 'data-lazy-src', 'data-cfsrc'] as $attr) {
+            $candidate = $img->getAttribute($attr);
+            if (
+                $candidate !== null
+                && $candidate !== ''
+                && str_starts_with($candidate, 'data:') === false
+            ) {
+                $img->setAttribute('src', $candidate);
+                return;
+            }
+        }
+
+        foreach (['data-srcset', 'srcset'] as $attr) {
+            $candidate = $img->getAttribute($attr);
+            if ($candidate === null || $candidate === '') {
+                continue;
+            }
+            $url = self::bestSrcsetUrl($candidate);
+            if ($url !== null) {
+                $img->setAttribute('src', $url);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Picks the largest candidate from a srcset attribute.
+     */
+    private static function bestSrcsetUrl(string $srcset): ?string
+    {
+        $best = null;
+        $bestWidth = -1;
+
+        foreach (explode(',', $srcset) as $candidate) {
+            $parts = preg_split('/\s+/', trim($candidate));
+            if ($parts === false || $parts === [] || $parts[0] === '') {
+                continue;
+            }
+
+            $url = $parts[0];
+            if (str_starts_with($url, 'data:') === true) {
+                continue;
+            }
+
+            $width = -1;
+            if (isset($parts[1]) === true && preg_match('/^(\d+)w$/', $parts[1], $m) === 1) {
+                $width = (int) $m[1];
+            }
+
+            if ($width >= $bestWidth) {
+                $bestWidth = $width;
+                $best = $url;
+            }
+        }
+
+        return $best;
+    }
+
+    private function resolveRelativeUrls(\Dom\Element $container): void
+    {
         $base = self::URI;
-        $elements = $container->querySelectorAll('[src], [href]');
+        $elements = $container->querySelectorAll('[src], [href], [poster]');
 
         foreach ($elements as $el) {
-            foreach (['src', 'href'] as $attr) {
+            foreach (['src', 'href', 'poster'] as $attr) {
                 if ($el->hasAttribute($attr) === false) {
                     continue;
                 }

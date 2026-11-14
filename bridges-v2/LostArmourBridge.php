@@ -16,7 +16,7 @@ final class LostArmourBridge extends BridgeAbstract
     public const DESCRIPTION = 'Daily reports from the war in Ukraine from lostarmour.info';
     public const CACHE_TIMEOUT = 21600;
 
-    private const MIN_IMAGES = 3;
+    private const DAYS_TO_FETCH = 7;
 
     private const ELEMENTS_TO_REMOVE = [
         'header',
@@ -53,41 +53,57 @@ final class LostArmourBridge extends BridgeAbstract
     public function collectData(): void
     {
         $today = new \DateTime();
+        $foundAny = false;
 
-        for ($i = 0; $i < 3; $i++) {
+        for ($i = 0; $i < self::DAYS_TO_FETCH; $i++) {
             $date = clone $today;
             $date->sub(new \DateInterval('P' . $i . 'D'));
-            $this->collectDayData($date);
+            if ($this->collectDayData($date) === true) {
+                $foundAny = true;
+            }
+        }
+
+        if ($foundAny === false) {
+            throwServerException('No articles found in the last ' . self::DAYS_TO_FETCH . ' days. The site may have changed its URL structure or blocked the request.');
         }
     }
 
-    private function collectDayData(\DateTime $date): void
+    private function collectDayData(\DateTime $date): bool
     {
         $dateStr = $date->format('d-m-Y');
         $url = self::URI . '/summary/voyna_na_ukraine-svodka-za-' . $dateStr;
 
         try {
             $html = (string) getContents($url);
+        } catch (\HttpException $e) {
+            if ($e->getCode() === 404) {
+                return false;
+            }
+            throwServerException('Failed to fetch ' . $url . ': ' . $e->getMessage());
         } catch (\Exception $e) {
-            return;
+            throwServerException('Failed to fetch ' . $url . ': ' . $e->getMessage());
         }
 
         if ($html === '') {
-            return;
+            return false;
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        try {
+            libxml_use_internal_errors(true);
+            $dom = \Dom\HTMLDocument::createFromString($html);
+            libxml_use_internal_errors(false);
+        } catch (\Throwable $e) {
+            throwServerException('Failed to parse HTML from ' . $url . ': ' . $e->getMessage());
+        }
 
         $h1 = $dom->querySelector('h1');
         if ($h1 === null) {
-            return;
+            return false;
         }
 
         $title = trim($h1->textContent ?? '');
         if ($title === '') {
-            return;
+            return false;
         }
 
         $author = null;
@@ -107,7 +123,7 @@ final class LostArmourBridge extends BridgeAbstract
         $article = $dom->querySelector('article') ?? $dom->querySelector('main') ?? $dom->querySelector('.content') ?? $dom->querySelector('body');
 
         if ($article === null) {
-            return;
+            return false;
         }
 
         $h1 = $dom->querySelector('h1');
@@ -119,8 +135,8 @@ final class LostArmourBridge extends BridgeAbstract
         $content = $this->cleanMsOfficeMarkup($content);
         $content = $this->cleanNbsp($content);
 
-        if ($content === '' || substr_count($content, '<img ') < self::MIN_IMAGES) {
-            return;
+        if ($content === '') {
+            return false;
         }
 
         $item = [
@@ -132,6 +148,7 @@ final class LostArmourBridge extends BridgeAbstract
         ];
 
         $this->items[] = $item;
+        return true;
     }
 
     private function removeUnwantedElements(\Dom\HTMLDocument $dom): void
@@ -243,7 +260,9 @@ final class LostArmourBridge extends BridgeAbstract
                     $url = $el->getAttribute($attr);
                     if ($url !== null && $url !== '') {
                         $absoluteUrl = urljoin($baseUrl, $url);
-                        $el->setAttribute($attr, $absoluteUrl);
+                        if ($absoluteUrl !== null && $absoluteUrl !== '') {
+                            $el->setAttribute($attr, $absoluteUrl);
+                        }
                     }
                 }
             }

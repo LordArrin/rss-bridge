@@ -219,13 +219,29 @@ abstract class BridgeAbstract
 
                 switch ($type) {
                     case 'checkbox':
-                        $this->inputs[$context][$name]['value'] = $input[$context][$name]['value'] ?? false;
+                        // Preserve the legacy nested lookup, but guard every level
+                        // so mixed offsets are never accessed without a type check.
+                        $checkboxValue = false;
+                        if (isset($input[$context]) === true && is_array($input[$context]) === true) {
+                            $contextInput = $input[$context];
+                            if (isset($contextInput[$name]) === true && is_array($contextInput[$name]) === true) {
+                                $nameInput = $contextInput[$name];
+                                if (isset($nameInput['value']) === true) {
+                                    $checkboxValue = $nameInput['value'];
+                                }
+                            }
+                        }
+                        $this->inputs[$context][$name]['value'] = $checkboxValue;
                         break;
                     case 'list':
                         if (isset($parameter['defaultValue']) === false) {
-                            $firstItem = reset($parameter['values']);
-                            if (is_array($firstItem) === true) {
-                                $firstItem = reset($firstItem);
+                            $values = $parameter['values'] ?? [];
+                            $firstItem = false;
+                            if (is_array($values) === true) {
+                                $firstItem = reset($values);
+                                if (is_array($firstItem) === true) {
+                                    $firstItem = reset($firstItem);
+                                }
                             }
                             $this->inputs[$context][$name]['value'] = $firstItem;
                         } else {
@@ -291,18 +307,21 @@ abstract class BridgeAbstract
             $contextName = 'global';
         }
 
-        $needle = (string)$this->inputs[$this->queriedContext][$input]['value'];
+        $needle = self::stringify($this->inputs[$this->queriedContext][$input]['value'] ?? null);
         $values = $contexts[$contextName][$input]['values'] ?? [];
         if (is_array($values) === false) {
             return null;
         }
+
         foreach ($values as $first_level_key => $first_level_value) {
-            if (is_array($first_level_value) === false && $needle === (string)$first_level_value) {
-                return (string)$first_level_key;
-            } elseif (is_array($first_level_value) === true) {
+            if (is_array($first_level_value) === false) {
+                if ($needle === self::stringify($first_level_value)) {
+                    return (string) $first_level_key;
+                }
+            } else {
                 foreach ($first_level_value as $second_level_key => $second_level_value) {
-                    if ($needle === (string)$second_level_value) {
-                        return (string)$second_level_key;
+                    if ($needle === self::stringify($second_level_value)) {
+                        return (string) $second_level_key;
                     }
                 }
             }
@@ -329,5 +348,19 @@ abstract class BridgeAbstract
     public function getShortName(): string
     {
         return (new \ReflectionClass($this))->getShortName();
+    }
+
+    private static function stringify(mixed $value): string
+    {
+        if (is_string($value) === true) {
+            return $value;
+        }
+        if (is_int($value) === true || is_float($value) === true) {
+            return (string) $value;
+        }
+        if (is_bool($value) === true) {
+            return $value === true ? '1' : '';
+        }
+        return '';
     }
 }

@@ -15,6 +15,7 @@ use RSSBridge\Logger\Logger;
  * - Retry logic with exponential backoff
  * - Unified logging interface
  * - Response validation hooks
+ * - Safe scalar coercion helpers for mixed config/option values
  */
 abstract class ProxyAbstract implements ProxyInterface
 {
@@ -56,6 +57,63 @@ abstract class ProxyAbstract implements ProxyInterface
     }
 
     /**
+     * Safely coerces a mixed config/option value to int.
+     * Accepts ints, numeric strings and floats; anything else yields $default.
+     */
+    protected static function toInt(mixed $value, int $default): int
+    {
+        if (is_int($value) === true) {
+            return $value;
+        }
+        if (is_float($value) === true) {
+            return (int) $value;
+        }
+        if (is_string($value) === true && is_numeric($value) === true) {
+            return (int) $value;
+        }
+        return $default;
+    }
+
+    /**
+     * Safely coerces a mixed config/option value to string.
+     * Non-scalar values yield $default.
+     */
+    protected static function toString(mixed $value, string $default = ''): string
+    {
+        if (is_string($value) === true) {
+            return $value;
+        }
+        if (is_int($value) === true || is_float($value) === true) {
+            return (string) $value;
+        }
+        if (is_bool($value) === true) {
+            return $value === true ? '1' : '';
+        }
+        return $default;
+    }
+
+    /**
+     * Safely coerces a mixed config/option value to bool.
+     */
+    protected static function toBool(mixed $value, bool $default): bool
+    {
+        if (is_bool($value) === true) {
+            return $value;
+        }
+        if (is_int($value) === true) {
+            return $value !== 0;
+        }
+        if (is_string($value) === true) {
+            $lower = strtolower(trim($value));
+            if ($lower === '') {
+                return $default;
+            }
+            return filter_var($lower, FILTER_VALIDATE_BOOLEAN);
+        }
+        return $default;
+    }
+
+    /**
      * Gets HTML with automatic caching and Stale-while-revalidate fallback.
      *
      * When upstream request fails (timeout, HTTP error, exception), the last
@@ -68,17 +126,17 @@ abstract class ProxyAbstract implements ProxyInterface
      */
     public function getHtml(string $url, array $options = []): string
     {
-        $cacheTtl = (int)($options['cache_ttl'] ?? 3600);
-        $useCache = (bool)($options['use_cache'] ?? true);
+        $cacheTtl = self::toInt($options['cache_ttl'] ?? 3600, 3600);
+        $useCache = self::toBool($options['use_cache'] ?? true, true);
 
-        /** @var array{fresh: ?string, stale: ?string} $cached */
+        /** @var array{fresh: mixed, stale: mixed} $cached */
         $cached = ['fresh' => null, 'stale' => null];
 
         if ($useCache === true && $this->cache instanceof CacheInterface) {
             $cacheKey = $this->buildCacheKey($url, $options);
             $cached = $this->cache->getWithStale($cacheKey);
 
-            if ($cached['fresh'] !== null && is_string($cached['fresh']) === true) {
+            if (is_string($cached['fresh']) === true && $cached['fresh'] !== '') {
                 $this->log('debug', sprintf('Cache hit (fresh) for %s', $url));
                 return $cached['fresh'];
             }
@@ -107,8 +165,8 @@ abstract class ProxyAbstract implements ProxyInterface
             if (
                 $useCache === true
                 && $this->cache instanceof CacheInterface
-                && $cached['stale'] !== null
                 && is_string($cached['stale']) === true
+                && $cached['stale'] !== ''
             ) {
                 $this->log('warning', sprintf(
                     'Returning stale cache for %s due to proxy error: %s',
@@ -132,8 +190,8 @@ abstract class ProxyAbstract implements ProxyInterface
      */
     public function getBinary(string $url, array $options = []): array
     {
-        $cacheTtl = (int)($options['cache_ttl'] ?? 86400);
-        $useCache = (bool)($options['use_cache'] ?? true);
+        $cacheTtl = self::toInt($options['cache_ttl'] ?? 86400, 86400);
+        $useCache = self::toBool($options['use_cache'] ?? true, true);
 
         /** @var array{fresh: mixed, stale: mixed} $cached */
         $cached = ['fresh' => null, 'stale' => null];
@@ -142,10 +200,10 @@ abstract class ProxyAbstract implements ProxyInterface
             $cacheKey = $this->buildCacheKey('binary_' . $url, $options);
             $cached = $this->cache->getWithStale($cacheKey);
 
-            if ($this->isValidBinaryPayload($cached['fresh']) === true) {
+            $fresh = $this->normalizeBinaryPayload($cached['fresh']);
+            if ($fresh !== null) {
                 $this->log('debug', sprintf('Cache hit (fresh binary) for %s', $url));
-                /** @var array{body: string, type: string} */
-                return $cached['fresh'];
+                return $fresh;
             }
         }
 
@@ -165,18 +223,16 @@ abstract class ProxyAbstract implements ProxyInterface
 
             return $payload;
         } catch (\Throwable $e) {
-            if (
-                $useCache === true
-                && $this->cache instanceof CacheInterface
-                && $this->isValidBinaryPayload($cached['stale']) === true
-            ) {
-                $this->log('warning', sprintf(
-                    'Returning stale binary cache for %s due to proxy error: %s',
-                    $url,
-                    $e->getMessage()
-                ));
-                /** @var array{body: string, type: string} */
-                return $cached['stale'];
+            if ($useCache === true && $this->cache instanceof CacheInterface) {
+                $stale = $this->normalizeBinaryPayload($cached['stale']);
+                if ($stale !== null) {
+                    $this->log('warning', sprintf(
+                        'Returning stale binary cache for %s due to proxy error: %s',
+                        $url,
+                        $e->getMessage()
+                    ));
+                    return $stale;
+                }
             }
 
             throw $e;
@@ -220,14 +276,28 @@ abstract class ProxyAbstract implements ProxyInterface
      */
     protected function isValidBinaryPayload(mixed $value): bool
     {
+        return $this->normalizeBinaryPayload($value) !== null;
+    }
+
+    /**
+     * Narrows a mixed cached value into a strictly typed binary payload.
+     *
+     * @return array{body: string, type: string}|null
+     */
+    protected function normalizeBinaryPayload(mixed $value): ?array
+    {
         if (is_array($value) === false) {
-            return false;
+            return null;
         }
 
-        return isset($value['body']) === true
-            && isset($value['type']) === true
-            && is_string($value['body']) === true
-            && is_string($value['type']) === true;
+        $body = $value['body'] ?? null;
+        $type = $value['type'] ?? null;
+
+        if (is_string($body) === false || is_string($type) === false) {
+            return null;
+        }
+
+        return ['body' => $body, 'type' => $type];
     }
 
     /**

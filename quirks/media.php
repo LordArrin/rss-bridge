@@ -89,7 +89,7 @@ function handleYoutube(string $string): string
         return sprintf(<<<EOD
 <iframe width="560" height="315" src="%s" title="YouTube video player" frameborder="0"
 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-referrerpolicy="strict-origin" allowfullscreen></iframe>'
+referrerpolicy="strict-origin" allowfullscreen></iframe>
 EOD
          , $embedUri);
     } else {
@@ -146,10 +146,25 @@ function render_draftjs_to_html(string $jsonContent): string
             return e($jsonContent);
         }
 
-        $text = $data[0];
-        if (is_string($text) === false) {
-            $text = is_array($text) === true ? implode('', $text) : (string) $text;
+        $textRaw = $data[0];
+        if (is_string($textRaw) === true) {
+            $text = $textRaw;
+        } elseif (is_array($textRaw) === true) {
+            $parts = [];
+            foreach ($textRaw as $part) {
+                if (is_string($part) === true) {
+                    $parts[] = $part;
+                } elseif (is_scalar($part) === true) {
+                    $parts[] = (string) $part;
+                }
+            }
+            $text = implode('', $parts);
+        } elseif (is_scalar($textRaw) === true) {
+            $text = (string) $textRaw;
+        } else {
+            return e($jsonContent);
         }
+
         if ($text === '') {
             return '';
         }
@@ -157,23 +172,41 @@ function render_draftjs_to_html(string $jsonContent): string
         $utf16 = mb_convert_encoding($text, 'UTF-16LE', 'UTF-8');
         $units = str_split($utf16, 2);
         $unitCount = count($units);
-        $styles = (isset($data[2]) === true && is_array($data[2]) === true) ? $data[2] : [];
+
+        $styles = [];
+        if (isset($data[2]) === true && is_array($data[2]) === true) {
+            $styles = $data[2];
+        }
+
+        $toInt = static function (mixed $value, int $default): int {
+            if (is_int($value) === true) {
+                return $value;
+            }
+            if (is_float($value) === true) {
+                return (int) $value;
+            }
+            if (is_string($value) === true && is_numeric($value) === true) {
+                return (int) $value;
+            }
+            return $default;
+        };
 
         $tagMap = [0 => 'strong', 1 => 'u', 2 => 'em', 3 => 's'];
         $events = [];
         $depth = 0;
 
         foreach ($styles as $style) {
-            if (count($style) < 3) {
+            if (is_array($style) === false || count($style) < 3) {
                 continue;
             }
-            $tag = $tagMap[(int) ($style[0] ?? -1)] ?? null;
+
+            $tag = $tagMap[$toInt($style[0] ?? null, -1)] ?? null;
             if ($tag === null) {
                 continue;
             }
 
-            $start = (int) ($style[1] ?? 0);
-            $end = $start + (int) ($style[2] ?? 0);
+            $start = $toInt($style[1] ?? null, 0);
+            $end = $start + $toInt($style[2] ?? null, 0);
             if ($start < 0 || $end > $unitCount || $start >= $end) {
                 continue;
             }

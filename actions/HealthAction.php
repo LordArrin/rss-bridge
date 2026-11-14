@@ -134,8 +134,23 @@ final class HealthAction implements ActionInterface
      */
     private function calculateHitRate(array $stats): string
     {
-        $hits = $stats['get_hits'] ?? 0;
-        $misses = $stats['get_misses'] ?? 0;
+        $hitsRaw = $stats['get_hits'] ?? 0;
+        $missesRaw = $stats['get_misses'] ?? 0;
+
+        $hits = 0;
+        if (is_int($hitsRaw) === true) {
+            $hits = $hitsRaw;
+        } elseif (is_string($hitsRaw) === true && is_numeric($hitsRaw) === true) {
+            $hits = (int) $hitsRaw;
+        }
+
+        $misses = 0;
+        if (is_int($missesRaw) === true) {
+            $misses = $missesRaw;
+        } elseif (is_string($missesRaw) === true && is_numeric($missesRaw) === true) {
+            $misses = (int) $missesRaw;
+        }
+
         $total = $hits + $misses;
 
         if ($total === 0) {

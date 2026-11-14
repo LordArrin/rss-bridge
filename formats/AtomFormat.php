@@ -42,16 +42,16 @@ final class AtomFormat extends FormatAbstract
                 $title = $document->createElementNS(self::ATOM_NS, 'title');
                 $feed->appendChild($title);
                 $title->setAttribute('type', 'text');
-                $title->appendChild($document->createTextNode((string) $feedValue));
+                $title->appendChild($document->createTextNode(self::stringify($feedValue)));
             } elseif ($feedKey === 'icon') {
                 if ((bool) $feedValue === true) {
                     $icon = $document->createElementNS(self::ATOM_NS, 'icon');
                     $feed->appendChild($icon);
-                    $icon->appendChild($document->createTextNode((string) $feedValue));
+                    $icon->appendChild($document->createTextNode(self::stringify($feedValue)));
 
                     $logo = $document->createElementNS(self::ATOM_NS, 'logo');
                     $feed->appendChild($logo);
-                    $logo->appendChild($document->createTextNode((string) $feedValue));
+                    $logo->appendChild($document->createTextNode(self::stringify($feedValue)));
                 }
             } elseif ($feedKey === 'uri') {
                 if ((bool) $feedValue === true) {
@@ -59,7 +59,7 @@ final class AtomFormat extends FormatAbstract
                     $feed->appendChild($linkAlternate);
                     $linkAlternate->setAttribute('rel', 'alternate');
                     $linkAlternate->setAttribute('type', 'text/html');
-                    $linkAlternate->setAttribute('href', (string) $feedValue);
+                    $linkAlternate->setAttribute('href', self::stringify($feedValue));
 
                     $linkSelf = $document->createElementNS(self::ATOM_NS, 'link');
                     $feed->appendChild($linkSelf);
@@ -69,15 +69,16 @@ final class AtomFormat extends FormatAbstract
                 }
             } elseif ($feedKey === 'itunes') {
                 $feed->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:itunes', self::ITUNES_NS);
-                foreach ((array) $feedValue as $itunesKey => $itunesValue) {
-                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, (string) $itunesKey);
+                $itunesItems = is_array($feedValue) === true ? $feedValue : [];
+                foreach ($itunesItems as $itunesKey => $itunesValue) {
+                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, self::stringify($itunesKey));
                     $feed->appendChild($itunesProperty);
-                    $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
+                    $itunesProperty->appendChild($document->createTextNode(self::stringify($itunesValue)));
                 }
             } else {
                 $element = $document->createElementNS(self::ATOM_NS, $feedKey);
                 $feed->appendChild($element);
-                $element->appendChild($document->createTextNode((string) $feedValue));
+                $element->appendChild($document->createTextNode(self::stringify($feedValue)));
             }
         }
 
@@ -114,11 +115,11 @@ final class AtomFormat extends FormatAbstract
             }
 
             if ($entryID === '') {
-                $entryID = 'urn:sha1:' . hash('sha1', (string) $entryTitle . (string) $entryContent);
+                $entryID = 'urn:sha1:' . hash('sha1', ($entryTitle ?? '') . ($entryContent ?? ''));
             }
 
             if ($entryTitle === null || $entryTitle === '') {
-                $entryTitle = str_replace("\n", ' ', strip_tags((string) $entryContent));
+                $entryTitle = str_replace("\n", ' ', strip_tags($entryContent ?? ''));
                 if (strlen($entryTitle) > 140) {
                     $wrapPos = strpos(wordwrap($entryTitle, 140), "\n");
                     if ($wrapPos !== false) {
@@ -163,20 +164,22 @@ final class AtomFormat extends FormatAbstract
 
             if (isset($itemArray['itunes']) === true) {
                 $feed->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:itunes', self::ITUNES_NS);
-                foreach ((array) $itemArray['itunes'] as $itunesKey => $itunesValue) {
-                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, (string) $itunesKey);
+                $itunesItems = is_array($itemArray['itunes']) === true ? $itemArray['itunes'] : [];
+                foreach ($itunesItems as $itunesKey => $itunesValue) {
+                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, self::stringify($itunesKey));
                     $entry->appendChild($itunesProperty);
-                    $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
+                    $itunesProperty->appendChild($document->createTextNode(self::stringify($itunesValue)));
                 }
+
                 $enclosure = $itemArray['enclosure'] ?? null;
                 if (is_array($enclosure) === true) {
-                    $enclosureUrl = (string) ($enclosure['url'] ?? '');
+                    $enclosureUrl = self::stringify($enclosure['url'] ?? '');
                     if ($enclosureUrl !== '') {
                         $itunesEnclosure = $document->createElementNS(self::ATOM_NS, 'enclosure');
                         $entry->appendChild($itunesEnclosure);
                         $itunesEnclosure->setAttribute('url', $enclosureUrl);
-                        $itunesEnclosure->setAttribute('length', (string) ($enclosure['length'] ?? ''));
-                        $itunesEnclosure->setAttribute('type', (string) ($enclosure['type'] ?? ''));
+                        $itunesEnclosure->setAttribute('length', self::stringify($enclosure['length'] ?? ''));
+                        $itunesEnclosure->setAttribute('type', self::stringify($enclosure['type'] ?? ''));
                     }
                 }
             } elseif ($entryUri !== null && $entryUri !== '') {
@@ -216,11 +219,11 @@ final class AtomFormat extends FormatAbstract
             }
 
             $thumbnail = method_exists($item, 'getThumbnail') === true ? $item->getThumbnail() : ($itemArray['thumbnail'] ?? null);
-
-            if ($thumbnail !== null && $thumbnail !== '') {
+            $thumbnailUrl = self::stringify($thumbnail);
+            if ($thumbnailUrl !== '') {
                 $thumbnailElement = $document->createElementNS(self::MRSS_NS, 'media:thumbnail');
                 $entry->appendChild($thumbnailElement);
-                $thumbnailElement->setAttribute('url', (string) $thumbnail);
+                $thumbnailElement->setAttribute('url', $thumbnailUrl);
             }
         }
 
@@ -229,5 +232,10 @@ final class AtomFormat extends FormatAbstract
             throw new \Exception('Failed to render Atom XML feed');
         }
         return $xml;
+    }
+
+    private static function stringify(mixed $value): string
+    {
+        return is_scalar($value) === true ? (string) $value : '';
     }
 }

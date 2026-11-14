@@ -44,18 +44,21 @@ final class TrawlProxy extends ProxyAbstract
 
     protected function initialize(): void
     {
-        $this->apiUrl = rtrim((string)($this->config['url'] ?? ''), '/');
-        $this->timeout = (int)($this->config['timeout'] ?? 180000) / 1000;
+        $this->apiUrl = rtrim(self::toString($this->config['url'] ?? ''), '/');
 
-        $apiKey = (string)($this->config['twocaptcha_api_key'] ?? '');
+        // FIX: intdiv() keeps the result an int. The previous
+        // "(int)$value / 1000" produced a float and broke the typed property.
+        $this->timeout = intdiv(self::toInt($this->config['timeout'] ?? 180000, 180000), 1000);
+
+        $apiKey = self::toString($this->config['twocaptcha_api_key'] ?? '');
         $this->twocaptchaApiKey = $apiKey !== '' ? $apiKey : null;
 
-        $this->useForwardProxy = (bool)($this->config['use_forward_proxy'] ?? false);
+        $this->useForwardProxy = self::toBool($this->config['use_forward_proxy'] ?? false, false);
 
         if ($this->useForwardProxy === true) {
-            $parsed = parse_url($this->apiUrl);
+            $parsed = parse_url($this->apiUrl ?? '');
             $this->forwardProxyHost = is_array($parsed) === true && isset($parsed['host']) === true ? $parsed['host'] : 'localhost';
-            $this->forwardProxyPort = (int)($this->config['forward_proxy_port'] ?? 8192);
+            $this->forwardProxyPort = self::toInt($this->config['forward_proxy_port'] ?? 8192, 8192);
         }
 
         if ($this->twocaptchaApiKey !== null) {
@@ -79,7 +82,7 @@ final class TrawlProxy extends ProxyAbstract
         }
 
         try {
-            $response = $this->request('GET', $this->apiUrl . '/health');
+            $response = $this->request('GET', ($this->apiUrl ?? '') . '/health');
             return isset($response['status']) === true;
         } catch (\Exception $e) {
             $this->log('warning', 'Trawl unavailable: ' . $e->getMessage());
@@ -155,8 +158,8 @@ final class TrawlProxy extends ProxyAbstract
     {
         $payload = [
             'url' => $url,
-            'maxTimeout' => (int)($options['timeout'] ?? 180000),
-            'maxTier' => (int)($options['max_tier'] ?? 4),
+            'maxTimeout' => self::toInt($options['timeout'] ?? 180000, 180000),
+            'maxTier' => self::toInt($options['max_tier'] ?? 4, 4),
             'solveEmbeddedCaptchas' => true,
         ];
 
@@ -187,14 +190,14 @@ final class TrawlProxy extends ProxyAbstract
         ]);
 
         try {
-            $response = $this->request('POST', $this->apiUrl . '/scrape', $payload);
+            $response = $this->request('POST', ($this->apiUrl ?? '') . '/scrape', $payload);
         } catch (\Exception $e) {
             // Gracefully handle invalid/unavailable 2Captcha
             if ($useTwocaptcha === true && $this->isTwocaptchaError($e->getMessage()) === true) {
                 $this->invalidateTwocaptcha($e->getMessage());
                 unset($payload['twocaptchaApiKey']);
                 $this->log('info', 'Retrying request without 2Captcha...');
-                $response = $this->request('POST', $this->apiUrl . '/scrape', $payload);
+                $response = $this->request('POST', ($this->apiUrl ?? '') . '/scrape', $payload);
             } else {
                 throw $e;
             }
@@ -204,7 +207,7 @@ final class TrawlProxy extends ProxyAbstract
         $totalMs = $response['totalMs'] ?? null;
         $responseCookies = $response['cookies'] ?? [];
         $cookiesCount = is_array($responseCookies) === true ? count($responseCookies) : 0;
-        $sessionCached = (bool)($response['sessionCached'] ?? false);
+        $sessionCached = self::toBool($response['sessionCached'] ?? false, false);
 
         $this->log('info', 'Trawl scrape completed', [
             'url' => $url,
@@ -215,11 +218,14 @@ final class TrawlProxy extends ProxyAbstract
             'has_html' => isset($response['html']) === true,
         ]);
 
-        if (isset($response['html']) === false) {
-            throwServerException('Trawl did not return HTML content. Response: ' . json_encode($response));
+        $html = $response['html'] ?? null;
+        if (is_string($html) === false) {
+            $encodedResponse = json_encode($response);
+            $responseDump = is_string($encodedResponse) === true ? $encodedResponse : '';
+            throwServerException('Trawl did not return HTML content. Response: ' . $responseDump);
         }
 
-        return (string)$response['html'];
+        return $html;
     }
 
     /**
@@ -311,11 +317,13 @@ final class TrawlProxy extends ProxyAbstract
         }
 
         if (isset($result['error']) === true && $result['error'] === true) {
+            $apiMessage = self::toString($result['message'] ?? 'Unknown', 'Unknown');
+
             $this->log('error', 'Trawl API error', [
-                'message' => $result['message'] ?? 'Unknown',
+                'message' => $apiMessage,
                 'response' => $result
             ]);
-            throwServerException('API error: ' . (is_string($result['message'] ?? null) === true ? $result['message'] : 'Unknown'));
+            throwServerException('API error: ' . $apiMessage);
         }
 
         return $result;
@@ -335,8 +343,8 @@ final class TrawlProxy extends ProxyAbstract
 
         $payload = [
             'url' => $url,
-            'maxTimeout' => (int)($options['timeout'] ?? 180000),
-            'maxTier' => (int)($options['max_tier'] ?? 4),
+            'maxTimeout' => self::toInt($options['timeout'] ?? 180000, 180000),
+            'maxTier' => self::toInt($options['max_tier'] ?? 4, 4),
             'solveEmbeddedCaptchas' => false,
         ];
 
@@ -349,13 +357,12 @@ final class TrawlProxy extends ProxyAbstract
             $payload['sessionId'] = $options['session_id'];
         }
 
-        $response = $this->request('POST', $this->apiUrl . '/scrape', $payload);
+        $response = $this->request('POST', ($this->apiUrl ?? '') . '/scrape', $payload);
 
-        if (isset($response['html']) === false) {
+        $body = $response['html'] ?? null;
+        if (is_string($body) === false) {
             throwServerException('Trawl did not return content');
         }
-
-        $body = (string)$response['html'];
 
         $urlPath = parse_url($url, PHP_URL_PATH);
         $extension = pathinfo(is_string($urlPath) === true ? $urlPath : '', PATHINFO_EXTENSION);
@@ -407,9 +414,15 @@ final class TrawlProxy extends ProxyAbstract
         if (is_array($headers) === true && $headers !== []) {
             $curlHeaders = [];
             foreach ($headers as $key => $value) {
-                $curlHeaders[] = "{$key}: {$value}";
+                $valueStr = self::toString($value);
+                if ($valueStr === '') {
+                    continue;
+                }
+                $curlHeaders[] = (string) $key . ': ' . $valueStr;
             }
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
+            if ($curlHeaders !== []) {
+                curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
+            }
         }
 
         $response = curl_exec($ch);

@@ -61,7 +61,13 @@ final class DevToBridge extends BridgeAbstract
             return '';
         }
 
-        $dom = \Dom\HTMLDocument::createFromString($html);
+        try {
+            libxml_use_internal_errors(true);
+            $dom = \Dom\HTMLDocument::createFromString($html);
+            libxml_use_internal_errors(false);
+        } catch (\Throwable) {
+            return $html;
+        }
 
         foreach ($dom->querySelectorAll('img[src]') as $img) {
             $src = $img->getAttribute('src');
@@ -70,7 +76,9 @@ final class DevToBridge extends BridgeAbstract
                 $hasHttps = str_starts_with($src, 'https://');
                 if ($hasHttp === false && $hasHttps === false) {
                     $absoluteUrl = urljoin($baseUrl, $src);
-                    $img->setAttribute('src', $absoluteUrl);
+                    if ($absoluteUrl !== null && $absoluteUrl !== '') {
+                        $img->setAttribute('src', $absoluteUrl);
+                    }
                 }
             }
         }
@@ -82,7 +90,9 @@ final class DevToBridge extends BridgeAbstract
                 $hasHttps = str_starts_with($href, 'https://');
                 if ($hasHttp === false && $hasHttps === false) {
                     $absoluteUrl = urljoin($baseUrl, $href);
-                    $link->setAttribute('href', $absoluteUrl);
+                    if ($absoluteUrl !== null && $absoluteUrl !== '') {
+                        $link->setAttribute('href', $absoluteUrl);
+                    }
                 }
             }
         }
@@ -184,7 +194,19 @@ final class DevToBridge extends BridgeAbstract
                 continue;
             }
 
-            $articleDom = getSimpleHTMLDOM($articleUrl);
+            try {
+                $articleHtml = getContents($articleUrl);
+            } catch (\Exception $e) {
+                continue;
+            }
+
+            try {
+                libxml_use_internal_errors(true);
+                $articleDom = \Dom\HTMLDocument::createFromString($articleHtml);
+                libxml_use_internal_errors(false);
+            } catch (\Throwable) {
+                continue;
+            }
 
             $bodyEl = $articleDom->querySelector('.crayons-article__body');
             $content = $bodyEl !== null ? $bodyEl->innerHTML : '';
@@ -211,7 +233,19 @@ final class DevToBridge extends BridgeAbstract
         $limitInput = $this->getInput('limit');
         $limit = $limitInput !== null && $limitInput !== '' ? (int)$limitInput : 10;
 
-        $dom = getSimpleHTMLDOM(self::URI);
+        try {
+            $indexHtml = getContents(self::URI);
+        } catch (\Exception $e) {
+            throwServerException('Failed to fetch DEV.to homepage: ' . $e->getMessage());
+        }
+
+        try {
+            libxml_use_internal_errors(true);
+            $dom = \Dom\HTMLDocument::createFromString($indexHtml);
+            libxml_use_internal_errors(false);
+        } catch (\Throwable) {
+            throwServerException('Failed to parse DEV.to homepage');
+        }
 
         $guideLinks = $dom->querySelectorAll('.widget-link-list .crayons-link--contentful');
 
@@ -231,13 +265,29 @@ final class DevToBridge extends BridgeAbstract
             }
 
             $guideUrl = urljoin(self::URI, $href);
+            if ($guideUrl === null || $guideUrl === '') {
+                continue;
+            }
+
             $title = trim($link->textContent ?? '');
 
             if ($title === '') {
                 continue;
             }
 
-            $guideDom = getSimpleHTMLDOM($guideUrl);
+            try {
+                $guideHtml = getContents($guideUrl);
+            } catch (\Exception $e) {
+                continue;
+            }
+
+            try {
+                libxml_use_internal_errors(true);
+                $guideDom = \Dom\HTMLDocument::createFromString($guideHtml);
+                libxml_use_internal_errors(false);
+            } catch (\Throwable) {
+                continue;
+            }
 
             $bodyEl = $guideDom->querySelector('.crayons-article__body');
             $content = $bodyEl !== null ? $bodyEl->innerHTML : '';

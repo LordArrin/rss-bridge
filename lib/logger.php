@@ -63,11 +63,12 @@ final class LogFilter
      */
     public static function shouldLog(array $record): bool
     {
-        if (isset($record['context']['e']) === false) {
+        $context = $record['context'] ?? null;
+        if (is_array($context) === false || isset($context['e']) === false) {
             return true;
         }
 
-        $e = $record['context']['e'];
+        $e = $context['e'];
 
         if ($e instanceof \Throwable === false) {
             return true;
@@ -140,6 +141,61 @@ final class LogFormatter
                 return '{}';
             }
         }
+    }
+
+    /**
+     * Narrows a mixed record context into a string-keyed array.
+     *
+     * @return array<string, mixed>
+     */
+    public static function normalizeContext(mixed $context): array
+    {
+        if (is_array($context) === false) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($context as $key => $value) {
+            if (is_string($key) === true) {
+                $normalized[$key] = $value;
+            }
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Reads a mixed record field as string (non-scalar values become '').
+     */
+    public static function stringValue(mixed $value): string
+    {
+        if (is_string($value) === true) {
+            return $value;
+        }
+        if (is_int($value) === true || is_float($value) === true) {
+            return (string) $value;
+        }
+        if (is_bool($value) === true) {
+            return $value === true ? '1' : '';
+        }
+        return '';
+    }
+
+    /**
+     * Reads a mixed record field as int.
+     */
+    public static function intValue(mixed $value, int $default = 0): int
+    {
+        if (is_int($value) === true) {
+            return $value;
+        }
+        if (is_float($value) === true) {
+            return (int) $value;
+        }
+        if (is_string($value) === true && is_numeric($value) === true) {
+            return (int) $value;
+        }
+        return $default;
     }
 }
 
@@ -235,7 +291,7 @@ final class StreamHandler
      */
     public function __invoke(array $record): void
     {
-        $level = (int)($record['level'] ?? 0);
+        $level = LogFormatter::intValue($record['level'] ?? 0);
         if ($level < $this->level) {
             return;
         }
@@ -245,8 +301,7 @@ final class StreamHandler
         }
 
         $record = LogFormatter::formatRecord($record);
-        $contextArray = $record['context'] ?? [];
-        $context = is_array($contextArray) === true ? LogFormatter::encodeContext($contextArray) : '';
+        $context = LogFormatter::encodeContext(LogFormatter::normalizeContext($record['context'] ?? null));
 
         $createdAt = $record['created_at'] ?? null;
         if ($createdAt instanceof \DateTimeInterface === false) {
@@ -256,9 +311,9 @@ final class StreamHandler
         $text = sprintf(
             "[%s] %s.%s %s %s\n",
             $createdAt->format('Y-m-d H:i:s'),
-            (string)($record['name'] ?? ''),
-            (string)($record['level_name'] ?? ''),
-            (string)($record['message'] ?? ''),
+            LogFormatter::stringValue($record['name'] ?? ''),
+            LogFormatter::stringValue($record['level_name'] ?? ''),
+            LogFormatter::stringValue($record['message'] ?? ''),
             $context
         );
 
@@ -280,7 +335,7 @@ final class ErrorLogHandler
      */
     public function __invoke(array $record): void
     {
-        $level = (int)($record['level'] ?? 0);
+        $level = LogFormatter::intValue($record['level'] ?? 0);
         if ($level < $this->level) {
             return;
         }
@@ -290,8 +345,7 @@ final class ErrorLogHandler
         }
 
         $record = LogFormatter::formatRecord($record);
-        $contextArray = $record['context'] ?? [];
-        $context = is_array($contextArray) === true ? LogFormatter::encodeContext($contextArray) : '';
+        $context = LogFormatter::encodeContext(LogFormatter::normalizeContext($record['context'] ?? null));
 
         $createdAt = $record['created_at'] ?? null;
         if ($createdAt instanceof \DateTimeInterface === false) {
@@ -301,9 +355,9 @@ final class ErrorLogHandler
         $text = sprintf(
             '[%s] %s.%s %s %s',
             $createdAt->format('Y-m-d H:i:s'),
-            (string)($record['name'] ?? ''),
-            (string)($record['level_name'] ?? ''),
-            (string)($record['message'] ?? ''),
+            LogFormatter::stringValue($record['name'] ?? ''),
+            LogFormatter::stringValue($record['level_name'] ?? ''),
+            LogFormatter::stringValue($record['message'] ?? ''),
             $context
         );
 

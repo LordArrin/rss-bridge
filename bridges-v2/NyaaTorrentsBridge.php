@@ -112,29 +112,43 @@ final class NyaaTorrentsBridge extends BridgeAbstract
             $magnetUrl = '';
 
             if ($viewUri !== '') {
-                $html = getContents($viewUri);
+                try {
+                    $html = getContents($viewUri);
+                } catch (\Exception) {
+                    $html = '';
+                }
+
                 if (is_string($html) === true && $html !== '') {
-                    $dom = \Dom\HTMLDocument::createFromString($html);
-
-                    $descriptionNode = $dom->querySelector('#torrent-description');
-                    $description = $descriptionNode !== null ? $descriptionNode->innerHTML : '';
-
-                    $decodedDescription = html_entity_decode($description);
-                    if (function_exists('markdownToHtml') === true) {
-                        $content = \markdownToHtml($decodedDescription);
-                    } else {
-                        $content = $parsedown->text($decodedDescription);
+                    try {
+                        libxml_use_internal_errors(true);
+                        $dom = \Dom\HTMLDocument::createFromString($html);
+                        libxml_use_internal_errors(false);
+                    } catch (\Throwable) {
+                        libxml_use_internal_errors(false);
+                        $dom = null;
                     }
 
-                    $links = $dom->querySelectorAll('div.panel-footer.clearfix > a');
-                    if ($links->length > 1) {
-                        $magnetHref = $links->item(1)?->getAttribute('href') ?? '';
-                        if (is_string($magnetHref) === true && $magnetHref !== '') {
-                            $decodedMagnet = html_entity_decode($magnetHref);
-                            if (str_contains($decodedMagnet, 'https://torrent.parts/#') === true) {
-                                $decodedMagnet = str_replace('https://torrent.parts/#', '', $decodedMagnet);
+                    if ($dom !== null) {
+                        $descriptionNode = $dom->querySelector('#torrent-description');
+                        $description = $descriptionNode !== null ? $descriptionNode->innerHTML : '';
+
+                        $decodedDescription = html_entity_decode($description);
+                        if (function_exists('markdownToHtml') === true) {
+                            $content = \markdownToHtml($decodedDescription);
+                        } else {
+                            $content = $parsedown->text($decodedDescription);
+                        }
+
+                        $links = $dom->querySelectorAll('div.panel-footer.clearfix > a');
+                        if ($links->length > 1) {
+                            $magnetHref = $links->item(1)?->getAttribute('href') ?? '';
+                            if (is_string($magnetHref) === true && $magnetHref !== '') {
+                                $decodedMagnet = html_entity_decode($magnetHref);
+                                if (str_contains($decodedMagnet, 'https://torrent.parts/#') === true) {
+                                    $decodedMagnet = str_replace('https://torrent.parts/#', '', $decodedMagnet);
+                                }
+                                $magnetUrl = $decodedMagnet;
                             }
-                            $magnetUrl = $decodedMagnet;
                         }
                     }
                 }
@@ -156,7 +170,15 @@ final class NyaaTorrentsBridge extends BridgeAbstract
             return $content;
         }
 
-        $dom = \Dom\HTMLDocument::createFromString('<div id="rss-bridge-content">' . $content . '</div>');
+        try {
+            libxml_use_internal_errors(true);
+            $dom = \Dom\HTMLDocument::createFromString('<div id="rss-bridge-content">' . $content . '</div>');
+            libxml_use_internal_errors(false);
+        } catch (\Throwable) {
+            libxml_use_internal_errors(false);
+            return $content;
+        }
+
         $wrapper = $dom->querySelector('#rss-bridge-content');
 
         if ($wrapper === null) {

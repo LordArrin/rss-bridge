@@ -24,11 +24,11 @@ final class SfeedFormat extends FormatAbstract
         foreach ($this->getItems() as $item) {
             $itemArray = $item->toArray();
 
-            $timestamp = $itemArray['timestamp'] ?? '';
-            $title = $this->escape((string) ($itemArray['title'] ?? ''));
-            $uri = (string) ($itemArray['uri'] ?? '');
-            $content = $this->escape((string) ($itemArray['content'] ?? ''));
-            $author = (string) ($itemArray['author'] ?? '');
+            $timestamp = self::stringify($itemArray['timestamp'] ?? '');
+            $title = $this->escape(self::stringify($itemArray['title'] ?? ''));
+            $uri = self::stringify($itemArray['uri'] ?? '');
+            $content = $this->escape(self::stringify($itemArray['content'] ?? ''));
+            $author = self::stringify($itemArray['author'] ?? '');
 
             $rawEnclosures = $itemArray['enclosures'] ?? [];
             $enclosures = is_array($rawEnclosures) === true ? array_values(array_filter($rawEnclosures, fn($v) => is_string($v))) : [];
@@ -38,10 +38,12 @@ final class SfeedFormat extends FormatAbstract
             $categories = is_array($rawCategories) === true ? array_values(array_filter($rawCategories, fn($v) => is_string($v))) : [];
             $categoriesStr = $this->escape($this->getCategories($categories));
 
+            $titleNormalized = preg_replace('/\s+/', ' ', $title) ?? $title;
+
             $text .= sprintf(
                 "%s\t%s\t%s\t%s\thtml\t\t%s\t%s\t%s\n",
-                (string) $timestamp,
-                preg_replace('/\s+/', ' ', $title),
+                $timestamp,
+                $titleNormalized,
                 $uri,
                 $content,
                 $author,
@@ -74,5 +76,10 @@ final class SfeedFormat extends FormatAbstract
     private function getCategories(array $cats): string
     {
         return implode('|', array_map('trim', $cats));
+    }
+
+    private static function stringify(mixed $value): string
+    {
+        return is_scalar($value) === true ? (string) $value : '';
     }
 }

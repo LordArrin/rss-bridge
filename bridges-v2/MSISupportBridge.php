@@ -38,6 +38,10 @@ final class MSISupportBridge extends BridgeAbstract
         'download' => 'display:inline-block;margin-top:10px;padding:8px 16px;background:#cc0000;color:#fff;text-decoration:none;border-radius:4px;font-weight:500',
     ];
 
+    private const HEADERS = [
+        'Referer: https://www.msi.com/',
+    ];
+
     /** @var array{product: string, category: string, fragment: string, sub_product: string}|null */
     private ?array $productInfo = null;
 
@@ -152,12 +156,12 @@ final class MSISupportBridge extends BridgeAbstract
         $url = self::URI . 'api/v1/product/support/panel?product=' . urlencode($apiProduct) . '&type=' . urlencode($type);
 
         try {
-            $json = getContents($url, ['Accept: application/json']);
+            $json = getContents($url, self::HEADERS);
             if (json_validate($json) === false) {
                 return null;
             }
             $data = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
-            if ($data === null || isset($data['result']['downloads']) === false) {
+            if (is_array($data) === false || isset($data['result']['downloads']) === false) {
                 return null;
             }
             return $data['result']['downloads'];
@@ -271,7 +275,7 @@ final class MSISupportBridge extends BridgeAbstract
             'title'   => $itemTitle,
             'uri'     => $uri,
             'content' => $content,
-            'uid'     => (is_scalar($rawId) === true) ? (string) $rawId : md5($itemTitle)
+            'uid'     => (is_scalar($rawId) === true && (string) $rawId !== '') ? (string) $rawId : md5($itemTitle)
         ];
 
         if (isset($file['download_release']) === true && is_string($file['download_release']) === true && $file['download_release'] !== '') {
@@ -291,8 +295,10 @@ final class MSISupportBridge extends BridgeAbstract
 
         $hideAttachments = (bool) $this->getInput('hide_download_button');
         $allItems = [];
+        $typesTried = [];
 
         foreach ($this->getDownloadTypes() as $type) {
+            $typesTried[] = $type;
             $downloads = $this->fetchApiData($type);
             if ($downloads === null) {
                 continue;
@@ -325,7 +331,7 @@ final class MSISupportBridge extends BridgeAbstract
         }
 
         if ($allItems === []) {
-            return;
+            throwServerException('No items found for types: ' . implode(', ', $typesTried) . '. Product: ' . $info['product'] . '. The MSI API may have changed or blocked the request.');
         }
 
         usort($allItems, fn(array $a, array $b): int => ($b['timestamp'] ?? 0) <=> ($a['timestamp'] ?? 0));

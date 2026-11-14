@@ -66,7 +66,7 @@ final class CacheMiddleware implements Middleware
                 $this->resolveMaxAge($request),
                 $response->getHeader('etag')
             );
-            if ((int) $request->get('_cache_timeout', -1) === 0) {
+            if (self::toInt($request->get('_cache_timeout', -1), -1) === 0) {
                 $this->cache->delete($cacheKey);
             }
             return $response;
@@ -268,13 +268,15 @@ final class CacheMiddleware implements Middleware
     private function resolveMaxAge(Request $request): int
     {
         $attribute = $request->getAttribute('_resolved_cache_timeout');
-        if ($attribute !== null && (int) $attribute > 0) {
-            return min(86400, max(1, (int) $attribute));
+        $attributeInt = self::toInt($attribute, 0);
+        if ($attributeInt > 0) {
+            return min(86400, max(1, $attributeInt));
         }
 
         $param = $request->get('_cache_timeout');
-        if ($param !== null && (int) $param > 0) {
-            return min(86400, max(1, (int) $param));
+        $paramInt = self::toInt($param, 0);
+        if ($paramInt > 0) {
+            return min(86400, max(1, $paramInt));
         }
 
         return self::DEFAULT_MAX_AGE;
@@ -407,5 +409,19 @@ final class CacheMiddleware implements Middleware
             $headers['date'] = gmdate('D, d M Y H:i:s \G\M\T');
         }
         return $headers;
+    }
+
+    private static function toInt(mixed $value, int $default): int
+    {
+        if (is_int($value) === true) {
+            return $value;
+        }
+        if (is_float($value) === true) {
+            return (int) $value;
+        }
+        if (is_string($value) === true && is_numeric($value) === true) {
+            return (int) $value;
+        }
+        return $default;
     }
 }

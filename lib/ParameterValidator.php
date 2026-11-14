@@ -42,8 +42,9 @@ class ParameterValidator
                         break;
                     default:
                     case 'text':
-                        if (isset($contextParameters[$name]['pattern']) === true) {
-                            $input[$name] = $this->validateTextValue($value, $contextParameters[$name]['pattern']);
+                        $pattern = $contextParameters[$name]['pattern'] ?? null;
+                        if (is_string($pattern) === true) {
+                            $input[$name] = $this->validateTextValue($value, $pattern);
                         } else {
                             $input[$name] = $this->validateTextValue($value);
                         }
@@ -93,12 +94,21 @@ class ParameterValidator
             foreach ($contextParameters as $id => $properties) {
                 if ($this->isFilled($input[$id] ?? null) === true) {
                     $queriedContexts[$contextName] = true;
-                } elseif (
+                    continue;
+                }
+
+                if (is_array($properties) === false) {
+                    continue;
+                }
+
+                if (
                     isset($properties['type']) === true
                     && ($properties['type'] === 'checkbox' || $properties['type'] === 'list')
                 ) {
                     continue;
-                } elseif (isset($properties['required']) === true && $properties['required'] === true) {
+                }
+
+                if (isset($properties['required']) === true && $properties['required'] === true) {
                     $queriedContexts[$contextName] = false;
                     break;
                 }
@@ -164,20 +174,33 @@ class ParameterValidator
         if ($pattern === null) {
             $filteredValue = filter_var($value, FILTER_UNSAFE_RAW);
         } else {
-            $filteredValue = filter_var((string) $value, FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => '/^' . $pattern . '$/']]);
+            $stringValue = self::scalarToString($value);
+            $filteredValue = filter_var($stringValue, FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => '/^' . $pattern . '$/']]);
         }
-        return $filteredValue === false ? null : (string) $filteredValue;
+
+        if ($filteredValue === false) {
+            return null;
+        }
+
+        return self::scalarToString($filteredValue);
     }
 
     private function validateNumberValue(mixed $value): ?int
     {
         $filteredValue = filter_var($value, FILTER_VALIDATE_INT);
-        return $filteredValue === false ? null : (int) $filteredValue;
+        if (is_int($filteredValue) === true) {
+            return $filteredValue;
+        }
+        return null;
     }
 
     private function validateCheckboxValue(mixed $value): ?bool
     {
-        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        $filteredValue = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        if (is_bool($filteredValue) === true) {
+            return $filteredValue;
+        }
+        return null;
     }
 
     /**
@@ -193,7 +216,7 @@ class ParameterValidator
         if ($filteredValue === false) {
             return null;
         }
-        $filteredValue = (string) $filteredValue;
+        $stringValue = self::scalarToString($filteredValue);
 
         $allowed = [];
         array_walk_recursive($expectedValues, static function (mixed $item) use (&$allowed): void {
@@ -202,10 +225,24 @@ class ParameterValidator
             }
         });
 
-        if (in_array($filteredValue, $allowed, true) === true) {
-            return $filteredValue;
+        if (in_array($stringValue, $allowed, true) === true) {
+            return $stringValue;
         }
 
         return null;
+    }
+
+    private static function scalarToString(mixed $value): string
+    {
+        if (is_string($value) === true) {
+            return $value;
+        }
+        if (is_int($value) === true || is_float($value) === true) {
+            return (string) $value;
+        }
+        if (is_bool($value) === true) {
+            return $value === true ? '1' : '';
+        }
+        return '';
     }
 }

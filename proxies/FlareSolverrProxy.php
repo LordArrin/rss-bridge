@@ -14,8 +14,8 @@ final class FlareSolverrProxy extends ProxyAbstract
 
     protected function initialize(): void
     {
-        $this->apiUrl = rtrim((string)($this->config['url'] ?? ''), '/') . '/v1';
-        $this->sessionName = (string)($this->config['session_name'] ?? 'rss_bridge_session');
+        $this->apiUrl = rtrim(self::toString($this->config['url'] ?? ''), '/') . '/v1';
+        $this->sessionName = self::toString($this->config['session_name'] ?? 'rss_bridge_session', 'rss_bridge_session');
     }
 
     public function getName(): string
@@ -75,7 +75,7 @@ final class FlareSolverrProxy extends ProxyAbstract
         $payload = [
             'cmd' => 'request.get',
             'url' => $url,
-            'maxTimeout' => (int)($options['timeout'] ?? 180000),
+            'maxTimeout' => self::toInt($options['timeout'] ?? 180000, 180000),
             'wait' => $wait,
         ];
 
@@ -97,11 +97,12 @@ final class FlareSolverrProxy extends ProxyAbstract
             try {
                 $response = $this->request('POST', $this->apiUrl, $payload);
 
-                if (isset($response['solution']['response']) === false) {
+                $html = $this->extractSolutionHtml($response);
+                if ($html === null) {
                     throwServerException('FlareSolverr did not return HTML content');
                 }
 
-                return (string)$response['solution']['response'];
+                return $html;
             } catch (\Exception $e) {
                 if ($attempt >= $maxRetries) {
                     throwServerException($e->getMessage());
@@ -122,12 +123,32 @@ final class FlareSolverrProxy extends ProxyAbstract
     }
 
     /**
+     * Extracts solution.response from a FlareSolverr API reply.
+     *
+     * @param array<string, mixed> $response
+     */
+    private function extractSolutionHtml(array $response): ?string
+    {
+        $solution = $response['solution'] ?? null;
+        if (is_array($solution) === false) {
+            return null;
+        }
+
+        $html = $solution['response'] ?? null;
+        if (is_string($html) === false || $html === '') {
+            return null;
+        }
+
+        return $html;
+    }
+
+    /**
      * @param array<string, mixed> $options
      */
     private function calculateWaitTime(string $url, array $options): int
     {
         if (isset($options['wait']) === true) {
-            return (int)$options['wait'];
+            return self::toInt($options['wait'], 5000);
         }
 
         $parsedHost = parse_url($url, PHP_URL_HOST);
@@ -244,17 +265,19 @@ final class FlareSolverrProxy extends ProxyAbstract
             }
 
             if (($result['status'] ?? '') !== 'ok') {
+                $apiMessage = self::toString($result['message'] ?? 'Unknown', 'Unknown');
+
                 $this->log('error', 'FlareSolverr API error', [
-                    'message' => $result['message'] ?? 'Unknown'
+                    'message' => $apiMessage
                 ]);
 
-                if ($this->cache !== null && isset($result['message']) === true && is_string($result['message']) === true && str_contains($result['message'], 'session') === true) {
+                if ($this->cache !== null && str_contains($apiMessage, 'session') === true) {
                     $cacheKey = self::SESSION_FLAG_PREFIX . md5($this->sessionName);
                     $this->cache->delete($cacheKey);
                     $this->log('warning', 'FlareSolverr session cache invalidated due to API error');
                 }
 
-                throwServerException('API error: ' . (is_string($result['message'] ?? null) === true ? $result['message'] : 'Unknown'));
+                throwServerException('API error: ' . $apiMessage);
             }
 
             return $result;
@@ -283,8 +306,8 @@ final class FlareSolverrProxy extends ProxyAbstract
         $payload = [
             'cmd' => 'request.get',
             'url' => $url,
-            'maxTimeout' => (int)($options['timeout'] ?? 180000),
-            'wait' => (int)($options['wait'] ?? 5000),
+            'maxTimeout' => self::toInt($options['timeout'] ?? 180000, 180000),
+            'wait' => self::toInt($options['wait'] ?? 5000, 5000),
         ];
 
         if ($this->sessionName !== '') {
@@ -300,11 +323,10 @@ final class FlareSolverrProxy extends ProxyAbstract
             try {
                 $response = $this->request('POST', $this->apiUrl, $payload);
 
-                if (isset($response['solution']['response']) === false) {
+                $body = $this->extractSolutionHtml($response);
+                if ($body === null) {
                     throwServerException('FlareSolverr did not return content');
                 }
-
-                $body = (string)$response['solution']['response'];
 
                 $urlPath = parse_url($url, PHP_URL_PATH);
                 $extension = pathinfo(is_string($urlPath) === true ? $urlPath : '', PATHINFO_EXTENSION);

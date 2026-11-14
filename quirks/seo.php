@@ -262,7 +262,11 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
                                 $json_navigate_ok = true;
                                 while (count($field) > 1) {
                                     $sub_field = array_shift($field);
-                                    if (is_array($json_root) === true && array_key_exists($sub_field, $json_root) === true) {
+                                    if (
+                                        (is_string($sub_field) === true || is_int($sub_field) === true)
+                                        && is_array($json_root) === true
+                                        && array_key_exists($sub_field, $json_root) === true
+                                    ) {
                                         $json_root = $json_root[$sub_field];
                                         if (
                                             is_array($json_root) === true
@@ -279,10 +283,14 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
                                 if ($json_navigate_ok === false) {
                                     continue;
                                 }
-                                $field = $field[0];
+                                $field = $field[0] ?? null;
                             }
 
-                            if (is_array($json_root) === true && array_key_exists($field, $json_root) === true) {
+                            if (
+                                (is_string($field) === true || is_int($field) === true)
+                                && is_array($json_root) === true
+                                && array_key_exists($field, $json_root) === true
+                            ) {
                                 $field_value = $json_root[$field];
 
                                 if ($property === 'enclosures') {
@@ -316,10 +324,10 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
                         }
                     }
                 } elseif ($ldjson_is_of_type($json, $ldjson_author_types) === true) {
-                    $hasId = isset($json['@id']) === true && is_string($json['@id']) === true;
-                    $hasName = isset($json['name']) === true && is_string($json['name']) === true;
-                    if ($hasId === true && $hasName === true) {
-                        $ldjson_author_mappings[$json['@id']] = $json['name'];
+                    $authorId = $json['@id'] ?? null;
+                    $authorName = $json['name'] ?? null;
+                    if (is_string($authorId) === true && is_string($authorName) === true) {
+                        $ldjson_author_mappings[$authorId] = $authorName;
                     }
                 }
             }
@@ -369,7 +377,15 @@ function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
     }
 
     if (isset($item['enclosures']) === true && is_array($item['enclosures']) === true) {
-        $result['enclosures'] = $item['enclosures'];
+        $enclosures = [];
+        foreach ($item['enclosures'] as $enclosure) {
+            if (is_string($enclosure) === true && $enclosure !== '') {
+                $enclosures[] = $enclosure;
+            }
+        }
+        if ($enclosures !== []) {
+            $result['enclosures'] = $enclosures;
+        }
     }
 
     return $result;

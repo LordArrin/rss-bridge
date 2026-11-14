@@ -78,8 +78,19 @@ final class RssBridge
         // Build middleware stack in reverse order (last middleware executes first)
         foreach (array_reverse($middlewareClasses) as $middlewareClass) {
             $middleware = $this->container[$middlewareClass];
+
+            if (is_callable($middleware) === false) {
+                throw new \RuntimeException(sprintf('Middleware "%s" is not callable', $middlewareClass));
+            }
+
             $stack = function (Request $request) use ($middleware, $stack): Response {
-                return $middleware($request, $stack);
+                $result = $middleware($request, $stack);
+
+                if ($result instanceof Response === false) {
+                    throw new \RuntimeException('Middleware did not return a Response');
+                }
+
+                return $result;
             };
         }
 

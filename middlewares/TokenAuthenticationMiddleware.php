@@ -22,17 +22,17 @@ final class TokenAuthenticationMiddleware implements Middleware
 
         $requestToken = $request->get('token');
 
-        if ($requestToken === null || (string) $requestToken === '') {
+        if (is_string($requestToken) === false || $requestToken === '') {
             return new Response(render(__DIR__ . '/../templates/token.html.php', [
                 'message' => 'Missing token',
                 'token' => '',
             ]), 401);
         }
 
-        if (hash_equals($token, (string) $requestToken) === false) {
+        if (hash_equals($token, $requestToken) === false) {
             return new Response(render(__DIR__ . '/../templates/token.html.php', [
                 'message' => 'Invalid token',
-                'token' => (string) $requestToken,
+                'token' => $requestToken,
             ]), 401);
         }
 

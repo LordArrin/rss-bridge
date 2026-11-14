@@ -88,9 +88,13 @@ final class GolemBridge extends FeedExpander
             $urls[$uri] = true;
 
             $html = getContents($uri, static::HEADERS);
-            libxml_use_internal_errors(true);
-            $articlePage = \Dom\HTMLDocument::createFromString($html);
-            libxml_use_internal_errors(false);
+            try {
+                libxml_use_internal_errors(true);
+                $articlePage = \Dom\HTMLDocument::createFromString($html);
+                libxml_use_internal_errors(false);
+            } catch (\Throwable) {
+                break;
+            }
 
             $this->convertRelativeToAbsoluteLinks($articlePage, $uri);
 
@@ -134,9 +138,13 @@ final class GolemBridge extends FeedExpander
 
         $articleHtml = $articleNode->outerHTML;
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString('<div>' . $articleHtml . '</div>');
-        libxml_use_internal_errors(false);
+        try {
+            libxml_use_internal_errors(true);
+            $dom = \Dom\HTMLDocument::createFromString('<div>' . $articleHtml . '</div>');
+            libxml_use_internal_errors(false);
+        } catch (\Throwable) {
+            return '';
+        }
 
         $wrapper = $dom->querySelector('div');
         if ($wrapper === null) {
@@ -204,7 +212,10 @@ final class GolemBridge extends FeedExpander
         'div.toc',
         'div[id*="adtile"]',
         'figcaption',
-        'iframe'
+        'iframe',
+        'svg.lucide-icon',
+        '.go-external-link__icon',
+        '.go-external-link svg',
         ];
 
         foreach ($badSelectors as $selector) {
@@ -267,14 +278,20 @@ final class GolemBridge extends FeedExpander
         foreach ($dom->querySelectorAll('img') as $image) {
             $src = $image->getAttribute('src');
             if ($src !== null && $src !== '') {
-                $image->setAttribute('src', urljoin($baseUrl, $src));
+                $absoluteUrl = urljoin($baseUrl, $src);
+                if ($absoluteUrl !== null && $absoluteUrl !== '') {
+                    $image->setAttribute('src', $absoluteUrl);
+                }
             }
         }
 
         foreach ($dom->querySelectorAll('a') as $anchor) {
             $href = $anchor->getAttribute('href');
             if ($href !== null && $href !== '') {
-                $anchor->setAttribute('href', urljoin($baseUrl, $href));
+                $absoluteUrl = urljoin($baseUrl, $href);
+                if ($absoluteUrl !== null && $absoluteUrl !== '') {
+                    $anchor->setAttribute('href', $absoluteUrl);
+                }
             }
         }
     }

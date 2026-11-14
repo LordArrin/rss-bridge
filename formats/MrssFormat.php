@@ -43,8 +43,8 @@ final class MrssFormat extends FormatAbstract
         $feed->appendChild($channel);
 
         $feedArray = $this->getFeed();
-        $uri = $feedArray['uri'] ?? '';
-        $title = $feedArray['name'] ?? '';
+        $uri = self::stringify($feedArray['uri'] ?? '');
+        $title = self::stringify($feedArray['name'] ?? '');
 
         foreach ($feedArray as $feedKey => $feedValue) {
             if ($feedKey === 'name') {
@@ -78,7 +78,7 @@ final class MrssFormat extends FormatAbstract
                     $feedImage = $document->createElement('image');
                     $channel->appendChild($feedImage);
                     $iconUrl = $document->createElement('url');
-                    $iconUrl->appendChild($document->createTextNode((string) $icon));
+                    $iconUrl->appendChild($document->createTextNode(self::stringify($icon)));
                     $feedImage->appendChild($iconUrl);
                     $iconTitle = $document->createElement('title');
                     $iconTitle->appendChild($document->createTextNode($title));
@@ -89,15 +89,16 @@ final class MrssFormat extends FormatAbstract
                 }
             } elseif ($feedKey === 'itunes') {
                 $feed->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:itunes', self::ITUNES_NS);
-                foreach ((array) $feedValue as $itunesKey => $itunesValue) {
-                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, (string) $itunesKey);
+                $itunesItems = is_array($feedValue) === true ? $feedValue : [];
+                foreach ($itunesItems as $itunesKey => $itunesValue) {
+                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, self::stringify($itunesKey));
                     $channel->appendChild($itunesProperty);
-                    $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
+                    $itunesProperty->appendChild($document->createTextNode(self::stringify($itunesValue)));
                 }
             } else {
                 $element = $document->createElement($feedKey);
                 $channel->appendChild($element);
-                $element->appendChild($document->createTextNode((string) $feedValue));
+                $element->appendChild($document->createTextNode(self::stringify($feedValue)));
             }
         }
 
@@ -116,7 +117,7 @@ final class MrssFormat extends FormatAbstract
             }
 
             if ($itemUid === null || $itemUid === '') {
-                $itemUid = hash('sha1', (string) $itemTitle . $itemContent);
+                $itemUid = hash('sha1', ($itemTitle ?? '') . $itemContent);
             }
 
             $entry = $document->createElement('item');
@@ -130,21 +131,22 @@ final class MrssFormat extends FormatAbstract
 
             if (isset($itemArray['itunes']) === true) {
                 $feed->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:itunes', self::ITUNES_NS);
-                foreach ((array) $itemArray['itunes'] as $itunesKey => $itunesValue) {
-                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, (string) $itunesKey);
+                $itunesItems = is_array($itemArray['itunes']) === true ? $itemArray['itunes'] : [];
+                foreach ($itunesItems as $itunesKey => $itunesValue) {
+                    $itunesProperty = $document->createElementNS(self::ITUNES_NS, self::stringify($itunesKey));
                     $entry->appendChild($itunesProperty);
-                    $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
+                    $itunesProperty->appendChild($document->createTextNode(self::stringify($itunesValue)));
                 }
 
                 $enclosure = $itemArray['enclosure'] ?? null;
                 if (is_array($enclosure) === true) {
-                    $enclosureUrl = (string) ($enclosure['url'] ?? '');
+                    $enclosureUrl = self::stringify($enclosure['url'] ?? '');
                     if ($enclosureUrl !== '') {
                         $itunesEnclosure = $document->createElement('enclosure');
                         $entry->appendChild($itunesEnclosure);
                         $itunesEnclosure->setAttribute('url', $enclosureUrl);
-                        $itunesEnclosure->setAttribute('length', (string) ($enclosure['length'] ?? ''));
-                        $itunesEnclosure->setAttribute('type', (string) ($enclosure['type'] ?? ''));
+                        $itunesEnclosure->setAttribute('length', self::stringify($enclosure['length'] ?? ''));
+                        $itunesEnclosure->setAttribute('type', self::stringify($enclosure['type'] ?? ''));
                     }
                 }
             }
@@ -191,5 +193,10 @@ final class MrssFormat extends FormatAbstract
             throw new \Exception('Failed to render MRSS XML feed');
         }
         return $xml;
+    }
+
+    private static function stringify(mixed $value): string
+    {
+        return is_scalar($value) === true ? (string) $value : '';
     }
 }

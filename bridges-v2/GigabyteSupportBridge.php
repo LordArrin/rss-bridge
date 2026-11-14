@@ -173,19 +173,13 @@ final class GigabyteSupportBridge extends BridgeAbstract
                 $html = (string) $tidy->value;
             }
 
-            $previousHandler = null;
-
-            $previousHandler = set_error_handler(function (int $severity, string $message) use (&$previousHandler): bool {
-                if (str_contains($message, 'Dom\\HTMLDocument::createFromString()') === true) {
-                    return true;
-                }
-                return $previousHandler !== null ? $previousHandler($severity, $message) : false;
-            }, E_WARNING);
-
             try {
-                $this->pageDom = \Dom\HTMLDocument::createFromString($html, LIBXML_NOERROR);
-            } finally {
-                restore_error_handler();
+                libxml_use_internal_errors(true);
+                $this->pageDom = \Dom\HTMLDocument::createFromString($html, LIBXML_NOERROR | LIBXML_NOWARNING);
+                libxml_use_internal_errors(false);
+            } catch (\Throwable) {
+                libxml_use_internal_errors(false);
+                return null;
             }
 
             return $this->pageDom;

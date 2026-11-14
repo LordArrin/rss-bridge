@@ -40,7 +40,7 @@ final class EuronewsBridge extends BridgeAbstract
                 'required' => true,
                 'type' => 'number',
                 'defaultValue' => 10,
-                'title' => 'Maximum number of returned feed items. Maximum 50, default 10',
+                'title' => 'Maximum number of returned feed items. Maximum 20, default 10',
             ],
         ],
     ];
@@ -48,6 +48,8 @@ final class EuronewsBridge extends BridgeAbstract
     public function collectData(): void
     {
         $limit = (int)($this->getInput('limit') ?? 10);
+        $limit = min(20, max(1, $limit));
+
         $lang = $this->getInput('lang');
 
         if (is_string($lang) === false) {
@@ -114,9 +116,13 @@ final class EuronewsBridge extends BridgeAbstract
             return ['author' => 'Euronews', 'content' => '', 'enclosures' => []];
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        try {
+            libxml_use_internal_errors(true);
+            $dom = \Dom\HTMLDocument::createFromString($html);
+            libxml_use_internal_errors(false);
+        } catch (\Throwable) {
+            return ['author' => 'Euronews', 'content' => '', 'enclosures' => []];
+        }
 
         $author = 'Euronews';
         $content = '';
@@ -174,6 +180,14 @@ final class EuronewsBridge extends BridgeAbstract
                         $enclosures[] = (string)$graphItem['video']['contentUrl'];
                     }
                 }
+            }
+        }
+
+        // Remove related articles widgets
+        $relatedSelectors = ['.c-widget-related', '.c-widget-related__article'];
+        foreach ($relatedSelectors as $selector) {
+            foreach ($dom->querySelectorAll($selector) as $related) {
+                $related->remove();
             }
         }
 

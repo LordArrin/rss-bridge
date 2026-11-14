@@ -115,9 +115,23 @@ final class NautilusBridge extends FeedExpander
                 return $item;
             }
             $this->saveCacheValue($cacheKey, $html, 7 * 24 * 60 * 60);
-            $dom = \Dom\HTMLDocument::createFromString($html);
+            try {
+                libxml_use_internal_errors(true);
+                $dom = \Dom\HTMLDocument::createFromString($html);
+                libxml_use_internal_errors(false);
+            } catch (\Throwable) {
+                libxml_use_internal_errors(false);
+                return $item;
+            }
         } else {
-            $dom = \Dom\HTMLDocument::createFromString($cachedHtml);
+            try {
+                libxml_use_internal_errors(true);
+                $dom = \Dom\HTMLDocument::createFromString($cachedHtml);
+                libxml_use_internal_errors(false);
+            } catch (\Throwable) {
+                libxml_use_internal_errors(false);
+                return $item;
+            }
         }
 
         $nextData = $this->extractNextData($dom);
@@ -211,7 +225,15 @@ final class NautilusBridge extends FeedExpander
             return $content;
         }
 
-        $tempDom = \Dom\HTMLDocument::createFromString('<div>' . $articleHtml . '</div>');
+        try {
+            libxml_use_internal_errors(true);
+            $tempDom = \Dom\HTMLDocument::createFromString('<div>' . $articleHtml . '</div>');
+            libxml_use_internal_errors(false);
+        } catch (\Throwable) {
+            libxml_use_internal_errors(false);
+            return $content . $this->fixRelativeLinksInString($articleHtml);
+        }
+
         $articleMain = $tempDom->querySelector('div');
 
         if ($articleMain instanceof \Dom\Element === false) {
@@ -334,7 +356,15 @@ final class NautilusBridge extends FeedExpander
 
     private function fixRelativeLinksInString(string $html): string
     {
-        $tempDom = \Dom\HTMLDocument::createFromString('<div>' . $html . '</div>');
+        try {
+            libxml_use_internal_errors(true);
+            $tempDom = \Dom\HTMLDocument::createFromString('<div>' . $html . '</div>');
+            libxml_use_internal_errors(false);
+        } catch (\Throwable) {
+            libxml_use_internal_errors(false);
+            return $html;
+        }
+
         $wrapper = $tempDom->querySelector('div');
         if ($wrapper instanceof \Dom\Element === true) {
             $this->fixRelativeLinksInElement($wrapper);

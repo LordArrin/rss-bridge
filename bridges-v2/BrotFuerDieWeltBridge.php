@@ -130,15 +130,24 @@ final class BrotFuerDieWeltBridge extends BridgeAbstract
                 }
             }
 
-            $item['content'] = $description;
-
+            // Inline the teaser image into the body instead of shipping it as an enclosure.
+            $leadImageHtml = '';
             $enclosureImg = $article->querySelector('div.news-img-wrap picture img');
             if ($enclosureImg !== null) {
                 $imgSrc = $enclosureImg->getAttribute('src') ?? '';
                 if ($imgSrc !== '') {
-                    $item['enclosures'] = [urljoin(self::URI, $imgSrc)];
+                    $resolvedSrc = urljoin(self::URI, $imgSrc);
+                    if ($resolvedSrc !== null && $resolvedSrc !== '') {
+                        $leadImageHtml = sprintf(
+                            '<p><img src="%s" alt="%s" style="max-width:100%%;height:auto;" /></p>',
+                            htmlspecialchars($resolvedSrc, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+                            htmlspecialchars($item['title'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                        );
+                    }
                 }
             }
+
+            $item['content'] = $leadImageHtml . $description;
 
             $this->items[] = $item;
         }

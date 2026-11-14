@@ -28,7 +28,8 @@ final class FrontpageAction implements ActionInterface
 
     public function __invoke(Request $request): Response
     {
-        $token = $request->getAttribute('token');
+        $tokenRaw = $request->getAttribute('token');
+        $token = is_string($tokenRaw) === true ? $tokenRaw : null;
 
         $activeBridges = 0;
 
@@ -233,30 +234,36 @@ final class FrontpageAction implements ActionInterface
         $form .= '<div class="parameters">' . "\n";
 
         foreach ($parameters as $id => $parameter) {
-            if (isset($parameter['exampleValue']) === false) {
-                $parameter['exampleValue'] = '';
+            if (is_array($parameter) === false) {
+                continue;
             }
+
+            $exampleValueRaw = $parameter['exampleValue'] ?? '';
+            $exampleValue = is_string($exampleValueRaw) === true ? $exampleValueRaw : (is_scalar($exampleValueRaw) === true ? (string) $exampleValueRaw : '');
+            $parameter['exampleValue'] = $exampleValue;
 
             if (isset($parameter['defaultValue']) === false) {
                 $parameter['defaultValue'] = '';
             }
 
+            $nameRaw = $parameter['name'] ?? '';
+            $parameterName = is_string($nameRaw) === true ? $nameRaw : (is_scalar($nameRaw) === true ? (string) $nameRaw : '');
+
             // Cast is now valid because PHPDoc says $id can be int|string
             $idStr = (string) $id;
             $idArg = 'arg-' . urlencode($bridgeClassName) . '-' . urlencode($contextName) . '-' . urlencode($idStr);
 
-            $form .= html_tag('label', $parameter['name'], ['for' => $idArg]) . "\n";
+            $form .= html_tag('label', $parameterName, ['for' => $idArg]) . "\n";
 
-            if (
-                isset($parameter['type']) === false
-                || $parameter['type'] === 'text'
-            ) {
+            $type = $parameter['type'] ?? 'text';
+
+            if ($type === 'text') {
                 $form .= self::getTextInput($parameter, $idArg, $idStr) . "\n";
-            } elseif ($parameter['type'] === 'number') {
+            } elseif ($type === 'number') {
                 $form .= self::getNumberInput($parameter, $idArg, $idStr) . "\n";
-            } elseif ($parameter['type'] === 'list') {
+            } elseif ($type === 'list') {
                 $form .= self::getListInput($parameter, $idArg, $idStr) . "\n";
-            } elseif ($parameter['type'] === 'checkbox') {
+            } elseif ($type === 'checkbox') {
                 $form .= self::getCheckboxInput($parameter, $idArg, $idStr) . "\n";
             } else {
                 continue;
@@ -267,13 +274,18 @@ final class FrontpageAction implements ActionInterface
             // touch devices and the JS TooltipManager renders a proper,
             // viewport-clamped tooltip from this text instead.
             $tooltipLines = [];
-            if (isset($parameter['title']) === true) {
-                $tooltipLines[] = (string) $parameter['title'];
+
+            $titleRaw = $parameter['title'] ?? null;
+            if (is_string($titleRaw) === true) {
+                $tooltipLines[] = $titleRaw;
+            } elseif (is_scalar($titleRaw) === true) {
+                $tooltipLines[] = (string) $titleRaw;
             }
-            if ($parameter['exampleValue'] !== '') {
+
+            if ($exampleValue !== '') {
                 $tooltipLines[] = sprintf(
                     "Example (long press / right click to use):\n%s",
-                    $parameter['exampleValue']
+                    $exampleValue
                 );
             }
 
@@ -284,7 +296,7 @@ final class FrontpageAction implements ActionInterface
                     'title'      => $tooltipText,
                     'tabindex'   => '0',
                     'role'       => 'button',
-                    'aria-label' => 'More information about ' . $parameter['name'],
+                    'aria-label' => 'More information about ' . $parameterName,
                     'data-for'   => $idArg,
                 ];
                 $form .= html_tag('i', 'i', $params) . "\n";
@@ -306,7 +318,7 @@ final class FrontpageAction implements ActionInterface
     }
 
     /**
-     * @param array<string, mixed> $parameter
+     * @param array<mixed, mixed> $parameter
      */
     public static function getTextInput(array $parameter, string $id, string $name): string
     {
@@ -327,7 +339,7 @@ final class FrontpageAction implements ActionInterface
     }
 
     /**
-     * @param array<string, mixed> $parameter
+     * @param array<mixed, mixed> $parameter
      */
     public static function getNumberInput(array $parameter, string $id, string $name): string
     {
@@ -348,7 +360,7 @@ final class FrontpageAction implements ActionInterface
     }
 
     /**
-     * @param array<string, mixed> $parameter
+     * @param array<mixed, mixed> $parameter
      */
     public static function getCheckboxInput(array $parameter, string $id, string $name): string
     {
@@ -361,34 +373,46 @@ final class FrontpageAction implements ActionInterface
     }
 
     /**
-     * @param array<string, mixed> $parameter
+     * @param array<mixed, mixed> $parameter
      */
     public static function getListInput(array $parameter, string $id, string $name): string
     {
         $list = sprintf('<select id="%s" name="%s">', htmlspecialchars($id), htmlspecialchars($name)) . "\n";
 
-        foreach ($parameter['values'] as $key => $value) {
+        $values = $parameter['values'] ?? [];
+        if (is_array($values) === false) {
+            $values = [];
+        }
+
+        $defaultValue = $parameter['defaultValue'] ?? null;
+
+        foreach ($values as $key => $value) {
+            $keyStr = (string) $key;
+
             if (is_array($value) === true) {
-                $list .= '<optgroup label="' . htmlspecialchars((string) $key) . '">';
+                $list .= '<optgroup label="' . htmlspecialchars($keyStr) . '">';
+
                 foreach ($value as $subkey => $subvalue) {
                     $subkeyStr = (string) $subkey;
-                    $subvalueStr = (string) $subvalue;
+                    $subvalueStr = is_string($subvalue) === true ? $subvalue : (is_scalar($subvalue) === true ? (string) $subvalue : '');
+
                     if (
-                        $parameter['defaultValue'] === $subkey
-                        || $parameter['defaultValue'] === $subvalue
+                        $defaultValue === $subkey
+                        || $defaultValue === $subvalue
                     ) {
                         $list .= html_option($subkeyStr, $subvalueStr, true) . "\n";
                     } else {
                         $list .= html_option($subkeyStr, $subvalueStr) . "\n";
                     }
                 }
+
                 $list .= '</optgroup>';
             } else {
-                $keyStr = (string) $key;
-                $valueStr = (string) $value;
+                $valueStr = is_string($value) === true ? $value : (is_scalar($value) === true ? (string) $value : '');
+
                 if (
-                    $parameter['defaultValue'] === $key
-                    || $parameter['defaultValue'] === $value
+                    $defaultValue === $key
+                    || $defaultValue === $value
                 ) {
                     $list .= html_option($keyStr, $valueStr, true) . "\n";
                 } else {

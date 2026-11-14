@@ -20,8 +20,11 @@ final class HtmlFormat extends FormatAbstract
 
     public function render(): string
     {
-        $queryString = $_SERVER['QUERY_STRING'] ?? '';
-        $bridgeName = $_GET['bridge'] ?? 'Unknown';
+        $queryStringRaw = $_SERVER['QUERY_STRING'] ?? '';
+        $queryString = is_string($queryStringRaw) === true ? $queryStringRaw : '';
+
+        $bridgeNameRaw = $_GET['bridge'] ?? 'Unknown';
+        $bridgeName = is_string($bridgeNameRaw) === true ? $bridgeNameRaw : 'Unknown';
 
         $feedArray = $this->getFeed();
 

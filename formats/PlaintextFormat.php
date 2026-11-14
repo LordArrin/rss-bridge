@@ -21,9 +21,11 @@ final class PlaintextFormat extends FormatAbstract
     {
         $feed = $this->getFeed();
 
+        $items = [];
         foreach ($this->getItems() as $item) {
-            $feed['items'][] = $item->toArray();
+            $items[] = $item->toArray();
         }
+        $feed['items'] = $items;
 
         return json_encode(
             $feed,

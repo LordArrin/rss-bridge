@@ -26,7 +26,14 @@ function normalize_unicode(string $text, string $form = 'NFC'): string
         return $text;
     }
 
-    $normalized = Normalizer::normalize($text, constant('Normalizer::' . $form));
+    $normalizerForm = match ($form) {
+        'NFD' => \Normalizer::FORM_D,
+        'NFKC' => \Normalizer::FORM_KC,
+        'NFKD' => \Normalizer::FORM_KD,
+        default => \Normalizer::FORM_C,
+    };
+
+    $normalized = \Normalizer::normalize($text, $normalizerForm);
 
     return is_string($normalized) === true ? $normalized : $text;
 }

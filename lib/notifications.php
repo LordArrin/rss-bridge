@@ -108,7 +108,12 @@ function build_notification(
  */
 function add_notification(array $notification): void
 {
-    $GLOBALS['__notifications'][] = $notification;
+    $list = $GLOBALS['__notifications'] ?? [];
+    if (is_array($list) === false) {
+        $list = [];
+    }
+    $list[] = $notification;
+    $GLOBALS['__notifications'] = $list;
 }
 
 /** Convenience wrappers ---------------------------------------------------- */
@@ -147,9 +152,26 @@ function notify_error(string $body, ?string $title = null, ?string $author = nul
  */
 function get_notifications(): array
 {
-    /** @var array<int, array<string, mixed>> $list */
-    $list = $GLOBALS['__notifications'];
-    return $list;
+    $list = $GLOBALS['__notifications'] ?? [];
+    if (is_array($list) === false) {
+        return [];
+    }
+
+    $result = [];
+    foreach ($list as $item) {
+        if (is_array($item) === false) {
+            continue;
+        }
+        $normalized = [];
+        foreach ($item as $key => $value) {
+            if (is_string($key) === true) {
+                $normalized[$key] = $value;
+            }
+        }
+        $result[] = $normalized;
+    }
+
+    return $result;
 }
 
 /**
@@ -158,6 +180,81 @@ function get_notifications(): array
 function clear_notifications(): void
 {
     $GLOBALS['__notifications'] = [];
+}
+
+/** Internal normalization helpers ------------------------------------------ */
+
+/**
+ * Reads a mixed notification field as string (non-scalar values become '').
+ */
+function notification_string(mixed $value): string
+{
+    if (is_string($value) === true) {
+        return $value;
+    }
+    if (is_int($value) === true || is_float($value) === true) {
+        return (string) $value;
+    }
+    if (is_bool($value) === true) {
+        return $value === true ? '1' : '';
+    }
+    return '';
+}
+
+/**
+ * Normalizes a mixed value into a list of string-keyed item arrays.
+ *
+ * @return list<array<string, mixed>>
+ */
+function notification_normalize_items(mixed $value): array
+{
+    if (is_array($value) === false) {
+        return [];
+    }
+
+    $items = [];
+    foreach ($value as $item) {
+        if (is_array($item) === false) {
+            continue;
+        }
+        $normalized = [];
+        foreach ($item as $key => $field) {
+            if (is_string($key) === true) {
+                $normalized[$key] = $field;
+            }
+        }
+        $items[] = $normalized;
+    }
+
+    return $items;
+}
+
+/**
+ * Normalizes body links, preserving the original integer keys so that
+ * {N} placeholders in the body keep pointing at the same entries.
+ *
+ * @return array<int, array{label: string, url: string}>
+ */
+function notification_normalize_links(mixed $value): array
+{
+    if (is_array($value) === false) {
+        return [];
+    }
+
+    $links = [];
+    foreach ($value as $key => $item) {
+        if (is_int($key) === false || is_array($item) === false) {
+            continue;
+        }
+        $label = $item['label'] ?? null;
+        $url = $item['url'] ?? null;
+        if (is_string($label) === false || is_string($url) === false) {
+            continue;
+        }
+        $links[$key] = ['label' => $label, 'url' => $url];
+    }
+
+    return $links;
 }
 
 /** Rendering --------------------------------------------------------------- */
@@ -225,7 +322,7 @@ function notification_body_html(string $body, array $links): string
 function render_notification(array $n): string
 {
     $types = notification_types();
-    $type = (string) ($n['type'] ?? 'info');
+    $type = notification_string($n['type'] ?? 'info');
     $class = $types[$type] ?? $types['info'];
 
     $html = sprintf('<div class="notification %s" role="alert">', e($class));
@@ -240,46 +337,51 @@ function render_notification(array $n): string
 
     $html .= '<div class="notification-content">';
 
-    if (($n['title'] ?? '') !== '') {
-        $html .= sprintf('<strong class="notification-title">%s</strong>', e((string) $n['title']));
+    $title = notification_string($n['title'] ?? '');
+    if ($title !== '') {
+        $html .= sprintf('<strong class="notification-title">%s</strong>', e($title));
     }
 
     $html .= sprintf(
         '<span class="notification-body">%s</span>',
-        notification_body_html((string) ($n['body'] ?? ''), (array) ($n['links'] ?? []))
+        notification_body_html(
+            notification_string($n['body'] ?? ''),
+            notification_normalize_links($n['links'] ?? [])
+        )
     );
 
-    if (($n['author'] ?? '') !== '') {
-        $html .= sprintf('<span class="notification-author">%s</span>', e((string) $n['author']));
+    $author = notification_string($n['author'] ?? '');
+    if ($author !== '') {
+        $html .= sprintf('<span class="notification-author">%s</span>', e($author));
     }
 
     $html .= '</div>'; // .notification-content
 
-    $buttons = (array) ($n['buttons'] ?? []);
+    $buttons = notification_normalize_items($n['buttons'] ?? []);
     if ($buttons === []) {
         // No buttons to render.
     } else {
         $html .= '<div class="notification-actions">';
         foreach ($buttons as $button) {
-            if (is_array($button) === false) {
-                continue;
-            }
-            $label = htmlspecialchars((string) ($button['label'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $url = notification_safe_url((string) ($button['url'] ?? ''));
+            $label = htmlspecialchars(notification_string($button['label'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $url = notification_safe_url(notification_string($button['url'] ?? ''));
             if ($url === null) {
                 continue; // skip buttons with missing/unsafe URL entirely
             }
             $safeUrl = htmlspecialchars($url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $method = strtolower((string) ($button['method'] ?? 'get'));
+            $method = strtolower(notification_string($button['method'] ?? 'get'));
 
             if ($method === 'post') {
                 $hidden = '';
-                foreach ((array) ($button['attributes'] ?? []) as $key => $value) {
-                    $hidden .= sprintf(
-                        '<input type="hidden" name="%s" value="%s">',
-                        htmlspecialchars((string) $key, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-                        htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
-                    );
+                $attributes = $button['attributes'] ?? [];
+                if (is_array($attributes) === true) {
+                    foreach ($attributes as $key => $value) {
+                        $hidden .= sprintf(
+                            '<input type="hidden" name="%s" value="%s">',
+                            htmlspecialchars((string) $key, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+                            htmlspecialchars(notification_string($value), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                        );
+                    }
                 }
                 $html .= sprintf(
                     '<form method="post" action="%s" class="notification-form">%s<button type="submit" class="notification-button">%s</button></form>',

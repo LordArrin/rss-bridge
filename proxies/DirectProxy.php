@@ -23,11 +23,11 @@ final class DirectProxy extends ProxyAbstract
 
     protected function fetchHtml(string $url, array $options): string
     {
-        $headers = $options['headers'] ?? [];
+        $headers = $this->normalizeHeaders($options['headers'] ?? []);
         $curlOptions = [];
 
         if (isset($options['timeout']) === true) {
-            $curlOptions[CURLOPT_TIMEOUT] = (int)($options['timeout'] / 1000);
+            $curlOptions[CURLOPT_TIMEOUT] = (int) (self::toInt($options['timeout'], 0) / 1000);
         }
 
         try {
@@ -54,7 +54,7 @@ final class DirectProxy extends ProxyAbstract
         $curlOptions = [];
 
         if (isset($options['timeout']) === true) {
-            $curlOptions[CURLOPT_TIMEOUT] = (int)($options['timeout'] / 1000);
+            $curlOptions[CURLOPT_TIMEOUT] = (int) (self::toInt($options['timeout'], 0) / 1000);
         }
 
         try {
@@ -75,5 +75,32 @@ final class DirectProxy extends ProxyAbstract
                 "Direct binary fetch failed for {$url}: {$e->getMessage()}"
             );
         }
+    }
+
+    /**
+     * Normalizes mixed header input into a list of header lines accepted by getContents().
+     *
+     * @return list<string>
+     */
+    private function normalizeHeaders(mixed $rawHeaders): array
+    {
+        if (is_array($rawHeaders) === false) {
+            return [];
+        }
+
+        $headers = [];
+        foreach ($rawHeaders as $key => $value) {
+            if (is_string($value) === false) {
+                continue;
+            }
+
+            if (is_string($key) === true) {
+                $headers[] = $key . ': ' . $value;
+            } else {
+                $headers[] = $value;
+            }
+        }
+
+        return $headers;
     }
 }

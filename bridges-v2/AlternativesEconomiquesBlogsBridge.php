@@ -118,7 +118,8 @@ final class AlternativesEconomiquesBlogsBridge extends BridgeAbstract
             $author = trim($authorElement->textContent ?? '');
         }
 
-        $contentHtml = '<meta name="referrer" content="no-referrer">';
+        // Do NOT inject a <meta> tag into the body: feed readers render it as text.
+        $contentHtml = '';
         try {
             $articleHtml = getContents($url);
             $articleDom = HTMLDocument::createFromString($articleHtml, LIBXML_NOERROR);
@@ -162,6 +163,9 @@ final class AlternativesEconomiquesBlogsBridge extends BridgeAbstract
             }
 
             if ($element->localName === 'img') {
+                // Preserve the no-referrer intent without leaking a <meta> tag.
+                $element->setAttribute('referrerpolicy', 'no-referrer');
+
                 $dataSrc = $element->getAttribute('data-src');
                 if ($dataSrc !== null && $dataSrc !== '') {
                     $currentSrc = $element->getAttribute('src');

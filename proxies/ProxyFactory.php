@@ -121,16 +121,25 @@ final class ProxyFactory
         $env = array_merge($_ENV, $_SERVER);
 
         foreach ($env as $key => $value) {
-            if (str_starts_with((string) $key, $prefix) === true) {
-                $configKey = strtolower(substr((string) $key, $prefixLen));
+            $keyStr = (string) $key;
 
-                // Ignore legacy 'type' key if it somehow exists in the environment
-                if ($configKey === 'type') {
-                    continue;
-                }
-
-                $config[$configKey] = (string) $value;
+            if (str_starts_with($keyStr, $prefix) === false) {
+                continue;
             }
+
+            // $_SERVER also carries non-scalar entries (e.g. argv); skip them.
+            if (is_scalar($value) === false) {
+                continue;
+            }
+
+            $configKey = strtolower(substr($keyStr, $prefixLen));
+
+            // Ignore legacy 'type' key if it somehow exists in the environment
+            if ($configKey === 'type') {
+                continue;
+            }
+
+            $config[$configKey] = (string) $value;
         }
 
         return $config;

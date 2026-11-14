@@ -10,7 +10,10 @@ namespace RSSBridge;
 class Container implements \ArrayAccess
 {
     /**
-     * @var array<string, callable|mixed>
+     * Registered entries: either a factory callable(Container): mixed,
+     * or a plain value that is returned as-is.
+     *
+     * @var array<string, mixed>
      */
     private array $values = [];
 
@@ -35,9 +38,13 @@ class Container implements \ArrayAccess
         if (isset($this->values[$offset]) === false) {
             throw new \Exception(sprintf('Unknown container key: "%s"', $offset));
         }
-        if (isset($this->resolved[$offset]) === false) {
-            $this->resolved[$offset] = $this->values[$offset]($this);
+
+        // array_key_exists (not isset) so factories returning null are cached too.
+        if (array_key_exists($offset, $this->resolved) === false) {
+            $factory = $this->values[$offset];
+            $this->resolved[$offset] = is_callable($factory) === true ? $factory($this) : $factory;
         }
+
         return $this->resolved[$offset];
     }
 

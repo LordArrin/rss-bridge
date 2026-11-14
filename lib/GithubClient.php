@@ -40,9 +40,15 @@ final class GithubClient
     {
         $issues = $this->fetch(sprintf('/repos/%s/%s/issues?per_page=30', $owner, $repo));
 
-        return array_values(array_filter($issues, function (mixed $issue): bool {
-            return is_array($issue) === true && isset($issue['pull_request']) === false;
-        }));
+        $result = [];
+        foreach ($issues as $issue) {
+            if (is_array($issue) === false || isset($issue['pull_request']) === true) {
+                continue;
+            }
+            $result[] = $issue;
+        }
+
+        return self::filterObjectList($result);
     }
 
     /**
@@ -51,7 +57,7 @@ final class GithubClient
     public function fetchPullRequests(string $owner, string $repo): array
     {
         $result = $this->fetch(sprintf('/repos/%s/%s/pulls?per_page=30', $owner, $repo));
-        return array_values(array_filter($result, fn(mixed $item) => is_array($item)));
+        return self::filterObjectList($result);
     }
 
     /**
@@ -69,7 +75,7 @@ final class GithubClient
     {
         $comments = $this->fetch(sprintf('/repos/%s/%s/issues/%s/comments', $owner, $repo, $id));
 
-        return array_values(array_reverse(array_filter($comments, fn(mixed $item) => is_array($item))));
+        return array_reverse(self::filterObjectList($comments));
     }
 
     /**
@@ -78,7 +84,7 @@ final class GithubClient
     public function fetchReleases(string $owner, string $repo): array
     {
         $result = $this->fetch(sprintf('/repos/%s/%s/releases?per_page=100', $owner, $repo));
-        return array_values(array_filter($result, fn(mixed $item) => is_array($item)));
+        return self::filterObjectList($result);
     }
 
     /**
@@ -90,7 +96,7 @@ final class GithubClient
     public function fetchRepositoryEvents(string $owner, string $repo): array
     {
         $result = $this->fetch(sprintf('/repos/%s/%s/events?per_page=100', $owner, $repo));
-        return array_values(array_filter($result, fn(mixed $item) => is_array($item)));
+        return self::filterObjectList($result);
     }
 
     /**
@@ -110,9 +116,17 @@ final class GithubClient
             $items = [];
         }
 
+        $totalRaw = $result['total_count'] ?? 0;
+        $total = 0;
+        if (is_int($totalRaw) === true) {
+            $total = $totalRaw;
+        } elseif (is_string($totalRaw) === true && is_numeric($totalRaw) === true) {
+            $total = (int) $totalRaw;
+        }
+
         return [
-            'items' => array_values(array_filter($items, fn(mixed $item) => is_array($item))),
-            'total_count' => (int) ($result['total_count'] ?? 0),
+            'items' => self::filterObjectList($items),
+            'total_count' => $total,
         ];
     }
 
@@ -122,7 +136,8 @@ final class GithubClient
             $response = $this->fetch(sprintf('/repos/%s/%s/commits/%s', $owner, $repo, rawurlencode($tagName)));
             $commit = $response['commit'] ?? null;
             if (is_array($commit) === true) {
-                return (string) ($commit['message'] ?? '');
+                $message = $commit['message'] ?? '';
+                return is_string($message) === true ? $message : '';
             }
             return '';
         } catch (\HttpException $e) {
@@ -138,6 +153,35 @@ final class GithubClient
     {
         $result = $this->fetch('/rate_limit');
         /** @var array<string, mixed> $result */
+        return $result;
+    }
+
+    /**
+     * Keeps only array entries and normalizes their keys to strings.
+     * GitHub API objects always use string keys, so nothing is lost.
+     *
+     * @param array<mixed, mixed> $items
+     * @return list<array<string, mixed>>
+     */
+    private static function filterObjectList(array $items): array
+    {
+        $result = [];
+
+        foreach ($items as $item) {
+            if (is_array($item) === false) {
+                continue;
+            }
+
+            $normalized = [];
+            foreach ($item as $key => $value) {
+                if (is_string($key) === true) {
+                    $normalized[$key] = $value;
+                }
+            }
+
+            $result[] = $normalized;
+        }
+
         return $result;
     }
 

@@ -218,7 +218,7 @@ final class SearchFloorBridge extends BridgeAbstract
 
     /**
      * @param array{id: int, title: string, uri: string, date: int|null} $book
-     * @return array{uri: string, title: string, timestamp: int, author: string, content: string, enclosures: list<string>}
+     * @return array{uri: string, title: string, timestamp: int, author: string, content: string}
      */
     private function buildItem(array $book, string $author): array
     {
@@ -232,7 +232,6 @@ final class SearchFloorBridge extends BridgeAbstract
             'timestamp' => $book['date'] ?? time(),
             'author' => $author,
             'content' => $this->buildItemContent($book['title'], $meta['description'], $readerLink, $coverDataUri),
-            'enclosures' => $coverDataUri !== '' ? [$coverDataUri] : [],
         ];
     }
 

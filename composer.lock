@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "455cd8a415d4153e8a1ab3ea2724dedd",
+    "content-hash": "c251d848058e5791b198eb9e87341473",
     "packages": [
         {
             "name": "busybee/urljoin",

@@ -35,6 +35,10 @@ final class ConnectivityAction implements ActionInterface
             return new Response(render_template('connectivity.html.php'));
         }
 
+        if (is_string($bridgeName) === false) {
+            return new Response('Invalid bridge name parameter', 400);
+        }
+
         $bridgeClassName = $this->bridgeFactory->createBridgeClassName($bridgeName);
         if ($bridgeClassName === null) {
             return new Response('Bridge not found', 404);

@@ -37,11 +37,12 @@ final class FileCache extends AbstractCache
 
         $config = array_merge($default, $config);
 
-        if ((bool) $config['path'] === false) {
+        $pathRaw = $config['path'] ?? null;
+        if (is_string($pathRaw) === false || $pathRaw === '') {
             throw new \Exception('The FileCache needs a path value');
         }
 
-        $this->path = rtrim((string) $config['path'], '/') . '/';
+        $this->path = rtrim($pathRaw, '/') . '/';
         $this->enablePurge = (bool) $config['enable_purge'];
 
         if (is_dir($this->path) === false) {

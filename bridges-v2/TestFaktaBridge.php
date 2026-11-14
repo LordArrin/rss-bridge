@@ -17,7 +17,10 @@ final class TestFaktaBridge extends BridgeAbstract
     public const CACHE_TIMEOUT = 18000;
 
     private const CSS = [
-        'img' => 'display: block; float: none; clear: both; max-width: 800px; width: auto; height: auto; margin: 16px 0; padding: 0;',
+        'img' => 'display: block; float: none; clear: both; max-width: 400px; width: auto; height: auto; margin: 16px 0; padding: 0;',
+        'img_table' => 'display: inline-block; max-width: 100px; max-height: 100px; width: auto; height: auto; vertical-align: middle;',
+        'table' => 'border-collapse: collapse; max-width: 100%; width: auto; table-layout: auto; border: 1px solid #ccc;',
+        'cell' => 'border: 1px solid #ccc; padding: 6px 10px; text-align: left; vertical-align: top;',
     ];
 
     private const SWEDISH_MONTHS = [
@@ -44,9 +47,14 @@ final class TestFaktaBridge extends BridgeAbstract
             throwServerException('Empty response from Testfakta homepage');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        try {
+            libxml_use_internal_errors(true);
+            $dom = \Dom\HTMLDocument::createFromString($html);
+            libxml_use_internal_errors(false);
+        } catch (\Throwable) {
+            libxml_use_internal_errors(false);
+            throwServerException('Failed to parse Testfakta homepage');
+        }
 
         $rows = $dom->querySelectorAll('.row-container');
 
@@ -67,6 +75,9 @@ final class TestFaktaBridge extends BridgeAbstract
                 continue;
             }
             $url = urljoin(self::URI, $href);
+            if ($url === null || $url === '') {
+                continue;
+            }
 
             $figureNode = $element->querySelector('img');
             $figureSrc = ($figureNode !== null) ? ($figureNode->getAttribute('src') ?? '') : '';
@@ -74,16 +85,25 @@ final class TestFaktaBridge extends BridgeAbstract
             $preambleNode = $element->querySelector('.text');
             $preamble = ($preambleNode !== null) ? trim($preambleNode->textContent ?? '') : '';
 
-            $articleHtml = getContents($url);
+            try {
+                $articleHtml = getContents($url);
+            } catch (\Exception) {
+                continue;
+            }
+
             if (is_string($articleHtml) === false || $articleHtml === '') {
                 continue;
             }
 
-            libxml_use_internal_errors(true);
-            $articleDom = \Dom\HTMLDocument::createFromString($articleHtml);
-            libxml_use_internal_errors(false);
+            try {
+                libxml_use_internal_errors(true);
+                $articleDom = \Dom\HTMLDocument::createFromString($articleHtml);
+                libxml_use_internal_errors(false);
+            } catch (\Throwable) {
+                libxml_use_internal_errors(false);
+                continue;
+            }
 
-            $contentNode = $articleDom->querySelector('div.content');
             $articleTextNode = $articleDom->querySelector('article');
 
             $requestorNode = $articleDom->querySelector('div.uppdrag');
@@ -102,7 +122,9 @@ final class TestFaktaBridge extends BridgeAbstract
 
             if ($figureSrc !== '') {
                 $fullFigureSrc = urljoin($url, $figureSrc);
-                $content .= '<p><img src="' . htmlspecialchars($fullFigureSrc) . '" style="' . self::CSS['img'] . '" alt="" /></p>';
+                if ($fullFigureSrc !== null && $fullFigureSrc !== '') {
+                    $content .= '<p><img src="' . htmlspecialchars($fullFigureSrc) . '" style="' . self::CSS['img'] . '" alt="" /></p>';
+                }
             }
 
             if ($category !== '' || $requestor !== '') {
@@ -114,6 +136,8 @@ final class TestFaktaBridge extends BridgeAbstract
             }
 
             if ($articleTextNode !== null) {
+                $this->removeJunk($articleTextNode);
+                $this->cleanTableStyles($articleTextNode);
                 $this->limitImageSize($articleTextNode, $url);
                 $articleContent = $articleTextNode->innerHTML;
                 if ($articleContent !== '') {
@@ -182,23 +206,66 @@ final class TestFaktaBridge extends BridgeAbstract
         return false;
     }
 
-    private function limitImageSize(\Dom\Node $node, string $baseUrl): void
+    private function removeJunk(\Dom\Element $node): void
     {
-        if ($node instanceof \Dom\Element === false && $node instanceof \Dom\HTMLDocument === false) {
-            return;
+        foreach (['script', 'svg'] as $tag) {
+            foreach (iterator_to_array($node->querySelectorAll($tag)) as $el) {
+                if ($el->parentNode !== null) {
+                    $el->parentNode->removeChild($el);
+                }
+            }
+        }
+    }
+
+    private function cleanTableStyles(\Dom\Element $node): void
+    {
+        foreach (iterator_to_array($node->querySelectorAll('table, tr, td, th')) as $el) {
+            $el->removeAttribute('style');
+            $el->removeAttribute('bgcolor');
+            $el->removeAttribute('color');
+            $el->removeAttribute('background');
         }
 
-        foreach ($node->querySelectorAll('img') as $img) {
-            if ($img instanceof \Dom\Element === true) {
-                $src = $img->getAttribute('src') ?? '';
-                if ($src !== '') {
-                    $img->setAttribute('src', urljoin($baseUrl, $src));
+        foreach (iterator_to_array($node->querySelectorAll('table')) as $table) {
+            $table->setAttribute('style', self::CSS['table']);
+        }
+
+        foreach (iterator_to_array($node->querySelectorAll('td, th')) as $cell) {
+            $cell->setAttribute('style', self::CSS['cell']);
+        }
+    }
+
+    private function limitImageSize(\Dom\Element $node, string $baseUrl): void
+    {
+        foreach (iterator_to_array($node->querySelectorAll('img')) as $img) {
+            $src = $img->getAttribute('src') ?? '';
+            if ($src !== '') {
+                $absolute = urljoin($baseUrl, $src);
+                if ($absolute !== null && $absolute !== '') {
+                    $img->setAttribute('src', $absolute);
                 }
-                $img->removeAttribute('width');
-                $img->removeAttribute('height');
-                $img->removeAttribute('align');
+            }
+            $img->removeAttribute('width');
+            $img->removeAttribute('height');
+            $img->removeAttribute('align');
+
+            if ($this->isInsideTable($img) === true) {
+                $img->setAttribute('style', self::CSS['img_table']);
+            } else {
                 $img->setAttribute('style', self::CSS['img']);
             }
         }
+    }
+
+    private function isInsideTable(\Dom\Element $img): bool
+    {
+        $current = $img->parentElement;
+        while ($current !== null) {
+            if ($current->localName === 'table' || $current->localName === 'td' || $current->localName === 'th') {
+                return true;
+            }
+            $current = $current->parentElement;
+        }
+        return false;
     }
 }

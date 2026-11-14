@@ -436,7 +436,27 @@ final class MemcachedCache extends AbstractCache
     public function getStats(): array
     {
         $stats = $this->conn->getStats();
-        return is_array($stats) === true ? $stats : [];
+        if (is_array($stats) === false) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($stats as $server => $serverStats) {
+            if (is_string($server) === false || is_array($serverStats) === false) {
+                continue;
+            }
+
+            $normalized = [];
+            foreach ($serverStats as $key => $value) {
+                if (is_string($key) === true) {
+                    $normalized[$key] = $value;
+                }
+            }
+
+            $result[$server] = $normalized;
+        }
+
+        return $result;
     }
 
     protected function createCacheKey(string $key): string

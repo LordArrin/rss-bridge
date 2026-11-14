@@ -43,6 +43,10 @@ final class DisplayAction implements ActionInterface
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Missing bridge name parameter']), 400);
         }
 
+        if (is_string($bridgeName) === false) {
+            return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Invalid bridge name parameter']), 400);
+        }
+
         $bridgeClassName = $this->bridgeFactory->createBridgeClassName($bridgeName);
         if ($bridgeClassName === null) {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Bridge not found']), 404);
@@ -50,6 +54,10 @@ final class DisplayAction implements ActionInterface
 
         if ($format === null || $format === '') {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'You must specify a format']), 400);
+        }
+
+        if (is_string($format) === false) {
+            return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Invalid format parameter']), 400);
         }
 
         if ($this->bridgeFactory->isEnabled($bridgeClassName) === false) {
@@ -66,15 +74,17 @@ final class DisplayAction implements ActionInterface
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => $message]), 500);
         }
 
-        $ttl = $request->get('_cache_timeout');
+        $ttl = $bridge->getCacheTimeout();
+        $ttlRaw = $request->get('_cache_timeout');
 
         $customTimeoutEnabled = filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN);
 
-        if ($customTimeoutEnabled === true && $ttl !== null) {
-            $ttl = (int) $ttl;
-            $ttl = max(1, min($ttl, 86400));
-        } else {
-            $ttl = $bridge->getCacheTimeout();
+        if ($customTimeoutEnabled === true) {
+            if (is_int($ttlRaw) === true) {
+                $ttl = max(1, min($ttlRaw, 86400));
+            } elseif (is_string($ttlRaw) === true && is_numeric($ttlRaw) === true) {
+                $ttl = max(1, min((int) $ttlRaw, 86400));
+            }
         }
 
         $request = $request->withAttribute('_resolved_cache_timeout', $ttl);
@@ -246,11 +256,14 @@ final class DisplayAction implements ActionInterface
 
         // A corrupted/legacy error-report entry must not crash the error path.
         $report = null;
+        $count = 1;
+
         if (is_string($stored) === true && $stored !== '') {
             try {
                 $decoded = Json::decode($stored);
                 if (is_array($decoded) === true && isset($decoded['count']) === true && is_int($decoded['count']) === true) {
                     $report = $decoded;
+                    $count = $decoded['count'];
                 }
             } catch (\JsonException $e) {
                 $report = null;
@@ -258,8 +271,9 @@ final class DisplayAction implements ActionInterface
         }
 
         if ($report !== null) {
+            $count++;
             $report['time'] = time();
-            $report['count']++;
+            $report['count'] = $count;
         } else {
             $report = [
                 'error' => $code,
@@ -271,7 +285,7 @@ final class DisplayAction implements ActionInterface
         $ttl = 86400 * 5;
         $this->cache->set($cacheKey, Json::encode($report), $ttl);
 
-        return (int) $report['count'];
+        return $count;
     }
 
     private static function createGithubIssueUrl(BridgeAbstract $bridge, \Throwable $e): string
@@ -286,7 +300,8 @@ final class DisplayAction implements ActionInterface
 
         $phpVer = phpversion();
 
-        $queryString = $_SERVER['QUERY_STRING'] ?? '';
+        $queryStringRaw = $_SERVER['QUERY_STRING'] ?? '';
+        $queryString = is_string($queryStringRaw) === true ? $queryStringRaw : '';
         $query = [
             'title' => $bridge->getName() . ' failed with: ' . $e->getMessage(),
             'body' => sprintf(

@@ -32,19 +32,35 @@ final class Url
 
     public static function getCurrentUrl(): string
     {
-        return self::getBaseUrl() . ($_SERVER['REQUEST_URI'] ?? '/');
+        return self::getBaseUrl() . self::serverValue('REQUEST_URI', '/');
     }
 
     private static function getBaseUrl(): string
     {
-        $https = $_SERVER['HTTPS'] ?? '';
-        $proto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+        $https = self::serverValue('HTTPS', '');
+        $proto = self::serverValue('HTTP_X_FORWARDED_PROTO', '');
         if ($proto !== '') {
             $https = ($proto === 'https') ? 'on' : '';
         }
-        $host = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
+        $host = self::serverValue('HTTP_HOST', self::serverValue('SERVER_NAME', 'localhost'));
         $scheme = ($https === 'on') ? 'https' : 'http';
         return sprintf('%s://%s', $scheme, $host);
+    }
+
+    /**
+     * Reads a $_SERVER entry as string. Non-scalar values yield $default.
+     */
+    private static function serverValue(string $key, string $default): string
+    {
+        $value = $_SERVER[$key] ?? null;
+
+        if (is_string($value) === true) {
+            return $value;
+        }
+        if (is_int($value) === true || is_float($value) === true) {
+            return (string) $value;
+        }
+        return $default;
     }
 
     public static function createSaneExceptionMessage(\Throwable $e): string

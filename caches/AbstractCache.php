@@ -91,9 +91,16 @@ abstract class AbstractCache implements CacheInterface
         }
 
         $value = $this->restoreFromJson($decoded['value']);
-        $freshUntil = (int) ($decoded['fresh_until'] ?? 0);
-        $now = time();
 
+        $freshUntilRaw = $decoded['fresh_until'] ?? 0;
+        $freshUntil = 0;
+        if (is_int($freshUntilRaw) === true) {
+            $freshUntil = $freshUntilRaw;
+        } elseif (is_string($freshUntilRaw) === true && is_numeric($freshUntilRaw) === true) {
+            $freshUntil = (int) $freshUntilRaw;
+        }
+
+        $now = time();
         $isFresh = ($freshUntil === 0 || $freshUntil > $now);
 
         return [
@@ -184,19 +191,47 @@ abstract class AbstractCache implements CacheInterface
     private function restoreFromJson(mixed $value): mixed
     {
         if (is_array($value) === true && ($value['__type'] ?? null) === 'Http\\Response') {
-            $body = (string) ($value['body'] ?? '');
-            $encoding = $value['body_encoding'] ?? 'utf8';
+            $bodyRaw = $value['body'] ?? '';
+            $body = is_string($bodyRaw) === true ? $bodyRaw : '';
 
+            $encoding = $value['body_encoding'] ?? 'utf8';
             if ($encoding === 'base64') {
                 $decoded = base64_decode($body, true);
                 $body = ($decoded !== false) ? $decoded : '';
             }
 
-            return new Response(
-                $body,
-                (int) ($value['code'] ?? 200),
-                (array) ($value['headers'] ?? [])
-            );
+            $codeRaw = $value['code'] ?? 200;
+            $code = 200;
+            if (is_int($codeRaw) === true) {
+                $code = $codeRaw;
+            } elseif (is_string($codeRaw) === true && is_numeric($codeRaw) === true) {
+                $code = (int) $codeRaw;
+            }
+
+            // Rebuild a strictly typed header map: array<string, string|list<string>>.
+            $headersRaw = $value['headers'] ?? [];
+            $headers = [];
+            if (is_array($headersRaw) === true) {
+                foreach ($headersRaw as $name => $headerValue) {
+                    if (is_string($name) === false) {
+                        continue;
+                    }
+
+                    if (is_string($headerValue) === true) {
+                        $headers[$name] = $headerValue;
+                    } elseif (is_array($headerValue) === true) {
+                        $list = [];
+                        foreach ($headerValue as $item) {
+                            if (is_string($item) === true) {
+                                $list[] = $item;
+                            }
+                        }
+                        $headers[$name] = $list;
+                    }
+                }
+            }
+
+            return new Response($body, $code, $headers);
         }
 
         return $value;

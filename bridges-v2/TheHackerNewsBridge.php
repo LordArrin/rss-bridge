@@ -29,6 +29,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
         '.social-share',
         '.related-posts',
         '.ad-container',
+        '.note-b.cf',
     ];
 
     protected const LIMIT = 10;
@@ -41,9 +42,14 @@ final class TheHackerNewsBridge extends BridgeAbstract
             throwServerException('Empty response from The Hacker News homepage');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        try {
+            libxml_use_internal_errors(true);
+            $dom = \Dom\HTMLDocument::createFromString($html);
+            libxml_use_internal_errors(false);
+        } catch (\Throwable) {
+            libxml_use_internal_errors(false);
+            throwServerException('Failed to parse The Hacker News homepage');
+        }
 
         $elements = $dom->querySelectorAll('div.body-post');
         $count = 0;
@@ -57,12 +63,10 @@ final class TheHackerNewsBridge extends BridgeAbstract
                 continue;
             }
 
-            $articleAuthor = null;
+            [$articleAuthor, $articleTimestamp] = $this->extractAuthorAndDate($element);
 
             $titleNode = $element->querySelector('h2.home-title');
             $articleTitle = ($titleNode !== null) ? trim($titleNode->textContent ?? '') : '';
-
-            $articleTimestamp = $this->extractTimestamp($element);
 
             $articleThumbnail = '';
             $thumbnailNode = $element->querySelector('img');
@@ -87,6 +91,9 @@ final class TheHackerNewsBridge extends BridgeAbstract
             }
 
             $articleUrl = urljoin(self::URI, $href);
+            if ($articleUrl === null || $articleUrl === '') {
+                continue;
+            }
 
             $articleContent = $this->fetchArticleContent($articleUrl, $articleAuthor);
 
@@ -97,13 +104,15 @@ final class TheHackerNewsBridge extends BridgeAbstract
             $content = '';
             if ($articleThumbnail !== '') {
                 $fullThumbnailUrl = urljoin($articleUrl, $articleThumbnail);
-                $content .= sprintf(
-                    '<p style="%s"><img src="%s" style="%s" alt="%s" /></p>',
-                    self::WRAPPER_STYLE,
-                    e($fullThumbnailUrl),
-                    self::IMG_STYLE,
-                    e($articleTitle)
-                );
+                if ($fullThumbnailUrl !== null && $fullThumbnailUrl !== '') {
+                    $content .= sprintf(
+                        '<p style="%s"><img src="%s" style="%s" alt="%s" /></p>',
+                        self::WRAPPER_STYLE,
+                        e($fullThumbnailUrl),
+                        self::IMG_STYLE,
+                        e($articleTitle)
+                    );
+                }
             }
             $content .= $articleContent;
 
@@ -128,42 +137,76 @@ final class TheHackerNewsBridge extends BridgeAbstract
         }
     }
 
-    private function extractTimestamp(\Dom\Element $element): int
+    /**
+     * @return array{0: string|null, 1: int}
+     */
+    private function extractAuthorAndDate(\Dom\Element $element): array
     {
-        $calendar = $element->querySelector('i.icon-calendar');
-        if ($calendar === null) {
-            return time();
-        }
+        $author = null;
+        $timestamp = time();
 
-        $parent = $calendar->parentElement;
-        if ($parent instanceof \Dom\Element === false) {
-            return time();
-        }
+        // Ищем контейнер .postmeta. Если его нет, ищем прямо в элементе.
+        $postmeta = $element->querySelector('.postmeta');
+        $searchRoot = $postmeta !== null ? $postmeta : $element;
 
-        $parentHtml = $parent->innerHTML;
-        if (preg_match('/<\/i>(.*?)<\/span>/is', $parentHtml, $matches) === 1) {
-            $dateText = trim(strip_tags($matches[1]));
-            if ($dateText !== '') {
-                $ts = strtotime($dateText);
+        // Находим все span.author внутри этого блока
+        $spans = $searchRoot->querySelectorAll('span.author');
+
+        if ($spans->length >= 2) {
+            // Первый span - это автор, второй - дата
+            $author = trim($spans->item(0)->textContent ?? '');
+            $dateStr = trim($spans->item(1)->textContent ?? '');
+
+            if ($dateStr !== '') {
+                $ts = strtotime($dateStr);
                 if ($ts !== false) {
-                    return $ts;
+                    $timestamp = $ts;
                 }
+            }
+        } elseif ($spans->length === 1) {
+            // Если span только один, проверяем, не дата ли это. Если нет - это автор.
+            $text = trim($spans->item(0)->textContent ?? '');
+            if ($text !== '' && preg_match('/^\d{4}-\d{2}-\d{2}|^\w{3}\s+\d{1,2},\s+\d{4}$/', $text) === false) {
+                $author = $text;
             }
         }
 
-        return time();
+        return [$author, $timestamp];
     }
 
     private function fetchArticleContent(string $url, ?string &$author): string
     {
-        $articleDom = getSimpleHTMLDOM($url);
+        try {
+            $articleHtml = getContents($url);
+        } catch (\Exception) {
+            return '';
+        }
 
-        $authorSpans = $articleDom->querySelectorAll('span.author');
-        $spanCount = count($authorSpans);
-        if ($spanCount > 0) {
-            $lastAuthor = $authorSpans->item($spanCount - 1);
-            if ($lastAuthor !== null) {
-                $author = trim($lastAuthor->textContent ?? '');
+        if (is_string($articleHtml) === false || $articleHtml === '') {
+            return '';
+        }
+
+        try {
+            libxml_use_internal_errors(true);
+            $articleDom = \Dom\HTMLDocument::createFromString($articleHtml);
+            libxml_use_internal_errors(false);
+        } catch (\Throwable) {
+            libxml_use_internal_errors(false);
+            return '';
+        }
+
+        // Если автор не был найден на главной, пытаемся найти его на странице статьи
+        if ($author === null || $author === '') {
+            $authorSpans = $articleDom->querySelectorAll('span.author');
+            $spanCount = count($authorSpans);
+            if ($spanCount > 0) {
+                $lastAuthor = $authorSpans->item($spanCount - 1);
+                if ($lastAuthor !== null) {
+                    $authorText = trim($lastAuthor->textContent ?? '');
+                    if ($authorText !== '' && preg_match('/^\d{4}-\d{2}-\d{2}|^\w{3}\s+\d{1,2},\s+\d{4}$/', $authorText) === false) {
+                        $author = $authorText;
+                    }
+                }
             }
         }
 
@@ -192,42 +235,21 @@ final class TheHackerNewsBridge extends BridgeAbstract
         return $html;
     }
 
-    private function removeSvgPlaceholders(\Dom\Node $node): void
+    private function removeSvgPlaceholders(\Dom\Element $node): void
     {
-        if ($node instanceof \Dom\Element === false && $node instanceof \Dom\HTMLDocument === false) {
-            return;
-        }
-
-        $images = $node->querySelectorAll('img');
-
-        foreach ($images as $img) {
-            if ($img instanceof \Dom\Element === false) {
-                continue;
-            }
-
+        foreach (iterator_to_array($node->querySelectorAll('img')) as $img) {
             $src = $img->getAttribute('src');
             if (is_string($src) === true && str_starts_with($src, 'data:image/svg+xml') === true) {
-                $parent = $img->parentElement;
-                if ($parent !== null) {
-                    $parent->removeChild($img);
+                if ($img->parentNode !== null) {
+                    $img->parentNode->removeChild($img);
                 }
             }
         }
     }
 
-    private function fixImages(\Dom\Node $node): void
+    private function fixImages(\Dom\Element $node): void
     {
-        if ($node instanceof \Dom\Element === false && $node instanceof \Dom\HTMLDocument === false) {
-            return;
-        }
-
-        $images = $node->querySelectorAll('img');
-
-        foreach ($images as $img) {
-            if ($img instanceof \Dom\Element === false) {
-                continue;
-            }
-
+        foreach (iterator_to_array($node->querySelectorAll('img')) as $img) {
             $img->removeAttribute('width');
             $img->removeAttribute('height');
             $img->removeAttribute('align');
@@ -265,67 +287,39 @@ final class TheHackerNewsBridge extends BridgeAbstract
         }
     }
 
-    private function styleLists(\Dom\Node $node): void
+    private function styleLists(\Dom\Element $node): void
     {
-        if ($node instanceof \Dom\Element === false && $node instanceof \Dom\HTMLDocument === false) {
-            return;
+        foreach (iterator_to_array($node->querySelectorAll('ul')) as $ul) {
+            $ul->setAttribute('style', self::UL_STYLE);
         }
 
-        foreach ($node->querySelectorAll('ul') as $ul) {
-            if ($ul instanceof \Dom\Element === true) {
-                $ul->setAttribute('style', self::UL_STYLE);
-            }
+        foreach (iterator_to_array($node->querySelectorAll('ol')) as $ol) {
+            $ol->setAttribute('style', self::UL_STYLE);
         }
 
-        foreach ($node->querySelectorAll('ol') as $ol) {
-            if ($ol instanceof \Dom\Element === true) {
-                $ol->setAttribute('style', self::UL_STYLE);
-            }
-        }
-
-        foreach ($node->querySelectorAll('li') as $li) {
-            if ($li instanceof \Dom\Element === true) {
-                $li->setAttribute('style', self::LI_STYLE);
-            }
+        foreach (iterator_to_array($node->querySelectorAll('li')) as $li) {
+            $li->setAttribute('style', self::LI_STYLE);
         }
     }
 
     /**
      * @param list<string> $selectors
      */
-    private function removeSelectors(\Dom\Node $node, array $selectors): void
+    private function removeSelectors(\Dom\Element $node, array $selectors): void
     {
-        if ($node instanceof \Dom\Element === false && $node instanceof \Dom\HTMLDocument === false) {
-            return;
-        }
-
         $combinedSelector = implode(',', $selectors);
-        $elements = $node->querySelectorAll($combinedSelector);
-
-        foreach ($elements as $el) {
-            if ($el instanceof \Dom\Element === true) {
-                $parent = $el->parentElement;
-                if ($parent !== null) {
-                    $parent->removeChild($el);
-                }
+        foreach (iterator_to_array($node->querySelectorAll($combinedSelector)) as $el) {
+            if ($el->parentNode !== null) {
+                $el->parentNode->removeChild($el);
             }
         }
     }
 
-    private function convertLazyLoading(\Dom\Node $node): void
+    private function convertLazyLoading(\Dom\Element $node): void
     {
-        if ($node instanceof \Dom\Element === false && $node instanceof \Dom\HTMLDocument === false) {
-            return;
-        }
-
         $lazyAttrs = ['data-src', 'data-lazy-src', 'data-original', 'data-url', 'data-srcset', 'data-cfsrc'];
-        $images = $node->querySelectorAll('img');
 
-        foreach ($images as $img) {
-            if ($img instanceof \Dom\Element === false) {
-                continue;
-            }
-
+        foreach (iterator_to_array($node->querySelectorAll('img')) as $img) {
             foreach ($lazyAttrs as $lazyAttr) {
                 $value = $img->getAttribute($lazyAttr);
                 if (is_string($value) === true && $value !== '') {
@@ -337,25 +331,20 @@ final class TheHackerNewsBridge extends BridgeAbstract
         }
     }
 
-    private function resolveRelativeLinks(\Dom\Node $node, string $baseUrl): void
+    private function resolveRelativeLinks(\Dom\Element $node, string $baseUrl): void
     {
-        if ($node instanceof \Dom\Element === false && $node instanceof \Dom\HTMLDocument === false) {
-            return;
-        }
-
         $selectors = ['a[href]', 'img[src]', 'link[href]', 'script[src]', 'source[src]', 'video[src]'];
 
         foreach ($selectors as $selector) {
-            foreach ($node->querySelectorAll($selector) as $el) {
-                if ($el instanceof \Dom\Element === false) {
-                    continue;
-                }
-
+            foreach (iterator_to_array($node->querySelectorAll($selector)) as $el) {
                 $attrName = str_contains($selector, 'href') === true ? 'href' : 'src';
                 $attr = $el->getAttribute($attrName);
 
                 if (is_string($attr) === true && $attr !== '') {
-                    $el->setAttribute($attrName, urljoin($baseUrl, $attr));
+                    $resolved = urljoin($baseUrl, $attr);
+                    if ($resolved !== null && $resolved !== '') {
+                        $el->setAttribute($attrName, $resolved);
+                    }
                 }
             }
         }

@@ -18,6 +18,18 @@ final class ScmbBridge extends BridgeAbstract
     {
         $html = $this->fetchHtml(self::URI);
 
+        foreach ($html->querySelectorAll('.premium-needed') as $junk) {
+            if ($junk->parentNode !== null) {
+                $junk->parentNode->removeChild($junk);
+            }
+        }
+
+        foreach ($html->querySelectorAll('.item-content > h2') as $junk) {
+            if ($junk->parentNode !== null) {
+                $junk->parentNode->removeChild($junk);
+            }
+        }
+
         $articles = $html->querySelectorAll('article');
 
         foreach ($articles as $article) {
@@ -98,9 +110,14 @@ final class ScmbBridge extends BridgeAbstract
             throwServerException('Failed to fetch ' . $url);
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        try {
+            libxml_use_internal_errors(true);
+            $dom = \Dom\HTMLDocument::createFromString($html);
+            libxml_use_internal_errors(false);
+        } catch (\Throwable $e) {
+            libxml_use_internal_errors(false);
+            throwServerException('Failed to parse HTML from ' . $url . ': ' . $e->getMessage());
+        }
 
         return $dom;
     }

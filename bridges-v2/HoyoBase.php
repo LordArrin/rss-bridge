@@ -110,7 +110,15 @@ abstract class HoyoBase extends BridgeAbstract
                 continue;
             }
 
-            $dom = \Dom\HTMLDocument::createFromString('<div>' . $sContent . '</div>');
+            try {
+                libxml_use_internal_errors(true);
+                $dom = \Dom\HTMLDocument::createFromString('<div>' . $sContent . '</div>');
+                libxml_use_internal_errors(false);
+            } catch (\Throwable) {
+                libxml_use_internal_errors(false);
+                continue;
+            }
+
             $wrapper = $dom->querySelector('div');
 
             if ($wrapper === null) {
@@ -276,7 +284,15 @@ abstract class HoyoBase extends BridgeAbstract
             return;
         }
 
-        $tempDoc = \Dom\HTMLDocument::createFromString('<div id="rss-bridge-temp-wrapper">' . $replacement . '</div>');
+        try {
+            libxml_use_internal_errors(true);
+            $tempDoc = \Dom\HTMLDocument::createFromString('<div id="rss-bridge-temp-wrapper">' . $replacement . '</div>');
+            libxml_use_internal_errors(false);
+        } catch (\Throwable) {
+            libxml_use_internal_errors(false);
+            return;
+        }
+
         $tempWrapper = $tempDoc->querySelector('#rss-bridge-temp-wrapper');
         if ($tempWrapper === null) {
             return;

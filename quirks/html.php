@@ -94,7 +94,7 @@ function html_tag(string $name, ?string $content = null, array $attributes = [])
             'type', 'id', 'name', 'value', 'placeholder', 'title', 'pattern',
             'class', 'for', 'oncontextmenu', 'data-for', 'formtarget',
             'tabindex', 'role', 'aria-label' => (function () use (&$html, $key, $value): void {
-                if ($value !== null && $value !== '' && $value !== false) {
+                if (is_scalar($value) === true && $value !== false && $value !== '') {
                     $html .= sprintf(' %s="%s"', $key, e((string) $value));
                 }
             })(),
