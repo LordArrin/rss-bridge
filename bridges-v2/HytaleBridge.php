@@ -69,7 +69,7 @@ final class HytaleBridge extends BridgeAbstract
 
         $item = [];
         $item['uri'] = $articleUrl;
-        $item['title'] = trim($link->textContent);
+        $item['title'] = trim($link->textContent ?? '');
 
         $content = '';
 
@@ -86,7 +86,7 @@ final class HytaleBridge extends BridgeAbstract
         $descriptionElement = $blogPost->querySelector(self::DESCRIPTION_SELECTOR);
 
         if ($descriptionElement !== null) {
-            $descriptionText = trim($descriptionElement->textContent);
+            $descriptionText = trim($descriptionElement->textContent ?? '');
             if ($descriptionText !== '') {
                 if ($content !== '') {
                     $content .= '<br />';
@@ -104,7 +104,7 @@ final class HytaleBridge extends BridgeAbstract
         if ($footerSpans->length >= 1) {
             $firstSpan = $footerSpans->item(0);
             if ($firstSpan !== null) {
-                $dateText = trim($firstSpan->textContent);
+                $dateText = trim($firstSpan->textContent ?? '');
                 if ($dateText !== '') {
                     $timestamp = strtotime($dateText);
                     if ($timestamp !== false) {
@@ -117,7 +117,7 @@ final class HytaleBridge extends BridgeAbstract
         $authorElement = $blogPost->querySelector(self::AUTHOR_SELECTOR);
 
         if ($authorElement !== null) {
-            $authorText = trim($authorElement->textContent);
+            $authorText = trim($authorElement->textContent ?? '');
 
             if (preg_match('/Posted by\s+(.+)/i', $authorText, $matches) === 1) {
                 $item['author'] = trim($matches[1]);

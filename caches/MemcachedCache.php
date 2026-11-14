@@ -173,27 +173,15 @@ final class MemcachedCache extends AbstractCache
 
         $value = $item['value'] ?? null;
 
-        $isChunked = is_array($value) === true && isset($value['__chunks']) === true;
-
-        if ($isChunked === false) {
-            if (is_string($value) === false) {
-                $this->logger->info(sprintf('Discarding invalid (non-string) cache entry for key "%s"', $key));
+        // Chunked entry: the marker lives at $value['__chunks'] (see set()).
+        if (is_array($value) === true && isset($value['__chunks']) === true) {
+            $chunksList = $value['__chunks'];
+            if (is_array($chunksList) === false) {
+                $this->logger->warning('Corrupted chunk list in memcached, invalidating entry');
                 $this->delete($key);
                 return ['fresh' => null, 'stale' => null];
             }
 
-            try {
-                return $this->decode($value, $key);
-            } catch (\Throwable $e) {
-                $this->logger->warning('Failed to decode memcached entry: ' . $e->getMessage());
-                return ['fresh' => null, 'stale' => null];
-            }
-        }
-
-        $chunksList = $value['__chunks'];
-        $payload = null;
-
-        if (is_array($chunksList) === true) {
             foreach ($chunksList as $chunkKey) {
                 if (is_string($chunkKey) === false) {
                     $this->logger->warning('Corrupted chunk list in memcached (non-string key), invalidating entry');
@@ -203,16 +191,29 @@ final class MemcachedCache extends AbstractCache
             }
 
             $payload = $this->readChunked(array_values($chunksList));
+            if ($payload === null) {
+                return ['fresh' => null, 'stale' => null];
+            }
+
+            try {
+                return $this->decode($payload, $key);
+            } catch (\Throwable $e) {
+                $this->logger->warning('Failed to decode chunked memcached entry: ' . $e->getMessage());
+                return ['fresh' => null, 'stale' => null];
+            }
         }
 
-        if ($payload === null) {
+        // Non-chunked entry: the value is the JSON string itself.
+        if (is_string($value) === false) {
+            $this->logger->info(sprintf('Discarding invalid (non-string) cache entry for key "%s"', $key));
+            $this->delete($key);
             return ['fresh' => null, 'stale' => null];
         }
 
         try {
-            return $this->decode($payload, $key);
+            return $this->decode($value, $key);
         } catch (\Throwable $e) {
-            $this->logger->warning('Failed to decode chunked memcached entry: ' . $e->getMessage());
+            $this->logger->warning('Failed to decode memcached entry: ' . $e->getMessage());
             return ['fresh' => null, 'stale' => null];
         }
     }
@@ -235,12 +236,12 @@ final class MemcachedCache extends AbstractCache
 
         try {
             $encoded = $this->encode($value, $freshUntil);
-        } catch (\JsonException $e) {
-            $this->logger->error(sprintf('Failed to JSON encode cache key "%s": %s', $key, $e->getMessage()));
+        } catch (\JsonException | \InvalidArgumentException $e) {
+            $this->logger->error(sprintf('Failed to encode cache key "%s": %s', $key, $e->getMessage()));
             return;
         }
 
-        $storeValue = $encoded; // FIX: Всегда храним JSON-строку, а не сырой $value
+        $storeValue = $encoded; // Always store the JSON string, never the raw $value
         $chunkKeys = [];
 
         if (strlen($encoded) > $this->chunkSize) {
@@ -276,7 +277,6 @@ final class MemcachedCache extends AbstractCache
                 return;
             }
 
-            // Маркер того, что значение разбито на чанки
             $storeValue = ['__chunks' => $chunkKeys];
         }
 
@@ -292,7 +292,8 @@ final class MemcachedCache extends AbstractCache
                     $this->conn->delete($chunkKey);
                 }
             }
-            $this->logStoreFailure($cacheKey, strlen(json_encode($item, \JSON_THROW_ON_ERROR)));
+            $itemJson = json_encode($item);
+            $this->logStoreFailure($cacheKey, $itemJson === false ? 0 : strlen($itemJson));
         }
     }
 
@@ -327,7 +328,9 @@ final class MemcachedCache extends AbstractCache
      */
     private function readChunked(array $chunkKeys): ?string
     {
-        $values = $this->conn->getMulti($chunkKeys, 1024);
+        // No flags: GET_EXTENDED (2) would wrap values in arrays and break the
+        // is_string() checks below; the previous "1024" was not a valid flag.
+        $values = $this->conn->getMulti($chunkKeys);
         $resultCode = $this->conn->getResultCode();
 
         // Partial hits come back with RES_NOTFOUND while fully successful
@@ -432,7 +435,8 @@ final class MemcachedCache extends AbstractCache
      */
     public function getStats(): array
     {
-        return $this->conn->getStats();
+        $stats = $this->conn->getStats();
+        return is_array($stats) === true ? $stats : [];
     }
 
     protected function createCacheKey(string $key): string

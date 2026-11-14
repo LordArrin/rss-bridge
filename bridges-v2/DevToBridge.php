@@ -231,7 +231,7 @@ final class DevToBridge extends BridgeAbstract
             }
 
             $guideUrl = urljoin(self::URI, $href);
-            $title = trim($link->textContent);
+            $title = trim($link->textContent ?? '');
 
             if ($title === '') {
                 continue;
@@ -244,11 +244,11 @@ final class DevToBridge extends BridgeAbstract
             $content = $this->cleanArticleContent($content, $guideUrl);
 
             $authorEl = $guideDom->querySelector('.crayons-article__header__meta .fw-bold');
-            $authorName = $authorEl !== null ? trim($authorEl->textContent) : null;
+            $authorName = $authorEl !== null ? trim($authorEl->textContent ?? '') : null;
 
             $tags = [];
             foreach ($guideDom->querySelectorAll('.spec__tags .crayons-tag') as $tag) {
-                $tagText = trim($tag->textContent);
+                $tagText = trim($tag->textContent ?? '');
                 if ($tagText !== '') {
                     $tags[] = ltrim($tagText, '#');
                 }

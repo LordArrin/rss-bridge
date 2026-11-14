@@ -58,7 +58,12 @@ final class BridgeMetadataCache
         $cacheKey = $this->buildCacheKey();
         $cached = $this->cache->get($cacheKey);
 
-        if ($cached !== null && is_array($cached) === true && isset($cached['metadata']) === true) {
+        if (
+            $cached !== null
+            && is_array($cached) === true
+            && isset($cached['metadata']) === true
+            && is_array($cached['metadata']) === true
+        ) {
             // Restore broken bridges list to the loader so FrontpageAction can access it
             if (isset($cached['broken_bridges']) === true && is_array($cached['broken_bridges']) === true) {
                 foreach ($cached['broken_bridges'] as $bridgeName => $errorInfo) {
@@ -256,7 +261,14 @@ final class BridgeMetadataCache
     }
 
     /**
-     * Builds the cache key based on bridge directories and their modification times.
+     * Builds the cache key from bridge directories, their files, and the
+     * env-driven bridge filters.
+     *
+     * The filters (ENABLED_BRIDGES / DISABLED_BRIDGES) change the visible bridge
+     * set without touching any file, so they MUST participate in the key —
+     * otherwise the frontpage keeps a stale bridge set for up to DEFAULT_TTL.
+     * File name + mtime + size are hashed so renames and same-second edits
+     * invalidate the entry too.
      *
      * @return string Unique cache key
      */
@@ -264,19 +276,27 @@ final class BridgeMetadataCache
     {
         if ($this->cachedHash === null) {
             $hashParts = [];
+
+            $enabled = getenv('ENABLED_BRIDGES');
+            $disabled = getenv('DISABLED_BRIDGES');
+            $hashParts[] = 'enabled=' . ($enabled === false ? '' : $enabled);
+            $hashParts[] = 'disabled=' . ($disabled === false ? '' : $disabled);
+
             foreach ($this->bridgesDirs as $dir) {
                 if (is_dir($dir) === true) {
                     $hashParts[] = $dir;
                     $files = scandir($dir);
                     if ($files !== false) {
                         foreach ($files as $file) {
-                            if ($file !== '.' && $file !== '..') {
-                                $filepath = $dir . '/' . $file;
-                                $mtime = filemtime($filepath);
-                                if ($mtime !== false) {
-                                    $hashParts[] = $mtime;
-                                }
+                            if ($file === '.' || $file === '..') {
+                                continue;
                             }
+                            $filepath = $dir . '/' . $file;
+                            $mtime = filemtime($filepath);
+                            $size = filesize($filepath);
+                            $hashParts[] = $file
+                                . ':' . ($mtime === false ? 0 : $mtime)
+                                . ':' . ($size === false ? 0 : $size);
                         }
                     }
                 }

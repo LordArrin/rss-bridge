@@ -157,7 +157,7 @@ final class TldrTechBridge extends BridgeAbstract
             if ($header !== null) {
                 $sectionH3 = $header->querySelector('h3');
                 if ($sectionH3 !== null) {
-                    $sectionName = trim($sectionH3->textContent);
+                    $sectionName = trim($sectionH3->textContent ?? '');
                 }
             }
 
@@ -178,7 +178,7 @@ final class TldrTechBridge extends BridgeAbstract
                     continue;
                 }
 
-                $title = trim($articleH3->textContent);
+                $title = trim($articleH3->textContent ?? '');
                 if ($title === '') {
                     continue;
                 }
@@ -235,7 +235,7 @@ final class TldrTechBridge extends BridgeAbstract
 
     private function truncateTitle(string $title): string
     {
-        $title = preg_replace('/\s*\(\d+\s+minute\s+read\)\s*$/i', '', $title);
+        $title = preg_replace('/\s*\(\d+\s+minute\s+read\)\s*$/i', '', $title) ?? $title;
 
         if (mb_strlen($title) <= self::MAX_TITLE_LENGTH) {
             return $title;

@@ -72,7 +72,7 @@ final class GoodreadsBridge extends BridgeAbstract
             }
 
             $dateSpan = $row->querySelector('.uitext');
-            $dateSpanText = ($dateSpan !== null) ? $dateSpan->textContent : '';
+            $dateSpanText = ($dateSpan !== null) ? ($dateSpan->textContent ?? '') : '';
             $date = null;
             $isPublished = false;
 
@@ -101,7 +101,7 @@ final class GoodreadsBridge extends BridgeAbstract
                 continue;
             }
 
-            $title = trim($bookTitleNode->textContent);
+            $title = trim($bookTitleNode->textContent ?? '');
             $href = $bookTitleNode->getAttribute('href') ?? '';
 
             if ($href !== '' && str_starts_with($href, '/') === true) {
@@ -109,7 +109,7 @@ final class GoodreadsBridge extends BridgeAbstract
             }
 
             $authorNameNode = $row->querySelector('.authorName');
-            $authorName = ($authorNameNode !== null) ? trim($authorNameNode->textContent) : '';
+            $authorName = ($authorNameNode !== null) ? trim($authorNameNode->textContent ?? '') : '';
 
             $coverSrc = '';
             $bookCoverNode = $row->querySelector('.bookCover');

@@ -106,7 +106,7 @@ final class NACSouthGermanyMediaLibraryBridge extends BridgeAbstract
             return null;
         }
 
-        $sourceUri = (string) ($source->getAttribute('src') ?? '');
+        $sourceUri = $source->getAttribute('src') ?? '';
         if ($sourceUri === '') {
             return null;
         }

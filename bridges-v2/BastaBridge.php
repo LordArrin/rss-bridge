@@ -58,8 +58,8 @@ final class BastaBridge extends BridgeAbstract
                 continue;
             }
 
-            $title = trim($titleEl->textContent);
-            $uri = trim($guidEl->textContent);
+            $title = trim($titleEl->textContent ?? '');
+            $uri = trim($guidEl->textContent ?? '');
 
             if ($title === '' || $uri === '') {
                 continue;
@@ -67,7 +67,7 @@ final class BastaBridge extends BridgeAbstract
 
             $timestamp = null;
             if ($dateEl !== null) {
-                $dateText = trim($dateEl->textContent);
+                $dateText = trim($dateEl->textContent ?? '');
                 if ($dateText !== '') {
                     $parsed = strtotime($dateText);
                     if ($parsed !== false) {
@@ -145,7 +145,7 @@ final class BastaBridge extends BridgeAbstract
                     continue;
                 }
 
-                $value = $el->getAttribute($attr);
+                $value = $el->getAttribute($attr) ?? '';
 
                 if (
                     $value === '' ||

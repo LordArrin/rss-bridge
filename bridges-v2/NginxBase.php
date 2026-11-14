@@ -264,7 +264,7 @@ abstract class NginxBase extends BridgeAbstract
                         $link->setAttribute('href', urljoin($this->getURI(), $href));
                     }
                 }
-                $content = (string) $wrapper->innerHTML;
+                $content = $wrapper->innerHTML;
             }
 
             $this->items[] = [

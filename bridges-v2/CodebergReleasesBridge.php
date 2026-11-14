@@ -351,11 +351,11 @@ final class CodebergReleasesBridge extends BridgeAbstract
 
         if ($body !== '') {
             $body = str_replace(["\r\n", "\r"], "\n", $body);
-            $body = preg_replace('/^\s*\(Built by workflow.*$/m', '', $body);
-            $body = preg_replace('/^\s*Built by workflow.*$/m', '', $body);
-            $body = preg_replace('/\n{3,}/', "\n\n", $body);
-            $body = preg_replace('/\n([*-] )/', "\n\n$1", $body);
-            $body = trim((string) $body);
+            $body = preg_replace('/^\s*\(Built by workflow.*$/m', '', $body) ?? $body;
+            $body = preg_replace('/^\s*Built by workflow.*$/m', '', $body) ?? $body;
+            $body = preg_replace('/\n{3,}/', "\n\n", $body) ?? $body;
+            $body = preg_replace('/\n([*-] )/', "\n\n$1", $body) ?? $body;
+            $body = trim($body);
 
             if ($body !== '') {
                 $html = markdownToHtml($body, [
@@ -368,12 +368,12 @@ final class CodebergReleasesBridge extends BridgeAbstract
                     '/<ul([^>]*)>/',
                     '<ul$1 style="list-style-type: disc; margin: 8px 0; padding-left: 24px;">',
                     $html
-                );
+                ) ?? $html;
                 $html = preg_replace(
                     '/<li([^>]*)>/',
                     '<li$1 style="margin: 4px 0;">',
                     $html
-                );
+                ) ?? $html;
 
                 $content .= sprintf('<div>%s</div>', $html);
             }

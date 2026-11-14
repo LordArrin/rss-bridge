@@ -208,7 +208,7 @@ final class PanoramaBridge extends BridgeAbstract
 
         $ogTitle = $articleHTML->querySelector('meta[property="og:title"]');
         if ($ogTitle !== null) {
-            $content = (string) ($ogTitle->getAttribute('content') ?? '');
+            $content = ($ogTitle->getAttribute('content') ?? '');
             return $content !== '' ? trim($content) : $fallbackTitle;
         }
 
@@ -219,7 +219,7 @@ final class PanoramaBridge extends BridgeAbstract
     {
         $publishedTime = $articleHTML->querySelector('meta[property="article:published_time"]');
         if ($publishedTime !== null) {
-            $content = (string) ($publishedTime->getAttribute('content') ?? '');
+            $content = $publishedTime->getAttribute('content') ?? '';
             if ($content !== '') {
                 $timestamp = strtotime($content);
                 if ($timestamp !== false) {
@@ -235,7 +235,7 @@ final class PanoramaBridge extends BridgeAbstract
     {
         $authorTag = $articleHTML->querySelector('meta[property="article:author"]');
         if ($authorTag !== null) {
-            $content = (string) ($authorTag->getAttribute('content') ?? '');
+            $content = $authorTag->getAttribute('content') ?? '';
             return $content !== '' ? $content : self::DEFAULT_AUTHOR;
         }
 
@@ -246,7 +246,7 @@ final class PanoramaBridge extends BridgeAbstract
     {
         $ogImage = $articleHTML->querySelector('meta[property="og:image"]');
         if ($ogImage !== null) {
-            $content = (string) ($ogImage->getAttribute('content') ?? '');
+            $content = $ogImage->getAttribute('content') ?? '';
             if ($content !== '') {
                 $imageUrl = trim($content);
                 if ($imageUrl !== '') {
@@ -287,12 +287,12 @@ final class PanoramaBridge extends BridgeAbstract
                 $junk->remove();
             }
 
-            return (string) $contentElem->innerHTML;
+            return $contentElem->innerHTML;
         }
 
         $ogDesc = $articleHTML->querySelector('meta[property="og:description"]');
         if ($ogDesc !== null) {
-            $content = (string) ($ogDesc->getAttribute('content') ?? '');
+            $content = $ogDesc->getAttribute('content') ?? '';
             if ($content !== '') {
                 $description = trim($content);
                 if ($description !== '') {

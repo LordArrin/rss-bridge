@@ -105,9 +105,16 @@ final class GigabyteSupportBridge extends BridgeAbstract
             array_pop($segments);
         }
 
+        $product = array_pop($segments);
+        $category = array_pop($segments);
+
+        if ($product === null || $category === null) {
+            return null;
+        }
+
         $this->productInfo = [
-            'product' => array_pop($segments),
-            'category' => array_pop($segments),
+            'product' => $product,
+            'category' => $category,
             'fragment' => $parsedUrl['fragment'] ?? '',
         ];
 

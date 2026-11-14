@@ -120,9 +120,9 @@ final class FeedAggregatorBridge extends BridgeAbstract
                     }
                 }
             } catch (\JsonException $e) {
-                $this->logger->warning(sprintf('FeedAggregator: JSON parse error for %s', $jsonUrl));
+                $this->logger?->warning(sprintf('FeedAggregator: JSON parse error for %s', $jsonUrl));
             } catch (\Exception $e) {
-                $this->logger->warning(sprintf('FeedAggregator: failed to fetch %s', $jsonUrl));
+                $this->logger?->warning(sprintf('FeedAggregator: failed to fetch %s', $jsonUrl));
             }
         }
 

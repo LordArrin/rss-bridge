@@ -215,7 +215,7 @@ final class FimfictionBridge extends BridgeAbstract
 
     private function detectStoryError(\Dom\HTMLDocument $dom): ?string
     {
-        $text = (string) $dom->documentElement->textContent;
+        $text = $dom->documentElement->textContent ?? '';
 
         return match (true) {
             stripos($text, 'Story not found') !== false => 'This story has been deleted or does not exist.',

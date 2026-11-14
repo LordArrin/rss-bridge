@@ -112,7 +112,7 @@ final class AuthorTodayBridge extends BridgeAbstract
             return '';
         }
 
-        return trim($titleNode->textContent);
+        return trim($titleNode->textContent ?? '');
     }
 
     /**
@@ -121,7 +121,7 @@ final class AuthorTodayBridge extends BridgeAbstract
     private function parseChapters(\Dom\HTMLDocument $html): array
     {
         $authorNode = $html->querySelector('.book-authors a');
-        $author = $authorNode !== null ? trim($authorNode->textContent) : '';
+        $author = $authorNode !== null ? trim($authorNode->textContent ?? '') : '';
 
         $coverNode = $html->querySelector('img.cover-image');
         $coverUrl = $coverNode !== null ? $this->absoluteUrl((string)$coverNode->getAttribute('src')) : '';
@@ -170,7 +170,7 @@ final class AuthorTodayBridge extends BridgeAbstract
             return null;
         }
 
-        $title = trim($link->textContent);
+        $title = trim($link->textContent ?? '');
         $uri = $this->absoluteUrl((string)$link->getAttribute('href'));
         $timeNode = $chapter->querySelector('[data-time]');
         $timestamp = $timeNode !== null ? $this->timestamp((string)$timeNode->getAttribute('data-time')) : null;

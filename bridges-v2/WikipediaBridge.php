@@ -184,9 +184,9 @@ final class WikipediaBridge extends BridgeAbstract
     private function replaceUriInHtmlElement(string $html): string
     {
         $baseUri = $this->getURI();
-        $html = preg_replace('/href="\/wiki\//', 'href="' . $baseUri . '/wiki/', $html);
-        $html = preg_replace('/href="\//', 'href="' . $baseUri . '/', $html);
-        $html = preg_replace('/src="\/\//', 'src="https://', $html);
+        $html = preg_replace('/href="\/wiki\//', 'href="' . $baseUri . '/wiki/', $html) ?? $html;
+        $html = preg_replace('/href="\//', 'href="' . $baseUri . '/', $html) ?? $html;
+        $html = preg_replace('/src="\/\//', 'src="https://', $html) ?? $html;
         return $html;
     }
 

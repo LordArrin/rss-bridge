@@ -69,8 +69,9 @@ final class UniverseTodayBridge extends FeedExpander
                 continue;
             }
             $src = $iframe->getAttribute('src') ?? '';
-            if ($src !== '') {
-                $link = $iframe->ownerDocument->createElement('a');
+            $ownerDocument = $iframe->ownerDocument;
+            if ($src !== '' && $ownerDocument !== null) {
+                $link = $ownerDocument->createElement('a');
                 $link->textContent = $src;
                 $link->setAttribute('href', $src);
                 $iframe->replaceWith($link);
@@ -128,8 +129,8 @@ final class UniverseTodayBridge extends FeedExpander
 
         $baseUri = rtrim(self::URI, '/');
 
-        $html = preg_replace('/\b(src|href)="\/([^"]+)"/i', '$1="' . $baseUri . '/$2"', $html);
-        $html = preg_replace('/\b(src|href)="\/\/([^"]+)"/i', '$1="https://$2"', $html);
+        $html = preg_replace('/\b(src|href)="\/([^"]+)"/i', '$1="' . $baseUri . '/$2"', $html) ?? $html;
+        $html = preg_replace('/\b(src|href)="\/\/([^"]+)"/i', '$1="https://$2"', $html) ?? $html;
 
         $item['content'] = $html;
 

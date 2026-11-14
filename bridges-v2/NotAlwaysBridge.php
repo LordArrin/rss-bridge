@@ -86,7 +86,7 @@ final class NotAlwaysBridge extends BridgeAbstract
             return null;
         }
 
-        $title = trim($link->textContent);
+        $title = trim($link->textContent ?? '');
 
         $postHeader = $post->querySelector('.post_header');
         $storyContent = $post->querySelector('.storycontent');

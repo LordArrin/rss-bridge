@@ -161,7 +161,7 @@ final class NautilusBridge extends FeedExpander
             return null;
         }
 
-        $jsonString = $script->textContent;
+        $jsonString = $script->textContent ?? '';
         if ($jsonString === '') {
             return null;
         }
@@ -229,8 +229,9 @@ final class NautilusBridge extends FeedExpander
                 continue;
             }
             $src = $iframe->getAttribute('src') ?? '';
-            if ($src !== '') {
-                $link = $articleMain->ownerDocument->createElement('a');
+            $ownerDocument = $articleMain->ownerDocument;
+            if ($src !== '' && $ownerDocument !== null) {
+                $link = $ownerDocument->createElement('a');
                 $link->textContent = $src;
                 $link->setAttribute('href', $src);
                 $iframe->replaceWith($link);
@@ -301,7 +302,7 @@ final class NautilusBridge extends FeedExpander
             if ($paragraph instanceof \Dom\Element === false) {
                 continue;
             }
-            $text = trim(html_entity_decode($paragraph->textContent, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            $text = trim(html_entity_decode($paragraph->textContent ?? '', ENT_QUOTES | ENT_HTML5, 'UTF-8'));
             if (str_contains($text, 'Subscribe to our free newsletter') === true) {
                 $paragraph->remove();
             }

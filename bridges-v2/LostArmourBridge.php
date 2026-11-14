@@ -286,16 +286,16 @@ final class LostArmourBridge extends BridgeAbstract
 
     private function cleanMsOfficeMarkup(string $html): string
     {
-        $html = preg_replace('/<!--\[if[^\]]*\]>.*?<!\[endif\]-->/s', '', $html);
-        $html = preg_replace('/<!--\s*\[if[^\]]*\]-->/s', '', $html);
-        $html = preg_replace('/<!--\[endif\]-->/s', '', $html);
+        $html = preg_replace('/<!--\[if[^\]]*\]>.*?<!\[endif\]-->/s', '', $html) ?? $html;
+        $html = preg_replace('/<!--\s*\[if[^\]]*\]-->/s', '', $html) ?? $html;
+        $html = preg_replace('/<!--\[endif\]-->/s', '', $html) ?? $html;
         return $html;
     }
 
     private function cleanNbsp(string $html): string
     {
-        $html = preg_replace('/(&nbsp;|\xC2\xA0)+/', ' ', $html);
-        $html = preg_replace('/<p>\s*<\/p>/', '', $html);
+        $html = preg_replace('/(&nbsp;|\xC2\xA0)+/', ' ', $html) ?? $html;
+        $html = preg_replace('/<p>\s*<\/p>/', '', $html) ?? $html;
         return $html;
     }
 }

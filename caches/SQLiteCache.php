@@ -296,10 +296,9 @@ final class SQLiteCache extends AbstractCache
         $hardExpiration = $ttl === null ? 0 : $freshUntil + self::DEFAULT_STALE_TTL;
 
         try {
-            // Use AbstractCache::encode() for JSON serialization
             $blob = $this->encode($value, $freshUntil);
-        } catch (\JsonException $e) {
-            $this->logger->error(sprintf('Failed to JSON encode cache key "%s": %s', $key, $e->getMessage()));
+        } catch (\JsonException | \InvalidArgumentException $e) {
+            $this->logger->error(sprintf('Failed to encode cache key "%s": %s', $key, $e->getMessage()));
             return;
         }
 

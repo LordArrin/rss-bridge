@@ -40,34 +40,21 @@ final class Configuration
             throwServerException('The default bridges configuration file (.bridges.default) is missing');
         }
 
-        $config = parse_ini_file($defaultConfigPath, true, INI_SCANNER_TYPED);
+        // INI_SCANNER_RAW keeps every value as a string: numeric-looking tokens
+        // and secrets keep leading zeros and are NOT silently cast to int.
+        $config = parse_ini_file($defaultConfigPath, true, INI_SCANNER_RAW);
         if ($config === false) {
             throwServerException('Error parsing default bridges config');
         }
-
-        foreach ($config as $header => $section) {
-            if (is_array($section) === false) {
-                continue;
-            }
-            foreach ($section as $key => $value) {
-                self::setConfig((string) $header, (string) $key, $value);
-            }
-        }
+        self::importConfig($config);
 
         // 2. Load user bridge configuration (optional, copied to /app/ by docker-entrypoint.sh
         // to ensure correct read permissions for the nginx PHP-FPM user)
         $userConfigPath = __DIR__ . '/../.bridges';
         if (file_exists($userConfigPath) === true) {
-            $userConfig = parse_ini_file($userConfigPath, true, INI_SCANNER_TYPED);
+            $userConfig = parse_ini_file($userConfigPath, true, INI_SCANNER_RAW);
             if ($userConfig !== false) {
-                foreach ($userConfig as $header => $section) {
-                    if (is_array($section) === false) {
-                        continue;
-                    }
-                    foreach ($section as $key => $value) {
-                        self::setConfig((string) $header, (string) $key, $value);
-                    }
-                }
+                self::importConfig($userConfig);
             }
         }
     }
@@ -78,6 +65,51 @@ final class Configuration
             throwServerException('Bridge config has not been loaded');
         }
         return self::$config[strtolower($section)][strtolower($key)] ?? $default;
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private static function importConfig(array $config): void
+    {
+        foreach ($config as $header => $section) {
+            if (is_array($section) === false) {
+                continue;
+            }
+            foreach ($section as $key => $value) {
+                self::setConfig((string) $header, (string) $key, self::coerceValue($value));
+            }
+        }
+    }
+
+    /**
+     * Only explicit boolean/null keywords are coerced; everything else stays a
+     * string (so bridges cast numeric config values themselves). This preserves
+     * secrets like "007" or "123456" that INI_SCANNER_TYPED would turn into int.
+     */
+    private static function coerceValue(mixed $value): mixed
+    {
+        if (is_string($value) === false) {
+            return $value;
+        }
+
+        // RAW mode may leave surrounding quotes; strip one matching pair.
+        $len = strlen($value);
+        if ($len >= 2 && (($value[0] === '"' && $value[$len - 1] === '"') || ($value[0] === "'" && $value[$len - 1] === "'"))) {
+            $value = substr($value, 1, -1);
+        }
+
+        $lower = strtolower(trim($value));
+        if ($lower === 'true' || $lower === 'yes' || $lower === 'on') {
+            return true;
+        }
+        if ($lower === 'false' || $lower === 'no' || $lower === 'off') {
+            return false;
+        }
+        if ($lower === 'null') {
+            return null;
+        }
+        return $value;
     }
 
     /**

@@ -163,14 +163,14 @@ final class TopWarBridge extends BridgeAbstract
 
             $nextSibling = $imgContainer->nextSibling;
 
-            while ($nextSibling !== null && $nextSibling->nodeType === XML_TEXT_NODE && trim((string) ($nextSibling->textContent ?? '')) === '') {
+            while ($nextSibling !== null && $nextSibling->nodeType === XML_TEXT_NODE && trim($nextSibling->textContent ?? '') === '') {
                 $nextSibling = $nextSibling->nextSibling;
             }
 
             if ($nextSibling instanceof \Dom\Element) {
                 $tagName = $nextSibling->tagName ?? '';
                 if ($tagName === 'div' || $tagName === 'span') {
-                    $captionText = trim((string) ($nextSibling->textContent ?? ''));
+                    $captionText = trim($nextSibling->textContent ?? '');
                     if ($captionText !== '' && strlen($captionText) < 500) {
                         $ownerDoc = $articleBody->ownerDocument;
                         if ($ownerDoc !== null) {

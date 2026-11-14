@@ -49,6 +49,11 @@ class FeedItem
     {
         $item = new self();
         foreach ($itemArray as $key => $value) {
+            // __set() is typed string; under strict_types an int key would throw
+            // a TypeError. Numeric keys carry no meaning for feed items — skip.
+            if (is_string($key) === false) {
+                continue;
+            }
             $item->__set($key, $value);
         }
         return $item;
@@ -153,7 +158,9 @@ class FeedItem
     {
         $this->title = null;
         if (is_string($title) === true) {
-            $this->title = truncate(trim($title));
+            // No truncation here: upstream kept full titles, and display-level
+            // shortening belongs to the formats, not the data model.
+            $this->title = trim($title);
         }
     }
 
@@ -181,7 +188,8 @@ class FeedItem
             return;
         }
 
-        if ($timestamp > 0) {
+        // Accept pre-1970 (negative) dates; keep 0 as the "unknown" sentinel.
+        if ($timestamp !== 0) {
             $this->timestamp = $timestamp;
         }
     }
@@ -249,8 +257,14 @@ class FeedItem
                 if (preg_match(self::DATA_URI_IMAGE_PATTERN, $enclosure) !== 1) {
                     continue;
                 }
-            } elseif (filter_var($enclosure, FILTER_VALIDATE_URL) === false) {
-                continue;
+            } else {
+                // Weak scheme check (same as setURI): FILTER_VALIDATE_URL silently
+                // dropped valid IDN/unicode/space-containing URLs. Relative URLs
+                // are still rejected — formats do not absolutize enclosures.
+                $enclosure = trim($enclosure);
+                if (preg_match('#^https?://#i', $enclosure) !== 1) {
+                    continue;
+                }
             }
 
             if (in_array($enclosure, $this->enclosures, true) === false) {
@@ -293,7 +307,9 @@ class FeedItem
             return;
         }
         if (preg_match('/^[a-f0-9]{40}$/', $uid) === 1) {
-            // Preserve sha1 hash
+            // Preserve an already-hashed sha1 (lowercase) as-is. Note: migrating
+            // from the old "sha1 everything" behavior changes such UIDs once,
+            // which can surface a one-time batch of duplicates in readers.
             $this->uid = $uid;
         } else {
             $this->uid = sha1($uid);

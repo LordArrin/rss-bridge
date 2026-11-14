@@ -91,7 +91,7 @@ final class SamsungMobileChangelogBridge extends BridgeAbstract
 
         $h1 = $dom->querySelector('h1');
         if ($h1 !== null) {
-            $this->deviceName = trim($h1->textContent);
+            $this->deviceName = trim($h1->textContent ?? '');
         }
 
         $this->parseChangelog($container, $url);

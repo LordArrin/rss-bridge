@@ -179,7 +179,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
 
         $timeTag = $html->querySelector('time');
         if ($timeTag !== null) {
-            $datetime = (string) ($timeTag->getAttribute('datetime') ?? '');
+            $datetime = $timeTag->getAttribute('datetime') ?? '';
             $dateText = $datetime !== '' ? $datetime : (string) $timeTag->textContent;
             $timestamp = strtotime($dateText);
             if ($timestamp !== false) {

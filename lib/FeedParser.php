@@ -19,14 +19,23 @@ final class FeedParser
     {
         $xmlString = self::prepareXml($xmlString);
 
-        libxml_use_internal_errors(true);
-        $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
-        $xmlErrors = libxml_get_errors();
-        libxml_use_internal_errors(false);
+        $previousLibxmlState = libxml_use_internal_errors(true);
+        try {
+            $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
+        } catch (\Throwable $e) {
+            // The new Dom\* API reports fatal parse errors via exceptions, not the
+            // libxml error buffer (the exact class varies by build). Catch broadly
+            // at this boundary and normalize to a plain Exception for FeedExpander.
+            throw new \Exception(sprintf('Unable to parse xml: %s', $e->getMessage()), 0, $e);
+        } finally {
+            // Always clear the buffer and restore the previous state so stale errors
+            // cannot leak into later simplexml/libxml calls (esp. in CLI loops).
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousLibxmlState);
+        }
 
         if ($doc->documentElement === null) {
-            $firstXmlErrorMessage = $xmlErrors !== [] ? $xmlErrors[0]->message : 'Unknown parsing error';
-            throw new \Exception(sprintf('Unable to parse xml: %s', $firstXmlErrorMessage));
+            throw new \Exception('Unable to parse xml: empty document');
         }
 
         $root = $doc->documentElement;
@@ -159,29 +168,59 @@ final class FeedParser
 
         $contentNode = $feedItem->querySelector('content');
         if ($contentNode !== null) {
-            if ($contentNode->hasChildNodes() === true && $contentNode->childNodes->count() > 0) {
+            // Serialize as markup ONLY when there are real element children
+            // (type="xhtml"). For type="html"/text the payload is a text node and
+            // must be taken verbatim: C14N() would re-escape it, and the output
+            // format escapes once more -> double-encoded content in readers.
+            $hasElementChildren = false;
+            foreach ($contentNode->childNodes as $child) {
+                if ($child instanceof \Dom\Element) {
+                    $hasElementChildren = true;
+                    break;
+                }
+            }
+
+            if ($hasElementChildren === true) {
                 $content = '';
                 foreach ($contentNode->childNodes as $child) {
                     $content .= $child->C14N();
                 }
                 $item['content'] = $content;
             } else {
-                $item['content'] = $this->getNodeText($contentNode);
+                $item['content'] = $contentNode->textContent;
             }
         }
 
-        foreach ($feedItem->querySelectorAll('link') as $link) {
-            $rel = $this->getNodeAttr($link, 'rel');
-            $href = $this->getNodeAttr($link, 'href');
-            if ($href === null) {
-                continue;
-            }
+        $links = iterator_to_array($feedItem->querySelectorAll('link'));
 
-            if ($rel === 'alternate' || $rel === null || $rel === '') {
+        // Enclosures are collected regardless of the number of links.
+        foreach ($links as $link) {
+            $rel = strtolower($this->getNodeAttr($link, 'rel') ?? '');
+            if ($rel === 'enclosure') {
+                $href = $this->getNodeAttr($link, 'href');
+                if ($href !== null) {
+                    $item['enclosures'][] = $href;
+                }
+            }
+        }
+
+        if (count($links) === 1) {
+            // A single link is the entry URI regardless of rel (upstream parity):
+            // feeds with only rel="self" must not lose their URI.
+            $href = $this->getNodeAttr($links[0], 'href');
+            if ($href !== null) {
                 $item['uri'] = $href;
             }
-            if ($rel === 'enclosure') {
-                $item['enclosures'][] = $href;
+        } else {
+            foreach ($links as $link) {
+                // RFC 4287: an absent rel defaults to "alternate".
+                $rel = strtolower($this->getNodeAttr($link, 'rel') ?? 'alternate');
+                if ($rel === 'alternate' || $rel === '') {
+                    $href = $this->getNodeAttr($link, 'href');
+                    if ($href !== null) {
+                        $item['uri'] = $href;
+                    }
+                }
             }
         }
 

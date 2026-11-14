@@ -436,7 +436,12 @@ final class CurlHttpClient implements HttpClient
 
         $ips = self::ipResolver()->resolve($host);
         if ($ips === []) {
-            return [];
+            // Fail closed: an unresolvable host cannot be vetted, so refuse rather
+            // than letting cURL resolve it unchecked. Escape hatch: HTTP_SSRF_CHECK=false.
+            throw new \HttpException(sprintf(
+                'Access to %s is blocked: the host could not be resolved for SSRF vetting (SSRF protection)',
+                $host
+            ));
         }
 
         $allowedIps = [];
@@ -459,6 +464,12 @@ final class CurlHttpClient implements HttpClient
     /**
      * Returns the registrable domain (eTLD+1) of a host.
      *
+     * Heuristic, NOT a full Public Suffix List: the last two labels are treated
+     * as a public suffix when the TLD is a two-letter ccTLD and the second level
+     * is a registry-like label (co/com/net/org/...). This is conservative — it
+     * only ever requires MORE matching labels than the flat-TLD default, so it
+     * cannot merge unrelated sites that the default would keep apart.
+     *
      * @param string $host Lowercased hostname.
      * @return string|null The registrable domain, or null for IPs/edge cases.
      */
@@ -474,22 +485,19 @@ final class CurlHttpClient implements HttpClient
             return null;
         }
 
-        $twoLevelSuffixes = [
-            'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'me.uk', 'ltd.uk', 'plc.uk',
-            'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au',
-            'co.nz', 'net.nz', 'org.nz', 'govt.nz',
-            'co.za', 'org.za', 'web.za',
-            'com.br', 'net.br', 'org.br', 'gov.br',
-            'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'go.jp',
-            'co.kr', 'or.kr', 'ne.kr',
-            'com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn',
-            'com.mx', 'com.ar', 'com.tr', 'com.pl', 'com.ua', 'com.ru',
-        ];
-
         $suffixLength = 1;
         if ($count >= 3) {
-            $candidateSuffix = $labels[$count - 2] . '.' . $labels[$count - 1];
-            if (in_array($candidateSuffix, $twoLevelSuffixes, true) === true) {
+            $tld = $labels[$count - 1];
+            $secondLevel = $labels[$count - 2];
+            $registryLabels = [
+                'co', 'com', 'net', 'org', 'gov', 'gob', 'gouv', 'edu', 'ac',
+                'go', 'or', 'ne', 'ad', 'nom', 'gen', 'firm', 'ind', 'web',
+                'sch', 'asn', 'id', 'asso', 'ltd', 'plc', 'me', 'govt', 'muni',
+                'idf', 're', 'pe', 'geek', 'maori', 'school', 'arts', 'rec',
+                'info', 'biz', 'name', 'pro', 'mil', 'gv', 'coop', 'aero',
+                'museum', 'travel', 'jobs', 'mobi', 'tel', 'asia', 'cat', 'post',
+            ];
+            if (strlen($tld) === 2 && in_array($secondLevel, $registryLabels, true) === true) {
                 $suffixLength = 2;
             }
         }
@@ -499,6 +507,144 @@ final class CurlHttpClient implements HttpClient
         }
 
         return implode('.', array_slice($labels, -$suffixLength - 1));
+    }
+
+    /**
+     * Resolves a relative or protocol-relative Location reference against the
+     * original request URL per RFC 3986 section 5. Query/fragment are preserved.
+     *
+     * @param array{host: string, port: int, scheme: string, path: string} $base
+     */
+    private static function resolveReference(array $base, string $reference): string
+    {
+        $scheme = $base['scheme'];
+        $host = $base['host'];
+        $port = $base['port'];
+
+        // Protocol-relative: //host[:port]/path
+        if (str_starts_with($reference, '//') === true) {
+            $authorityAndRest = substr($reference, 2);
+            $slashPos = strpos($authorityAndRest, '/');
+            $authority = $slashPos === false ? $authorityAndRest : substr($authorityAndRest, 0, $slashPos);
+            $rest = $slashPos === false ? '/' : substr($authorityAndRest, $slashPos);
+
+            if (str_starts_with($authority, '[') === true) {
+                $close = strpos($authority, ']');
+                if ($close !== false) {
+                    $host = substr($authority, 0, $close + 1);
+                    $tail = substr($authority, $close + 1);
+                    if (str_starts_with($tail, ':') === true && ctype_digit(substr($tail, 1)) === true) {
+                        $port = (int) substr($tail, 1);
+                    }
+                } else {
+                    $host = $authority;
+                }
+            } else {
+                $colon = strrpos($authority, ':');
+                if ($colon !== false && ctype_digit(substr($authority, $colon + 1)) === true) {
+                    $host = substr($authority, 0, $colon);
+                    $port = (int) substr($authority, $colon + 1);
+                } else {
+                    $host = $authority;
+                }
+            }
+
+            return self::buildUrl($scheme, $host, $port, self::removeDotSegments($rest));
+        }
+
+        // Absolute-path reference: /path
+        if (str_starts_with($reference, '/') === true) {
+            return self::buildUrl($scheme, $host, $port, self::removeDotSegments($reference));
+        }
+
+        // Relative path: merge with the base directory (RFC 3986 5.3). A base
+        // path ending in "/" is itself the directory; otherwise strip the last
+        // segment. This fixes the old dirname() bug for directory-like bases.
+        $basePath = $base['path'];
+        if ($basePath === '' || str_ends_with($basePath, '/') === true) {
+            $merged = $basePath . $reference;
+        } else {
+            $lastSlash = strrpos($basePath, '/');
+            $merged = ($lastSlash === false ? '' : substr($basePath, 0, $lastSlash + 1)) . $reference;
+        }
+        if (str_starts_with($merged, '/') === false) {
+            $merged = '/' . $merged;
+        }
+
+        return self::buildUrl($scheme, $host, $port, self::removeDotSegments($merged));
+    }
+
+    /**
+     * RFC 3986 section 5.2.4: remove "." and ".." segments, preserving a trailing
+     * slash and any query/fragment suffix.
+     */
+    private static function removeDotSegments(string $path): string
+    {
+        $suffix = '';
+        $cut = strcspn($path, '?#');
+        if ($cut < strlen($path)) {
+            $suffix = substr($path, $cut);
+            $path = substr($path, 0, $cut);
+        }
+
+        $input = $path;
+        $output = '';
+        while ($input !== '') {
+            if (str_starts_with($input, '../') === true) {
+                $input = substr($input, 3);
+                continue;
+            }
+            if (str_starts_with($input, './') === true) {
+                $input = substr($input, 2);
+                continue;
+            }
+            if (str_starts_with($input, '/./') === true) {
+                $input = '/' . substr($input, 3);
+                continue;
+            }
+            if ($input === '/.') {
+                $input = '/';
+                continue;
+            }
+            if (str_starts_with($input, '/../') === true) {
+                $input = '/' . substr($input, 4);
+                $lastSlash = strrpos($output, '/');
+                $output = $lastSlash === false ? '' : substr($output, 0, $lastSlash);
+                continue;
+            }
+            if ($input === '/..') {
+                $input = '/';
+                $lastSlash = strrpos($output, '/');
+                $output = $lastSlash === false ? '' : substr($output, 0, $lastSlash);
+                continue;
+            }
+            if ($input === '.' || $input === '..') {
+                $input = '';
+                continue;
+            }
+            $nextSlash = str_starts_with($input, '/') === true ? strpos($input, '/', 1) : strpos($input, '/');
+            $segEnd = $nextSlash === false ? strlen($input) : $nextSlash;
+            $output .= substr($input, 0, $segEnd);
+            $input = substr($input, $segEnd);
+        }
+
+        return $output . $suffix;
+    }
+
+    /**
+     * Builds scheme://host[:port]/path, omitting the port ONLY when it is the
+     * default for the scheme (http:80, https:443). IPv6 literals are bracketed.
+     */
+    private static function buildUrl(string $scheme, string $host, int $port, string $path): string
+    {
+        if (str_contains($host, ':') === true && str_starts_with($host, '[') === false) {
+            $host = '[' . $host . ']';
+        }
+        $isDefaultPort = ($scheme === 'http' && $port === 80) || ($scheme === 'https' && $port === 443);
+        if ($isDefaultPort === true) {
+            return sprintf('%s://%s%s', $scheme, $host, $path);
+        }
+        return sprintf('%s://%s:%d%s', $scheme, $host, $port, $path);
     }
 
     /**
@@ -859,21 +1005,7 @@ final class CurlHttpClient implements HttpClient
             }
 
             if (preg_match('#^[a-z][a-z0-9+\-.]*://#i', $location) === 0) {
-                $scheme = $originalParsed['scheme'];
-                $host = $originalParsed['host'];
-                $port = $originalParsed['port'];
-
-                if (str_starts_with($location, '/') === true) {
-                    $path = $location;
-                } else {
-                    $basePath = dirname($originalParsed['path']);
-                    if ($basePath === '.') {
-                        $basePath = '/';
-                    }
-                    $path = rtrim($basePath, '/') . '/' . ltrim($location, '/');
-                }
-
-                $location = ($port === 80 || $port === 443) ? sprintf('%s://%s%s', $scheme, $host, $path) : sprintf('%s://%s:%d%s', $scheme, $host, $port, $path);
+                $location = self::resolveReference($originalParsed, $location);
             }
 
             $redirectParsed = self::parseHttpUrl($location);

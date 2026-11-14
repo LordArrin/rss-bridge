@@ -60,7 +60,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
             $articleAuthor = null;
 
             $titleNode = $element->querySelector('h2.home-title');
-            $articleTitle = ($titleNode !== null) ? trim($titleNode->textContent) : '';
+            $articleTitle = ($titleNode !== null) ? trim($titleNode->textContent ?? '') : '';
 
             $articleTimestamp = $this->extractTimestamp($element);
 
@@ -74,7 +74,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
             }
 
             $descNode = $element->querySelector('div.home-desc');
-            $articleContentFallback = ($descNode !== null) ? trim($descNode->textContent) : '';
+            $articleContentFallback = ($descNode !== null) ? trim($descNode->textContent ?? '') : '';
 
             $linkNode = $element->querySelector('a.story-link');
             if ($linkNode === null) {
@@ -163,7 +163,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
         if ($spanCount > 0) {
             $lastAuthor = $authorSpans->item($spanCount - 1);
             if ($lastAuthor !== null) {
-                $author = trim($lastAuthor->textContent);
+                $author = trim($lastAuthor->textContent ?? '');
             }
         }
 

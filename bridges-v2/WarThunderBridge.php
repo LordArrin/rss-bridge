@@ -205,7 +205,13 @@ final class WarThunderBridge extends BridgeAbstract
                 $src = 'https:' . $src;
             }
 
-            $newImg = $figure->ownerDocument->createElement('img');
+            $ownerDocument = $figure->ownerDocument;
+            if ($ownerDocument === null) {
+                continue;
+            }
+
+            $newImg = $ownerDocument->createElement('img');
+
             $newImg->setAttribute('src', $src);
             $newImg->setAttribute('style', self::IMG_STYLE);
             $newImg->setAttribute('align', 'left');
@@ -266,8 +272,9 @@ final class WarThunderBridge extends BridgeAbstract
             $linksHtml .= '</p>';
 
             $emptyParagraph = '<p align="left" style="text-align: left; margin: 16px 0;"></p>';
-            if ($linksHtml !== $emptyParagraph && $wrapper->parentNode !== null) {
-                $fragment = $wrapper->ownerDocument->createDocumentFragment();
+            $ownerDocument = $wrapper->ownerDocument;
+            if ($linksHtml !== $emptyParagraph && $wrapper->parentNode !== null && $ownerDocument !== null) {
+                $fragment = $ownerDocument->createDocumentFragment();
                 $result = $fragment->appendXml($linksHtml);
                 if ($result === true) {
                     $wrapper->parentNode->replaceChild($fragment, $wrapper);
@@ -487,7 +494,7 @@ final class WarThunderBridge extends BridgeAbstract
             }
 
             $title = $news['title'];
-            $link = $news['link'];
+            $link = $news['link'] ?? '';
             $description = $news['description'];
             $timestamp = $news['date'];
             $imageUrl = $news['image'];

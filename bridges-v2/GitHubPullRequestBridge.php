@@ -81,7 +81,13 @@ final class GitHubPullRequestBridge extends BridgeAbstract
             throwClientException('User name and Project name are required.');
         }
 
-        $client = new GithubClient($this->cache, $this->logger);
+        $cache = $this->cache;
+        $logger = $this->logger;
+        if ($cache === null || $logger === null) {
+            throwServerException('GitHub bridge requires cache and logger services.');
+        }
+
+        $client = new GithubClient($cache, $logger);
 
         $items = match ($this->queriedContext) {
             'Project Pull Requests' => $this->fetchProjectPullRequests($client, $owner, $repo),

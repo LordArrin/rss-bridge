@@ -100,7 +100,7 @@ final class AnisearchBridge extends BridgeAbstract
             }
 
             $titleSpan = $a->querySelector('span.title');
-            $title = $titleSpan instanceof \Dom\Element ? $titleSpan->textContent : 'Unknown Title';
+            $title = $titleSpan instanceof \Dom\Element ? ($titleSpan->textContent ?? 'Unknown Title') : 'Unknown Title';
 
             $href = $a->getAttribute('href');
             if (is_string($href) === false || $href === '') {

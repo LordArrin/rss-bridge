@@ -42,9 +42,9 @@ final class NikonDownloadCenterBridge extends BridgeAbstract
                 continue;
             }
 
-            $date = trim($dateNode->textContent);
+            $date = trim($dateNode->textContent ?? '');
             $productType = $productIcon->getAttribute('alt');
-            $desc = trim($linkNode->textContent);
+            $desc = trim($linkNode->textContent ?? '');
             $href = $linkNode->getAttribute('href');
 
             if ($productType === null) {

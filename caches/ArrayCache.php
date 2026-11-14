@@ -68,10 +68,9 @@ final class ArrayCache extends AbstractCache
         $freshUntil = $ttl === null ? 0 : $now + $ttl;
 
         try {
-            // Use AbstractCache::encode() for JSON serialization
             $this->data[$key] = $this->encode($value, $freshUntil);
-        } catch (\JsonException $e) {
-            // For in-memory cache, just skip storing if encoding fails
+        } catch (\JsonException | \InvalidArgumentException $e) {
+            // In-memory cache: skip storing on encode failure (incl. unsupported objects).
             return;
         }
     }

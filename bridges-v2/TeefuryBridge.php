@@ -43,7 +43,7 @@ final class TeefuryBridge extends BridgeAbstract
             $authorLink = $titleNode->querySelector('a.odad-title__anchor');
             $author = 'Unknown';
             if ($authorLink !== null) {
-                $author = trim($authorLink->textContent);
+                $author = trim($authorLink->textContent ?? '');
             }
 
             $dataLink = $productDiv->getAttribute('data-link');

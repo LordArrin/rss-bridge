@@ -299,8 +299,9 @@ final class ThreeDNewsBridge extends BridgeAbstract
                 }
             }
 
-            if ($fullImageUrl !== '' && $container->parentNode !== null) {
-                $newImg = $container->ownerDocument->createElement('img');
+            $ownerDocument = $container->ownerDocument;
+            if ($fullImageUrl !== '' && $container->parentNode !== null && $ownerDocument !== null) {
+                $newImg = $ownerDocument->createElement('img');
                 $newImg->setAttribute('src', $fullImageUrl);
                 $newImg->setAttribute('style', self::IMG_STYLE);
                 $newImg->setAttribute('align', 'left');

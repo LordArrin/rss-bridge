@@ -216,13 +216,13 @@ final class BrotFuerDieWeltBridge extends BridgeAbstract
     private function getCachedArticleHtml(string $uri): string
     {
         $cacheKey = 'brot_' . md5($uri);
-        $cached = $this->cache->get($cacheKey);
+        $cached = $this->cache !== null ? $this->cache->get($cacheKey) : null;
         if ($cached !== null) {
             return (string)$cached;
         }
 
         $html = getContents($uri);
-        if ($html !== '') {
+        if ($html !== '' && $this->cache !== null) {
             $this->cache->set($cacheKey, $html, 86400);
         }
 

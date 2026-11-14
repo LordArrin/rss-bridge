@@ -60,7 +60,7 @@ final class FreeCodeCampBridge extends FeedExpander
         }
 
         if ($authorElement !== null) {
-            $authorText = trim($authorElement->textContent);
+            $authorText = trim($authorElement->textContent ?? '');
             if ($authorText !== '') {
                 $item['author'] = $authorText;
             }

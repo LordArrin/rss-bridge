@@ -91,7 +91,7 @@ class ParameterValidator
 
             // Check if all parameters of the context are satisfied
             foreach ($contextParameters as $id => $properties) {
-                if (($input[$id] ?? '') !== '') {
+                if ($this->isFilled($input[$id] ?? null) === true) {
                     $queriedContexts[$contextName] = true;
                 } elseif (
                     isset($properties['type']) === true
@@ -127,7 +127,7 @@ class ParameterValidator
         switch ($matchCount) {
             case 0:
                 // Found no match, is there a context without parameters?
-                if (isset($input['context']) === true) {
+                if (isset($input['context']) === true && is_scalar($input['context']) === true) {
                     return (string) $input['context'];
                 }
                 foreach ($queriedContexts as $contextName => $queried) {
@@ -144,6 +144,21 @@ class ParameterValidator
         }
     }
 
+    /**
+     * Legacy empty() semantics, spelled out for the strict-comparison sniffs:
+     * null, false, '', 0, '0' and [] are all considered "not filled".
+     * An unchecked checkbox (false) or a list value of '0' must NOT satisfy a context.
+     */
+    private function isFilled(mixed $value): bool
+    {
+        return $value !== null
+            && $value !== false
+            && $value !== ''
+            && $value !== 0
+            && $value !== '0'
+            && $value !== [];
+    }
+
     private function validateTextValue(mixed $value, ?string $pattern = null): ?string
     {
         if ($pattern === null) {
@@ -151,13 +166,13 @@ class ParameterValidator
         } else {
             $filteredValue = filter_var((string) $value, FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => '/^' . $pattern . '$/']]);
         }
-        return $filteredValue === false ? null : $filteredValue;
+        return $filteredValue === false ? null : (string) $filteredValue;
     }
 
     private function validateNumberValue(mixed $value): ?int
     {
         $filteredValue = filter_var($value, FILTER_VALIDATE_INT);
-        return $filteredValue === false ? null : $filteredValue;
+        return $filteredValue === false ? null : (int) $filteredValue;
     }
 
     private function validateCheckboxValue(mixed $value): ?bool
@@ -178,6 +193,7 @@ class ParameterValidator
         if ($filteredValue === false) {
             return null;
         }
+        $filteredValue = (string) $filteredValue;
 
         $allowed = [];
         array_walk_recursive($expectedValues, static function (mixed $item) use (&$allowed): void {

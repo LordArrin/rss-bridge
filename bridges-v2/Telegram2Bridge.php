@@ -279,7 +279,7 @@ CSS,
             if ($this->feedName === '') {
                 $el = $dom->querySelector(self::SELECTORS['CHANNEL_TITLE']);
                 $this->feedName = htmlspecialchars_decode(
-                    $el !== null ? $el->textContent : '',
+                    $el !== null ? ($el->textContent ?? '') : '',
                     flags: ENT_QUOTES
                 );
             }
@@ -1277,7 +1277,7 @@ CSS,
     private function getUnsupportedReason(\Dom\Element $message): string
     {
         $label = $message->querySelector(self::SELECTORS['UNSUPPORTED_LABEL']);
-        $text = $label !== null ? trim($label->textContent) : '';
+        $text = $label !== null ? trim($label->textContent ?? '') : '';
 
         if (str_contains($text, 'too big') === true || str_contains($text, 'too large') === true) {
             return self::UNSUPPORTED_REASON_TOO_BIG;
@@ -1571,7 +1571,7 @@ CSS,
     {
         $author = $fwd->querySelector(self::SELECTORS['FORWARDED_AUTHOR']);
         if ($author !== null) {
-            $text = trim($author->textContent);
+            $text = trim($author->textContent ?? '');
             if ($text !== '') {
                 return $text;
             }
@@ -1584,7 +1584,7 @@ CSS,
     {
         $el = $element->querySelector($selector);
         if ($el !== null) {
-            return trim($el->textContent);
+            return trim($el->textContent ?? '');
         }
         return '';
     }

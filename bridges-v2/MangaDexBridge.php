@@ -680,28 +680,28 @@ final class MangaDexBridge extends BridgeAbstract
     private function logDebug(string $message): void
     {
         if ($this->logLevel <= self::LOG_LEVELS['debug']) {
-            $this->logger->debug('MangaDex: ' . $message);
+            $this->logger?->debug('MangaDex: ' . $message);
         }
     }
 
     private function logInfo(string $message): void
     {
         if ($this->logLevel <= self::LOG_LEVELS['info']) {
-            $this->logger->info('MangaDex: ' . $message);
+            $this->logger?->info('MangaDex: ' . $message);
         }
     }
 
     private function logWarning(string $message): void
     {
         if ($this->logLevel <= self::LOG_LEVELS['warning']) {
-            $this->logger->warning('MangaDex: ' . $message);
+            $this->logger?->warning('MangaDex: ' . $message);
         }
     }
 
     private function logError(string $message): void
     {
         if ($this->logLevel <= self::LOG_LEVELS['error']) {
-            $this->logger->error('MangaDex: ' . $message);
+            $this->logger?->error('MangaDex: ' . $message);
         }
     }
 }

@@ -28,12 +28,12 @@ final class LogicMastersBridge extends BridgeAbstract
 
             $title = 'Untitled';
             if ($titleNode !== null) {
-                $title = trim($titleNode->textContent);
+                $title = trim($titleNode->textContent ?? '');
             }
 
             $timestamp = time();
             if ($dateNode !== null) {
-                $timestamp = $this->parseDate(trim($dateNode->textContent));
+                $timestamp = $this->parseDate(trim($dateNode->textContent ?? ''));
             }
 
             $content = '';

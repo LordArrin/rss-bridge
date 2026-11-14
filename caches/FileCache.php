@@ -108,23 +108,39 @@ final class FileCache extends AbstractCache
 
         $cacheFile = $this->createCacheFile($key);
         $now = time();
-
         $freshUntil = $ttl === null ? 0 : $now + $ttl;
 
         try {
-            // Use AbstractCache::encode() for JSON serialization
             $data = $this->encode($value, $freshUntil);
-        } catch (\JsonException $e) {
-            $this->logger->error(sprintf('Failed to JSON encode cache key "%s": %s', $key, $e->getMessage()));
+        } catch (\JsonException | \InvalidArgumentException $e) {
+            // InvalidArgumentException: unsupported objects (see AbstractCache).
+            // Fail soft — a cache write must never crash the request.
+            $this->logger->error(sprintf('Failed to encode cache key "%s": %s', $key, $e->getMessage()));
             return;
         }
 
+        // Atomic write: temp file in the SAME directory + rename. Lock-free
+        // readers (file_get_contents without LOCK_SH) see either the old or the
+        // new complete file, never a torn write. LOCK_EX alone is NOT atomic.
+        $tmpFile = $cacheFile . '.' . bin2hex(random_bytes(8)) . '.tmp';
         try {
-            // LOCK_EX for atomic writes, 0600 for security (owner-only access)
-            file_put_contents($cacheFile, $data, \LOCK_EX);
-            chmod($cacheFile, 0600);
-        } catch (\Exception $e) {
+            $written = file_put_contents($tmpFile, $data, \LOCK_EX);
+            if ($written === false) {
+                $this->logger->warning(sprintf('Failed to write cache file "%s"', $tmpFile));
+                @unlink($tmpFile);
+                return;
+            }
+            if (chmod($tmpFile, 0600) === false) {
+                $this->logger->warning(sprintf('Failed to chmod cache file "%s"', $tmpFile));
+            }
+            if (rename($tmpFile, $cacheFile) === false) {
+                $this->logger->warning(sprintf('Failed to rename cache file "%s" to "%s"', $tmpFile, $cacheFile));
+                @unlink($tmpFile);
+                return;
+            }
+        } catch (\Throwable $e) {
             $this->logger->warning(Url::createSaneExceptionMessage($e));
+            @unlink($tmpFile);
         }
     }
 

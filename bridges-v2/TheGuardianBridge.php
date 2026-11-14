@@ -156,8 +156,8 @@ final class TheGuardianBridge extends FeedExpander
 
         $html = $body->innerHTML;
 
-        $html = preg_replace('/<em>\s*The Associated Press contributed reporting\s*<\/em>/i', '', $html);
-        $html = preg_replace('/<p[^>]*>\s*<em>\s*The Associated Press contributed reporting\s*<\/em>\s*<\/p>/i', '', $html);
+        $html = preg_replace('/<em>\s*The Associated Press contributed reporting\s*<\/em>/i', '', $html) ?? $html;
+        $html = preg_replace('/<p[^>]*>\s*<em>\s*The Associated Press contributed reporting\s*<\/em>\s*<\/p>/i', '', $html) ?? $html;
         $html = str_ireplace('The Associated Press contributed reporting', '', $html);
 
         return $html;
@@ -177,8 +177,11 @@ final class TheGuardianBridge extends FeedExpander
         }
 
         $result = '';
-        foreach ($dom->documentElement->childNodes as $child) {
-            $result .= $dom->saveHtml($child);
+        $documentElement = $dom->documentElement;
+        if ($documentElement !== null) {
+            foreach ($documentElement->childNodes as $child) {
+                $result .= $dom->saveHtml($child);
+            }
         }
 
         return $result;

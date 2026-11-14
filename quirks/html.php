@@ -308,23 +308,31 @@ function sanitize_inline_css(string $css): string
 /**
  * Strip invisible Unicode characters from a string.
  *
- * Removes zero-width spaces, bidirectional markers, non-breaking spaces, and
- * ASCII control characters that can break text matching, title generation,
- * or cause visual glitches in RSS readers.
+ * Space-like characters (NBSP, thin/ideographic spaces, line/paragraph
+ * separators) are replaced with a regular space so adjacent words are not
+ * glued together. Truly invisible characters (zero-width, bidi marks, soft
+ * hyphen) and ASCII control characters are removed outright. Tabs and
+ * newlines are preserved.
  *
  * @param string $text The input text.
  * @return string The cleaned text.
  */
 function strip_invisible_unicode(string $text): string
 {
-    $pattern = '/[\x{200B}-\x{200D}\x{FEFF}\x{00AD}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{00A0}\x{1680}\x{2000}-\x{200A}\x{202F}\x{205F}\x{3000}\x{0000}-\x{0008}\x{000B}\x{000C}\x{000E}-\x{001F}\x{007F}]/u';
-    $cleaned = preg_replace($pattern, '', $text);
-
+    // Space-like -> regular space (keeps word boundaries intact).
+    $spaceLike = '/[\x{00A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}]/u';
+    $cleaned = preg_replace($spaceLike, ' ', $text);
     if (is_string($cleaned) === false) {
         return $text;
     }
 
-    // Add normalization after stripping
+    // Zero-width / bidi / soft-hyphen / ASCII controls -> removed.
+    $invisible = '/[\x{200B}-\x{200D}\x{FEFF}\x{00AD}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{0000}-\x{0008}\x{000B}\x{000C}\x{000E}-\x{001F}\x{007F}]/u';
+    $cleaned = preg_replace($invisible, '', $cleaned);
+    if (is_string($cleaned) === false) {
+        return $text;
+    }
+
     return normalize_unicode($cleaned, 'NFC');
 }
 

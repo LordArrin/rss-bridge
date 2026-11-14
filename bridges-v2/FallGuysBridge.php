@@ -59,7 +59,7 @@ final class FallGuysBridge extends BridgeAbstract
         $newsData = $this->requestJsonData($newsListUrl);
 
         if ($newsData === null || isset($newsData->props->pageProps->newsList) === false) {
-            $this->logger->error('Failed to parse news list from Fall Guys website');
+            $this->logger?->error('Failed to parse news list from Fall Guys website');
             return;
         }
 
@@ -102,11 +102,11 @@ final class FallGuysBridge extends BridgeAbstract
             try {
                 $newsItemData = $this->requestJsonData($newsItemUrl);
             } catch (\Exception $e) {
-                $this->logger->error(sprintf('Failed to request data for news item "%s" (%s)', $newsItemTitle, $newsItemUrl), ['e' => $e]);
+                $this->logger?->error(sprintf('Failed to request data for news item "%s" (%s)', $newsItemTitle, $newsItemUrl), ['e' => $e]);
             }
 
             if ($newsItemData === null) {
-                $this->logger->error(sprintf('Failed to parse json data for news item "%s" (%s)', $newsItemTitle, $newsItemUrl));
+                $this->logger?->error(sprintf('Failed to parse json data for news item "%s" (%s)', $newsItemTitle, $newsItemUrl));
             } else {
                 $contentItems = $newsItemData->props->pageProps->pageData->content->items ?? [];
 
@@ -178,7 +178,7 @@ final class FallGuysBridge extends BridgeAbstract
                             }
                         }
                     } else {
-                        $this->logger->warning(sprintf('Unsupported content item in news item "%s" (%s)', $newsItemTitle, $newsItemUrl));
+                        $this->logger?->warning(sprintf('Unsupported content item in news item "%s" (%s)', $newsItemTitle, $newsItemUrl));
                     }
                 }
             }
@@ -223,13 +223,13 @@ final class FallGuysBridge extends BridgeAbstract
             return null;
         }
 
-        $json = $element->textContent;
+        $json = $element->textContent ?? '';
 
         try {
             $decoded = Json::decode($json, false);
             return $decoded instanceof \stdClass ? $decoded : null;
         } catch (\JsonException $e) {
-            $this->logger->error('Failed to decode JSON from Fall Guys website', ['url' => $url, 'e' => $e]);
+            $this->logger?->error('Failed to decode JSON from Fall Guys website', ['url' => $url, 'e' => $e]);
             return null;
         }
     }

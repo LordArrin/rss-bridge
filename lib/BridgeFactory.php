@@ -56,6 +56,15 @@ final class BridgeFactory
      */
     private array $missingEnabledBridges = [];
 
+    /**
+     * Per-process sandbox verification results, keyed by path + mtime + size.
+     * Avoids re-running the subprocess for unchanged files within a worker;
+     * editing a file changes mtime/size and invalidates the entry.
+     *
+     * @var array<string, bool>
+     */
+    private static array $sandboxCache = [];
+
     public function __construct(CacheInterface $cache, Logger $logger)
     {
         $this->cache = $cache;
@@ -78,7 +87,12 @@ final class BridgeFactory
             return;
         }
 
-        foreach (scandir($v2Dir) as $file) {
+        $files = scandir($v2Dir);
+        if ($files === false) {
+            return;
+        }
+
+        foreach ($files as $file) {
             if (preg_match('/^([^.]+Bridge)\.php$/U', $file, $m) !== 1) {
                 continue;
             }
@@ -221,8 +235,9 @@ final class BridgeFactory
      * Loads a bridge file inside an isolated PHP subprocess to detect
      * fatal compile errors (e.g. signature mismatches with parent classes).
      *
-     * This prevents the main process from crashing when a bridge
-     * has incompatible type declarations with its parent abstract class.
+     * The verdict is written to a dedicated result file, NOT parsed from stdout:
+     * the new Dom\* parser and PHP 8.5 deprecations legitimately emit warnings,
+     * and those must not mark an otherwise working bridge as broken.
      *
      * @param string $file Absolute path to the bridge PHP file
      *
@@ -230,37 +245,86 @@ final class BridgeFactory
      */
     private function loadBridgeInSandbox(string $file): void
     {
-        $testScript = tempnam(sys_get_temp_dir(), 'rssbridge_sandbox_') . '.php';
-        $vendorPath = realpath(__DIR__ . '/../vendor/autoload.php');
+        $real = realpath($file);
+        $mtime = @filemtime($file);
+        $size = @filesize($file);
+        $cacheKey = ($real !== false ? $real : $file)
+            . '|' . ($mtime === false ? 0 : $mtime)
+            . '|' . ($size === false ? 0 : $size);
 
-        $code = "<?php\n";
-        if ($vendorPath !== false) {
-            $code .= "require '" . addslashes($vendorPath) . "';\n";
+        if (isset(self::$sandboxCache[$cacheKey]) === true) {
+            if (self::$sandboxCache[$cacheKey] === true) {
+                return;
+            }
+            throw new \Exception('Bridge compatibility error (cached): ' . $file);
         }
 
-        $code .= "try {\n";
-        $code .= "    require '" . addslashes($file) . "';\n";
-        $code .= "    echo 'SANDBOX_SUCCESS';\n";
-        $code .= "} catch (\\Throwable \$e) {\n";
-        $code .= "    echo 'SANDBOX_EXCEPTION: ' . \$e->getMessage() . \"\\n\";\n";
-        $code .= "}\n";
+        // tempnam() creates the base file; rename it to the .php script so we do
+        // not leak an orphan temp file on every load (the old code unlinked only
+        // the .php variant and left the base behind).
+        $tmpBase = tempnam(sys_get_temp_dir(), 'rssbridge_sandbox_');
+        if ($tmpBase === false) {
+            throw new \Exception('Unable to create sandbox temp file');
+        }
+        $testScript = $tmpBase . '.php';
+        $resultFile = $tmpBase . '.result';
+        if (@rename($tmpBase, $testScript) === false) {
+            @unlink($tmpBase);
+            throw new \Exception('Unable to prepare sandbox script');
+        }
 
-        file_put_contents($testScript, $code);
+        try {
+            $vendorPath = realpath(__DIR__ . '/../vendor/autoload.php');
 
-        $phpBinary = self::getPhpCliBinary();
+            $code = "<?php\n";
+            $code .= "set_time_limit(30);\n";
+            if ($vendorPath !== false) {
+                $code .= "require '" . addslashes($vendorPath) . "';\n";
+            }
+            $code .= "try {\n";
+            $code .= "    require '" . addslashes($file) . "';\n";
+            $code .= "    file_put_contents('" . addslashes($resultFile) . "', 'SANDBOX_SUCCESS');\n";
+            $code .= "} catch (\\Throwable \$e) {\n";
+            $code .= "    file_put_contents('" . addslashes($resultFile) . "', 'SANDBOX_EXCEPTION: ' . \$e->getMessage());\n";
+            $code .= "}\n";
 
-        $output = [];
-        $returnVar = 0;
+            if (file_put_contents($testScript, $code) === false) {
+                throw new \Exception('Unable to write sandbox script');
+            }
 
-        // phpcs:ignore Generic.PHP.ForbiddenFunctions.Found
-        exec($phpBinary . ' ' . escapeshellarg($testScript) . ' 2>&1', $output, $returnVar);
+            $phpBinary = self::getPhpCliBinary();
+            $cmd = escapeshellarg($phpBinary) . ' ' . escapeshellarg($testScript) . ' 2>&1';
 
-        unlink($testScript);
+            // Optional wall-clock guard when coreutils/busybox timeout is present.
+            $timeoutBin = is_executable('/usr/bin/timeout') === true ? '/usr/bin/timeout' : (is_executable('/bin/timeout') === true ? '/bin/timeout' : null);
+            if ($timeoutBin !== null) {
+                $cmd = $timeoutBin . ' 30 ' . $cmd;
+            }
 
-        $result = trim(implode("\n", $output));
+            $output = [];
+            $returnVar = 0;
 
-        if ($returnVar !== 0 || $result !== 'SANDBOX_SUCCESS') {
-            throw new \Exception('Bridge compatibility error: ' . $result);
+            // phpcs:ignore Generic.PHP.ForbiddenFunctions.Found
+            exec($cmd, $output, $returnVar);
+
+            $result = is_file($resultFile) === true ? (string) file_get_contents($resultFile) : '';
+            $stdout = trim(implode("\n", $output));
+
+            if ($result === 'SANDBOX_SUCCESS' && $returnVar === 0) {
+                if ($stdout !== '') {
+                    // Warnings/deprecations are not fatal: log, do not mark broken.
+                    $this->logger->debug(sprintf('[sandbox] %s emitted output: %s', basename($file), $stdout));
+                }
+                self::$sandboxCache[$cacheKey] = true;
+                return;
+            }
+
+            self::$sandboxCache[$cacheKey] = false;
+            $detail = $result !== '' ? $result : ($stdout !== '' ? $stdout : 'no result (fatal compile error?)');
+            throw new \Exception('Bridge compatibility error: ' . $detail);
+        } finally {
+            @unlink($testScript);
+            @unlink($resultFile);
         }
     }
 
@@ -374,9 +438,9 @@ final class BridgeFactory
      */
     public static function normalizeBridgeName(string $name): string
     {
-        if (str_contains($name, '\\') === true) {
-            $parts = explode('\\', $name);
-            $name = end($parts);
+        $pos = strrpos($name, '\\');
+        if ($pos !== false) {
+            $name = substr($name, $pos + 1);
         }
 
         if (preg_match('/(.+)(?:\.php)$/i', $name, $matches) === 1) {
@@ -399,11 +463,8 @@ final class BridgeFactory
      */
     public function getShortClassName(string $className): string
     {
-        if (str_contains($className, '\\') === true) {
-            $parts = explode('\\', $className);
-            return end($parts);
-        }
-        return $className;
+        $pos = strrpos($className, '\\');
+        return $pos === false ? $className : substr($className, $pos + 1);
     }
 
     /**

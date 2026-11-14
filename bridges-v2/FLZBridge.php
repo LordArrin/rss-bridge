@@ -214,7 +214,7 @@ final class FLZBridge extends BridgeAbstract
         }
 
         if ($this->skippedFeeds !== []) {
-            $this->logger->warning(sprintf(
+            $this->logger?->warning(sprintf(
                 'FLZ: %d of %d feeds are incomplete (throttled, or out of time after %.1f s): %s',
                 count($this->skippedFeeds),
                 count($feeds),
@@ -383,7 +383,7 @@ final class FLZBridge extends BridgeAbstract
             $parser = new FeedParser();
             $feed = $parser->parseFeed($xml);
         } catch (\Exception $e) {
-            $this->logger->info(sprintf('FLZ: feed %s is not valid: %s', $path, $e->getMessage()));
+            $this->logger?->info(sprintf('FLZ: feed %s is not valid: %s', $path, $e->getMessage()));
             return null;
         }
 
@@ -429,7 +429,7 @@ final class FLZBridge extends BridgeAbstract
                 return $this->fetch($url);
             } catch (\Exception $e) {
                 if ($e instanceof \HttpException === false || $e->getCode() !== 429) {
-                    $this->logger->info(sprintf('FLZ: feed %s not available: %s', $path, $e->getMessage()));
+                    $this->logger?->info(sprintf('FLZ: feed %s not available: %s', $path, $e->getMessage()));
                     return null;
                 }
             }
@@ -477,7 +477,7 @@ final class FLZBridge extends BridgeAbstract
                 $html = $this->fetch($url);
                 $dom = \Dom\HTMLDocument::createFromString($html);
             } catch (\Exception $e) {
-                $this->logger->info(sprintf('FLZ: overview %s not available: %s', $url, $e->getMessage()));
+                $this->logger?->info(sprintf('FLZ: overview %s not available: %s', $url, $e->getMessage()));
                 continue;
             }
 
@@ -531,7 +531,7 @@ final class FLZBridge extends BridgeAbstract
             $dom = \Dom\HTMLDocument::createFromString($html);
             $body = $this->extractBody($dom);
         } catch (\Exception $e) {
-            $this->logger->info(sprintf('FLZ: article %s not available: %s', $item['uri'], $e->getMessage()));
+            $this->logger?->info(sprintf('FLZ: article %s not available: %s', $item['uri'], $e->getMessage()));
             return $this->buildNotice('Full text could not be fetched (article page not accessible).') . $item['content'];
         }
 
@@ -559,7 +559,7 @@ final class FLZBridge extends BridgeAbstract
                 continue;
             }
 
-            $text = html_entity_decode($element->textContent, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $text = html_entity_decode($element->textContent ?? '', ENT_QUOTES | ENT_HTML5, 'UTF-8');
             $text = trim((string) preg_replace('~\s+~u', ' ', $text));
 
             if ($text !== '') {
@@ -618,7 +618,7 @@ final class FLZBridge extends BridgeAbstract
                 throw new \Exception('Unexpected answer from the logon status');
             }
         } catch (\Exception $e) {
-            $this->logger->warning(sprintf('FLZ: login service failed: %s', $e->getMessage()));
+            $this->logger?->warning(sprintf('FLZ: login service failed: %s', $e->getMessage()));
             $this->cookie = '';
             $this->loginProblem = 'FLZ login service (sso.flz.de) was not reachable or returned an error.';
             return;
@@ -629,7 +629,7 @@ final class FLZBridge extends BridgeAbstract
         }
 
         $reason = isset($status['message']) === true && $status['message'] !== '' ? (string) $status['message'] : 'Session not logged in';
-        $this->logger->warning(sprintf(
+        $this->logger?->warning(sprintf(
             'FLZ: login failed (%s), pausing for %d hours',
             $reason,
             self::LOGIN_LOCK_TTL / 3600

@@ -672,7 +672,7 @@ final class PawchiveBridge extends BridgeAbstract
                 return $data;
             } catch (\Exception $e) {
                 $lastException = $e;
-                $this->logger->warning(sprintf(
+                $this->logger?->warning(sprintf(
                     'Pawchive mirror %s failed for %s: %s',
                     $host,
                     $endpoint,
@@ -765,7 +765,7 @@ final class PawchiveBridge extends BridgeAbstract
                     }
                 }
             } catch (\Exception $e) {
-                $this->logger->debug(sprintf(
+                $this->logger?->debug(sprintf(
                     'Thumbnail check failed for %s: %s',
                     $thumbnailUrl,
                     $e->getMessage()

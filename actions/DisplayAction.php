@@ -169,11 +169,15 @@ final class DisplayAction implements ActionInterface
         // byte-identically (e.g. Atom <updated>), which keeps ETag and
         // Last-Modified stable across regenerations and consistent with each
         // other (RFC 9110 sections 8.8.2 / 8.8.3).
+        //
+        // Read timestamps from the NORMALIZED FeedItem objects, not the raw
+        // arrays: setTimestamp() coerces numeric strings to int, and bridges
+        // may push FeedItem instances directly (no array offset access).
         $now = time();
         $lastModifiedTimestamp = 0;
-        foreach ($items as $item) {
-            $itemTimestamp = $item['timestamp'] ?? null;
-            if (is_int($itemTimestamp) === true && $itemTimestamp > $lastModifiedTimestamp) {
+        foreach ($formatObj->getItems() as $feedItem) {
+            $itemTimestamp = $feedItem->getTimestamp();
+            if ($itemTimestamp !== null && $itemTimestamp > $lastModifiedTimestamp) {
                 $lastModifiedTimestamp = $itemTimestamp;
             }
         }
@@ -296,7 +300,7 @@ final class DisplayAction implements ActionInterface
                 implode(', @', $maintainers),
             ),
             'labels' => 'Bridge-Broken',
-            'assignee' => $maintainers[0],
+            'assignee' => $maintainers[0] ?? 'unknown',
         ];
 
         return 'https://github.com/LordArrin/rss-bridge/issues/new?' . http_build_query($query);

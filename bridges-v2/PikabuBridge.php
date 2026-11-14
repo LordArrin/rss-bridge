@@ -217,8 +217,9 @@ final class PikabuBridge extends BridgeAbstract
         $gifxes = iterator_to_array($post->querySelectorAll('[data-type=gifx]'));
         foreach ($gifxes as $el) {
             $src = $el->getAttribute('data-source');
-            if ($src !== null && $src !== '' && $el->parentNode !== null) {
-                $img = $el->ownerDocument->createElement('img');
+            $ownerDocument = $el->ownerDocument;
+            if ($src !== null && $src !== '' && $el->parentNode !== null && $ownerDocument !== null) {
+                $img = $ownerDocument->createElement('img');
                 $img->setAttribute('src', $src);
                 $el->parentNode->replaceChild($img, $el);
             }

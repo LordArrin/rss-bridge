@@ -93,7 +93,13 @@ final class GithubIssueBridge extends BridgeAbstract
             $params['order'] = $parsed['order'];
         }
 
-        $client = new GithubClient($this->cache, $this->logger);
+        $cache = $this->cache;
+        $logger = $this->logger;
+        if ($cache === null || $logger === null) {
+            throwServerException('GitHub bridge requires cache and logger services.');
+        }
+
+        $client = new GithubClient($cache, $logger);
 
         try {
             $result = $client->searchIssues($params);

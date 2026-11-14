@@ -77,7 +77,7 @@ final class GithubSearchBridge extends BridgeAbstract
 
             $item = [];
             $item['uri'] = self::BASE_URI . $href;
-            $item['title'] = trim($titleElement->textContent);
+            $item['title'] = trim($titleElement->textContent ?? '');
 
             $timestamp = time();
             if ($dateElement !== null) {
@@ -95,7 +95,7 @@ final class GithubSearchBridge extends BridgeAbstract
 
             $content = '<p>';
             if ($descriptionElement !== null) {
-                $content .= htmlspecialchars(trim($descriptionElement->textContent));
+                $content .= htmlspecialchars(trim($descriptionElement->textContent ?? ''));
             } else {
                 $content .= 'No description';
             }
@@ -109,7 +109,7 @@ final class GithubSearchBridge extends BridgeAbstract
                         continue;
                     }
                     $topicHref = $topicElement->getAttribute('href') ?? '';
-                    $topicTitle = trim($topicElement->textContent);
+                    $topicTitle = trim($topicElement->textContent ?? '');
 
                     if ($topicHref !== '') {
                         $topicLink = self::BASE_URI . $topicHref;
@@ -123,7 +123,7 @@ final class GithubSearchBridge extends BridgeAbstract
             if ($languageElement !== null) {
                 $content .= '<p>';
                 $content .= 'Language: ';
-                $content .= htmlspecialchars(trim($languageElement->textContent));
+                $content .= htmlspecialchars(trim($languageElement->textContent ?? ''));
                 $content .= '</p>';
             }
 

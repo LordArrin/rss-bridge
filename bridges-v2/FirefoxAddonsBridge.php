@@ -54,7 +54,7 @@ final class FirefoxAddonsBridge extends BridgeAbstract
 
         $titleNode = $dom->querySelector('h1[class="AddonTitle"] > a');
         if ($titleNode !== null) {
-            $this->feedName = $titleNode->textContent;
+            $this->feedName = $titleNode->textContent ?? '';
         }
 
         $authorNode = $dom->querySelector('span.AddonTitle-author > a');
@@ -77,7 +77,7 @@ final class FirefoxAddonsBridge extends BridgeAbstract
             $fileInfoNode = $li->querySelector('div.AddonVersionCard-fileInfo');
             $size = '';
             if ($fileInfoNode !== null) {
-                $fileInfoText = $fileInfoNode->textContent;
+                $fileInfoText = $fileInfoNode->textContent ?? '';
                 $releaseDateRegex = '/Released ([\w, ]+) - ([\w. ]+)/';
                 if (preg_match($releaseDateRegex, $fileInfoText, $match) === 1) {
                     $timestamp = strtotime($match[1]);
@@ -89,7 +89,7 @@ final class FirefoxAddonsBridge extends BridgeAbstract
             }
 
             $compatNode = $li->querySelector('div.AddonVersionCard-compatibility');
-            $compatibility = ($compatNode !== null) ? $compatNode->textContent : '';
+            $compatibility = ($compatNode !== null) ? ($compatNode->textContent ?? '') : '';
 
             $licenseNode = $li->querySelector('p.AddonVersionCard-license');
             $license = ($licenseNode !== null) ? $licenseNode->innerHTML : '';

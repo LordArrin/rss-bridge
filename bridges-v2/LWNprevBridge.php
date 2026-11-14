@@ -167,7 +167,7 @@ EOD;
         $ownerDocument = $title->ownerDocument;
 
         while ($contentEnd === false) {
-            $node = $node->nextSibling;
+            $node = $node?->nextSibling;
 
             if ($node === null) {
                 $contentEnd = true;
@@ -415,7 +415,7 @@ EOD;
             $ownerDocument = $newsletters->ownerDocument;
 
             while ($contentEnd === false) {
-                $node = $node->nextSibling;
+                $node = $node?->nextSibling;
 
                 if ($node === null) {
                     $contentEnd = true;

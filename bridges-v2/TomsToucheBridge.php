@@ -36,7 +36,7 @@ final class TomsToucheBridge extends BridgeAbstract
             throwServerException('Date node is not an element.');
         }
 
-        $dateStr = trim($dateNode->textContent);
+        $dateStr = trim($dateNode->textContent ?? '');
         $parts = explode('.', $dateStr);
         if (count($parts) !== 3) {
             throwServerException('Invalid date format.');

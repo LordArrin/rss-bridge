@@ -42,7 +42,7 @@ final class HuntShowdownNewsBridge extends BridgeAbstract
                 continue;
             }
 
-            $articleTitle = trim($titleNode->textContent);
+            $articleTitle = trim($titleNode->textContent ?? '');
 
             $href = $linkNode->getAttribute('href');
             if ($href === null || $href === '') {
@@ -66,12 +66,12 @@ final class HuntShowdownNewsBridge extends BridgeAbstract
                 $articleContent .= $imgTag;
             }
             if ($contentNode !== null) {
-                $articleContent .= htmlspecialchars(trim($contentNode->textContent), ENT_QUOTES, 'UTF-8');
+                $articleContent .= htmlspecialchars(trim($contentNode->textContent ?? ''), ENT_QUOTES, 'UTF-8');
             }
 
             $timestamp = time();
             if ($dateNode !== null) {
-                $dateText = trim($dateNode->textContent);
+                $dateText = trim($dateNode->textContent ?? '');
                 $parsed = strtotime($dateText);
                 if ($parsed !== false) {
                     $timestamp = $parsed;

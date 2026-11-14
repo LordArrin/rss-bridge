@@ -139,16 +139,22 @@ final class AtomFormat extends FormatAbstract
             $title->setAttribute('type', 'html');
             $title->appendChild($document->createTextNode($entryTitle));
 
-            if ((bool) $entryTimestamp === true) {
-                $timestamp = gmdate(\DATE_ATOM, $entryTimestamp);
+            // RFC 4287 requires atom:updated on every entry. Without an item
+            // timestamp, fall back to the feed's Last-Modified (content-derived
+            // in DisplayAction) so the feed stays valid and stable. atom:published
+            // is optional and only emitted when a real item timestamp exists.
+            $updatedTimestamp = $entryTimestamp ?? $this->getLastModified();
+            if ($updatedTimestamp === 0) {
+                $updatedTimestamp = time();
+            }
+            $entryUpdated = $document->createElementNS(self::ATOM_NS, 'updated');
+            $entry->appendChild($entryUpdated);
+            $entryUpdated->appendChild($document->createTextNode(gmdate(\DATE_ATOM, $updatedTimestamp)));
 
+            if ($entryTimestamp !== null) {
                 $published = $document->createElementNS(self::ATOM_NS, 'published');
                 $entry->appendChild($published);
-                $published->appendChild($document->createTextNode($timestamp));
-
-                $entryUpdated = $document->createElementNS(self::ATOM_NS, 'updated');
-                $entry->appendChild($entryUpdated);
-                $entryUpdated->appendChild($document->createTextNode($timestamp));
+                $published->appendChild($document->createTextNode(gmdate(\DATE_ATOM, $entryTimestamp)));
             }
 
             $idElem = $document->createElementNS(self::ATOM_NS, 'id');
@@ -162,12 +168,16 @@ final class AtomFormat extends FormatAbstract
                     $entry->appendChild($itunesProperty);
                     $itunesProperty->appendChild($document->createTextNode((string) $itunesValue));
                 }
-                if (isset($itemArray['enclosure']) === true) {
-                    $itunesEnclosure = $document->createElementNS(self::ATOM_NS, 'enclosure');
-                    $entry->appendChild($itunesEnclosure);
-                    $itunesEnclosure->setAttribute('url', (string) $itemArray['enclosure']['url']);
-                    $itunesEnclosure->setAttribute('length', (string) $itemArray['enclosure']['length']);
-                    $itunesEnclosure->setAttribute('type', (string) $itemArray['enclosure']['type']);
+                $enclosure = $itemArray['enclosure'] ?? null;
+                if (is_array($enclosure) === true) {
+                    $enclosureUrl = (string) ($enclosure['url'] ?? '');
+                    if ($enclosureUrl !== '') {
+                        $itunesEnclosure = $document->createElementNS(self::ATOM_NS, 'enclosure');
+                        $entry->appendChild($itunesEnclosure);
+                        $itunesEnclosure->setAttribute('url', $enclosureUrl);
+                        $itunesEnclosure->setAttribute('length', (string) ($enclosure['length'] ?? ''));
+                        $itunesEnclosure->setAttribute('type', (string) ($enclosure['type'] ?? ''));
+                    }
                 }
             } elseif ($entryUri !== null && $entryUri !== '') {
                 $entryLinkAlternate = $document->createElementNS(self::ATOM_NS, 'link');

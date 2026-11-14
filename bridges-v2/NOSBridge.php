@@ -78,7 +78,7 @@ final class NOSBridge extends BridgeAbstract
                 continue;
             }
 
-            $title = trim($h2->textContent);
+            $title = trim($h2->textContent ?? '');
 
             $link = $article->querySelector('a');
             if ($link === null) {
@@ -93,7 +93,7 @@ final class NOSBridge extends BridgeAbstract
             $p = $article->querySelector('p');
             $content = '';
             if ($p !== null) {
-                $content = trim($p->textContent);
+                $content = trim($p->textContent ?? '');
             }
 
             $timeElement = $article->querySelector('time');
