@@ -71,12 +71,7 @@ final class LocalHost
             throwClientException(sprintf('LocalHost: empty response from %s', $url));
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_clear_errors();
-        libxml_use_internal_errors(false);
-
-        return $dom;
+        return parseHtmlDocument($html);
     }
 
     /**

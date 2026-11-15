@@ -38,9 +38,7 @@ declare(strict_types=1);
 function html_find_seo_metadata(string|\Dom\HTMLDocument $html): array
 {
     if (is_string($html) === true) {
-        libxml_use_internal_errors(true);
-        $html = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $html = parseHtmlDocument($html);
     }
 
     // Working buffer. We build the final strictly-typed array at the end

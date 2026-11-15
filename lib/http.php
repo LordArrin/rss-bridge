@@ -446,7 +446,7 @@ final class CurlHttpClient implements HttpClient
     /**
      * Parses an absolute URL into its security-relevant components.
      *
-     * @return array{host: string, port: int, scheme: string, path: string}|null
+     * @return array{host: string, port: int, scheme: string, path: string, query: string}|null
      */
     private static function parseHttpUrl(string $url): ?array
     {
@@ -476,6 +476,7 @@ final class CurlHttpClient implements HttpClient
             'port' => $parts['port'] ?? ($scheme === 'https' ? 443 : 80),
             'scheme' => $scheme,
             'path' => $parts['path'] ?? '/',
+            'query' => $parts['query'] ?? '',
         ];
     }
 
@@ -591,13 +592,22 @@ final class CurlHttpClient implements HttpClient
      * Resolves a relative or protocol-relative Location reference against the
      * original request URL per RFC 3986 section 5. Query/fragment are preserved.
      *
-     * @param array{host: string, port: int, scheme: string, path: string} $base
+     * @param array{host: string, port: int, scheme: string, path: string, query: string} $base
      */
     private static function resolveReference(array $base, string $reference): string
     {
         $scheme = $base['scheme'];
         $host = $base['host'];
         $port = $base['port'];
+
+        if (str_starts_with($reference, '?') === true) {
+            return self::buildUrl($scheme, $host, $port, $base['path'] . $reference);
+        }
+
+        if (str_starts_with($reference, '#') === true) {
+            $query = $base['query'] !== '' ? '?' . $base['query'] : '';
+            return self::buildUrl($scheme, $host, $port, $base['path'] . $query . $reference);
+        }
 
         // Protocol-relative: //host[:port]/path
         if (str_starts_with($reference, '//') === true) {
@@ -749,6 +759,51 @@ final class CurlHttpClient implements HttpClient
     }
 
     /**
+     * Adjusts the request config for a redirect hop.
+     *
+     * Method/body semantics per RFC 9110: 303 always becomes GET; 301/302 turn
+     * POST into GET (the de-facto browser/curl behaviour); 307/308 preserve the
+     * original method and body. Sensitive headers are dropped when the hop
+     * crosses to a different effective domain so credentials never leak to an
+     * unrelated site.
+     *
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    private static function prepareRedirectConfig(array $config, int $statusCode, string $fromHost, string $toHost): array
+    {
+        $curlOptions = self::normalizeCurlOptions($config['curl_options'] ?? []);
+
+        $isPost = ($curlOptions[CURLOPT_POST] ?? false) === true
+            || isset($curlOptions[CURLOPT_POSTFIELDS]) === true
+            || strtoupper(self::scalarToString($curlOptions[CURLOPT_CUSTOMREQUEST] ?? '')) === 'POST';
+
+        if ($statusCode === 303 || (($statusCode === 301 || $statusCode === 302) && $isPost === true)) {
+            unset($curlOptions[CURLOPT_POST], $curlOptions[CURLOPT_POSTFIELDS], $curlOptions[CURLOPT_CUSTOMREQUEST]);
+            $curlOptions[CURLOPT_HTTPGET] = true;
+        }
+
+        $config['curl_options'] = $curlOptions;
+
+        if (self::isSameEffectiveDomain($fromHost, $toHost) === false) {
+            $sensitive = ['authorization', 'cookie', 'proxy-authorization', 'x-api-key'];
+            $headers = $config['headers'] ?? [];
+            if (is_array($headers) === true) {
+                $filtered = [];
+                foreach ($headers as $name => $value) {
+                    if (in_array(strtolower((string) $name), $sensitive, true) === true) {
+                        continue;
+                    }
+                    $filtered[$name] = $value;
+                }
+                $config['headers'] = $filtered;
+            }
+        }
+
+        return $config;
+    }
+
+    /**
      * Performs an HTTP request with SSRF protection and retry logic.
      *
      * @param array<string, mixed> $config
@@ -824,7 +879,7 @@ final class CurlHttpClient implements HttpClient
             'last_modified'         => null,
             'retries'               => 2,
             'max_filesize'          => null,
-            'max_redirections'      => 0,
+            'max_redirections'      => 5,
             'ssrf_check'            => null,
         ];
 
@@ -832,7 +887,7 @@ final class CurlHttpClient implements HttpClient
 
         // Resolve the mixed config scalars once, then reuse the typed locals.
         $timeoutSeconds = self::toInt($config['timeout'] ?? 5, 5);
-        $retryCount = self::toInt($config['retries'] ?? 2, 2);
+        $retryCount = max(0, self::toInt($config['retries'] ?? 2, 2));
         $connectTimeout = self::toInt($config['connect_timeout'] ?? null, min(10, intdiv($timeoutSeconds, 2)));
 
         $budget = ($timeoutSeconds * (1 + $retryCount)) * 1.35;
@@ -969,9 +1024,6 @@ final class CurlHttpClient implements HttpClient
         } else {
             $transientErrnos[] = 96;
         }
-        if ($retryCount === 0) {
-            $maxAttempts = 2;
-        }
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             $remaining = $deadline - microtime(true);
@@ -1025,9 +1077,6 @@ final class CurlHttpClient implements HttpClient
             }
 
             $isTransient = in_array($lastErrno, $transientErrnos, true) === true;
-            if ($retryCount === 0 && $isTransient === false) {
-                break;
-            }
 
             $remainingUs = (int)(($deadline - microtime(true)) * 1_000_000);
             if ($remainingUs < 1_000_000) {
@@ -1101,25 +1150,20 @@ final class CurlHttpClient implements HttpClient
                 ));
             }
 
-            if (self::isSameEffectiveDomain($originalParsed['host'], $redirectParsed['host']) === true) {
-                $redirectCount = self::toInt($config['_redirect_count'] ?? 0, 0);
-                if ($redirectCount >= 5) {
-                    throw new \HttpException(sprintf(
-                        'Too many redirects for %s (SSRF protection: redirect loop detected)',
-                        $url
-                    ));
-                }
-
-                $config['_redirect_count'] = $redirectCount + 1;
-                $config['_deadline'] = $deadline;
-                return $this->request($location, $config);
+            $maxRedirects = max(0, self::toInt($config['max_redirections'] ?? 5, 5));
+            $redirectCount = self::toInt($config['_redirect_count'] ?? 0, 0);
+            if ($redirectCount >= $maxRedirects) {
+                throw new \HttpException(sprintf(
+                    'Too many redirects for %s (SSRF protection: redirect loop detected)',
+                    $url
+                ));
             }
 
-            throw new \HttpException(sprintf(
-                'Refusing to follow redirect to %s for %s (SSRF protection: cross-domain redirects are disabled to prevent bypasses)',
-                $location,
-                $url
-            ));
+            $config['_redirect_count'] = $redirectCount + 1;
+            $config['_deadline'] = $deadline;
+            $config = self::prepareRedirectConfig($config, $statusCode, $originalParsed['host'], $redirectParsed['host']);
+
+            return $this->request($location, $config);
         }
 
         return new Response((string)$body, $statusCode, $responseHeaders);
@@ -1472,8 +1516,10 @@ final class Response
     {
         http_response_code($this->code);
         foreach ($this->headers as $name => $values) {
+            $replace = true;
             foreach ($values as $value) {
-                header(sprintf('%s: %s', $name, $value));
+                header(sprintf('%s: %s', $name, $value), $replace);
+                $replace = false;
             }
         }
         echo $this->body;

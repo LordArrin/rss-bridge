@@ -28,10 +28,21 @@ use PHPStan\Type\TypeCombinator;
  * Covers: ===, ==, !==, !=, in_array() needles, match() arms.
  * Does NOT track variable indirection ($t = $el->tagName; $t === 'div') — use the grep pass.
  *
+ * XML documents (\Dom\XMLDocument) preserve the original tag case, so lowercase
+ * comparisons are legitimate there. Such contexts are exempt: classes extending
+ * FeedExpander, and any file that references \Dom\XMLDocument. For rare mixed
+ * HTML/XML files, suppress individual lines with an ignore comment for the
+ * dom.tagNameLowercaseComparison identifier.
+ *
  * @implements Rule<Node>
  */
 final class DomTagNameComparisonRule implements Rule
 {
+    /**
+     * @var array<string, bool>
+     */
+    private static array $xmlFiles = [];
+
     public function getNodeType(): string
     {
         return Node::class;
@@ -42,6 +53,9 @@ final class DomTagNameComparisonRule implements Rule
      */
     public function processNode(Node $node, Scope $scope): array
     {
+        if ($this->isXmlContext($scope) === true) {
+            return [];
+        }
         if ($node instanceof BinaryOp) {
             return $this->processBinaryOp($node, $scope);
         }
@@ -52,6 +66,25 @@ final class DomTagNameComparisonRule implements Rule
             return $this->processMatch($node, $scope);
         }
         return [];
+    }
+
+    private function isXmlContext(Scope $scope): bool
+    {
+        $classReflection = $scope->getClassReflection();
+        while ($classReflection !== null) {
+            if ($classReflection->getName() === 'RSSBridge\FeedExpander') {
+                return true;
+            }
+            $classReflection = $classReflection->getParentClass();
+        }
+
+        $file = $scope->getFile();
+        if (isset(self::$xmlFiles[$file]) === false) {
+            $contents = @file_get_contents($file);
+            self::$xmlFiles[$file] = is_string($contents) === true && str_contains($contents, 'Dom\XMLDocument') === true;
+        }
+
+        return self::$xmlFiles[$file];
     }
 
     /**
@@ -136,13 +169,10 @@ final class DomTagNameComparisonRule implements Rule
             return false;
         }
 
-        // Strip null so nullable Dom\Element (?Dom\Element) is still recognised.
         $varType = TypeCombinator::removeNull($scope->getType($node->var));
         $element = new ObjectType('Dom\Element');
         $domNode = new ObjectType('Dom\Node');
 
-        // Both directions: exact/subclass (element is supertype of var) and
-        // supertype/mixed (var is supertype of element). Avoids the inverted check.
         return $element->isSuperTypeOf($varType)->yes() === true
             || $domNode->isSuperTypeOf($varType)->yes() === true
             || $varType->isSuperTypeOf($element)->yes() === true;
@@ -150,7 +180,6 @@ final class DomTagNameComparisonRule implements Rule
 
     private function hasLowercase(string $value): bool
     {
-        // 'div', 'h2', 'Div' -> true; 'DIV', '123', '' -> false.
         return $value !== '' && $value !== strtoupper($value);
     }
 

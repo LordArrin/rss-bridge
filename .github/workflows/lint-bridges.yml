@@ -164,7 +164,7 @@ jobs:
             echo "No bridges-v2 files to check."
           fi
 
-      - name: Run PHPStan on changed bridges (Level 5)
+      - name: Run PHPStan on changed bridges
         if: steps.changed.outputs.has_files == 'true'
         run: |
           echo "### Checking bridges-v2 with PHPStan ###"

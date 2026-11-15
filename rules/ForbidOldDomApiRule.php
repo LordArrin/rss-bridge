@@ -54,6 +54,14 @@ final class ForbidOldDomApiRule implements Rule
     /**
      * @var array<string, string>
      */
+    private const FORBIDDEN_FUNCTIONS = [
+        'dom_import_simplexml' => '\Dom\Element obtained from \Dom\XMLDocument directly',
+        'simplexml_import_dom' => 'the \Dom\* API directly instead of converting to SimpleXML',
+    ];
+
+    /**
+     * @var array<string, string>
+     */
     private const REPLACEMENTS = [
         'DOMDocument' => '\Dom\HTMLDocument::createFromString() or \Dom\XMLDocument::createFromString()',
         'DOMDocumentFragment' => '\Dom\DocumentFragment',
@@ -112,6 +120,15 @@ final class ForbidOldDomApiRule implements Rule
 
         if ($node instanceof PropertyFetch) {
             $errors = array_merge($errors, $this->processPropertyFetch($node, $scope));
+        }
+
+        if ($node instanceof Node\Expr\FuncCall) {
+            $name = $node->name;
+            if ($name instanceof Name) {
+                $errors = array_merge($errors, $this->processFunctionName($name, $scope));
+            } else {
+                $errors = array_merge($errors, $this->processDynamicFunctionCall($name, $node->getStartLine(), $scope));
+            }
         }
 
         return $errors;
@@ -281,6 +298,66 @@ final class ForbidOldDomApiRule implements Rule
                 ->identifier('dom.deprecatedProperty')
                 ->build(),
         ];
+    }
+
+    /**
+     * @return list<\PHPStan\Rules\IdentifierRuleError>
+     */
+    private function processFunctionName(Name $node, Scope $scope): array
+    {
+        $functionName = strtolower($this->getShortClassName($scope->resolveName($node)));
+
+        if (isset(self::FORBIDDEN_FUNCTIONS[$functionName]) === false) {
+            return [];
+        }
+
+        $dedupKey = $scope->getFile() . ':' . $node->getStartLine() . ':fn:' . $functionName;
+        if (isset(self::$reported[$dedupKey]) === true) {
+            return [];
+        }
+        self::$reported[$dedupKey] = true;
+
+        return [
+            RuleErrorBuilder::message(sprintf(
+                'Legacy DOM/SimpleXML bridge function "%s()" is forbidden. Use: %s',
+                $functionName,
+                self::FORBIDDEN_FUNCTIONS[$functionName]
+            ))
+                ->identifier('dom.oldApiForbidden')
+                ->build(),
+        ];
+    }
+
+    /**
+     * @return list<\PHPStan\Rules\IdentifierRuleError>
+     */
+    private function processDynamicFunctionCall(Node\Expr $name, int $line, Scope $scope): array
+    {
+        $errors = [];
+
+        foreach ($scope->getType($name)->getConstantStrings() as $constantString) {
+            $functionName = strtolower($this->getShortClassName($constantString->getValue()));
+
+            if (isset(self::FORBIDDEN_FUNCTIONS[$functionName]) === false) {
+                continue;
+            }
+
+            $dedupKey = $scope->getFile() . ':' . $line . ':dynfn:' . $functionName;
+            if (isset(self::$reported[$dedupKey]) === true) {
+                continue;
+            }
+            self::$reported[$dedupKey] = true;
+
+            $errors[] = RuleErrorBuilder::message(sprintf(
+                'Legacy DOM/SimpleXML bridge function "%s()" is forbidden. Use: %s',
+                $functionName,
+                self::FORBIDDEN_FUNCTIONS[$functionName]
+            ))
+                ->identifier('dom.oldApiForbidden')
+                ->build();
+        }
+
+        return $errors;
     }
 
     private function resolveClassName(Name $node, Scope $scope): string

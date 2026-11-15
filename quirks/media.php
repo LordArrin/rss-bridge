@@ -70,11 +70,23 @@ function handleYoutube(string $string): string
     $useIframe = Configuration::getConfig('youtube', 'iframe');
     $useNocookie = Configuration::getConfig('youtube', 'nocookie');
 
-    $regex = '#(?:https?://|//)?(?:www\.|m\.|.+\.)?(?:youtu\.be/|youtube(?:-nocookie|)\.com/(?:embed/|v/|shorts/|feeds/api/videos/|watch\?v=|watch\?.+&v=))([\w-]{11})#i';
+    $regex = '#(?:https?://|//)?(?:www\.|m\.|.+\.)?(?:youtu\.be/|youtube(?:-nocookie|)\.com/(?:embed/|v/|shorts/|live/|feeds/api/videos/|watch\?v=|watch\?.+&v=))([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])#i';
     if (preg_match($regex, $string, $matches) === 1) {
         $videoID = $matches[1];
-    } elseif (preg_match('#[\w-]{11}#i', $string, $matches2) === 1) {
-        $videoID = $matches2[0];
+    } elseif (preg_match_all('#(?<![A-Za-z0-9_-])([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])#', $string, $matches2) > 0) {
+        $videoID = '';
+        foreach ($matches2[1] as $candidate) {
+            $hasDigit = preg_match('#[0-9]#', $candidate) === 1;
+            $hasLower = preg_match('#[a-z]#', $candidate) === 1;
+            $hasUpper = preg_match('#[A-Z]#', $candidate) === 1;
+            if (($hasDigit === true && ($hasLower === true || $hasUpper === true)) || ($hasLower === true && $hasUpper === true)) {
+                $videoID = $candidate;
+                break;
+            }
+        }
+        if ($videoID === '') {
+            return '';
+        }
     } else {
         return '';
     }
@@ -191,7 +203,7 @@ function render_draftjs_to_html(string $jsonContent): string
             return $default;
         };
 
-        $tagMap = [0 => 'strong', 1 => 'u', 2 => 'em', 3 => 's'];
+        $tagMap = [0 => 'strong', 1 => 'em', 2 => 'u', 3 => 's', 4 => 'code'];
         $events = [];
         $depth = 0;
 

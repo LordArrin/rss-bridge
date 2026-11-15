@@ -3,58 +3,10 @@
 declare(strict_types=1);
 
 /**
- * Sanitize image binary data by re-encoding through GD.
- *
- * This function strips EXIF metadata (including GPS coordinates and camera info),
- * neutralizes polyglot attacks (malicious code embedded in image files),
- * and ensures the image is a valid, clean file.
- *
- * SECURITY: this function is fail-closed. If the input cannot be sanitized for any
- * reason (GD missing, undecodable data, insufficient memory, encoding failure, ...),
- * it returns a safe 1x1 transparent WebP placeholder instead of the original bytes,
- * so unsanitized content is never passed through.
- *
- * Memory safety: dimensions are read from the header WITHOUT decoding pixels, and
- * the decode is only attempted when the estimated GD memory fits within the
- * available headroom (PHP memory_limit, cgroup limit and host MemAvailable).
- *
- * @param string $binary Raw image binary data
- * @param int|null $maxWidth Optional maximum width (null = no resize)
- * @param int|null $maxHeight Optional maximum height (null = no resize)
- * @param int $quality WebP quality (1-100)
- * @return string Sanitized WebP binary, or a safe placeholder on failure
+ * @return array{0: int, 1: int}
  */
-function sanitize_image(
-    string $binary,
-    ?int $maxWidth = null,
-    ?int $maxHeight = null,
-    int $quality = 85
-): string {
-    // Fail-closed: without GD we cannot sanitize, so never return the original.
-    if (extension_loaded('gd') === false) {
-        return sanitize_image_placeholder();
-    }
-
-    // Too small to be a meaningful image; do not pass untrusted bytes through.
-    if (strlen($binary) < 100) {
-        return sanitize_image_placeholder();
-    }
-
-    // Read dimensions from the header WITHOUT decoding the pixel buffer.
-    $info = @getimagesizefromstring($binary);
-    if ($info === false || $info[0] <= 0 || $info[1] <= 0) {
-        return sanitize_image_placeholder();
-    }
-    $width = $info[0];
-    $height = $info[1];
-
-    // Sanity ceiling: no real web image exceeds this; also prevents int overflow
-    // in the memory estimate for malicious/corrupt headers.
-    if ($width > 65535 || $height > 65535) {
-        return sanitize_image_placeholder();
-    }
-
-    // Compute target dimensions (cheap math) to estimate the destination buffer.
+function sanitize_image_target_size(int $width, int $height, ?int $maxWidth, ?int $maxHeight): array
+{
     $targetWidth = $width;
     $targetHeight = $height;
 
@@ -70,7 +22,6 @@ function sanitize_image(
         $targetWidth = (int) round($targetWidth * $ratio);
     }
 
-    // Output size cap (8192px is plenty for any web display).
     $maxDimension = 8192;
     if ($targetWidth > $maxDimension || $targetHeight > $maxDimension) {
         $ratio = min($maxDimension / $targetWidth, $maxDimension / $targetHeight);
@@ -78,21 +29,77 @@ function sanitize_image(
         $targetHeight = (int) round($targetHeight * $ratio);
     }
 
-    $targetWidth = max(1, $targetWidth);
-    $targetHeight = max(1, $targetHeight);
+    return [max(1, $targetWidth), max(1, $targetHeight)];
+}
 
-    // Estimate GD memory: source + destination truecolor buffers (~4 bytes/px)
-    // plus a 1.5x safety factor for GD internals and the WebP encode buffer.
-    $estimated = (int) ((($width * $height) + ($targetWidth * $targetHeight)) * 4 * 1.5);
-    if ($estimated > sanitize_image_available_memory()) {
-        // Not enough headroom to decode safely: fail closed rather than OOM.
+/**
+ * Sanitize image binary data by re-encoding through GD.
+ *
+ * This function strips EXIF metadata (including GPS coordinates and camera info),
+ * neutralizes polyglot attacks (malicious code embedded in image files),
+ * and ensures the image is a valid, clean file.
+ *
+ * SECURITY: undecodable or unencodable input never passes through: a safe 1x1
+ * transparent WebP placeholder is returned instead. The single exception is the
+ * memory guard: when there is not enough headroom to re-encode, the original
+ * bytes are passed through unchanged rather than replaced with a placeholder.
+ *
+ * Memory safety: dimensions are read from the header WITHOUT decoding pixels, and
+ * the decode is only attempted when the estimated GD memory fits within the
+ * available headroom (PHP memory_limit, cgroup limit and host MemAvailable).
+ *
+ * @param string $binary Raw image binary data
+ * @param int|null $maxWidth Optional maximum width (null = no resize)
+ * @param int|null $maxHeight Optional maximum height (null = no resize)
+ * @param int $quality WebP quality (1-100)
+ * @return string Sanitized WebP binary, original bytes on low memory, or a safe placeholder on failure
+ */
+function sanitize_image(
+    string $binary,
+    ?int $maxWidth = null,
+    ?int $maxHeight = null,
+    int $quality = 85
+): string {
+    if (extension_loaded('gd') === false) {
         return sanitize_image_placeholder();
+    }
+
+    if (strlen($binary) < 26) {
+        return sanitize_image_placeholder();
+    }
+
+    $width = 0;
+    $height = 0;
+    $targetWidth = 0;
+    $targetHeight = 0;
+
+    $info = @getimagesizefromstring($binary);
+    if ($info !== false && $info[0] > 0 && $info[1] > 0) {
+        if ($info[0] > 65535 || $info[1] > 65535) {
+            return sanitize_image_placeholder();
+        }
+        $width = $info[0];
+        $height = $info[1];
+        [$targetWidth, $targetHeight] = sanitize_image_target_size($width, $height, $maxWidth, $maxHeight);
+        $estimated = (int) ((($width * $height) + ($targetWidth * $targetHeight)) * 4 * 1.25);
+        if ($estimated > sanitize_image_available_memory()) {
+            return $binary;
+        }
     }
 
     $sourceImage = @imagecreatefromstring($binary);
     if ($sourceImage === false) {
         return sanitize_image_placeholder();
     }
+
+    if ($width === 0) {
+        $width = imagesx($sourceImage);
+        $height = imagesy($sourceImage);
+        [$targetWidth, $targetHeight] = sanitize_image_target_size($width, $height, $maxWidth, $maxHeight);
+    }
+
+    $targetWidth = max(1, $targetWidth);
+    $targetHeight = max(1, $targetHeight);
 
     $bufferLevel = ob_get_level();
 
@@ -102,11 +109,9 @@ function sanitize_image(
             return sanitize_image_placeholder();
         }
 
-        // Preserve transparency
         imagealphablending($cleanImage, false);
         imagesavealpha($cleanImage, true);
 
-        // Resample (kills EXIF and polyglots)
         imagecopyresampled(
             $cleanImage,
             $sourceImage,
@@ -120,7 +125,6 @@ function sanitize_image(
             imagesy($sourceImage)
         );
 
-        // Output as WebP for best compression
         ob_start();
         $ok = imagewebp($cleanImage, null, $quality);
         $sanitized = ob_get_clean();
@@ -130,8 +134,7 @@ function sanitize_image(
         }
 
         return $sanitized;
-    } catch (\Throwable $e) {
-        // Make sure a failed encode does not leave an output buffer open.
+    } catch (\Throwable) {
         while (ob_get_level() > $bufferLevel) {
             ob_end_clean();
         }
@@ -164,7 +167,7 @@ function sanitize_image_parse_bytes(string $value): int
  *  - PHP memory_limit headroom (limit - current real usage),
  *  - cgroup memory headroom (container-aware; /proc/meminfo alone shows the host),
  *  - host MemAvailable (Linux).
- * A 30% reserve is kept for PHP overhead, output buffering and WebP encoding.
+ * A 10% reserve is kept for PHP overhead, output buffering and WebP encoding.
  * Falls back to a conservative 64 MiB when nothing is readable.
  */
 function sanitize_image_available_memory(): int
@@ -207,7 +210,7 @@ function sanitize_image_available_memory(): int
         return 64 * 1024 * 1024;
     }
 
-    return (int) (min($candidates) * 0.7);
+    return (int) (min($candidates) * 0.9);
 }
 
 /**

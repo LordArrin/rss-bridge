@@ -19,10 +19,13 @@ function get_sitemap(string $url): array
         return [];
     }
 
-    libxml_use_internal_errors(true);
-    $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
-    libxml_clear_errors();
-    libxml_use_internal_errors(false);
+    $previous = libxml_use_internal_errors(true);
+    try {
+        $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
+    } finally {
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+    }
 
     if ($doc->documentElement === null) {
         return [];
@@ -290,6 +293,38 @@ function getContents(
     return $response->getBody();
 }
 
+function parseHtmlDocument(string $html): \Dom\HTMLDocument
+{
+    $previous = libxml_use_internal_errors(true);
+    try {
+        try {
+            return \Dom\HTMLDocument::createFromString($html, LIBXML_NOERROR);
+        } catch (\Throwable) {
+            $clean = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $html);
+            $clean = is_string($clean) === true ? $clean : '';
+            if (preg_match('//u', $clean) !== 1) {
+                $clean = mb_convert_encoding($clean, 'UTF-8', 'UTF-8');
+            }
+            return \Dom\HTMLDocument::createFromString($clean, LIBXML_NOERROR);
+        }
+    } finally {
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+    }
+}
+
+function parseHtmlFragment(string $html, string $wrapperId = 'rss-bridge-temp-wrapper'): ?\Dom\HTMLDocument
+{
+    if (trim($html) === '') {
+        return null;
+    }
+    try {
+        return parseHtmlDocument(sprintf('<div id="%s">%s</div>', $wrapperId, $html));
+    } catch (\Throwable) {
+        return null;
+    }
+}
+
 /**
  * Gets contents from the Internet as HTMLDocument object.
  *
@@ -308,12 +343,7 @@ function getSimpleHTMLDOM(
         throw new \Exception('Unable to parse dom because the http response was the empty string');
     }
 
-    libxml_use_internal_errors(true);
-    $dom = \Dom\HTMLDocument::createFromString($html);
-    libxml_clear_errors();
-    libxml_use_internal_errors(false);
-
-    return $dom;
+    return parseHtmlDocument($html);
 }
 
 /**
@@ -355,12 +385,7 @@ function getProtectedSimpleHTMLDOM(string $url, string $profileName, array $opti
         throwClientException(sprintf("Proxy profile '%s' returned empty HTML for: %s", $profileName, $url));
     }
 
-    libxml_use_internal_errors(true);
-    $dom = \Dom\HTMLDocument::createFromString($html);
-    libxml_clear_errors();
-    libxml_use_internal_errors(false);
-
-    return $dom;
+    return parseHtmlDocument($html);
 }
 
 /**

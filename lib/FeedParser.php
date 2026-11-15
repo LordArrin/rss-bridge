@@ -314,7 +314,7 @@ final class FeedParser
             if ($guid !== null) {
                 $isPermaLink = $this->getNodeAttr($guid, 'isPermaLink');
                 $guidText = $this->getNodeText($guid);
-                if (($isPermaLink === 'true' || filter_var($guidText, FILTER_VALIDATE_URL) !== false)) {
+                if (strtolower($isPermaLink ?? '') !== 'false' && filter_var($guidText, FILTER_VALIDATE_URL) !== false) {
                     $item['uri'] = $guidText;
                 }
             }

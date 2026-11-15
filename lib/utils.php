@@ -150,6 +150,13 @@ final class Url
 
     public static function parseMimeType(string $url): string
     {
+        if (str_starts_with($url, 'data:') === true) {
+            if (preg_match('~^data:([a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+)~i', $url, $m) === 1) {
+                return strtolower($m[1]);
+            }
+            return 'text/plain';
+        }
+
         $mime = self::MIME_TYPES;
 
         $openBasedir = ini_get('open_basedir');
