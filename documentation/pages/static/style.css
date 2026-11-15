@@ -109,12 +109,11 @@
 /* ============================================================
    2. BASE RESET & TYPOGRAPHY
    ============================================================ */
-html { 
-    box-sizing: border-box; 
-    font-size: 16px; 
+html {
+    box-sizing: border-box;
+    font-size: 16px;
     scroll-behavior: smooth;
     scroll-padding-top: 80px;
-    overflow-anchor: none;
     color-scheme: light dark;
 }
 *, *:before, *:after { box-sizing: inherit; }
@@ -188,7 +187,11 @@ code {
     display: flex;
     align-items: center;
     gap: 5px;
-    transition: all var(--md-motion-duration-short) var(--md-motion-easing-standard);
+    transition: background-color var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                color var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                border-color var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                opacity var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                transform var(--md-motion-duration-short) var(--md-motion-easing-standard);
     opacity: 0;
     min-width: auto;
     min-height: auto;
@@ -291,6 +294,13 @@ header {
     margin-bottom: 24px;
 }
 header.hero { padding: 56px 16px; }
+.hero-logo {
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 24px;
+}
 header img {
     max-height: 120px;
     width: auto;
@@ -298,7 +308,6 @@ header img {
     background-color: var(--md-surface-container-lowest);
     border-radius: var(--md-shape-xl);
     box-shadow: var(--md-elevation-2);
-    margin-bottom: 24px;
     transition: box-shadow var(--md-motion-duration-medium) var(--md-motion-easing-standard);
 }
 header img:hover { box-shadow: var(--md-elevation-3); }
@@ -320,7 +329,10 @@ header p.subtitle {
     font-size: 0.8125rem;
     font-weight: 500;
     box-shadow: var(--md-elevation-1);
-    transition: all var(--md-motion-duration-short) var(--md-motion-easing-standard);
+    transition: background-color var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                color var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                transform var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                box-shadow var(--md-motion-duration-short) var(--md-motion-easing-standard);
     text-decoration: none;
 }
 .badges .badge:hover {
@@ -352,10 +364,14 @@ button, a.button {
     text-decoration: none;
     text-align: center;
     display: inline-block;
-    transition: all var(--md-motion-duration-short) var(--md-motion-easing-standard);
+    transition: background-color var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                color var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                border-color var(--md-motion-duration-short) var(--md-motion-easing-standard),
+                box-shadow var(--md-motion-duration-short) var(--md-motion-easing-standard);
     box-shadow: var(--md-elevation-1);
     position: relative;
     overflow: hidden;
+    touch-action: manipulation;
 }
 button:hover, a.button:hover {
     background: var(--md-primary-container);
@@ -380,15 +396,20 @@ button::after, a.button::after {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 0;
-    height: 0;
+    width: 200px;
+    height: 200px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.3);
-    transform: translate(-50%, -50%);
-    transition: width 1s ease, height 1s ease, opacity 1s ease;
+    transform: translate(-50%, -50%) scale(0);
     opacity: 0;
+    transition: transform 0.6s ease, opacity 0.6s ease;
+    pointer-events: none;
 }
-button:active::after, a.button:active::after { width: 200px; height: 200px; opacity: 1; transition: 0s; }
+button:active::after, a.button:active::after {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+    transition: 0s;
+}
 
 /* ============================================================
    8. DOC SECTIONS
@@ -442,7 +463,8 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
     border-radius: var(--md-shape-lg);
     text-align: center;
     box-shadow: var(--md-elevation-1);
-    transition: all var(--md-motion-duration-medium) var(--md-motion-easing-standard);
+    transition: transform var(--md-motion-duration-medium) var(--md-motion-easing-standard),
+                box-shadow var(--md-motion-duration-medium) var(--md-motion-easing-standard);
 }
 .feature-card:hover { transform: translateY(-4px); box-shadow: var(--md-elevation-3); }
 .feature-card .icon { font-size: 3rem; margin-bottom: 16px; }
@@ -485,14 +507,15 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
     border: 2px solid transparent;
     color: var(--md-on-surface);
     font-family: inherit;
-    transition: all var(--md-motion-duration-medium) var(--md-motion-easing-standard);
+    transition: background-color var(--md-motion-duration-medium) var(--md-motion-easing-standard),
+                border-color var(--md-motion-duration-medium) var(--md-motion-easing-standard),
+                box-shadow var(--md-motion-duration-medium) var(--md-motion-easing-standard);
 }
 .searchbar input[type="text"]:focus {
     outline: none;
     background-color: var(--md-surface-container-lowest);
     border-color: var(--md-primary);
     box-shadow: var(--md-elevation-2);
-    padding: 16px 24px;
 }
 .searchbar input[type="text"]::placeholder {
     text-align: center;
@@ -523,6 +546,10 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
     transition: transform var(--md-motion-duration-short) var(--md-motion-easing-standard),
                 box-shadow var(--md-motion-duration-short) var(--md-motion-easing-standard);
     min-height: 200px;
+}
+#bridges-container .bridge-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 220px;
 }
 .bridge-card:hover {
     transform: translateY(-4px);
@@ -581,6 +608,14 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
     grid-column: 1 / -1;
 }
 
+.load-error {
+    color: var(--md-error);
+    padding: 20px;
+    text-align: center;
+    grid-column: 1 / -1;
+}
+.load-error small { color: var(--md-on-surface-variant); }
+
 /* ============================================================
    11. BRIDGE & PROXY SPECIFIC CONFIGURATION (spoilers)
    ============================================================ */
@@ -618,17 +653,18 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
     align-items: center;
     gap: 16px;
     text-align: left;
-    transition: background var(--md-motion-duration-short) var(--md-motion-easing-standard);
+    transition: background-color var(--md-motion-duration-short) var(--md-motion-easing-standard);
     min-height: auto;
     box-shadow: none;
     margin: 0;
     line-height: 1.5;
     position: relative;
+    touch-action: manipulation;
 }
 
 .bridge-specific-header::after,
-.proxies-header::after { 
-    display: none; 
+.proxies-header::after {
+    display: none;
 }
 
 .bridge-specific-header:hover,
@@ -688,15 +724,18 @@ button:active::after, a.button:active::after { width: 200px; height: 200px; opac
 
 .bridge-specific-content,
 .proxies-content {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height var(--md-motion-duration-medium) var(--md-motion-easing-standard);
+    display: none;
 }
 
 .bridge-specific-item.open .bridge-specific-content,
 .proxies-item.open .proxies-content {
-    max-height: 3000px;
-    transition: max-height var(--md-motion-duration-long) var(--md-motion-easing-decelerate);
+    display: block;
+    animation: spoilerFade var(--md-motion-duration-short) var(--md-motion-easing-standard);
+}
+
+@keyframes spoilerFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 .bridge-specific-content-inner,
@@ -891,12 +930,35 @@ section.footer {
    14. RESPONSIVE & ACCESSIBILITY
    ============================================================ */
 @media (max-width: 767px) {
+    html { scroll-padding-top: 64px; }
     .container, nav .nav-container { width: 100%; padding: 0 12px; }
     header h1 { font-size: 1.75rem; }
     .doc-section { padding: 20px; }
     .doc-section > h2 { font-size: 1.5rem; }
-    nav .nav-container { flex-direction: column; align-items: flex-start; }
-    nav .nav-links { width: 100%; justify-content: center; }
+    nav { padding: 8px 0; }
+    nav .nav-container {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 12px;
+    }
+    nav .logo span { display: none; }
+    nav .logo img { height: 32px; }
+    nav .nav-links {
+        flex: 1 1 auto;
+        width: auto;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    nav .nav-links::-webkit-scrollbar { display: none; }
+    nav .nav-links a {
+        flex: 0 0 auto;
+        padding: 6px 12px;
+        white-space: nowrap;
+    }
     button, a.button {
         display: inline-block;
         width: 45%;
@@ -907,26 +969,49 @@ section.footer {
     .code-block .copy-btn { opacity: 1; }
     .footer-badges { padding: 12px 16px; }
     .footer-badges .badge { font-size: 0.7rem; }
-    .bridge-specific-header {
+    .bridge-specific-header,
+    .proxies-header {
         padding: 16px;
     }
-    .bridge-specific-header .bridge-name { font-size: 1.125rem; }
-    .bridge-specific-content-inner { padding: 0 16px 16px; padding-top: 16px; }
-    .bridge-specific-content-inner ol li { padding-left: 36px; }
-    .bridge-specific-content-inner ol li::before { width: 28px; height: 28px; font-size: 0.8rem; }
+    .bridge-specific-header .bridge-name,
+    .proxies-header .bridge-name { font-size: 1.125rem; }
+    .bridge-specific-content-inner,
+    .proxies-content-inner { padding: 0 16px 16px; padding-top: 16px; }
+    .bridge-specific-content-inner ol li,
+    .proxies-content-inner ol li { padding-left: 36px; }
+    .bridge-specific-content-inner ol li::before,
+    .proxies-content-inner ol li::before { width: 28px; height: 28px; font-size: 0.8rem; }
 }
+
+@media (hover: none), (pointer: coarse) {
+    .doc-section:hover,
+    .feature-card:hover,
+    .bridge-card:hover {
+        transform: none;
+        box-shadow: var(--md-elevation-1);
+    }
+    .badges .badge:hover {
+        transform: none;
+        box-shadow: var(--md-elevation-1);
+    }
+    .code-block .copy-btn:hover { transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
     *, *::before, *::after {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
-    .bridge-specific-content { transition: none; }
 }
+
 @media (prefers-color-scheme: dark) {
     * { scrollbar-color: #352C28 #1F1714; }
 }
-#specific-loading.empty-state {
+
+#specific-loading.empty-state,
+#proxies-loading.empty-state {
     padding: 40px 20px;
     text-align: center;
     color: var(--md-on-surface-variant);

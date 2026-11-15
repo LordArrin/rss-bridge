@@ -473,97 +473,67 @@ const RssBridge = (() => {
         }
     };
     const Search = {
-        collator: null,
+        index: [],
 
-        getCollator() {
-            if (!this.collator) {
-                // 'base' sensitivity ignores case and accents (cafe == café, strasse == straße)
-                // This is perfect for fuzzy bridge name searching across all languages
-                this.collator = new Intl.Collator('en', { sensitivity: 'base' });
-            }
-            return this.collator;
+        normalize(s) {
+            return String(s ?? '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/ß/g, 'ss')
+                .toLowerCase();
         },
 
-        // Unicode-aware substring search using Intl.Collator
-        contains(haystack, needle) {
-            if (!needle) return true;
-            const haystackLen = haystack.length;
-            const needleLen = needle.length;
-            
-            if (needleLen > haystackLen) return false;
-            
-            const collator = this.getCollator();
-            
-            // Sliding window comparison
-            for (let i = 0; i <= haystackLen - needleLen; i++) {
-                const substring = haystack.substring(i, i + needleLen);
-                if (collator.compare(substring, needle) === 0) {
-                    return true;
-                }
-            }
-            return false;
+        buildIndex() {
+            this.index = Array.from(document.querySelectorAll('section.bridge-card')).map(card => ({
+                card,
+                text: this.normalize(
+                    (card.getAttribute('data-ref') ?? '') + ' ' +
+                    (card.getAttribute('data-short-name') ?? '') + ' ' +
+                    (card.querySelector('.description')?.textContent ?? '')
+                ),
+                domain: card.getAttribute('data-domain') ?? '',
+                visible: true
+            }));
         },
 
         perform() {
             const f = document.getElementById('searchfield');
             const term = f?.value.trim() ?? '';
             sessionStorage.setItem('rssbridge_search_query', term);
-            
+
             const clearBtn = document.querySelector('.search-clear-btn');
-            if (clearBtn) {
-                clearBtn.classList.toggle('visible', term.length > 0);
-            }
+            if (clearBtn) clearBtn.classList.toggle('visible', term.length > 0);
 
             const isUrlSearch = Utils.isUrl(term);
             const searchDomain = isUrlSearch ? Utils.extractDomain(term) : '';
-            
+            const needle = this.normalize(term);
+
             let matchCount = 0;
             let firstMatchCard = null;
 
-            document.querySelectorAll('section.bridge-card').forEach(card => {
-                if (!term) { 
-                    card.style.display = ''; 
-                    return; 
+            for (const entry of this.index) {
+                let isVisible = true;
+                if (term) {
+                    isVisible = isUrlSearch
+                        ? (searchDomain !== '' && Utils.domainsMatch(searchDomain, entry.domain))
+                        : entry.text.includes(needle);
                 }
-
-                const name = card.getAttribute('data-ref') ?? '';
-                const shortName = card.getAttribute('data-short-name') ?? '';
-                const desc = card.querySelector('.description')?.textContent ?? '';
-                const domain = card.getAttribute('data-domain') ?? '';
-
-                let isVisible = false;
-
-                if (!isUrlSearch) {
-                    // Combine all searchable text (no need to lowercase, Collator handles it)
-                    const searchableText = `${name} ${shortName} ${desc}`;
-                    // Use Unicode-aware collator search instead of .includes()
-                    isVisible = this.contains(searchableText, term);
+                if (isVisible !== entry.visible) {
+                    entry.card.style.display = isVisible ? '' : 'none';
+                    entry.visible = isVisible;
                 }
-                
-                if (isUrlSearch && searchDomain) {
-                    isVisible = Utils.domainsMatch(searchDomain, domain);
-                }
-
                 if (isVisible) {
-                    card.style.display = '';
                     matchCount++;
-                    if (!firstMatchCard) {
-                        firstMatchCard = card;
-                    }
-                } else {
-                    card.style.display = 'none';
+                    if (!firstMatchCard) firstMatchCard = entry.card;
                 }
-            });
+            }
 
             if (isUrlSearch && matchCount === 1 && firstMatchCard) {
                 const showMoreLabel = firstMatchCard.querySelector('label.showmore');
                 if (showMoreLabel) {
                     const checkbox = firstMatchCard.querySelector('.showmore-box');
-                    if (!checkbox.checked) {
-                        showMoreLabel.click();
-                    }
+                    if (!checkbox.checked) showMoreLabel.click();
                 }
-                
                 setTimeout(() => {
                     firstMatchCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     firstMatchCard.classList.add('highlight-pulse');
@@ -574,34 +544,33 @@ const RssBridge = (() => {
 
         init() {
             const f = document.getElementById('searchfield');
-            if (f) {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'search-input-wrapper';
-                f.parentNode.insertBefore(wrapper, f);
-                wrapper.appendChild(f);
-                
-                const clearBtn = document.createElement('button');
-                clearBtn.type = 'button';
-                clearBtn.className = 'search-clear-btn';
-                clearBtn.setAttribute('aria-label', 'Clear search');
-                clearBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
-                wrapper.appendChild(clearBtn);
-                
-                clearBtn.addEventListener('click', () => {
-                    f.value = '';
-                    f.dispatchEvent(new Event('input'));
-                    f.focus();
-                });
+            if (!f) return;
 
-                const savedQuery = sessionStorage.getItem('rssbridge_search_query');
-                if (savedQuery) {
-                    f.value = savedQuery;
-                }
-                
-                this.perform();
-                
-                f.addEventListener('input', Utils.debounce(() => this.perform(), CONFIG.SEARCH_DELAY));
-            }
+            const wrapper = document.createElement('div');
+            wrapper.className = 'search-input-wrapper';
+            f.parentNode.insertBefore(wrapper, f);
+            wrapper.appendChild(f);
+
+            const clearBtn = document.createElement('button');
+            clearBtn.type = 'button';
+            clearBtn.className = 'search-clear-btn';
+            clearBtn.setAttribute('aria-label', 'Clear search');
+            clearBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+            wrapper.appendChild(clearBtn);
+
+            clearBtn.addEventListener('click', () => {
+                f.value = '';
+                f.dispatchEvent(new Event('input'));
+                f.focus();
+            });
+
+            this.buildIndex();
+
+            const savedQuery = sessionStorage.getItem('rssbridge_search_query');
+            if (savedQuery) f.value = savedQuery;
+
+            this.perform();
+            f.addEventListener('input', Utils.debounce(() => this.perform(), CONFIG.SEARCH_DELAY));
         }
     };
 
@@ -907,10 +876,7 @@ const RssBridge = (() => {
 })();
 
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        RssBridge._init();
-        setTimeout(() => Search.perform(), 100);
-    });
+    document.addEventListener('DOMContentLoaded', () => RssBridge._init());
 } else {
     RssBridge._init();
 }

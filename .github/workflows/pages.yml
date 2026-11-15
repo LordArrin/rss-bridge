@@ -21,194 +21,63 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Debug repository structure
+      - name: Assemble site
         run: |
-          echo "=== Repository root ==="
-          ls -la
-          echo ""
-          echo "=== Looking for specific-bridges ==="
-          find . -name "specific-bridges" -type d 2>/dev/null || echo "Not found"
-          echo ""
-          echo "=== Looking for proxies ==="
-          find . -name "proxies" -type d 2>/dev/null || echo "Not found"
-          echo ""
-          echo "=== Looking for Vk2Bridge.html ==="
-          find . -name "Vk2Bridge.html" -type f 2>/dev/null || echo "Not found"
+          mkdir -p _site/static _site/documentation/pages
+          cp documentation/pages/static/index.html _site/index.html
+          cp documentation/pages/static/style.css _site/style.css
+          cp static/favicon.svg static/favicon.png static/not_boring_logo.png _site/static/
+          for dir in setup specific-bridges proxies; do
+            if [ -d "documentation/pages/$dir" ]; then
+              cp -r "documentation/pages/$dir" "_site/documentation/pages/$dir"
+            else
+              echo "::warning::documentation/pages/$dir not found, skipped"
+            fi
+          done
 
       - name: Extract bridge metadata
         run: |
-          php .github/workflows/extract-bridges.php > bridges.json
-          echo "✓ Generated bridges.json ($(wc -c < bridges.json) bytes)"
+          php .github/workflows/extract-bridges.php > _site/bridges.json
+          echo "bridges.json: $(wc -c < _site/bridges.json) bytes"
 
-      - name: Generate specific-bridges.json
+      - name: Generate documentation indexes
         run: |
           python3 << 'PYTHON_SCRIPT'
-          import os
           import json
+          import os
           import re
-          
-          SPECIFIC_DIR = "documentation/pages/specific-bridges"
-          OUTPUT_FILE = "specific-bridges.json"
-          
-          print(f"=== Generating {OUTPUT_FILE} ===")
-          print(f"Looking in: {SPECIFIC_DIR}")
-          
-          # Check if directory exists
-          if not os.path.isdir(SPECIFIC_DIR):
-              print(f"⚠️  Directory {SPECIFIC_DIR} does not exist")
-              print(f"Current directory: {os.getcwd()}")
-              print(f"Contents of current directory:")
-              for item in os.listdir('.'):
-                  print(f"  {item} {'[DIR]' if os.path.isdir(item) else ''}")
-              
-              # Write empty array
-              with open(OUTPUT_FILE, 'w') as f:
-                  json.dump([], f, indent=2)
-              print(f"✓ Created empty {OUTPUT_FILE}")
-              exit(0)
-          
-          # Collect HTML files
-          bridges = []
-          html_files = [f for f in os.listdir(SPECIFIC_DIR) if f.endswith('.html')]
-          print(f"Found {len(html_files)} HTML files: {html_files}")
-          
-          for filename in sorted(html_files):
-              filepath = os.path.join(SPECIFIC_DIR, filename)
-              name = filename[:-5]  # Remove .html
-              
-              # Read file and extract URI
-              with open(filepath, 'r', encoding='utf-8') as f:
-                  content = f.read()
-              
-              # Extract URI from meta comment
-              uri_match = re.search(r'<!--\s*meta:uri:(.*?)\s*-->', content)
-              uri = uri_match.group(1).strip() if uri_match else ""
-              
-              bridges.append({
-                  "name": name,
-                  "file": filename,
-                  "uri": uri
-              })
-              print(f"  ✓ {name} (uri: {uri})")
-          
-          # Write JSON
-          with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
-              json.dump(bridges, f, indent=2, ensure_ascii=False)
-          
-          print(f"✓ Generated {OUTPUT_FILE} with {len(bridges)} bridges")
-          
-          # Verify
-          with open(OUTPUT_FILE, 'r') as f:
-              content = f.read()
-              print(f"File size: {len(content)} bytes")
-              print(f"Content:\n{content}")
-          
-          # Validate JSON
-          try:
-              with open(OUTPUT_FILE, 'r') as f:
-                  json.load(f)
-              print("✓ JSON is valid")
-          except json.JSONDecodeError as e:
-              print(f"✗ JSON validation FAILED: {e}")
-              exit(1)
+
+          def collect(directory, output):
+              entries = []
+              if os.path.isdir(directory):
+                  for filename in sorted(f for f in os.listdir(directory) if f.endswith('.html')):
+                      with open(os.path.join(directory, filename), encoding='utf-8') as handle:
+                          content = handle.read()
+                      match = re.search(r'<!--\s*meta:uri:(.*?)\s*-->', content)
+                      entries.append({
+                          'name': filename[:-5],
+                          'file': filename,
+                          'uri': match.group(1).strip() if match else '',
+                      })
+              with open(output, 'w', encoding='utf-8') as handle:
+                  json.dump(entries, handle, ensure_ascii=False)
+              print(f'{output}: {len(entries)} entries')
+
+          collect('documentation/pages/specific-bridges', '_site/specific-bridges.json')
+          collect('documentation/pages/proxies', '_site/proxies.json')
           PYTHON_SCRIPT
 
-      # NEW: Generate proxies.json
-      - name: Generate proxies.json
+      - name: Verify site
         run: |
-          python3 << 'PYTHON_SCRIPT'
-          import os
-          import json
-          import re
-          
-          PROXIES_DIR = "documentation/pages/proxies"
-          OUTPUT_FILE = "proxies.json"
-          
-          print(f"=== Generating {OUTPUT_FILE} ===")
-          print(f"Looking in: {PROXIES_DIR}")
-          
-          # Check if directory exists
-          if not os.path.isdir(PROXIES_DIR):
-              print(f"⚠️  Directory {PROXIES_DIR} does not exist")
-              print(f"Current directory: {os.getcwd()}")
-              print(f"Contents of documentation/pages/:")
-              docs_pages = "documentation/pages"
-              if os.path.isdir(docs_pages):
-                  for item in os.listdir(docs_pages):
-                      print(f"  {item} {'[DIR]' if os.path.isdir(os.path.join(docs_pages, item)) else ''}")
-              else:
-                  print(f"  {docs_pages} does not exist")
-              
-              # Write empty array
-              with open(OUTPUT_FILE, 'w') as f:
-                  json.dump([], f, indent=2)
-              print(f"✓ Created empty {OUTPUT_FILE}")
-              exit(0)
-          
-          # Collect HTML files
-          proxies = []
-          html_files = [f for f in os.listdir(PROXIES_DIR) if f.endswith('.html')]
-          print(f"Found {len(html_files)} HTML files: {html_files}")
-          
-          for filename in sorted(html_files):
-              filepath = os.path.join(PROXIES_DIR, filename)
-              name = filename[:-5]  # Remove .html
-              
-              # Read file and extract URI
-              with open(filepath, 'r', encoding='utf-8') as f:
-                  content = f.read()
-              
-              # Extract URI from meta comment
-              uri_match = re.search(r'<!--\s*meta:uri:(.*?)\s*-->', content)
-              uri = uri_match.group(1).strip() if uri_match else ""
-              
-              proxies.append({
-                  "name": name,
-                  "file": filename,
-                  "uri": uri
-              })
-              print(f"  ✓ {name} (uri: {uri})")
-          
-          # Write JSON
-          with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
-              json.dump(proxies, f, indent=2, ensure_ascii=False)
-          
-          print(f"✓ Generated {OUTPUT_FILE} with {len(proxies)} proxies")
-          
-          # Verify
-          with open(OUTPUT_FILE, 'r') as f:
-              content = f.read()
-              print(f"File size: {len(content)} bytes")
-              print(f"Content:\n{content}")
-          
-          # Validate JSON
-          try:
-              with open(OUTPUT_FILE, 'r') as f:
-                  json.load(f)
-              print("✓ JSON is valid")
-          except json.JSONDecodeError as e:
-              print(f"✗ JSON validation FAILED: {e}")
-              exit(1)
-          PYTHON_SCRIPT
-      # /NEW
-
-      - name: Verify all files exist
-        run: |
-          echo "=== Final verification ==="
           for file in index.html style.css bridges.json specific-bridges.json proxies.json; do
-            if [ -f "$file" ]; then
-              echo "✓ $file exists ($(wc -c < "$file") bytes)"
-            else
-              echo "✗ $file MISSING"
+            if [ ! -f "_site/$file" ]; then
+              echo "_site/$file is missing"
               exit 1
             fi
+            echo "_site/$file: $(wc -c < "_site/$file") bytes"
           done
-          echo ""
-          echo "=== specific-bridges directory ==="
-          ls -la documentation/pages/specific-bridges/ 2>/dev/null || echo "Directory not found (will be skipped)"
-          echo ""
-          echo "=== proxies directory ==="
-          ls -la documentation/pages/proxies/ 2>/dev/null || echo "Directory not found (will be skipped)"
+          test -f _site/static/not_boring_logo.png
+          test -f _site/documentation/pages/setup/basics.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -216,7 +85,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: '_site'
 
       - name: Deploy to GitHub Pages
         id: deployment
@@ -224,4 +93,4 @@ jobs:
 
       - name: Show deployment URL
         run: |
-          echo "✓ Deployed to: ${{ steps.deployment.outputs.page_url }}"
+          echo "Deployed to: ${{ steps.deployment.outputs.page_url }}"

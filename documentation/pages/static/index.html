@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSS-Bridge by LordArrin</title>
+    <meta name="description" content="Modern RSS-Bridge fork with latest PHP 8.5, built-in Memcached, refined architecture and Material Design 3 interface">
+    <meta name="theme-color" content="#E65100" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#120D0B" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/svg+xml" href="./static/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="./static/favicon.png">
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<nav>
+    <div class="nav-container">
+        <div class="logo">
+            <img src="./static/favicon.svg" alt="RSS-Bridge" width="40" height="40">
+            <span>RSS-Bridge by LordArrin</span>
+        </div>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#installation">Installation</a>
+            <a href="#bridges">Bridges</a>
+            <a href="#bridge-specific">Specific</a>
+            <a href="#proxies">Proxies</a>
+            <a href="#development">Development</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+
+    <noscript>
+        <div class="load-error">
+            <strong>JavaScript is required</strong><br>
+            <small>Enable JavaScript or visit the repository directly.</small>
+        </div>
+    </noscript>
+
+    <header class="hero">
+        <div class="hero-logo">
+            <img src="./static/not_boring_logo.png" alt="RSS-Bridge" fetchpriority="high" decoding="async">
+        </div>
+        <p class="subtitle">Modern RSS-Bridge fork with latest PHP 8.5, built-in Memcached, refined architecture and Material Design 3 interface</p>
+        <div class="badges">
+            <span class="badge">PHP 8.5+</span>
+            <span class="badge">Memcached</span>
+            <span class="badge">Material Design 3</span>
+            <span class="badge">Alpine 3.24</span>
+            <span class="badge">LTO Optimized</span>
+        </div>
+        <div class="mt-24">
+            <a href="#installation" class="button">Get Started</a>
+            <a href="https://github.com/LordArrin/rss-bridge" class="button secondary">Source Code</a>
+        </div>
+    </header>
+
+    <section class="doc-section" id="features">
+        <h2>Key Features</h2>
+        <div class="features">
+            <div class="feature-card">
+                <div class="icon">⚡</div>
+                <h3>Maximum Performance</h3>
+                <p>Compiled with LTO, mold linker, mimalloc, and aggressive optimizations for Alpine Linux</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">💾</div>
+                <h3>Built-in Memcached</h3>
+                <p>In-memory caching for faster repeated requests and resource efficiency</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">🎨</div>
+                <h3>Modern UI</h3>
+                <p>Material Design 3 interface with dark theme, smooth animations, and responsive design</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">🔒</div>
+                <h3>Security</h3>
+                <p>Isolated bridges via SafeBridgeLoader, strict typing, and modern PHP practices</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="doc-section" id="installation">
+        <h2>Installation &amp; Setup</h2>
+        <div id="setup-content">
+            <div class="loading" id="setup-loading">Loading installation instructions...</div>
+        </div>
+    </section>
+
+    <section class="searchbar" id="bridges">
+        <h3>Search</h3>
+        <input
+            type="text"
+            name="searchfield"
+            id="bridge-search"
+            placeholder="Insert URL or bridge name"
+            value=""
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            enterkeyhint="search"
+        >
+    </section>
+
+    <div id="bridges-container">
+        <div class="loading" id="loading-message">Loading bridges from repository...</div>
+    </div>
+
+    <section class="doc-section" id="bridge-specific">
+        <h2>Specific Bridges Configuration</h2>
+        <p class="text-center">Some bridges require API keys, tokens, or cookies. Add them to <code>/config/.bridges</code>. Click on a bridge to expand the instructions.</p>
+        <div class="bridge-specific-list" id="bridge-specific-list" data-base="./documentation/pages/specific-bridges/">
+            <div class="loading" id="specific-loading">Loading specific bridge configurations...</div>
+        </div>
+    </section>
+
+    <section class="doc-section" id="proxies">
+        <h2>Proxies Configuration</h2>
+        <p class="text-center">Proxy profiles bypass JavaScript challenges and CAPTCHAs for protected sites. Configure them via environment variables in <code>/config/.env</code>. Click on a proxy to expand the instructions.</p>
+        <div class="proxies-list" id="proxies-list" data-base="./documentation/pages/proxies/">
+            <div class="loading" id="proxies-loading">Loading proxy configurations...</div>
+        </div>
+    </section>
+
+    <section class="doc-section" id="development">
+        <h2>Developing Custom Bridges</h2>
+
+        <h3>Requirements</h3>
+        <ul>
+            <li>PHP 8.5+ with mandatory <code>declare(strict_types=1)</code></li>
+            <li>Namespace <code>RSSBridge\Bridges</code></li>
+            <li>Class must be <code>final</code> and extend <code>BridgeAbstract</code></li>
+            <li>Use native <code>\Dom\HTMLDocument</code> instead of <code>simple_html_dom</code></li>
+        </ul>
+
+        <h3>Minimal Bridge Template</h3>
+<div class="code-block"><pre><code><span class="tok-kw">&lt;?php</span>
+
+<span class="tok-kw">declare</span>(strict_types=<span class="tok-num">1</span>);
+
+<span class="tok-kw">namespace</span> <span class="tok-fn">RSSBridge</span>\<span class="tok-fn">Bridges</span>;
+
+<span class="tok-kw">use</span> <span class="tok-fn">RSSBridge</span>\<span class="tok-fn">BridgeAbstract</span>;
+
+<span class="tok-kw">final class</span> <span class="tok-fn">ExampleBridge</span> <span class="tok-kw">extends</span> <span class="tok-fn">BridgeAbstract</span>
+{
+    <span class="tok-kw">public const</span> <span class="tok-var">NAME</span> = <span class="tok-str">'Example Bridge'</span>;
+    <span class="tok-kw">public const</span> <span class="tok-var">URI</span> = <span class="tok-str">'https://example.com/'</span>;
+    <span class="tok-kw">public const</span> <span class="tok-var">DESCRIPTION</span> = <span class="tok-str">'Returns example content'</span>;
+    <span class="tok-kw">public const</span> <span class="tok-var">MAINTAINER</span> = <span class="tok-str">'yourname'</span>;
+    <span class="tok-kw">public const</span> <span class="tok-var">CACHE_TIMEOUT</span> = <span class="tok-num">3600</span>;
+
+    <span class="tok-kw">public function</span> <span class="tok-fn">collectData</span>(): <span class="tok-kw">void</span>
+    {
+        <span class="tok-var">$dom</span> = <span class="tok-fn">getSimpleHTMLDOM</span>(<span class="tok-kw">self</span>::<span class="tok-var">URI</span>);
+        <span class="tok-var">$title</span> = <span class="tok-var">$dom</span>-&gt;<span class="tok-fn">querySelector</span>(<span class="tok-str">'h1'</span>)?-&gt;<span class="tok-var">textContent</span> ?? <span class="tok-str">'Untitled'</span>;
+
+        <span class="tok-var">$this</span>-&gt;<span class="tok-var">items</span>[] = [
+            <span class="tok-str">'title'</span>     =&gt; <span class="tok-var">$title</span>,
+            <span class="tok-str">'uri'</span>       =&gt; <span class="tok-kw">self</span>::<span class="tok-var">URI</span>,
+            <span class="tok-str">'content'</span>   =&gt; <span class="tok-str">'&lt;p&gt;Hello, world&lt;/p&gt;'</span>,
+            <span class="tok-str">'timestamp'</span> =&gt; <span class="tok-fn">time</span>(),
+            <span class="tok-str">'uid'</span>       =&gt; <span class="tok-str">'example-1'</span>,
+        ];
+    }
+}</code></pre></div>
+
+        <h3>Required Constants</h3>
+        <ul>
+            <li><code>NAME</code> — bridge display name</li>
+            <li><code>URI</code> — source URL</li>
+            <li><code>DESCRIPTION</code> — short description</li>
+            <li><code>MAINTAINER</code> — maintainer name</li>
+            <li><code>CACHE_TIMEOUT</code> — cache TTL in seconds</li>
+        </ul>
+
+        <h3>User Parameters</h3>
+<div class="code-block"><pre><code><span class="tok-kw">public const</span> <span class="tok-var">PARAMETERS</span> = [
+    <span class="tok-str">''</span> =&gt; [
+        <span class="tok-str">'username'</span> =&gt; [
+            <span class="tok-str">'name'</span>     =&gt; <span class="tok-str">'Username'</span>,
+            <span class="tok-str">'type'</span>     =&gt; <span class="tok-str">'text'</span>,
+            <span class="tok-str">'required'</span> =&gt; <span class="tok-kw">true</span>,
+        ],
+        <span class="tok-str">'limit'</span> =&gt; [
+            <span class="tok-str">'name'</span>         =&gt; <span class="tok-str">'Item limit'</span>,
+            <span class="tok-str">'type'</span>         =&gt; <span class="tok-str">'number'</span>,
+            <span class="tok-str">'defaultValue'</span> =&gt; <span class="tok-num">10</span>,
+        ],
+    ],
+];
+
+<span class="tok-com">// Access in collectData():</span>
+<span class="tok-var">$username</span> = (<span class="tok-kw">string</span>)<span class="tok-var">$this</span>-&gt;<span class="tok-fn">getInput</span>(<span class="tok-str">'username'</span>);
+<span class="tok-var">$limit</span>    = (<span class="tok-kw">int</span>)(<span class="tok-var">$this</span>-&gt;<span class="tok-fn">getInput</span>(<span class="tok-str">'limit'</span>) ?: <span class="tok-num">10</span>);</code></pre></div>
+
+        <h3>Bridges Configuration (Secrets)</h3>
+        <p>For API tokens, cookies and other secrets, use the <code>CONFIGURATION</code> constant:</p>
+<div class="code-block"><pre><code><span class="tok-com">// In your bridge class:</span>
+<span class="tok-kw">public const</span> <span class="tok-var">CONFIGURATION</span> = [
+    <span class="tok-str">'api_token'</span> =&gt; [<span class="tok-str">'required'</span> =&gt; <span class="tok-kw">true</span>],
+    <span class="tok-str">'session_cookie'</span> =&gt; [<span class="tok-str">'required'</span> =&gt; <span class="tok-kw">false</span>],
+];
+
+<span class="tok-com">// In /config/.bridges:</span>
+[ExampleBridge]
+api_token = <span class="tok-str">"your-token-here"</span>
+session_cookie = <span class="tok-str">"abc123"</span>
+
+<span class="tok-com">// Access in bridge code:</span>
+<span class="tok-var">$token</span> = <span class="tok-var">$this</span>-&gt;<span class="tok-fn">getOption</span>(<span class="tok-str">'api_token'</span>);</code></pre></div>
+
+        <h3>Useful Functions</h3>
+        <ul>
+            <li><code>getSimpleHTMLDOM($url)</code> — fetch and parse HTML</li>
+            <li><code>parseHtmlDocument($html)</code> — repair and parse malformed HTML</li>
+            <li><code>getContents($url)</code> — raw HTTP response</li>
+            <li><code>getProtectedContents($url, 'flaresolverr')</code> — fetch via proxy profile</li>
+        </ul>
+
+        <h3>Code Quality Checks</h3>
+<div class="code-block"><pre><code>vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php
+vendor/bin/phpcbf --standard=phpcs.xml bridges-v2/YourBridge.php
+vendor/bin/phpstan analyse bridges-v2/YourBridge.php</code></pre></div>
+
+        <div class="text-center mt-24">
+            <a href="https://github.com/LordArrin/rss-bridge/blob/master/documentation/instructions/writing-bridges-en.md" class="button">Full Documentation</a>
+        </div>
+    </section>
+
+    <section class="footer">
+        <div class="footer-badges">
+            <a href="https://hub.docker.com/repository/docker/lordarrin/rss-bridge/tags/" rel="noopener noreferrer" target="_blank" class="badge">
+                <span class="badge__left">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M13 4h2v2h-2V4zm-3 0h2v2h-2V4zm-3 0h2v2H7V4zm-3 2h2v2H4V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm-9 2h2v2H7V8zm3 0h2v2h-2V8zm3 0h2v2h-2V8zm-3 2h2v2h-2v-2zm3 0h2v2h-2v-2zm3.13 1.75c-.26-.12-.57-.2-.93-.2-.58 0-1.06.23-1.35.61-.17.23-.26.5-.28.79h-.02c-.1-.2-.29-.37-.54-.47-.22-.09-.5-.14-.81-.14-1.14 0-2.02.88-2.02 2.02 0 .05 0 .09.01.14H5c-.83 0-1.5.67-1.5 1.5S4.17 16.5 5 16.5h14c.83 0 1.5-.67 1.5-1.5s-.67-1.5-1.5-1.5h-1.23c.03-.11.05-.22.05-.34 0-.82-.6-1.41-1.19-1.41z"/>
+                    </svg>docker
+                </span>
+                <span class="badge__right">lordarrin/rss-bridge:1.3.0</span>
+            </a>
+
+            <a href="https://github.com/LordArrin/rss-bridge" rel="noopener noreferrer" target="_blank" class="badge">
+                <span class="badge__left">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                    </svg>github
+                </span>
+                <span class="badge__right">LordArrin/rss-bridge</span>
+            </a>
+
+            <a href="https://github.com/LordArrin/rss-bridge/blob/master/LICENSE" rel="noopener noreferrer" target="_blank" class="badge">
+                <span class="badge__left">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
+                    </svg>license
+                </span>
+                <span class="badge__right">AGPL-3.0</span>
+            </a>
+
+            <span class="footer-counter">
+                <span id="active-bridges">0</span> active bridges
+            </span>
+        </div>
+    </section>
+
+</div>
+
+<script>
+'use strict';
+
+(() => {
+    const SEARCH_DELAY = 100;
+    const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    let bridgesReady;
+    let specificReady;
+    let proxiesReady;
+    let setupReady;
+    const bridgesReadyPromise = new Promise(r => { bridgesReady = r; });
+    const specificReadyPromise = new Promise(r => { specificReady = r; });
+    const proxiesReadyPromise = new Promise(r => { proxiesReady = r; });
+    const setupReadyPromise = new Promise(r => { setupReady = r; });
+
+    const Utils = {
+        debounce(fn, delay) {
+            let timer;
+            return (...args) => {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn(...args), delay);
+            };
+        },
+        escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        },
+        extractDomain(url) {
+            if (!url) return '';
+            const candidate = /^https?:\/\//.test(url) ? url : 'https://' + url;
+            try {
+                let domain = new URL(candidate).hostname.toLowerCase();
+                if (domain.startsWith('www.')) domain = domain.substring(4);
+                return domain;
+            } catch (e) {
+                return '';
+            }
+        },
+        isUrl(str) {
+            return /^https?:\/\/.+/.test(str) || /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(str);
+        },
+        domainsMatch(a, b) {
+            if (!a || !b) return false;
+            return a === b || a.endsWith('.' + b) || b.endsWith('.' + a);
+        }
+    };
+
+    const SessionStore = {
+        get(key) {
+            try {
+                return sessionStorage.getItem(key);
+            } catch (e) {
+                return null;
+            }
+        },
+        set(key, value) {
+            try {
+                sessionStorage.setItem(key, value);
+            } catch (e) {}
+        }
+    };
+
+    const COPY_BUTTON_HTML =
+        '<span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>' +
+        '<span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>' +
+        '<span class="copy-label-copy">Copy</span><span class="copy-label-copied">Copied!</span>';
+
+    function initCopyButtons(root = document) {
+        root.querySelectorAll('.code-block').forEach(block => {
+            let btn = block.querySelector('.copy-btn');
+            if (!btn) {
+                btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'copy-btn';
+                btn.setAttribute('aria-label', 'Copy code');
+                btn.innerHTML = COPY_BUTTON_HTML;
+                block.prepend(btn);
+            }
+            if (btn.dataset.bound === '1') return;
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', async () => {
+                const code = block.querySelector('code');
+                const text = code ? code.textContent : '';
+                let copied = false;
+                try {
+                    await navigator.clipboard.writeText(text);
+                    copied = true;
+                } catch (err) {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    try {
+                        copied = document.execCommand('copy');
+                    } catch (e) {
+                        copied = false;
+                    }
+                    document.body.removeChild(textarea);
+                }
+                if (copied) {
+                    btn.classList.add('copied');
+                    setTimeout(() => btn.classList.remove('copied'), 2000);
+                }
+            });
+        });
+    }
+
+    function renderLoadError(loading, container, title, error) {
+        const box = document.createElement('div');
+        box.className = 'load-error';
+        const strong = document.createElement('strong');
+        strong.textContent = title;
+        const small = document.createElement('small');
+        small.textContent = error && error.message ? error.message : String(error);
+        box.appendChild(strong);
+        box.appendChild(document.createElement('br'));
+        box.appendChild(small);
+        if (loading && loading.isConnected) {
+            loading.replaceWith(box);
+        } else {
+            container.appendChild(box);
+        }
+    }
+
+    function initSpoilers(root = document) {
+        root.querySelectorAll('.bridge-specific-header, .proxies-header').forEach(header => {
+            if (header.dataset.bound === '1') return;
+            header.dataset.bound = '1';
+            header.addEventListener('click', () => {
+                const item = header.closest('.bridge-specific-item, .proxies-item');
+                if (!item) return;
+                const isOpen = item.classList.contains('open');
+                document.querySelectorAll('.bridge-specific-item.open, .proxies-item.open').forEach(openItem => {
+                    if (openItem === item) return;
+                    openItem.classList.remove('open');
+                    const openHeader = openItem.querySelector('.bridge-specific-header, .proxies-header');
+                    if (openHeader) openHeader.setAttribute('aria-expanded', 'false');
+                });
+                if (isOpen) {
+                    item.classList.remove('open');
+                    header.setAttribute('aria-expanded', 'false');
+                    return;
+                }
+                item.classList.add('open');
+                header.setAttribute('aria-expanded', 'true');
+                loadSpoilerContent(item);
+            });
+        });
+    }
+
+    function loadSpoilerContent(item) {
+        if (item.dataset.loaded === '1' || item.dataset.loading === '1') return;
+        const list = item.closest('[data-base]');
+        const file = item.dataset.file;
+        const inner = item.querySelector('.bridge-specific-content-inner, .proxies-content-inner');
+        if (!list || !file || !inner) return;
+        item.dataset.loading = '1';
+        inner.textContent = 'Loading instructions...';
+        fetch(list.dataset.base + file)
+            .then(response => {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.text();
+            })
+            .then(html => {
+                inner.innerHTML = html.replace(/^<!--\s*meta:uri:.*?-->\s*/m, '');
+                item.dataset.loaded = '1';
+                initCopyButtons(inner);
+            })
+            .catch(error => {
+                inner.textContent = '';
+                const note = document.createElement('div');
+                note.className = 'note';
+                note.textContent = 'Failed to load instructions: ' + (error && error.message ? error.message : String(error));
+                inner.appendChild(note);
+            })
+            .finally(() => {
+                item.dataset.loading = '0';
+            });
+    }
+
+    const Search = {
+        input: null,
+        index: [],
+
+        normalize(value) {
+            return String(value ?? '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/ß/g, 'ss')
+                .toLowerCase();
+        },
+
+        init() {
+            this.input = document.getElementById('bridge-search');
+            if (!this.input) return;
+            this.index = Array.from(document.querySelectorAll('#bridges-container .bridge-card')).map(card => ({
+                card,
+                text: this.normalize(
+                    (card.getAttribute('data-ref') ?? '') + ' ' +
+                    (card.getAttribute('data-short-name') ?? '') + ' ' +
+                    (card.getAttribute('data-description') ?? '')
+                ),
+                domain: card.getAttribute('data-domain') ?? '',
+                hidden: false
+            }));
+            const savedQuery = SessionStore.get('rssbridge_search_query');
+            if (savedQuery) this.input.value = savedQuery;
+            this.perform();
+            this.input.addEventListener('input', Utils.debounce(() => this.perform(), SEARCH_DELAY));
+        },
+
+        perform() {
+            if (!this.input) return;
+            const term = this.input.value.trim();
+            SessionStore.set('rssbridge_search_query', term);
+            const isUrlSearch = Utils.isUrl(term);
+            const searchDomain = isUrlSearch ? Utils.extractDomain(term) : '';
+            const needle = this.normalize(term);
+            for (const entry of this.index) {
+                let visible = true;
+                if (term !== '') {
+                    visible = isUrlSearch
+                        ? (searchDomain !== '' && Utils.domainsMatch(searchDomain, entry.domain))
+                        : entry.text.includes(needle);
+                }
+                const hidden = !visible;
+                if (hidden !== entry.hidden) {
+                    entry.card.classList.toggle('hidden', hidden);
+                    entry.hidden = hidden;
+                }
+            }
+        }
+    };
+
+    async function loadBridges() {
+        const container = document.getElementById('bridges-container');
+        const loading = document.getElementById('loading-message');
+        try {
+            const response = await fetch('./bridges.json');
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            const data = await response.json();
+            const bridges = Array.isArray(data.bridges) ? data.bridges : [];
+            const active = data.active || bridges.length;
+            document.getElementById('active-bridges').textContent = active;
+            const esc = Utils.escapeHtml;
+            const html = bridges.map(bridge => {
+                const file = esc(bridge.file);
+                const uri = esc(bridge.uri || 'https://github.com/LordArrin/rss-bridge');
+                const name = esc(bridge.name || bridge.file);
+                const description = esc(bridge.description || 'No description provided');
+                const maintainer = esc(bridge.maintainer || 'No maintainer');
+                const domain = esc(Utils.extractDomain(bridge.uri));
+                return `<section class="bridge-card" id="bridge-${file}" data-ref="${esc(bridge.name || '')}" data-short-name="${esc(bridge.file)}" data-description="${esc(bridge.description || '')}" data-domain="${domain}">` +
+                    `<h2><a href="${uri}" target="_blank" rel="noopener">${name}</a></h2>` +
+                    `<p class="description">${description}</p>` +
+                    `<p class="maintainer">${maintainer}</p>` +
+                    `</section>`;
+            }).join('');
+            loading.remove();
+            container.insertAdjacentHTML('beforeend', html);
+            Search.init();
+        } catch (error) {
+            renderLoadError(loading, container, 'Failed to load bridges', error);
+        }
+    }
+
+    async function loadDocList(cfg) {
+        const container = document.getElementById(cfg.containerId);
+        const loading = document.getElementById(cfg.loadingId);
+        try {
+            const response = await fetch(cfg.json);
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            const entries = await response.json();
+            if (!Array.isArray(entries)) throw new Error('Invalid JSON format: expected array');
+            if (entries.length === 0) {
+                loading.textContent = cfg.emptyText;
+                loading.classList.add('empty-state');
+                return;
+            }
+            const esc = Utils.escapeHtml;
+            const html = entries.map(entry => {
+                const uri = entry.uri ? `<span class="bridge-uri">${esc(entry.uri)}</span>` : '';
+                return `<div class="${cfg.itemClass}" data-file="${esc(entry.file)}">` +
+                    `<button type="button" class="${cfg.headerClass}" aria-expanded="false">` +
+                    `<span class="header-main"><span class="bridge-name">${esc(entry.name)}</span>${uri}</span>` +
+                    `<span class="toggle-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg></span>` +
+                    `</button>` +
+                    `<div class="${cfg.contentClass}"><div class="${cfg.innerClass}"></div></div>` +
+                    `</div>`;
+            }).join('');
+            loading.remove();
+            container.insertAdjacentHTML('beforeend', html);
+            initSpoilers(container);
+        } catch (error) {
+            renderLoadError(loading, container, cfg.errorTitle, error);
+        }
+    }
+
+    const SPECIFIC_LIST = {
+        json: './specific-bridges.json',
+        containerId: 'bridge-specific-list',
+        loadingId: 'specific-loading',
+        itemClass: 'bridge-specific-item',
+        headerClass: 'bridge-specific-header',
+        contentClass: 'bridge-specific-content',
+        innerClass: 'bridge-specific-content-inner',
+        emptyText: 'No bridges require specific configuration yet.',
+        errorTitle: 'Failed to load bridge configurations'
+    };
+
+    const PROXIES_LIST = {
+        json: './proxies.json',
+        containerId: 'proxies-list',
+        loadingId: 'proxies-loading',
+        itemClass: 'proxies-item',
+        headerClass: 'proxies-header',
+        contentClass: 'proxies-content',
+        innerClass: 'proxies-content-inner',
+        emptyText: 'No proxies are configured yet.',
+        errorTitle: 'Failed to load proxy configurations'
+    };
+
+    async function loadSetup() {
+        const container = document.getElementById('setup-content');
+        const loading = document.getElementById('setup-loading');
+        try {
+            const response = await fetch('./documentation/pages/setup/basics.html');
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            const html = await response.text();
+            container.innerHTML = html;
+            initCopyButtons(container);
+        } catch (error) {
+            renderLoadError(loading, container, 'Failed to load installation instructions', error);
+        }
+    }
+
+    function findTarget(href) {
+        try {
+            return document.querySelector(href);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async function scrollToTarget(href, behavior) {
+        const target = findTarget(href);
+        if (!target) return;
+        const bridgesContainer = document.getElementById('bridges-container');
+        const isBelowBridgesContainer = bridgesContainer &&
+            (bridgesContainer.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING);
+        if (isBelowBridgesContainer) {
+            await Promise.all([bridgesReadyPromise, specificReadyPromise, proxiesReadyPromise, setupReadyPromise]);
+            await new Promise(r => requestAnimationFrame(r));
+            await new Promise(r => requestAnimationFrame(r));
+        }
+        target.scrollIntoView({ behavior, block: 'start' });
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', async e => {
+            const href = anchor.getAttribute('href');
+            if (!href || href === '#') return;
+            e.preventDefault();
+            history.replaceState(null, '', href);
+            await scrollToTarget(href, REDUCED_MOTION.matches ? 'auto' : 'smooth');
+        });
+    });
+
+    initCopyButtons();
+    loadSetup().finally(setupReady);
+    loadBridges().finally(bridgesReady);
+    loadDocList(SPECIFIC_LIST).finally(specificReady);
+    loadDocList(PROXIES_LIST).finally(proxiesReady);
+
+    if (window.location.hash) {
+        Promise.all([bridgesReadyPromise, specificReadyPromise, proxiesReadyPromise, setupReadyPromise])
+            .then(() => new Promise(r => requestAnimationFrame(r)))
+            .then(() => scrollToTarget(window.location.hash, 'auto'));
+    }
+})();
+</script>
+
+</body>
+</html>

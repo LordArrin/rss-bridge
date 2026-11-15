@@ -871,18 +871,13 @@ input:focus::placeholder { opacity: 0; }
     flex-direction: column;
     align-items: center;
     gap: 8px;
-    animation: fadeInUp var(--md-motion-duration-long) var(--md-motion-easing-decelerate) both;
-    
-    /* Hardware acceleration */
-    transform: translateZ(0);
-    backface-visibility: hidden;
     
     /* Performance optimization for large lists.
        Note: `paint` containment is intentionally NOT used here — it clips
        overflow and would cut off the fixed-position tooltips spawned inside
        the cards on some engines. */
     content-visibility: auto;
-    contain-intrinsic-size: auto 300px;
+    contain-intrinsic-size: auto 320px;
     contain: style;
 }
 
@@ -1687,10 +1682,6 @@ html.has-favorites.favorites-loaded .bridge-card {
     }
 }
 
-.bridge-card {
-    animation: fadeInUp var(--md-motion-duration-medium) var(--md-motion-easing-decelerate) both;
-}
-
 @keyframes slideDown {
     from {
         opacity: 0;
@@ -1815,10 +1806,6 @@ html.has-favorites.favorites-loaded .bridge-card {
         max-width: none;
         width: auto;
     }
-
-    .bridge-card {
-        animation-duration: 0.4s;
-    }
     
     .favorite-btn,
     .hash-link {
@@ -1862,5 +1849,41 @@ html.has-favorites.favorites-loaded .bridge-card {
 @media (prefers-color-scheme: dark) {
     * {
         scrollbar-color: #352C28 #1F1714;
+    }
+}
+
+@media (hover: none), (pointer: coarse) {
+    section:not(.footer):not(.feeditem):hover {
+        transform: none;
+        box-shadow: var(--md-elevation-1);
+    }
+    .bridge-card:not(:has(.showmore-box:checked)):hover {
+        transform: none;
+    }
+    .bridge-card.sorted:hover {
+        transform: none !important;
+    }
+}
+
+@media screen and (max-width: 767px) {
+    .parameters input[type="text"],
+    .parameters input[type="number"],
+    .parameters input[type="password"],
+    .parameters select {
+        font-size: 16px;
+    }
+    .bridge-card {
+        animation: none;
+    }
+    .bridge-card > h2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .parameters > input[type="text"],
+    .parameters > input[type="number"],
+    .parameters > select {
+        grid-column: 1 / 3;
     }
 }
