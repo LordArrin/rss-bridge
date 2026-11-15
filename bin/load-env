@@ -613,11 +613,12 @@ function validateDomain(string $value): ?string
 }
 
 /**
- * Validates a TZ (timezone) value.
- * Accepts either:
- *   - IANA timezone name (e.g. "Europe/Moscow", "America/New_York")
- *   - UTC offset format (e.g. "UTC", "UTC+3", "UTC-5", "UTC+03:30")
- * Returns the validated value or null on failure.
+ * Validates and canonicalizes a TZ value.
+ * Accepts IANA names ('Europe/Moscow'), 'UTC', and UTC offsets ('UTC+3',
+ * 'UTC-7', 'UTC+03:00'). Whole-hour offsets are canonicalized to Etc/GMT
+ * identifiers (POSIX sign inversion: UTC+3 becomes Etc/GMT-3). Fractional
+ * offsets cannot be expressed as PHP timezone identifiers and are rejected
+ * with a hint to use an IANA name. Returns null on failure (fallback: UTC).
  */
 function validateTimezone(string $value): ?string
 {
@@ -626,24 +627,43 @@ function validateTimezone(string $value): ?string
         return null;
     }
 
-    // Try as IANA identifier
+    if (strtoupper($value) === 'UTC') {
+        return 'UTC';
+    }
+
+    if (preg_match('/^UTC([+-])(\d{1,2})(?::(\d{2}))?$/i', $value, $m) === 1) {
+        $hours = (int) $m[2];
+        $minutes = isset($m[3]) === true && $m[3] !== '' ? (int) $m[3] : 0;
+        if ($hours > 14 || $minutes > 59) {
+            return null;
+        }
+        if ($minutes !== 0) {
+            fwrite(STDERR, "TZ: '{$value}' has a fractional offset that PHP cannot express as a timezone identifier; use an IANA name instead (e.g. Asia/Kolkata for UTC+05:30)\n");
+            return null;
+        }
+        if ($hours === 0) {
+            return 'UTC';
+        }
+        $candidate = sprintf('Etc/GMT%s%d', $m[1] === '+' ? '-' : '+', $hours);
+        try {
+            new \DateTimeZone($candidate);
+        } catch (\Throwable) {
+            return null;
+        }
+        return $candidate;
+    }
+
     if (in_array($value, \DateTimeZone::listIdentifiers(), true) === true) {
         return $value;
     }
 
-    // Try UTC offset: UTC, UTC+N, UTC-N, UTC+HH:MM
-    if (preg_match('/^UTC([+-])(\d{1,2})(:(\d{2}))?$/', $value, $m) === 1) {
-        $hours = (int)$m[2];
-        $minutes = isset($m[4]) ? (int)$m[4] : 0;
-        if ($hours > 14 || $minutes > 59) {
+    if (preg_match('#^Etc/GMT[+-]\d{1,2}$#', $value) === 1) {
+        try {
+            new \DateTimeZone($value);
+        } catch (\Throwable) {
             return null;
         }
         return $value;
-    }
-
-    // Plain "UTC"
-    if (strtoupper($value) === 'UTC') {
-        return 'UTC';
     }
 
     return null;
@@ -1358,6 +1378,17 @@ function generatePhpIniOverrides(array $env): int
         $value = preg_replace('/[^0-9MGKm]/i', '', $env['PHP_OPCACHE_JIT_BUFFER']);
         $lines[] = "opcache.jit_buffer_size = {$value}";
         $count++;
+    }
+
+    if (isset($env['TZ']) === true && $env['TZ'] !== '') {
+        $tz = (string) $env['TZ'];
+        try {
+            new \DateTimeZone($tz);
+            $lines[] = 'date.timezone = ' . $tz;
+            $count++;
+        } catch (\Throwable) {
+            fwrite(STDERR, "TZ: '{$tz}' is not a valid PHP timezone, date.timezone left unset\n");
+        }
     }
 
     if ($count > 0) {

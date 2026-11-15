@@ -5,7 +5,7 @@
  * @var string $uri
  * @var string $bridge_name
  * @var array<int, array{url: string, name: string, type: string}> $formats
- * @var array<int, array{url: string, title: string, timestamp?: int, author?: string, content: string, enclosures?: array<int, string>, categories?: array<int, string>}> $items
+ * @var array<int, array{url: string, title: string, timestamp?: int, datetime?: string, date?: string, author?: string, content: string, enclosures?: array<int, string>, categories?: array<int, string>}> $items
  */
 
 ?>
@@ -70,8 +70,8 @@
                 <div class="item-meta">
                     <?php if (isset($item['timestamp'])): ?>
                         <p>
-                            <time datetime="<?= date('c', $item['timestamp']) ?>">
-                                <?= date('Y-m-d H:i:s', $item['timestamp']) ?>
+                            <time datetime="<?= e($item['datetime'] ?? date('c', $item['timestamp'])) ?>">
+                                <?= e($item['date'] ?? date('Y-m-d H:i:s P', $item['timestamp'])) ?>
                             </time>
                         </p>
                     <?php endif; ?>
@@ -83,7 +83,7 @@
 
                 <div class="item-content">
                     <!-- Intentionally not escaping for html context -->
-                    <?= break_annoying_html_tags($item['content']) ?>
+                    <?= break_annoying_html_tags($item['content'], true) ?>
                 </div>
 
                 <?php if (isset($item['enclosures']) && $item['enclosures'] !== []): ?>

@@ -219,7 +219,13 @@ class FeedItem
         if ($content instanceof \Dom\HTMLDocument) {
             $content = $content->saveHtml();
         } elseif ($content instanceof \Dom\Element) {
-            $content = $content->outerHTML;
+            $owner = $content->ownerDocument;
+            if ($owner instanceof \Dom\HTMLDocument) {
+                $content = $owner->saveHtml($content);
+            } else {
+                $markup = $content->C14N();
+                $content = $markup !== false ? $markup : '';
+            }
         }
 
         if (is_string($content) === true) {

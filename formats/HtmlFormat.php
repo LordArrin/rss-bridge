@@ -43,10 +43,13 @@ final class HtmlFormat extends FormatAbstract
 
         $items = [];
         foreach ($this->getItems() as $item) {
+            $timestamp = $item->getTimestamp();
             $items[] = [
                 'url'        => (bool) $item->getURI() === true ? $item->getURI() : ($feedArray['uri'] ?? ''),
                 'title'      => $item->getTitle() ?? '(no title)',
-                'timestamp'  => $item->getTimestamp(),
+                'timestamp'  => $timestamp,
+                'datetime'   => $timestamp !== null ? date('c', $timestamp) : '',
+                'date'       => $timestamp !== null ? date('Y-m-d H:i:s', $timestamp) : '',
                 'author'     => $item->getAuthor(),
                 'content'    => $item->getContent() ?? '',
                 'enclosures' => $item->getEnclosures(),

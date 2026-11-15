@@ -158,21 +158,108 @@ function html_option(string $name, string $value, bool $selected = false): strin
 // =============================================================================
 
 /**
- * Break potentially dangerous HTML tags by inserting a zero-width non-joiner.
+ * Hosts whose <iframe> embeds may be rendered by the HTML preview.
  *
- * This function sanitizes raw HTML strings to prevent XSS. It performs
- * case-insensitive tag breaking, strips inline event handlers, and
+ * Matching is exact or by subdomain ("player.vimeo.com" matches "vimeo.com").
+ */
+const VIDEO_EMBED_HOSTS = [
+    'youtube.com',
+    'youtube-nocookie.com',
+    'youtu.be',
+    'vk.com',
+    'vk.ru',
+    'vkvideo.ru',
+    'rutube.ru',
+    'vimeo.com',
+    'dzen.ru',
+    'ok.ru',
+    'coub.com',
+    'twitch.tv',
+];
+
+/**
+ * Checks whether an <iframe> attribute string points at a trusted video host.
+ *
+ * Only http(s) or protocol-relative URLs are accepted. "srcdoc" is rejected
+ * outright: it overrides "src" and would execute attacker HTML in our origin.
+ *
+ * @param string $attributes The raw attribute string of the iframe tag.
+ */
+function is_allowed_video_embed(string $attributes): bool
+{
+    if (preg_match('#\bsrcdoc\s*=#i', $attributes) === 1) {
+        return false;
+    }
+
+    if (preg_match('#\bsrc\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))#i', $attributes, $m) !== 1) {
+        return false;
+    }
+
+    $src = '';
+    foreach ([1, 2, 3] as $group) {
+        $candidate = $m[$group] ?? '';
+        if ($candidate !== '') {
+            $src = $candidate;
+            break;
+        }
+    }
+
+    $src = trim(html_entity_decode($src, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    if ($src === '') {
+        return false;
+    }
+
+    $parts = parse_url($src);
+    if (is_array($parts) === false) {
+        return false;
+    }
+
+    $scheme = strtolower($parts['scheme'] ?? '');
+    if ($scheme !== '' && $scheme !== 'https' && $scheme !== 'http') {
+        return false;
+    }
+
+    $host = strtolower($parts['host'] ?? '');
+    if ($host === '') {
+        return false;
+    }
+
+    foreach (VIDEO_EMBED_HOSTS as $domain) {
+        if ($host === $domain || str_ends_with($host, '.' . $domain) === true) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Break potentially dangerous HTML tags by escaping their opening bracket.
+ *
+ * Case-insensitive tag breaking, strips inline event handlers and
  * neutralizes javascript: URLs.
  *
  * @param string $html The HTML content to sanitize.
+ * @param bool $allowVideoEmbeds Keep <iframe> embeds from trusted video hosts
+ *                               (see VIDEO_EMBED_HOSTS). Closing </iframe> tags
+ *                               are kept as well; browsers ignore stray ones.
  * @return string The sanitized HTML.
  */
-function break_annoying_html_tags(string $html): string
+function break_annoying_html_tags(string $html, bool $allowVideoEmbeds = false): string
 {
-    $dangerousTags = 'script|iframe|object|embed|applet|svg|math|link|style|meta|base';
+    $dangerousTags = 'script|object|embed|applet|svg|math|link|style|meta|base';
 
     $html = (string) preg_replace('#<(' . $dangerousTags . ')\b#i', '&lt;$1', $html);
     $html = (string) preg_replace('#</(' . $dangerousTags . ')\b#i', '&lt;/$1', $html);
+
+    if ($allowVideoEmbeds === true) {
+        $html = (string) preg_replace_callback('#<iframe\b([^>]*)>#i', function (array $m): string {
+            return is_allowed_video_embed($m[1]) === true ? $m[0] : '&lt;iframe' . $m[1] . '>';
+        }, $html);
+    } else {
+        $html = (string) preg_replace('#<(iframe)\b#i', '&lt;$1', $html);
+        $html = (string) preg_replace('#</(iframe)\b#i', '&lt;/$1', $html);
+    }
 
     $html = (string) preg_replace(
         '#\s+on\w+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]*)#i',

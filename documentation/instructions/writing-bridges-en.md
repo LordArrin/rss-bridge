@@ -9,7 +9,7 @@ This guide covers bridge development for this fork. It assumes familiarity with 
 | PHP version | 7.4+ | 8.5+ |
 | Strict types | Optional | Required (`declare(strict_types=1)`) |
 | HTML parser | `simple_html_dom` (embedded) | `\Dom\HTMLDocument` (PHP 8.4+) |
-| HTML cleanup | Manual | `tidy` extension for malformed HTML |
+| HTML cleanup | Manual | Native `parseHtmlDocument()` helper; optional `tidy` for severe cases |
 | Bridge location | `bridges/` (global namespace) | `bridges-v2/` with `RSSBridge\Bridges` namespace |
 | HTML utilities | Inline in each bridge | Centralized in `quirks/` directory |
 | Markdown | Embedded Parsedown | `erusev/parsedown` via Composer |
@@ -60,7 +60,7 @@ composer test       # phpunit
 - PHPStan Level 8 runs on the changed bridge files
 - Bridge files must **not** have the executable bit set (`git update-index --chmod=-x bridges-v2/YourBridge.php`)
 
-> **⚠️ Note for AI Agents:** When generating or modifying bridge code, you must proactively ensure the output complies with `phpcs.xml` rules (e.g., `declare(strict_types=1)`, proper namespaces, no unused variables) and passes PHPStan Level 8. Fork-specific traps: `getContents()` returns `string|Response` (cast with `(string)` or guard with `is_string()`), `querySelectorAll()` iterates `\Dom\Node` (narrow with `instanceof \Dom\Element` before calling Element methods), and the legacy `DOM*` API is forbidden by `ForbidOldDomApiRule`. Do not output code that will fail these checks.
+> **⚠️ Note for AI Agents:** When generating or modifying bridge code, you must proactively ensure the output complies with `phpcs.xml` rules (e.g., `declare(strict_types=1)`, proper namespaces, no unused variables) and passes PHPStan Level 8. Fork-specific traps: `getContents()` returns `string|Response` (cast with `(string)` or guard with `is_string()`), `foreach` over `querySelectorAll()` already yields `\Dom\Element` (do **not** add an `instanceof` guard there — it fails Level 8), and the legacy `DOM*` API is forbidden by `ForbidOldDomApiRule`. Do not output code that will fail these checks.
 
 ## Available PHP Extensions
 
@@ -297,15 +297,15 @@ $response = getContents($url, [], [], true);  // requests the full Response obje
 > $html = $response->getBody();
 > ```
 
-`RSSBridge\Http\Response` API (final class, **no `__toString()`**): `getBody(): string`, `getCode(): int`, `getStatusLine(): string`, `getHeader(string $name, bool $all = false): string|array|null`, `getHeaders(): array`, `withBody(string $body): self`.
+`RSSBridge\Http\Response` API (final class, **no `__toString()`**): `getBody(): string`, `getCode(): int`, `getStatusLine(): string`, `getHeader(string $name, bool $all = false): string|array|null`, `getHeaders(): array`, `withBody(string $body): self`, `withHeader(string $name, string $value): self`, `withoutHeader(string $name): self`.
 
 ### How getContents() Caching Works
 
-- Successful responses (HTTP 200/201/202) are cached for **24 hours** (`86400` seconds), unless `Cache-Control: no-cache/no-store` is present
+- Successful responses (HTTP 200/201/202) are cached for **24 hours** (`86400` seconds). `Cache-Control: no-store` forbids storage entirely; `no-cache`/`must-revalidate` responses are stored but always revalidated before use
 - Cached responses are revalidated with `ETag` (`If-None-Match`) and `Last-Modified`; freshness honors `Cache-Control: max-age`, `Expires`, and `Age`
 - The cache key includes the POST body hash, so different POST payloads are cached separately
 - Non-2xx responses (except redirects and 304) throw `HttpException::fromResponse()` — Cloudflare challenge pages are automatically detected and thrown as `CloudFlareException`
-- Global settings apply via environment variables: `HTTP_TIMEOUT` (60s default), `HTTP_RETRIES`, `HTTP_MAX_FILESIZE` (40 MB default)
+- Global settings apply via environment variables: `HTTP_TIMEOUT` (60s default), `HTTP_RETRIES` (2 default; `0` disables retries), `HTTP_MAX_FILESIZE` (40 MB default)
 - **SSRF protection is on by default** (`HTTP_SSRF_CHECK=true`): requests to internal/reserved IP ranges are blocked, with DNS pinning against rebinding
 
 For sitemaps there is a dedicated helper returning a list of `{loc, lastmod, changefreq, priority}` entries:
@@ -328,12 +328,12 @@ if (is_string($cachedHtml) === false || $cachedHtml === '') {
     $this->saveCacheValue($cacheKey, $cachedHtml, 86400);
 }
 
-$dom = \Dom\HTMLDocument::createFromString($cachedHtml);
+$dom = parseHtmlDocument($cachedHtml);
 ```
 
 ### Parsing XML and Atom Feeds
 
-Use `\Dom\XMLDocument` for XML (suppressing libxml warnings is the house pattern):
+Use `\Dom\XMLDocument` for XML. Restore the previous libxml state in `finally` and catch parse failures (the new DOM API throws on fatal errors):
 
 ```php
 $feedXml = (string) getContents(self::URI . 'atom.xml');
@@ -341,15 +341,22 @@ if ($feedXml === '') {
     throwServerException('Failed to fetch Atom feed');
 }
 
-libxml_use_internal_errors(true);
-$xml = \Dom\XMLDocument::createFromString($feedXml);
-libxml_clear_errors();
-libxml_use_internal_errors(false);
+$previous = libxml_use_internal_errors(true);
+try {
+    $xml = \Dom\XMLDocument::createFromString($feedXml, LIBXML_NOERROR | LIBXML_NOWARNING);
+} catch (\Throwable $e) {
+    throwServerException('Failed to parse Atom feed: ' . $e->getMessage());
+} finally {
+    libxml_clear_errors();
+    libxml_use_internal_errors($previous);
+}
 
 foreach ($xml->querySelectorAll('entry') as $entry) {
     // ...
 }
 ```
+
+For HTML, use the `parseHtmlDocument()` helper instead — it handles malformed markup, control characters and invalid UTF-8, and restores the libxml state. Note: `\Dom\HTMLDocument::createFromString()` accepts `LIBXML_NOERROR` but **rejects** `LIBXML_NOWARNING`.
 
 If your goal is to *expand* an existing feed, prefer [`FeedExpander`](#expanding-existing-feeds-feedexpander) instead of manual XML parsing.
 
@@ -368,18 +375,20 @@ foreach ($dom->querySelectorAll('article.post') as $post) {
 }
 ```
 
-> **⚠️ PHPStan trap:** `querySelectorAll()` returns a `\Dom\NodeList` whose items are typed `\Dom\Node`, but `querySelector()`/`getAttribute()`/`innerHTML` are members of `\Dom\Element` (via `ParentNode`). Narrow the type before using Element APIs — this is the pattern used by bridges that pass strict checks:
+> **⚠️ PHPStan note:** With the locked PHPStan version, `foreach` over `querySelectorAll()` yields items already typed `\Dom\Element` — call Element methods directly. Adding an `instanceof \Dom\Element` guard inside such a loop **fails** Level 8 ("always evaluate to true"). Narrow only when using `->item($i)` (returns `?\Dom\Node`) or when nodes pass through `mixed` containers:
 >
 > ```php
 > foreach ($node->querySelectorAll('p, div') as $element) {
->     if ($element instanceof \Dom\Element === false) {
->         continue;
->     }
 >     $style = $element->getAttribute('style') ?? '';
+> }
+>
+> $first = $node->querySelectorAll('p')->item(0);
+> if ($first instanceof \Dom\Element) {
+>     $style = $first->getAttribute('style') ?? '';
 > }
 > ```
 >
-> `querySelector()` (singular) already returns `?\Dom\Element` and needs no guard, only a null check (or `?->`).
+> `querySelector()` (singular) already returns `?\Dom\Element` and needs only a null check (or `?->`).
 
 `\Dom\NodeList` also supports `->length` and `->item(0)` when you prefer index access.
 
@@ -387,14 +396,16 @@ foreach ($dom->querySelectorAll('article.post') as $post) {
 
 | Property / Method | Available on | Type | Description |
 |---|---|---|---|
-| `$node->textContent` | `\Dom\Node` | `string` | Plain text, HTML stripped |
+| `$node->textContent` | `\Dom\Node` | `?string` | Plain text, HTML stripped (null for some node types) |
 | `$node->innerHTML` | `\Dom\Element` | `string` | Inner HTML |
-| `$node->outerHTML` | `\Dom\Element` | `string` | Element with inner HTML |
+| `$node->C14N()` | `\Dom\Node` | `string\|false` | Canonical serialization of the node incl. its own tag (use instead of `outerHTML`) |
 | `$node->getAttribute('href')` | `\Dom\Element` | `?string` | Attribute value |
-| `$node->tagName` | `\Dom\Element` | `string` | Tag name (**UPPERCASE** in HTML documents) |
+| `$node->tagName` | `\Dom\Element` | `string` | Tag name (**UPPERCASE** in HTML documents; original case in XML) |
 | `$node->localName` | `\Dom\Element` | `string` | Tag name (always **lowercase**, preferred for comparisons) |
 | `$node->parentElement` | `\Dom\Node` | `?\Dom\Element` | Parent element |
 | `$node->childNodes` | `\Dom\Node` | `\Dom\NodeList` | Children |
+
+There is **no `outerHTML` property** on `\Dom\Element`. Use `$node->C14N()` (guard the `false` return) for a single node, or `$dom->saveHtml()` (returns `string`) for the whole document.
 
 Use the null-safe operator `?->` for optional elements:
 
@@ -409,7 +420,7 @@ $date = $post->querySelector('time')?->getAttribute('datetime');
 
 ```php
 $current = $node;
-while ($current !== null && $current instanceof \Dom\Element) {
+while ($current !== null) {
     // Use localName for reliable lowercase comparison
     if ($current->localName === 'article') {
         break;
@@ -420,7 +431,7 @@ while ($current !== null && $current instanceof \Dom\Element) {
 
 ## HTML Cleanup with Tidy
 
-Many websites generate malformed HTML (unclosed tags, broken attributes) that can break `\Dom\HTMLDocument`. Use the `tidy` extension to fix these issues:
+The native parser is forgiving, and `parseHtmlDocument()` additionally strips control characters and repairs invalid UTF-8. Reach for `tidy` only when a site is so malformed that the native parser still fails:
 
 ```php
 $html = (string) getContents($url);
@@ -433,7 +444,7 @@ $tidy->parseString($html, [
 ], 'utf8');
 $tidy->cleanRepair();
 
-$dom = \Dom\HTMLDocument::createFromString((string) $tidy);
+$dom = parseHtmlDocument((string) $tidy);
 ```
 
 There is no `tidy_html()` helper in this fork — use the `\tidy` class directly as shown above.
@@ -441,7 +452,7 @@ There is no `tidy_html()` helper in this fork — use the `\tidy` class directly
 **When to use tidy:**
 
 - Site returns HTML with parsing errors
-- `\Dom\HTMLDocument` throws exceptions on valid pages
+- `parseHtmlDocument()` still fails on a severely broken page
 - You need to normalize HTML from multiple sources
 
 **Performance note:** `tidy` adds ~5-10ms overhead per request. Use only when necessary.
@@ -476,7 +487,8 @@ $clean = break_annoying_html_tags($html);
 // validate href/src schemes, sanitize inline CSS
 sanitize_dom_element_attributes($element, ['a' => ['href', 'title']]);
 
-// URI scheme validation (http, https, mailto, ftp, data:image/*; anchors ok)
+// URI scheme validation (http, https, mailto, ftp; anchors/relative ok;
+// data: only for base64 raster images: png, jpeg, gif, webp, avif — SVG rejected)
 $ok = is_safe_uri($uri);
 
 // Remove expression()/behavior:/@import/javascript: from inline CSS
@@ -493,19 +505,24 @@ $summary = truncate_html_preserve_tags($articleHtml, 250, '...');
 
 // Render a poll as an ASCII progress bar list (safe and readable in all RSS readers).
 // Pass 'blocks' as $barStyle to use Unicode block characters (█░) instead of ASCII ([#...]).
-// $options must be an array of ['text' => string, 'votes' => int, 'percent' => float].
+// $options: list of ['text' => string, 'votes' => int, 'percent' => float (optional)].
 $pollHtml = render_ascii_poll($pollOptions, $totalVoters, 'ascii');
 ```
 
-`html_tag()` only allows these attributes: `type`, `id`, `name`, `value`, `placeholder`, `title`, `pattern`, `class`, `for`, `oncontextmenu`, `data-for`, `formtarget` (string), and `checked`, `required`, `selected` (boolean). Anything else throws — this prevents injection of event handlers like `onclick`.
+`html_tag()` only allows these attributes: `type`, `id`, `name`, `value`, `placeholder`, `title`, `pattern`, `class`, `for`, `oncontextmenu`, `data-for`, `formtarget`, `tabindex`, `role`, `aria-label` (string), and `checked`, `required`, `selected` (boolean). Anything else throws. Note that `oncontextmenu` is intentionally allowed, so never pass untrusted user input into it.
 
 ### String Extraction (`quirks/extract.php`)
 
 Extract data from HTML, inline JavaScript, or CSS styles:
 
 ```php
-// Extract text between delimiters (returns an empty string if start or end delimiter is not found, ensuring strict_types compatibility)
+// Extract text between delimiters. Returns string|false:
+//   false — start delimiter not found; '' — start found but end missing/empty.
+// Guard the false before passing to string functions (strict_types).
 $data = extractFromDelimiters($html, 'window.data = ', ';');
+if ($data === false) {
+    $data = '';
+}
 
 // Remove sections between delimiters
 $clean = stripWithDelimiters($html, '<script>', '</script>');
@@ -540,8 +557,9 @@ $largest = parseSrcsetLargestImageUrl($srcset);
 ### JSON Path Traversal (`quirks/json_path.php`)
 
 ```php
-// Safely traverse nested arrays/objects; returns null if any step is missing
-$title = read_json_path($data, 'response', 'items', 0, 'title');
+// Safely traverse nested arrays/objects; returns null if any step is missing.
+// Path segments are strings — use '0', not 0, for numeric indexes.
+$title = read_json_path($data, 'response', 'items', '0', 'title');
 ```
 
 ### SEO Metadata (`quirks/seo.php`)
@@ -573,8 +591,9 @@ $item = [
 // An unknown option throws \InvalidArgumentException.
 $html = markdownToHtml($markdown, ['breaksEnabled' => true]);
 
-// Generate YouTube embed (iframe) or a clickable WebP/JPEG thumbnail,
-// controlled by [youtube] iframe/nocookie in .bridges (or .bridges.default).
+// Generate YouTube embed (iframe) or a clickable WebP/JPEG thumbnail.
+// Iframe mode is opt-in via [youtube] iframe/nocookie in /config/.bridges
+// (not shipped in .bridges.default; default = clickable thumbnail).
 // Returns '' if no valid video ID is found.
 $embed = handleYoutube('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
 
@@ -650,18 +669,34 @@ public function collectData(): void
     $url = 'https://api.example.com/posts';
     $data = Json::decode((string) getContents($url, ['Accept: application/json']));
 
-    if (!is_array($data)) {
+    if (is_array($data) === false || isset($data['items']) === false || is_array($data['items']) === false) {
         throwServerException('Invalid JSON response');
     }
 
-    foreach ($data['items'] ?? [] as $entry) {
-        $this->items[] = [
-            'title' => $entry['title'] ?? 'Untitled',
-            'uri' => $entry['url'] ?? self::URI,
-            'content' => $entry['body'] ?? '',
-            'timestamp' => isset($entry['date']) ? strtotime($entry['date']) : time(),
-            'uid' => (string) ($entry['id'] ?? uniqid()),
-        ];
+    foreach ($data['items'] as $entry) {
+        if (is_array($entry) === false) {
+            continue;
+        }
+
+        $item = ['title' => 'Untitled', 'uri' => self::URI, 'content' => ''];
+
+        if (isset($entry['title']) === true && is_string($entry['title']) === true) {
+            $item['title'] = $entry['title'];
+        }
+        if (isset($entry['url']) === true && is_string($entry['url']) === true) {
+            $item['uri'] = $entry['url'];
+        }
+        if (isset($entry['body']) === true && is_string($entry['body']) === true) {
+            $item['content'] = $entry['body'];
+        }
+        if (isset($entry['date']) === true && is_string($entry['date']) === true) {
+            $timestamp = strtotime($entry['date']);
+            if ($timestamp !== false) {
+                $item['timestamp'] = $timestamp;
+            }
+        }
+
+        $this->items[] = $item;
     }
 }
 ```
@@ -678,7 +713,7 @@ For ultra-fast local caching (faster than memcached), use APCu. Data persists ac
 ```php
 public function collectData(): void
 {
-    $cacheKey = 'api_config_' . $this->getInput('site');
+    $cacheKey = 'api_config_' . (string) $this->getInput('site');
 
     // Try APCu first (fastest, local to this container)
     $config = apcu_fetch($cacheKey, $success);
@@ -711,22 +746,23 @@ public function collectData(): void
 {
     $cacheKey = 'full_page_' . md5($url);
 
-    $cached = $this->cache->get($cacheKey);
+    $cached = $this->loadCacheValue($cacheKey);
     if (is_string($cached) === true && $cached !== '') {
         $uncompressed = zstd_uncompress($cached);
         $html = is_string($uncompressed) ? $uncompressed : '';
     } else {
         $html = (string) getContents($url);
-
-        // Compress before storing (level 3 = good balance)
-        $this->cache->set($cacheKey, zstd_compress($html, 3), 86400);
+        $compressed = zstd_compress($html, 3);
+        if ($compressed !== false) {
+            $this->saveCacheValue($cacheKey, $compressed, 86400);
+        }
     }
 
     if ($html === '') {
         throwServerException('Failed to load page');
     }
 
-    $dom = \Dom\HTMLDocument::createFromString($html);
+    $dom = parseHtmlDocument($html);
     // ... process
 }
 ```
@@ -750,6 +786,7 @@ All exception classes and helper functions live in the **global namespace** (`li
 | `ClientException` | `HttpException` | 400 |
 | `ServerException` | `HttpException` | 500 |
 | `RateLimitException` | `ClientException` | 429 |
+| `ServiceUnavailableException` | `ServerException` | 503 (`retryAfter` default 600) |
 
 Use the helper functions inside `collectData()` (all return `never`):
 
@@ -762,6 +799,9 @@ throwServerException('Failed to fetch data from API');
 
 // Rate limit hit upstream (429, Retry-After hint)
 throwRateLimitException('API rate limit exceeded'); // optional 2nd arg: retryAfter seconds (default 3600)
+
+// Temporary upstream outage (503, Retry-After hint; default 600s)
+throwServiceUnavailableException('Upstream temporarily unavailable');
 
 // HTTP-level error with a specific code — note: GLOBAL class, not namespaced
 throw new \HttpException('Not Found', 404);
@@ -784,7 +824,7 @@ $this->items[] = [
     'author' => 'Alice',                    // Optional
     'uid' => 'unique-id',                   // Globally unique, optional
     'categories' => ['news', 'tech'],       // Optional
-    'enclosures' => ['https://example.com/image.jpg', 'data:image/png;base64,...'], // Optional media (supports data: URIs)
+    'enclosures' => ['https://example.com/image.jpg', 'data:image/png;base64,...'], // Optional media; data: URIs limited to base64 raster (png/jpeg/gif/webp/avif)
 ];
 ```
 
@@ -811,21 +851,23 @@ $this->saveCacheValue($cacheKey, $processedData, 3600); // default TTL: 86400
 
 `loadCacheValue()`/`saveCacheValue()` automatically prefix the key with the bridge's short name (e.g. `ExampleBridge_example_...`), so keys never collide between bridges.
 
+Values passed to `saveCacheValue()` must be JSON-serializable (scalars and arrays; `Response` is specially supported). Arbitrary objects throw `InvalidArgumentException` — the cache deliberately avoids PHP `unserialize()` for security.
+
 Alternatively, access the cache backend directly (no prefixing) and the logger:
 
 ```php
-$this->cache->get($cacheKey);
-$this->cache->set($cacheKey, $data, $ttl);
-$this->logger->warning('Upstream returned unexpected payload');
+if ($this->cache !== null) {
+    $this->cache->get($cacheKey);
+    $this->cache->set($cacheKey, $data, $ttl);
+}
+if ($this->logger !== null) {
+    $this->logger->warning('Upstream returned unexpected payload');
+}
 ```
 
 Both `$this->cache` and `$this->logger` are injected by `BridgeFactory` through the constructor. Do not define your own constructor unless you forward `($cache, $logger)` to `parent::__construct()`.
 
-**Cache backend priority:**
-
-1. APCu (if enabled, fastest)
-2. Memcached (shared across instances; configured via `CACHE_TYPE` env var, default: `memcached`)
-3. File cache (fallback)
+**Cache backend selection:** the backend is chosen explicitly via the `CACHE_TYPE` environment variable (`memcached`, `sqlite`, `file`, `array`, `null`; default `memcached`). There is no automatic APCu→Memcached→File fallback chain — APCu is a separate, manually-used local cache (see above).
 
 ## Proxy Profiles
 
@@ -902,15 +944,12 @@ For processing many URLs inside an HTML fragment, combine `\Dom\HTMLDocument` se
 ```php
 $dom = getSimpleHTMLDOM($articleUrl);
 foreach ($dom->querySelectorAll('img[src]') as $img) {
-    if ($img instanceof \Dom\Element === false) {
-        continue;
-    }
     $src = $img->getAttribute('src');
     if ($src !== null && $src !== '' && str_starts_with($src, 'http') === false) {
         $img->setAttribute('src', urljoin($articleUrl, $src));
     }
 }
-$html = $dom->saveHTML();
+$html = $dom->saveHtml();
 ```
 
 ## Expanding Existing Feeds (FeedExpander)
@@ -942,7 +981,11 @@ final class MyBlogExpanderBridge extends FeedExpander
     protected function parseItem(array $item): array|false
     {
         // Enrich the item, or return false to drop it from the feed
-        $dom = getSimpleHTMLDOM($item['uri']);
+        $uri = (string) ($item['uri'] ?? '');
+        if ($uri === '') {
+            return $item;
+        }
+        $dom = getSimpleHTMLDOM($uri);
         $item['content'] = $dom->querySelector('article')?->innerHTML ?? $item['content'];
         return $item;
     }
@@ -970,7 +1013,7 @@ use RSSBridge\Caches\CacheInterface;   // type hints for cache parameters
 use RSSBridge\Logger\Logger;           // type hints for logger parameters
 ```
 
-**Exceptions are the opposite:** `HttpException`, `ClientException`, `ServerException`, `RateLimitException`, `CloudFlareException` and the `throwClientException()`/`throwServerException()`/`throwRateLimitException()` helpers are all in the **global namespace** — do **not** import them. The same applies to `getContents()`, `getSimpleHTMLDOM()`, `getProtected*()`, `get_sitemap()` and all `quirks/` functions.
+**Exceptions are the opposite:** `HttpException`, `ClientException`, `ServerException`, `RateLimitException`, `ServiceUnavailableException`, `CloudFlareException` and the `throwClientException()`/`throwServerException()`/`throwRateLimitException()`/`throwServiceUnavailableException()` helpers are all in the **global namespace** — do **not** import them. The same applies to `getContents()`, `getSimpleHTMLDOM()`, `getProtected*()`, `get_sitemap()` and all `quirks/` functions.
 
 `RSSBridge\FeedItem` and `RSSBridge\FeedParser` exist but are framework internals — bridges normally work with plain arrays.
 
@@ -999,8 +1042,8 @@ docker exec rss-bridge php85 /app/vendor/bin/phpcs --standard=phpcs.xml bridges-
 
 ## Testing Your Bridge
 
-1. Place the bridge file in `bridges-v2/` — this is the **only** directory `BridgeFactory` scans (non-recursively), and the file name must match `*Bridge.php`. There is no `config/bridges-v2/` loading path.
-2. Make sure the bridge is enabled: `.bridges.default` ships with all bridges enabled by default. If your `/config/.bridges` lists bridges explicitly, add yours (short name, e.g. `MyBridge` or `My`).
+1. Place the bridge file in `bridges-v2/` — this is the **only** directory `BridgeFactory` scans (non-recursively), and the file name must match `*Bridge.php`. For Docker, you can instead drop the file into `/config/bridges-v2/`; the entrypoint copies it into `/app/bridges-v2/` at startup.
+2. Make sure the bridge is enabled via the `ENABLED_BRIDGES` / `DISABLED_BRIDGES` environment variables (comma-separated short names; `ENABLED_BRIDGES=*` enables all, which is the default). The `.bridges` file holds bridge-specific configuration tokens only — it does not control enablement.
 3. For Docker deployments the image ships with built-in bridges baked in; to test a custom bridge without rebuilding, bind-mount the file into the container:
 
    ```yaml
@@ -1035,7 +1078,10 @@ git update-index --chmod=-x bridges-v2/YourBridge.php
 ### 1. Use Efficient Serialization
 For caching large datasets, use `igbinary_serialize()` instead of native `serialize()`:
 ```php
-$this->cache->set($key, igbinary_serialize($data), $ttl);
+$serialized = igbinary_serialize($data);
+if ($serialized !== false) {
+    $this->saveCacheValue($key, $serialized, $ttl);
+}
 ```
 
 ### 2. Compress Large Objects
@@ -1055,7 +1101,7 @@ if ($ok === false) {
 ```
 
 ### 4. Clean Malformed HTML
-Use `tidy` for sites with broken HTML to prevent parsing errors:
+Use `parseHtmlDocument()` for broken HTML; reach for `tidy` only in severe cases:
 ```php
 $tidy = new \tidy();
 $tidy->parseString($html, ['clean' => true], 'utf8');
@@ -1081,7 +1127,7 @@ When fetching multiple items, use parallel requests or batch endpoints when avai
 - [ ] No `simple_html_dom` calls (`str_get_html()`, `->find()`, `->plaintext`) and no legacy `DOM*` classes (`DOMDocument`, `DOMXPath`, ...) — forbidden by `ForbidOldDomApiRule`
 - [ ] Uses `getSimpleHTMLDOM()`, `\Dom\HTMLDocument`, or `\Dom\XMLDocument` for parsing
 - [ ] `getContents()` results cast to `(string)` or guarded with `is_string()` (PHPStan Level 8)
-- [ ] `querySelectorAll()` items narrowed with `instanceof \Dom\Element` before Element methods
+- [ ] `foreach` over `querySelectorAll()` used directly (items are `\Dom\Element`); `instanceof` narrowing only for `->item($i)` / `mixed`
 - [ ] Null-safe operator `?->` used for optional elements
 - [ ] Exception helpers (`throwClientException`, ...) used from the **global namespace** — no imports
 - [ ] `Json` imported as `use RSSBridge\Utils\Json;` if used
@@ -1089,7 +1135,7 @@ When fetching multiple items, use parallel requests or batch endpoints when avai
 - [ ] Code passes `phpcs` checks (see [`phpcs.xml`](https://github.com/LordArrin/rss-bridge/blob/master/phpcs.xml))
 - [ ] Code passes `phpstan` analysis at Level 8 (see [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon))
 - [ ] Bridge tested with real data in Docker and enabled via `ENABLED_BRIDGES` env var
-- [ ] Malformed HTML sites use `tidy` cleanup
+- [ ] Malformed HTML handled via `parseHtmlDocument()`; `tidy` only for severe cases
 - [ ] Large cached objects use `igbinary` or `zstd` compression
 - [ ] API authentication uses `sodium` for signatures
 - [ ] APCu used for frequently accessed local data
@@ -1152,24 +1198,10 @@ final class BlogBridge extends BridgeAbstract
             throwServerException('Empty response from ' . $url);
         }
 
-        $tidy = new \tidy();
-        $tidy->parseString($html, [
-            'clean' => true,
-            'output-xhtml' => true,
-            'wrap' => 0,
-        ], 'utf8');
-        $tidy->cleanRepair();
-
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString((string) $tidy);
-        libxml_clear_errors();
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $count = 0;
         foreach ($dom->querySelectorAll('article.post') as $post) {
-            if ($post instanceof \Dom\Element === false) {
-                continue;
-            }
             if ($count >= $limit) {
                 break;
             }
@@ -1181,7 +1213,7 @@ final class BlogBridge extends BridgeAbstract
 
             $uri = $link->getAttribute('href');
             // Use strip_invisible_unicode to clean up weird formatting characters from titles
-            $title = strip_invisible_unicode(trim($link->textContent));
+            $title = strip_invisible_unicode(trim($link->textContent ?? ''));
             if ($uri === null || $uri === '') {
                 continue;
             }
@@ -1230,4 +1262,3 @@ final class BlogBridge extends BridgeAbstract
         }
     }
 }
-```
