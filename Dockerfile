@@ -582,7 +582,8 @@ RUN echo -n "${IMAGE_VERSION}" > /app/VERSION && \
     chmod 444 /app/VERSION
 
 RUN composer install --optimize-autoloader --no-interaction --ignore-platform-reqs --classmap-authoritative && \
-    sed -i "s/${VERSION_PLACEHOLDER}/${IMAGE_VERSION}/g" /app/index.html && \
+    grep -q "${VERSION_PLACEHOLDER}" /app/documentation/pages/static/index.html && \
+    sed -i "s/${VERSION_PLACEHOLDER}/${IMAGE_VERSION}/g" /app/documentation/pages/static/index.html && \
     chmod +x /app/bin/* && \
     chmod +x /app/docker-entrypoint.sh
 

@@ -1019,3 +1019,36 @@ section.footer {
     border-radius: var(--md-shape-lg);
     border: 2px dashed var(--md-outline-variant);
 }
+
+.code-block .copy-btn {
+    width: auto;
+}
+
+.features {
+    grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+}
+
+.doc-section,
+.bridge-card > h2,
+.bridge-card > .description {
+    overflow-wrap: break-word;
+}
+
+.hero-logo img {
+    min-width: 0;
+}
+
+nav .nav-links {
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: auto;
+}
+
+body {
+    overflow-x: clip;
+}
+
+@supports not (overflow-x: clip) {
+    html {
+        overflow-x: hidden;
+    }
+}

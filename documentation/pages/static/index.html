@@ -127,105 +127,8 @@
 
     <section class="doc-section" id="development">
         <h2>Developing Custom Bridges</h2>
-
-        <h3>Requirements</h3>
-        <ul>
-            <li>PHP 8.5+ with mandatory <code>declare(strict_types=1)</code></li>
-            <li>Namespace <code>RSSBridge\Bridges</code></li>
-            <li>Class must be <code>final</code> and extend <code>BridgeAbstract</code></li>
-            <li>Use native <code>\Dom\HTMLDocument</code> instead of <code>simple_html_dom</code></li>
-        </ul>
-
-        <h3>Minimal Bridge Template</h3>
-<div class="code-block"><pre><code><span class="tok-kw">&lt;?php</span>
-
-<span class="tok-kw">declare</span>(strict_types=<span class="tok-num">1</span>);
-
-<span class="tok-kw">namespace</span> <span class="tok-fn">RSSBridge</span>\<span class="tok-fn">Bridges</span>;
-
-<span class="tok-kw">use</span> <span class="tok-fn">RSSBridge</span>\<span class="tok-fn">BridgeAbstract</span>;
-
-<span class="tok-kw">final class</span> <span class="tok-fn">ExampleBridge</span> <span class="tok-kw">extends</span> <span class="tok-fn">BridgeAbstract</span>
-{
-    <span class="tok-kw">public const</span> <span class="tok-var">NAME</span> = <span class="tok-str">'Example Bridge'</span>;
-    <span class="tok-kw">public const</span> <span class="tok-var">URI</span> = <span class="tok-str">'https://example.com/'</span>;
-    <span class="tok-kw">public const</span> <span class="tok-var">DESCRIPTION</span> = <span class="tok-str">'Returns example content'</span>;
-    <span class="tok-kw">public const</span> <span class="tok-var">MAINTAINER</span> = <span class="tok-str">'yourname'</span>;
-    <span class="tok-kw">public const</span> <span class="tok-var">CACHE_TIMEOUT</span> = <span class="tok-num">3600</span>;
-
-    <span class="tok-kw">public function</span> <span class="tok-fn">collectData</span>(): <span class="tok-kw">void</span>
-    {
-        <span class="tok-var">$dom</span> = <span class="tok-fn">getSimpleHTMLDOM</span>(<span class="tok-kw">self</span>::<span class="tok-var">URI</span>);
-        <span class="tok-var">$title</span> = <span class="tok-var">$dom</span>-&gt;<span class="tok-fn">querySelector</span>(<span class="tok-str">'h1'</span>)?-&gt;<span class="tok-var">textContent</span> ?? <span class="tok-str">'Untitled'</span>;
-
-        <span class="tok-var">$this</span>-&gt;<span class="tok-var">items</span>[] = [
-            <span class="tok-str">'title'</span>     =&gt; <span class="tok-var">$title</span>,
-            <span class="tok-str">'uri'</span>       =&gt; <span class="tok-kw">self</span>::<span class="tok-var">URI</span>,
-            <span class="tok-str">'content'</span>   =&gt; <span class="tok-str">'&lt;p&gt;Hello, world&lt;/p&gt;'</span>,
-            <span class="tok-str">'timestamp'</span> =&gt; <span class="tok-fn">time</span>(),
-            <span class="tok-str">'uid'</span>       =&gt; <span class="tok-str">'example-1'</span>,
-        ];
-    }
-}</code></pre></div>
-
-        <h3>Required Constants</h3>
-        <ul>
-            <li><code>NAME</code> — bridge display name</li>
-            <li><code>URI</code> — source URL</li>
-            <li><code>DESCRIPTION</code> — short description</li>
-            <li><code>MAINTAINER</code> — maintainer name</li>
-            <li><code>CACHE_TIMEOUT</code> — cache TTL in seconds</li>
-        </ul>
-
-        <h3>User Parameters</h3>
-<div class="code-block"><pre><code><span class="tok-kw">public const</span> <span class="tok-var">PARAMETERS</span> = [
-    <span class="tok-str">''</span> =&gt; [
-        <span class="tok-str">'username'</span> =&gt; [
-            <span class="tok-str">'name'</span>     =&gt; <span class="tok-str">'Username'</span>,
-            <span class="tok-str">'type'</span>     =&gt; <span class="tok-str">'text'</span>,
-            <span class="tok-str">'required'</span> =&gt; <span class="tok-kw">true</span>,
-        ],
-        <span class="tok-str">'limit'</span> =&gt; [
-            <span class="tok-str">'name'</span>         =&gt; <span class="tok-str">'Item limit'</span>,
-            <span class="tok-str">'type'</span>         =&gt; <span class="tok-str">'number'</span>,
-            <span class="tok-str">'defaultValue'</span> =&gt; <span class="tok-num">10</span>,
-        ],
-    ],
-];
-
-<span class="tok-com">// Access in collectData():</span>
-<span class="tok-var">$username</span> = (<span class="tok-kw">string</span>)<span class="tok-var">$this</span>-&gt;<span class="tok-fn">getInput</span>(<span class="tok-str">'username'</span>);
-<span class="tok-var">$limit</span>    = (<span class="tok-kw">int</span>)(<span class="tok-var">$this</span>-&gt;<span class="tok-fn">getInput</span>(<span class="tok-str">'limit'</span>) ?: <span class="tok-num">10</span>);</code></pre></div>
-
-        <h3>Bridges Configuration (Secrets)</h3>
-        <p>For API tokens, cookies and other secrets, use the <code>CONFIGURATION</code> constant:</p>
-<div class="code-block"><pre><code><span class="tok-com">// In your bridge class:</span>
-<span class="tok-kw">public const</span> <span class="tok-var">CONFIGURATION</span> = [
-    <span class="tok-str">'api_token'</span> =&gt; [<span class="tok-str">'required'</span> =&gt; <span class="tok-kw">true</span>],
-    <span class="tok-str">'session_cookie'</span> =&gt; [<span class="tok-str">'required'</span> =&gt; <span class="tok-kw">false</span>],
-];
-
-<span class="tok-com">// In /config/.bridges:</span>
-[ExampleBridge]
-api_token = <span class="tok-str">"your-token-here"</span>
-session_cookie = <span class="tok-str">"abc123"</span>
-
-<span class="tok-com">// Access in bridge code:</span>
-<span class="tok-var">$token</span> = <span class="tok-var">$this</span>-&gt;<span class="tok-fn">getOption</span>(<span class="tok-str">'api_token'</span>);</code></pre></div>
-
-        <h3>Useful Functions</h3>
-        <ul>
-            <li><code>getSimpleHTMLDOM($url)</code> — fetch and parse HTML</li>
-            <li><code>parseHtmlDocument($html)</code> — repair and parse malformed HTML</li>
-            <li><code>getContents($url)</code> — raw HTTP response</li>
-            <li><code>getProtectedContents($url, 'flaresolverr')</code> — fetch via proxy profile</li>
-        </ul>
-
-        <h3>Code Quality Checks</h3>
-<div class="code-block"><pre><code>vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php
-vendor/bin/phpcbf --standard=phpcs.xml bridges-v2/YourBridge.php
-vendor/bin/phpstan analyse bridges-v2/YourBridge.php</code></pre></div>
-
+        <p class="text-center">Bridges live in <code>bridges-v2/</code> under the <code>RSSBridge\Bridges</code> namespace: PHP 8.5 with strict types, native <code>\Dom\HTMLDocument</code>, the <code>quirks/</code> helper library, and enforced PHPCS + PHPStan Level 8 quality gates.</p>
+        <p class="text-center">The full guide covers parameters, caching, proxy profiles, error handling, and the complete commit checklist.</p>
         <div class="text-center mt-24">
             <a href="https://github.com/LordArrin/rss-bridge/blob/master/documentation/instructions/writing-bridges-en.md" class="button">Full Documentation</a>
         </div>
@@ -239,7 +142,7 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php</code></pre></div>
                         <path d="M13 4h2v2h-2V4zm-3 0h2v2h-2V4zm-3 0h2v2H7V4zm-3 2h2v2H4V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm-9 2h2v2H7V8zm3 0h2v2h-2V8zm3 0h2v2h-2V8zm-3 2h2v2h-2v-2zm3 0h2v2h-2v-2zm3.13 1.75c-.26-.12-.57-.2-.93-.2-.58 0-1.06.23-1.35.61-.17.23-.26.5-.28.79h-.02c-.1-.2-.29-.37-.54-.47-.22-.09-.5-.14-.81-.14-1.14 0-2.02.88-2.02 2.02 0 .05 0 .09.01.14H5c-.83 0-1.5.67-1.5 1.5S4.17 16.5 5 16.5h14c.83 0 1.5-.67 1.5-1.5s-.67-1.5-1.5-1.5h-1.23c.03-.11.05-.22.05-.34 0-.82-.6-1.41-1.19-1.41z"/>
                     </svg>docker
                 </span>
-                <span class="badge__right">lordarrin/rss-bridge:1.3.0</span>
+                <span class="badge__right">lordarrin/rss-bridge:__RSSBRIDGE_IMAGE_VERSION__</span>
             </a>
 
             <a href="https://github.com/LordArrin/rss-bridge" rel="noopener noreferrer" target="_blank" class="badge">

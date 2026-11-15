@@ -18,7 +18,6 @@ tests/*
 Thumbs.db
 
 # Docs
-documentation/*
 README.md
 SECURITY.md
 

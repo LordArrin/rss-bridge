@@ -94,3 +94,14 @@ jobs:
       - name: Show deployment URL
         run: |
           echo "Deployed to: ${{ steps.deployment.outputs.page_url }}"
+
+      - name: Inject image version
+        run: |
+          VERSION=$(php -r 'echo json_decode(file_get_contents("composer.json"), true)["version"] ?? "";')
+          if [ -z "$VERSION" ]; then
+            echo "composer.json has no version field"
+            exit 1
+          fi
+          grep -q "__RSSBRIDGE_IMAGE_VERSION__" _site/index.html
+          sed -i "s/__RSSBRIDGE_IMAGE_VERSION__/${VERSION}/g" _site/index.html
+          echo "Injected version: ${VERSION}"
