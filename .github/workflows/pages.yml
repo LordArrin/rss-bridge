@@ -35,6 +35,17 @@ jobs:
             fi
           done
 
+      - name: Inject image version
+        run: |
+          VERSION=$(php -r 'echo json_decode(file_get_contents("composer.json"), true)["version"] ?? "";')
+          if [ -z "$VERSION" ]; then
+            echo "composer.json has no version field"
+            exit 1
+          fi
+          grep -q "__RSSBRIDGE_IMAGE_VERSION__" _site/index.html
+          sed -i "s/__RSSBRIDGE_IMAGE_VERSION__/${VERSION}/g" _site/index.html
+          echo "Injected version: ${VERSION}"
+
       - name: Extract bridge metadata
         run: |
           php .github/workflows/extract-bridges.php > _site/bridges.json
@@ -78,6 +89,10 @@ jobs:
           done
           test -f _site/static/not_boring_logo.png
           test -f _site/documentation/pages/setup/basics.html
+          if grep -q "__RSSBRIDGE_IMAGE_VERSION__" _site/index.html; then
+            echo "version placeholder was not substituted"
+            exit 1
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -94,14 +109,3 @@ jobs:
       - name: Show deployment URL
         run: |
           echo "Deployed to: ${{ steps.deployment.outputs.page_url }}"
-
-      - name: Inject image version
-        run: |
-          VERSION=$(php -r 'echo json_decode(file_get_contents("composer.json"), true)["version"] ?? "";')
-          if [ -z "$VERSION" ]; then
-            echo "composer.json has no version field"
-            exit 1
-          fi
-          grep -q "__RSSBRIDGE_IMAGE_VERSION__" _site/index.html
-          sed -i "s/__RSSBRIDGE_IMAGE_VERSION__/${VERSION}/g" _site/index.html
-          echo "Injected version: ${VERSION}"
