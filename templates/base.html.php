@@ -10,7 +10,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="RSS-Bridge — Generate RSS feeds for websites that don't have one" />
+    <meta name="description" content="RSS-Bridge â€” Generate RSS feeds for websites that don't have one" />
     <meta name="theme-color" content="#E65100" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#120D0B" media="(prefers-color-scheme: dark)">
     <title>RSS-Bridge</title>

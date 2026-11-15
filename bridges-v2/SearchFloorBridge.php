@@ -277,7 +277,7 @@ final class SearchFloorBridge extends BridgeAbstract
 
     private function findChapter(\Dom\HTMLDocument $html): string
     {
-        $chapterNode = $html->querySelector('.alert.alert-warning.alert-dismissible.fade.show') ?? $html->querySelector('[data-bs-title="Ïîñëåäíÿÿ ãëàâà"]');
+        $chapterNode = $html->querySelector('.alert.alert-warning.alert-dismissible.fade.show') ?? $html->querySelector('[data-bs-title="ÐŸÐ¾ÑÐ»ÐµÐ´Ð½ÑÑ Ð³Ð»Ð°Ð²Ð°"]');
 
         return $chapterNode !== null ? trim((string) $chapterNode->textContent) : '';
     }

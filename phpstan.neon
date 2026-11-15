@@ -28,7 +28,10 @@ parameters:
         - quirks/srcset.php
         - quirks/template.php
         - quirks/unicode.php
+        - quirks/video_embed.php
 
+    # Deliberate: PHPDoc-derived types are treated as uncertain, so redundant
+    # instanceof / null guards are tolerated instead of reported as "always true".
     treatPhpDocTypesAsCertain: false
 
     ignoreErrors:
@@ -36,3 +39,4 @@ parameters:
 rules:
     - RSSBridge\PHPStan\Rules\ForbidOldDomApiRule
     - RSSBridge\PHPStan\Rules\DomTagNameComparisonRule
+    - RSSBridge\PHPStan\Rules\Utf8EncodingRule

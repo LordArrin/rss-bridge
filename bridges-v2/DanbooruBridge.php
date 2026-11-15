@@ -261,7 +261,7 @@ final class DanbooruBridge extends BridgeAbstract
             $meta[] = 'Score: ' . (int)$score;
         }
         if ($meta !== []) {
-            $content .= '<p><em>' . htmlspecialchars(implode(' • ', $meta), ENT_QUOTES, 'UTF-8') . '</em></p>';
+            $content .= '<p><em>' . htmlspecialchars(implode(' â€¢ ', $meta), ENT_QUOTES, 'UTF-8') . '</em></p>';
         }
 
         return [

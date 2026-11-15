@@ -14,7 +14,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <meta name="description" content="RSS-Bridge — <?= e($title) ?>" />
+    <meta name="description" content="RSS-Bridge â€” <?= e($title) ?>" />
     <meta name="theme-color" content="#E65100" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#120D0B" media="(prefers-color-scheme: dark)">
     <title><?= e($title) ?> - RSS-Bridge</title>

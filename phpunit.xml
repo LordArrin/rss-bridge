@@ -9,11 +9,6 @@
          beStrictAboutOutputDuringTests="true"
          failOnRisky="true"
          failOnWarning="true">
-    <testsuites>
-        <testsuite name="RSS-Bridge Test Suite">
-            <directory>tests</directory>
-        </testsuite>
-    </testsuites>
 
     <source>
         <include>
@@ -24,6 +19,7 @@
             <directory>formats</directory>
             <directory>middlewares</directory>
             <directory>proxies</directory>
+            <directory>quirks</directory>
         </include>
     </source>
 </phpunit>

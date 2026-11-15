@@ -1241,7 +1241,7 @@ final class Vk2Bridge extends BridgeAbstract
     private function renderVideo(array $d): string
     {
         $title = $d['title'] ?? 'Video';
-        if (mb_stripos($title, 'Êëèï ') === 0) {
+        if (mb_stripos($title, 'ĞšĞ»Ğ¸Ğ¿ ') === 0) {
             return $this->renderClip($d);
         }
 
@@ -1332,15 +1332,15 @@ final class Vk2Bridge extends BridgeAbstract
         $footer = "Total votes: {$totalVotes}";
 
         if (($d['anonymous'] ?? false) !== false) {
-            $footer .= ' · Anonymous';
+            $footer .= ' Â· Anonymous';
         }
         if (($d['multiple'] ?? false) !== false) {
-            $footer .= ' · Multiple choice';
+            $footer .= ' Â· Multiple choice';
         }
         if (($d['closed'] ?? false) !== false) {
-            $footer .= ' · Closed';
+            $footer .= ' Â· Closed';
         } elseif (($d['end_date'] ?? 0) > 0) {
-            $footer .= ' · Ends ' . date('Y-m-d', $d['end_date']);
+            $footer .= ' Â· Ends ' . date('Y-m-d', $d['end_date']);
         }
 
         $lines[] = $footer;
@@ -1433,7 +1433,7 @@ final class Vk2Bridge extends BridgeAbstract
         $d = $attachment[$type] ?? [];
 
         return match ($type) {
-            'video' => (mb_stripos($d['title'] ?? '', 'Êëèï ') === 0) ? 'Clip: ' . $this->cleanClipTitle($d['title']) : 'Video: ' . ($d['title'] ?? ''),
+            'video' => (mb_stripos($d['title'] ?? '', 'ĞšĞ»Ğ¸Ğ¿ ') === 0) ? 'Clip: ' . $this->cleanClipTitle($d['title']) : 'Video: ' . ($d['title'] ?? ''),
             'clip' => 'Clip: ' . $this->cleanClipTitle($d['title'] ?? ''),
             'audio' => 'Music: ' . ($d['artist'] ?? '') . ' - ' . ($d['title'] ?? ''),
             'link' => (strpos($d['url'] ?? '', 'audio_playlist') !== false) ? 'Playlist: ' . ($d['title'] ?? '') : 'Link: ' . ($d['title'] ?? ''),
@@ -1547,8 +1547,8 @@ final class Vk2Bridge extends BridgeAbstract
 
     private function cleanClipTitle(string $title): string
     {
-        if (mb_stripos($title, 'Êëèï ') === 0) {
-            return trim(mb_substr($title, mb_strlen('Êëèï ')));
+        if (mb_stripos($title, 'ĞšĞ»Ğ¸Ğ¿ ') === 0) {
+            return trim(mb_substr($title, mb_strlen('ĞšĞ»Ğ¸Ğ¿ ')));
         }
         return $title;
     }

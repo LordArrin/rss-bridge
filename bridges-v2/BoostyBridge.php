@@ -148,7 +148,7 @@ final class BoostyBridge extends BridgeAbstract
 
     private function findSentenceEnd(string $text): int|false
     {
-        $punctuation = ['.', '!', '?', '…'];
+        $punctuation = ['.', '!', '?', 'â€¦'];
         $firstEnd = false;
 
         foreach ($punctuation as $punct) {

@@ -30,10 +30,10 @@ abstract class FeedExpander extends BridgeAbstract
      * Fetches and parses the remote feed, populating the internal items list.
      *
      * Each parsed item is passed to {@see parseItem()} which may enrich it.
-     * Only items that evaluate to truthy after parsing are kept.
+     * Items whose parsed result is `false` or an empty array are dropped.
      *
      * @param string $url Feed URL to fetch
-     * @param int $maxItems Maximum number of items to keep (-1 for unlimited)
+     * @param int $maxItems Maximum number of items to keep (-1 means up to 999)
      * @param list<string> $headers Additional HTTP headers for the request
      *
      * @throws \Exception If the URL is empty, the response is empty, or the XML cannot be parsed
@@ -79,13 +79,13 @@ abstract class FeedExpander extends BridgeAbstract
      * Override this method in extending bridges to enrich the item
      * (for example, by fetching the full article HTML from the item's URI).
      *
-     * IMPORTANT: The signature is intentionally left without type hints
-     * to remain compatible with legacy bridges that override this method
-     * with their own untyped signatures.
+     * The signature is fully typed. An override that never drops items may
+     * narrow the return type to `array`; PHPStan level 8 requires the declared
+     * return type to match what the method actually returns.
      *
      * @param array<string, mixed> $item Parsed feed item
      *
-     * @return array<string, mixed>|false The (possibly modified) item, or a falsy value to drop it
+     * @return array<string, mixed>|false The (possibly modified) item, or false to drop it
      */
     protected function parseItem(array $item): array|false
     {

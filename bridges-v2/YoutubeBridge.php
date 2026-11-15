@@ -440,7 +440,7 @@ final class YoutubeBridge extends BridgeAbstract
                 $descValue = strip_invisible_unicode(mb_substr((string) $description, $descEnhancement['pos'], $descEnhancement['len']));
                 $descAfter = strip_invisible_unicode(mb_substr((string) $description, $descEnhancement['pos'] + $descEnhancement['len']));
 
-                $descValue = trim($descValue, $whitespaceChars . '•/');
+                $descValue = trim($descValue, $whitespaceChars . 'â€¢/');
 
                 $description = sprintf(
                     '%s<a href="%s" target="_blank">%s</a>%s',

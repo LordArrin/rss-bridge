@@ -35,6 +35,7 @@ Before submitting or generating any bridge code, ensure it passes the following 
    - Command: `vendor/bin/phpstan analyse bridges-v2/YourBridge.php`
    - Includes `phpstan-strict-rules` and `phpstan-deprecation-rules`
    - Includes a custom rule `ForbidOldDomApiRule` that **forbids the legacy DOM API** (`DOMDocument`, `DOMNode`, `DOMElement`, `DOMXPath`, ...) and enforces the new `\Dom\*` API (`\Dom\HTMLDocument`, `\Dom\XMLDocument`, `\Dom\Element`, `\Dom\XPath`, ...)
+   - Includes a custom rule `Utf8EncodingRule` that **rejects files which are not valid UTF-8** (raw CP1251/CP1252 bytes in literals or comments) and shows the likely single-byte decoding
 
 Key PHPCS rules to keep in mind:
 - `declare(strict_types=1)` is required in every file
@@ -51,8 +52,10 @@ Composer scripts are available as shortcuts:
 composer lint       # phpcs on the whole project
 composer lint:fix   # phpcbf auto-fix
 composer stan       # phpstan (level from phpstan.neon)
-composer test       # phpunit
+composer test       # phpunit (the tests/ suite is not populated yet)
 ```
+
+> **Note:** `composer test` currently has no test cases — the `tests/` directory referenced by `phpunit.xml` is not shipped. For a load-time smoke test of every registered bridge (instantiation via `SafeBridgeLoader`, reporting broken stubs), run `bin/test-bridges`. It does not fetch live data; validate selectors against a real page separately.
 
 **CI behavior** (`.github/workflows/lint-bridges.yml`, runs on pull requests touching `bridges-v2/**`):
 - `phpcbf` auto-fixes style issues and commits them back to the PR branch
@@ -60,7 +63,7 @@ composer test       # phpunit
 - PHPStan Level 8 runs on the changed bridge files
 - Bridge files must **not** have the executable bit set (`git update-index --chmod=-x bridges-v2/YourBridge.php`)
 
-> **⚠️ Note for AI Agents:** When generating or modifying bridge code, you must proactively ensure the output complies with `phpcs.xml` rules (e.g., `declare(strict_types=1)`, proper namespaces, no unused variables) and passes PHPStan Level 8. Fork-specific traps: `getContents()` returns `string|Response` (cast with `(string)` or guard with `is_string()`), `foreach` over `querySelectorAll()` already yields `\Dom\Element` (do **not** add an `instanceof` guard there — it fails Level 8), and the legacy `DOM*` API is forbidden by `ForbidOldDomApiRule`. Do not output code that will fail these checks.
+> **⚠️ Note for AI Agents:** When generating or modifying bridge code, you must proactively ensure the output complies with `phpcs.xml` rules (e.g., `declare(strict_types=1)`, proper namespaces, no unused variables) and passes PHPStan Level 8. Fork-specific traps: `getContents()` returns `string` by default and `Response` only when `$returnFull = true` (a `(string)` cast is optional, not required); `foreach` over `querySelectorAll()` already yields `\Dom\Element` (an `instanceof` guard there is redundant, not an error); use `saveHtml()` (not `saveHTML()`); avoid the short ternary `?:` and `?->prop ?? $x` (write `->prop ?? $x`); keep ternaries on one line; files must be valid UTF-8 (no raw CP1251/CP1252 bytes); and the legacy `DOM*` API is forbidden by `ForbidOldDomApiRule`. Do not output code that will fail these checks.
 
 ## Available PHP Extensions
 
@@ -100,7 +103,7 @@ final class ExampleBridge extends BridgeAbstract
     public function collectData(): void
     {
         $dom = getSimpleHTMLDOM(self::URI);
-        $title = $dom->querySelector('h1')?->textContent ?? 'Untitled';
+        $title = $dom->querySelector('h1')->textContent ?? 'Untitled';
 
         $this->items[] = [
             'title' => $title,
@@ -199,12 +202,14 @@ Access parameter values inside `collectData()`. `getInput()` returns `mixed|null
 
 ```php
 $username = (string) $this->getInput('username');
-$limit = (int) ($this->getInput('limit') ?: 10);
+$limit = (int) ($this->getInput('limit') ?? 10);
 $includeReplies = (bool) $this->getInput('include_replies');
 $category = (string) $this->getInput('category');
 ```
 
-For `list` parameters, `$this->getKey('category')` returns the display label (array key) of the selected value.
+Use `??` (not the short ternary `?:`, which PHPStan forbids) so an explicit `0` is preserved; if `0` should fall back to the default, write an explicit `if`.
+
+For `list` parameters, `$this->getKey('category')` returns the display label (array key) of the selected value, or `null` when nothing is selected.
 
 ### Multiple Contexts
 
@@ -283,17 +288,14 @@ $json = (string) getContents($url, ['Accept: application/json']);
 $response = getContents($url, [], [], true);  // requests the full Response object
 ```
 
-> **⚠️ PHPStan trap:** `getContents()` is declared as returning `string|Response`. Passing the result directly into a `string` parameter (e.g. `\Dom\HTMLDocument::createFromString()`) **fails PHPStan Level 8**. In practice `getContents()` returns a string unless `$returnFull = true`, but static analysis needs help. Use one of the verified patterns:
+> **ℹ️ PHPStan note:** `getContents()` has a conditional return type: `string` by default, `RSSBridge\Http\Response` when the fourth argument `$returnFull` is `true`. PHPStan resolves this, so a plain `getContents($url)` is already typed `string` and can be passed straight into a `string` parameter — no cast is required for Level 8. The `(string)` cast remains the house style (explicit and harmless). With `$returnFull = true` the result is a `Response` (no `__toString()`), so read the body via `getBody()`:
 >
 > ```php
-> // Pattern 1: explicit cast (used by CodebergReleasesBridge)
+> // Default call: already typed string (cast optional, kept as house style)
 > $html = (string) getContents($url);
 >
-> // Pattern 2: is_string() guard (used by quirks/media_embed.php)
+> // Full response: typed Response — read the body explicitly
 > $response = getContents($url, [], [], true);
-> if (is_string($response) === true) {
->     throwServerException('Unexpected string response');
-> }
 > $html = $response->getBody();
 > ```
 
@@ -324,7 +326,7 @@ $cachedHtml = $this->loadCacheValue($cacheKey);
 
 if (is_string($cachedHtml) === false || $cachedHtml === '') {
     $articleDom = getSimpleHTMLDOM($articleUrl);
-    $cachedHtml = $articleDom->saveHTML() ?: '';
+    $cachedHtml = $articleDom->saveHtml();
     $this->saveCacheValue($cacheKey, $cachedHtml, 86400);
 }
 
@@ -375,7 +377,7 @@ foreach ($dom->querySelectorAll('article.post') as $post) {
 }
 ```
 
-> **⚠️ PHPStan note:** With the locked PHPStan version, `foreach` over `querySelectorAll()` yields items already typed `\Dom\Element` — call Element methods directly. Adding an `instanceof \Dom\Element` guard inside such a loop **fails** Level 8 ("always evaluate to true"). Narrow only when using `->item($i)` (returns `?\Dom\Node`) or when nodes pass through `mixed` containers:
+> **ℹ️ PHPStan note:** With the locked PHPStan version, `foreach` over `querySelectorAll()` yields items already typed `\Dom\Element` — call Element methods directly. An extra `instanceof \Dom\Element` guard inside such a loop is **redundant**: it does not fail Level 8 (the project sets `treatPhpDocTypesAsCertain: false`), but house style omits it. Narrow only when using `->item($i)` (returns `?\Dom\Node`) or when nodes pass through `mixed` containers:
 >
 > ```php
 > foreach ($node->querySelectorAll('p, div') as $element) {
@@ -383,7 +385,7 @@ foreach ($dom->querySelectorAll('article.post') as $post) {
 > }
 >
 > $first = $node->querySelectorAll('p')->item(0);
-> if ($first instanceof \Dom\Element) {
+> if ($first instanceof \Dom\Element === true) {
 >     $style = $first->getAttribute('style') ?? '';
 > }
 > ```
@@ -398,14 +400,15 @@ foreach ($dom->querySelectorAll('article.post') as $post) {
 |---|---|---|---|
 | `$node->textContent` | `\Dom\Node` | `?string` | Plain text, HTML stripped (null for some node types) |
 | `$node->innerHTML` | `\Dom\Element` | `string` | Inner HTML |
-| `$node->C14N()` | `\Dom\Node` | `string\|false` | Canonical serialization of the node incl. its own tag (use instead of `outerHTML`) |
+| `$node->outerHTML` | `\Dom\Element` | `string` | Element with its inner HTML (preserves attribute order) |
+| `$node->C14N()` | `\Dom\Node` | `string\|false` | Canonical serialization of the node incl. its own tag (may reorder attributes; guard the `false` return) |
 | `$node->getAttribute('href')` | `\Dom\Element` | `?string` | Attribute value |
 | `$node->tagName` | `\Dom\Element` | `string` | Tag name (**UPPERCASE** in HTML documents; original case in XML) |
 | `$node->localName` | `\Dom\Element` | `string` | Tag name (always **lowercase**, preferred for comparisons) |
 | `$node->parentElement` | `\Dom\Node` | `?\Dom\Element` | Parent element |
 | `$node->childNodes` | `\Dom\Node` | `\Dom\NodeList` | Children |
 
-There is **no `outerHTML` property** on `\Dom\Element`. Use `$node->C14N()` (guard the `false` return) for a single node, or `$dom->saveHtml()` (returns `string`) for the whole document.
+To serialize a single element use `$node->outerHTML` (preserves attribute order) or `$node->C14N()` (canonical form, may reorder attributes; guard the `false` return). For the whole document use `$dom->saveHtml()` (returns `string`).
 
 Use the null-safe operator `?->` for optional elements:
 
@@ -594,8 +597,10 @@ $item = [
 $html = markdownToHtml($markdown, ['breaksEnabled' => true]);
 
 // Legacy YouTube helper. Delegates to video_embed_youtube() in quirks/video_embed.php.
-// Iframe mode is opt-in via [youtube] iframe/nocookie in /config/.bridges
-// (not shipped in .bridges.default; default = clickable thumbnail).
+// Iframe vs clickable thumbnail is controlled by [youtube] iframe/nocookie in
+// /config/.bridges (or .bridges.default). The shipped .bridges.default sets
+// iframe = true and nocookie = true, so iframe embeds are the default; set
+// iframe = false to fall back to a clickable thumbnail.
 // Returns '' if no valid video ID is found.
 $embed = handleYoutube('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
 
@@ -772,7 +777,7 @@ public function collectData(): void
 ```
 
 - `Json::decode(string $json, bool $assoc = true): mixed` and `Json::encode(mixed $value, bool $pretty = true, bool $asciiSafe = false): string` both throw `\JsonException` on invalid input (`JSON_THROW_ON_ERROR`)
-- Note the `(string)` cast on `getContents()` — required for PHPStan Level 8
+- The `(string)` cast on `getContents()` is house style; PHPStan already infers `string` here via the conditional return type, so the cast is optional
 - An equally valid pattern used by bridges: `json_decode((string) getContents($url, $headers), true, 512, JSON_THROW_ON_ERROR)`
 - For deeply nested payloads, combine with `read_json_path()` (see [quirks](#json-path-traversal-quirksjson_pathphp))
 
@@ -809,7 +814,7 @@ public function collectData(): void
 
 ## Advanced Compression with Zstd
 
-For caching large objects (full HTML pages, JSON responses), compress with `zstd` to save memory:
+For caching large objects (full HTML pages, JSON responses), compress with `zstd` to save memory. The bridge cache is JSON-based and corrupts raw binary, so always store the compressed payload **base64-encoded**:
 
 ```php
 public function collectData(): void
@@ -817,14 +822,19 @@ public function collectData(): void
     $cacheKey = 'full_page_' . md5($url);
 
     $cached = $this->loadCacheValue($cacheKey);
+    $html = '';
     if (is_string($cached) === true && $cached !== '') {
-        $uncompressed = zstd_uncompress($cached);
-        $html = is_string($uncompressed) ? $uncompressed : '';
-    } else {
+        $compressed = base64_decode($cached, true);
+        if ($compressed !== false) {
+            $uncompressed = zstd_uncompress($compressed);
+            $html = is_string($uncompressed) ? $uncompressed : '';
+        }
+    }
+    if ($html === '') {
         $html = (string) getContents($url);
         $compressed = zstd_compress($html, 3);
         if ($compressed !== false) {
-            $this->saveCacheValue($cacheKey, $compressed, 86400);
+            $this->saveCacheValue($cacheKey, base64_encode($compressed), 86400);
         }
     }
 
@@ -843,7 +853,7 @@ public function collectData(): void
 
 - Caching full HTML pages (>50KB)
 - Large JSON API responses
-- Binary data (images, archives)
+- Binary data (images, archives) — base64-wrapped as shown above
 
 ## Error Handling
 
@@ -921,7 +931,7 @@ $this->saveCacheValue($cacheKey, $processedData, 3600); // default TTL: 86400
 
 `loadCacheValue()`/`saveCacheValue()` automatically prefix the key with the bridge's short name (e.g. `ExampleBridge_example_...`), so keys never collide between bridges.
 
-Values passed to `saveCacheValue()` must be JSON-serializable (scalars and arrays; `Response` is specially supported). Arbitrary objects throw `InvalidArgumentException` — the cache deliberately avoids PHP `unserialize()` for security.
+Values passed to `saveCacheValue()` must be JSON-serializable (scalars and arrays; `Response` is specially supported). Arbitrary objects throw `InvalidArgumentException` — the cache deliberately avoids PHP `unserialize()` for security. Raw binary strings are corrupted by the JSON encoding, so base64-encode them first (see the Zstd example above).
 
 Alternatively, access the cache backend directly (no prefixing) and the logger:
 
@@ -1048,22 +1058,22 @@ final class MyBlogExpanderBridge extends FeedExpander
         $this->collectExpandableDatas(self::URI . 'feed.xml', 10);
     }
 
-    protected function parseItem(array $item): array|false
+    protected function parseItem(array $item): array
     {
-        // Enrich the item, or return false to drop it from the feed
+        // Enrich the item with the full article body from the original site.
         $uri = (string) ($item['uri'] ?? '');
         if ($uri === '') {
             return $item;
         }
         $dom = getSimpleHTMLDOM($uri);
-        $item['content'] = $dom->querySelector('article')?->innerHTML ?? $item['content'];
+        $item['content'] = $dom->querySelector('article')->innerHTML ?? $item['content'];
         return $item;
     }
 }
 ```
 
 - `collectExpandableDatas(string $url, int $maxItems = -1, array $headers = []): void` fetches and parses the feed (`-1` means up to 999 items)
-- `parseItem(array $item): array|false` is called for every item; return `false` or `[]` to drop it
+- `parseItem(array $item): array|false` is called for every item; return `false` or `[]` to drop it. An override that never drops items may narrow the return type to `array` (as above) — PHPStan Level 8 requires the declared return type to match what the method actually returns
 - `getName()`, `getURI()`, and `getIcon()` are automatically taken from the parsed feed
 - Custom keys survive the round-trip through the `misc` bag (see [Feed Item Structure](#feed-item-structure))
 
@@ -1146,16 +1156,16 @@ git update-index --chmod=-x bridges-v2/YourBridge.php
 ## Performance Optimization Tips
 
 ### 1. Use Efficient Serialization
-For caching large datasets, use `igbinary_serialize()` instead of native `serialize()`:
+For caching large datasets, use `igbinary_serialize()` instead of native `serialize()`. The cache is JSON-based and corrupts raw binary, so base64-encode the result before storing:
 ```php
 $serialized = igbinary_serialize($data);
-if ($serialized !== false) {
-    $this->saveCacheValue($key, $serialized, $ttl);
+if (is_string($serialized) === true) {
+    $this->saveCacheValue($key, base64_encode($serialized), $ttl);
 }
 ```
 
 ### 2. Compress Large Objects
-Use `zstd_compress()` for HTML pages or JSON responses >50KB:
+Use `zstd_compress()` for HTML pages or JSON responses >50KB (base64-wrap before caching, see the Zstd example above):
 ```php
 $compressed = zstd_compress($html, 3); // Level 3 = good balance
 ```
@@ -1190,15 +1200,16 @@ When fetching multiple items, use parallel requests or batch endpoints when avai
 
 - [ ] File is in `bridges-v2/` and named `*Bridge.php`
 - [ ] File is **not** executable in git (`git update-index --chmod=-x` if needed)
+- [ ] File is valid UTF-8 — no raw CP1251/CP1252 bytes (enforced by `Utf8EncodingRule`)
 - [ ] `declare(strict_types=1)` at the top
 - [ ] `namespace RSSBridge\Bridges;` declared
 - [ ] Class is `final` and extends `BridgeAbstract` (or `FeedExpander`)
 - [ ] All five required constants defined with `public const`
 - [ ] No `simple_html_dom` calls (`str_get_html()`, `->find()`, `->plaintext`) and no legacy `DOM*` classes (`DOMDocument`, `DOMXPath`, ...) — forbidden by `ForbidOldDomApiRule`
 - [ ] Uses `getSimpleHTMLDOM()`, `\Dom\HTMLDocument`, or `\Dom\XMLDocument` for parsing
-- [ ] `getContents()` results cast to `(string)` or guarded with `is_string()` (PHPStan Level 8)
+- [ ] `getContents()` handled correctly: `string` by default (cast optional), `Response` read via `getBody()` when `$returnFull = true`
 - [ ] `foreach` over `querySelectorAll()` used directly (items are `\Dom\Element`); `instanceof` narrowing only for `->item($i)` / `mixed`
-- [ ] Null-safe operator `?->` used for optional elements
+- [ ] Null-safe operator `?->` used for optional elements; no `?->prop ?? $x` (use `->prop ?? $x`) and no short ternary `?:`
 - [ ] Exception helpers (`throwClientException`, ...) used from the **global namespace** — no imports
 - [ ] `Json` imported as `use RSSBridge\Utils\Json;` if used
 - [ ] Relative URLs handled via `urljoin()` (with `use function urljoin;`)
@@ -1206,7 +1217,7 @@ When fetching multiple items, use parallel requests or batch endpoints when avai
 - [ ] Code passes `phpstan` analysis at project level (see [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon))
 - [ ] Bridge tested with real data in Docker and enabled via `ENABLED_BRIDGES` env var
 - [ ] Malformed HTML handled via `parseHtmlDocument()`; `tidy` only for severe cases
-- [ ] Large cached objects use `igbinary` or `zstd` compression
+- [ ] Large cached objects use `igbinary`/`zstd` compression, base64-wrapped before `saveCacheValue()`
 - [ ] API authentication uses `sodium` for signatures
 - [ ] APCu used for frequently accessed local data
 - [ ] Used built-in `quirks/` helpers (e.g., `truncate_html_preserve_tags`, `extract_spa_json_variable`, `matches_keyword_rules`) instead of writing custom regex or substring logic
@@ -1258,11 +1269,9 @@ final class BlogBridge extends BridgeAbstract
     public function collectData(): void
     {
         $category = (string) $this->getInput('category');
-        $limit = (int) ($this->getInput('limit') ?: 20);
+        $limit = (int) ($this->getInput('limit') ?? 20);
 
-        $url = $category !== ''
-            ? self::URI . 'category/' . rawurlencode($category) . '/'
-            : self::URI;
+        $url = $category !== '' ? self::URI . 'category/' . rawurlencode($category) . '/' : self::URI;
 
         $html = (string) getContents($url);
         if ($html === '') {
@@ -1295,7 +1304,7 @@ final class BlogBridge extends BridgeAbstract
             $articleHtml = $this->loadCacheValue($cacheKey);
             if (is_string($articleHtml) === false || $articleHtml === '') {
                 $articleDom = getSimpleHTMLDOM($articleUrl);
-                $articleHtml = $articleDom->querySelector('.entry-content')?->innerHTML ?? '';
+                $articleHtml = $articleDom->querySelector('.entry-content')->innerHTML ?? '';
                 $articleHtml = break_annoying_html_tags($articleHtml);
                 $this->saveCacheValue($cacheKey, $articleHtml, self::ARTICLE_CACHE_TTL);
             }
@@ -1306,20 +1315,14 @@ final class BlogBridge extends BridgeAbstract
             $timestamp = $dateStr !== null ? strtotime($dateStr) : false;
 
             $authorName = $post->querySelector('.author-name')?->textContent;
-            $author = $authorName !== null && trim($authorName) !== ''
-                ? trim($authorName)
-                : (string) ($metadata['author'] ?? '');
+            $author = $authorName !== null && trim($authorName) !== '' ? trim($authorName) : (string) ($metadata['author'] ?? '');
 
             $this->items[] = [
                 'title' => $title,
                 'uri' => $articleUrl,
                 // Use truncate_html_preserve_tags for a safe summary if full content is missing
-                'content' => $articleHtml !== ''
-                    ? $articleHtml
-                    : truncate_html_preserve_tags($metadata['content'] ?? '', 300),
-                'timestamp' => $timestamp !== false
-                    ? $timestamp
-                    : (int) ($metadata['timestamp'] ?? time()),
+                'content' => $articleHtml !== '' ? $articleHtml : truncate_html_preserve_tags($metadata['content'] ?? '', 300),
+                'timestamp' => $timestamp !== false ? $timestamp : (int) ($metadata['timestamp'] ?? time()),
                 'author' => $author !== '' ? $author : null,
                 'uid' => $articleUrl,
                 'enclosures' => $metadata['enclosures'] ?? [],

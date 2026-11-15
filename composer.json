@@ -69,11 +69,13 @@
         "erusev/parsedown": "^1.8"
     },
     "require-dev": {
-        "phpstan/extension-installer": "^1.4",
-        "phpstan/phpstan": "^2.3.5",
+        "phpcompatibility/php-compatibility": "^10.0.0@dev",
+        "phpcsstandards/phpcsutils": "^1.2.3",
+        "phpstan/extension-installer": "^1.4.3",
+        "phpstan/phpstan": "^2.3.6",
         "phpstan/phpstan-deprecation-rules": "^2.0.5",
-        "phpstan/phpstan-strict-rules": "^2.1.0",
-        "phpunit/phpunit": "^13.4.5",
+        "phpstan/phpstan-strict-rules": "^2.1.1",
+        "phpunit/phpunit": "^13.4.7",
         "squizlabs/php_codesniffer": "^4.0.4"
     },
     "scripts": {

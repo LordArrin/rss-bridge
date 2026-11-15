@@ -402,7 +402,7 @@ final class FimfictionBridge extends BridgeAbstract
     {
         $result = preg_replace(
             '/<hr[^>]*>/i',
-            '<p style="' . self::CSS['scene-break'] . '">• • •</p>',
+            '<p style="' . self::CSS['scene-break'] . '">â€¢ â€¢ â€¢</p>',
             $content
         );
         return $result !== null ? $result : $content;
