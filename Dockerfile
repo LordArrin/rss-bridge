@@ -576,12 +576,14 @@ COPY --chown=nginx:nginx ./ /app/
 
 WORKDIR /app
 
-# Immutable version artifact
 RUN echo -n "${IMAGE_VERSION}" > /app/VERSION && \
     chown nginx:nginx /app/VERSION && \
     chmod 444 /app/VERSION
 
-RUN composer install --optimize-autoloader --no-interaction --ignore-platform-reqs --classmap-authoritative && \
+RUN find /app -type f \( -name '*.sh' -o -name '*.php' \) -exec sed -i 's/\r$//' {} +
+
+RUN sed -i "s/\"version\": \".*\"/\"version\": \"${IMAGE_VERSION}\"/" /app/composer.json && \
+    composer install --optimize-autoloader --no-interaction --ignore-platform-reqs --classmap-authoritative && \
     grep -q "${VERSION_PLACEHOLDER}" /app/documentation/pages/static/index.html && \
     sed -i "s/${VERSION_PLACEHOLDER}/${IMAGE_VERSION}/g" /app/documentation/pages/static/index.html && \
     chmod +x /app/bin/* && \
@@ -592,7 +594,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -fsS --compressed "http://localhost/?action=health" || exit 1
 
 EXPOSE 80/tcp 80/udp
-
-RUN find /app -type f \( -name '*.sh' -o -name '*.php' \) -exec sed -i 's/\r$//' {} +
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

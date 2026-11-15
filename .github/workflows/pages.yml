@@ -37,14 +37,14 @@ jobs:
 
       - name: Inject image version
         run: |
-          VERSION=$(php -r 'echo json_decode(file_get_contents("composer.json"), true)["version"] ?? "";')
-          if [ -z "$VERSION" ]; then
-            echo "composer.json has no version field"
+          VERSION=$(grep -E '^ARG IMAGE_VERSION=' Dockerfile | head -n1 | sed 's/^ARG IMAGE_VERSION=//')
+          if [ -z "$VERSION" ] || [ "$VERSION" = "0.0.0-dev" ]; then
+            echo "Dockerfile has no valid IMAGE_VERSION: '${VERSION}'"
             exit 1
           fi
           grep -q "__RSSBRIDGE_IMAGE_VERSION__" _site/index.html
           sed -i "s/__RSSBRIDGE_IMAGE_VERSION__/${VERSION}/g" _site/index.html
-          echo "Injected version: ${VERSION}"
+          echo "Injected version from Dockerfile: ${VERSION}"
 
       - name: Extract bridge metadata
         run: |
