@@ -158,90 +158,13 @@ function html_option(string $name, string $value, bool $selected = false): strin
 // =============================================================================
 
 /**
- * Hosts whose <iframe> embeds may be rendered by the HTML preview.
- *
- * Matching is exact or by subdomain ("player.vimeo.com" matches "vimeo.com").
- */
-const VIDEO_EMBED_HOSTS = [
-    'youtube.com',
-    'youtube-nocookie.com',
-    'youtu.be',
-    'vk.com',
-    'vk.ru',
-    'vkvideo.ru',
-    'rutube.ru',
-    'vimeo.com',
-    'dzen.ru',
-    'ok.ru',
-    'coub.com',
-    'twitch.tv',
-];
-
-/**
- * Checks whether an <iframe> attribute string points at a trusted video host.
- *
- * Only http(s) or protocol-relative URLs are accepted. "srcdoc" is rejected
- * outright: it overrides "src" and would execute attacker HTML in our origin.
- *
- * @param string $attributes The raw attribute string of the iframe tag.
- */
-function is_allowed_video_embed(string $attributes): bool
-{
-    if (preg_match('#\bsrcdoc\s*=#i', $attributes) === 1) {
-        return false;
-    }
-
-    if (preg_match('#\bsrc\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))#i', $attributes, $m) !== 1) {
-        return false;
-    }
-
-    $src = '';
-    foreach ([1, 2, 3] as $group) {
-        $candidate = $m[$group] ?? '';
-        if ($candidate !== '') {
-            $src = $candidate;
-            break;
-        }
-    }
-
-    $src = trim(html_entity_decode($src, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-    if ($src === '') {
-        return false;
-    }
-
-    $parts = parse_url($src);
-    if (is_array($parts) === false) {
-        return false;
-    }
-
-    $scheme = strtolower($parts['scheme'] ?? '');
-    if ($scheme !== '' && $scheme !== 'https' && $scheme !== 'http') {
-        return false;
-    }
-
-    $host = strtolower($parts['host'] ?? '');
-    if ($host === '') {
-        return false;
-    }
-
-    foreach (VIDEO_EMBED_HOSTS as $domain) {
-        if ($host === $domain || str_ends_with($host, '.' . $domain) === true) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-/**
  * Break potentially dangerous HTML tags by escaping their opening bracket.
  *
  * Case-insensitive tag breaking, strips inline event handlers and
  * neutralizes javascript: URLs.
  *
- * @param string $html The HTML content to sanitize.
  * @param bool $allowVideoEmbeds Keep <iframe> embeds from trusted video hosts
- *                               (see VIDEO_EMBED_HOSTS). Closing </iframe> tags
+ *                               (see video_embed_hosts()). Closing </iframe> tags
  *                               are kept as well; browsers ignore stray ones.
  * @return string The sanitized HTML.
  */

@@ -52,87 +52,20 @@ function markdownToHtml(string $string, array $config = []): string
 /**
  * Handle a YouTube video URL by returning an embed or a clickable thumbnail.
  *
- * Extracts the 11-character YouTube video ID from various URL formats
- * (youtube.com/watch, youtu.be, shorts, embed, etc.) and returns either:
- *
- * - An <iframe> embed (when youtube.iframe is enabled in configuration),
- *   optionally using youtube-nocookie.com for privacy.
- * - A <picture> element with WebP/JPEG srcset thumbnails linking to the
- *   video page (when iframe is disabled), which is safer for RSS readers.
- *
- * Returns an empty string if no valid YouTube video ID is found.
+ * Thin wrapper around video_embed_youtube(); the player logic lives in
+ * quirks/video_embed.php. Iframe mode is opt-in via [youtube] iframe/nocookie
+ * in /config/.bridges. Returns '' when no valid video ID is found.
  *
  * @param string $string A string containing a YouTube video URL or video ID.
- * @return string HTML snippet with iframe or thumbnail, or empty string if not found.
+ * @return string HTML snippet with iframe or thumbnail, or empty string.
  */
 function handleYoutube(string $string): string
 {
-    $useIframe = Configuration::getConfig('youtube', 'iframe');
-    $useNocookie = Configuration::getConfig('youtube', 'nocookie');
-
-    $regex = '#(?:https?://|//)?(?:www\.|m\.|.+\.)?(?:youtu\.be/|youtube(?:-nocookie|)\.com/(?:embed/|v/|shorts/|live/|feeds/api/videos/|watch\?v=|watch\?.+&v=))([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])#i';
-    if (preg_match($regex, $string, $matches) === 1) {
-        $videoID = $matches[1];
-    } elseif (preg_match_all('#(?<![A-Za-z0-9_-])([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])#', $string, $matches2) > 0) {
-        $videoID = '';
-        foreach ($matches2[1] as $candidate) {
-            $hasDigit = preg_match('#[0-9]#', $candidate) === 1;
-            $hasLower = preg_match('#[a-z]#', $candidate) === 1;
-            $hasUpper = preg_match('#[A-Z]#', $candidate) === 1;
-            if (($hasDigit === true && ($hasLower === true || $hasUpper === true)) || ($hasLower === true && $hasUpper === true)) {
-                $videoID = $candidate;
-                break;
-            }
-        }
-        if ($videoID === '') {
-            return '';
-        }
-    } else {
-        return '';
-    }
-
-    if ($useIframe === true) {
-        if ($useNocookie === true) {
-            $embedUri = 'https://www.youtube-nocookie.com/embed/' . $videoID;
-        } else {
-            $embedUri = 'https://www.youtube.com/embed/' . $videoID;
-        }
-
-        return sprintf(<<<EOD
-<iframe width="560" height="315" src="%s" title="YouTube video player" frameborder="0"
-allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-referrerpolicy="strict-origin" allowfullscreen></iframe>
-EOD
-         , $embedUri);
-    } else {
-        $videoUri = 'https://www.youtube.com/watch?v=' . $videoID;
-
-        $thumbnailJpegBaseUri = 'https://i.ytimg.com/vi/' . $videoID;
-        $jpegSrcset = sprintf(
-            '%1$s/mqdefault.jpg 320w, %1$s/0.jpg 480w, %1$s/hqdefault.jpg 481w, %1$s/sddefault.jpg 640w, %1$s/hq720.jpg 720w, %1$s/maxresdefault.jpg 721w',
-            $thumbnailJpegBaseUri
-        );
-
-        $thumbnailWebpBaseUri = 'https://i.ytimg.com/vi_webp/' . $videoID;
-        $webpSrcset = sprintf(
-            '%1$s/mqdefault.webp 320w, %1$s/0.webp 480w, %1$s/hqdefault.webp 481w, %1$s/sddefault.webp 640w, %1$s/hq720.webp 720w, %1$s/maxresdefault.webp 721w',
-            $thumbnailWebpBaseUri
-        );
-
-        $fallbackUri = $thumbnailJpegBaseUri . '/maxresdefault.jpg';
-
-        return sprintf(<<<EOD
-<a href="%s">
-    <picture>
-        <source srcset="%s" type="image/webp" referrerpolicy="no-referrer" />
-        <img srcset="%s" src="%s" alt="Video thumbnail" title="YouTube video thumbnail" referrerpolicy="no-referrer" />
-    </picture>
-</a>
-<p>
-<a href="%s">%s</a>
-</p>
-EOD, $videoUri, $webpSrcset, $jpegSrcset, $fallbackUri, $videoUri, $videoUri);
-    }
+    return video_embed_youtube(
+        $string,
+        Configuration::getConfig('youtube', 'iframe') === true,
+        Configuration::getConfig('youtube', 'nocookie') === true
+    );
 }
 
 /**

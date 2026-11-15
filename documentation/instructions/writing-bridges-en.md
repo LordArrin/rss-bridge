@@ -478,10 +478,12 @@ $div = html_tag('div', 'Hello', ['class' => 'greeting']);
 $input = html_input(['type' => 'text', 'name' => 'q', 'value' => 'search']);
 $option = html_option('United States', 'us', true);
 
-// Neutralize dangerous tags (script, iframe, object, embed, applet, svg,
-// math, link, style, meta, base), strip on* event handlers and
-// javascript: URLs while keeping visible text
+// Neutralize dangerous tags (script, object, embed, applet, svg, math, link,
+// style, meta, base), strip on* handlers and javascript: URLs.
+// Pass true as the 2nd argument to keep <iframe> embeds from trusted video
+// hosts (see quirks/video_embed.php). Default false escapes all iframes.
 $clean = break_annoying_html_tags($html);
+$preview = break_annoying_html_tags($html, true);
 
 // DOM-level sanitization: strip all attributes except a strict whitelist,
 // validate href/src schemes, sanitize inline CSS
@@ -591,7 +593,7 @@ $item = [
 // An unknown option throws \InvalidArgumentException.
 $html = markdownToHtml($markdown, ['breaksEnabled' => true]);
 
-// Generate YouTube embed (iframe) or a clickable WebP/JPEG thumbnail.
+// Legacy YouTube helper. Delegates to video_embed_youtube() in quirks/video_embed.php.
 // Iframe mode is opt-in via [youtube] iframe/nocookie in /config/.bridges
 // (not shipped in .bridges.default; default = clickable thumbnail).
 // Returns '' if no valid video ID is found.
@@ -603,6 +605,74 @@ $embed = handleYoutube('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
 // pairs (emojis) without splitting them in half. Returns escaped plain text on parse failure.
 $richText = render_draftjs_to_html($draftJsonString);
 ```
+
+### Video Embeds (`quirks/video_embed.php`)
+
+Single source of truth for video players: the trusted-host registry, watch-URL → player-URL
+conversion, iframe markup and the legacy YouTube renderer. The HTML sanitizer only asks
+`is_allowed_video_embed()` and knows nothing about individual providers.
+
+| Function | Returns | Purpose |
+|---|---|---|
+| `video_embed_iframe(string $url, array $options = [])` | `string` | Ready-to-use `<iframe>`, or `''` if the URL is not supported |
+| `video_embed_url(string $url, array $options = [])` | `?string` | Player URL, or `null` if not convertible |
+| `video_embed_provider(string $url)` | `?string` | Provider key (`youtube`, `vk`, …) or `null` |
+| `video_embed_host(string $url)` | `string` | Lowercased host of an http(s) URL, `''` otherwise |
+| `video_embed_hosts()` | `list<string>` | Flat list of all trusted hosts |
+| `is_allowed_video_embed(string $attributes)` | `bool` | Checks an iframe attribute string (used by the sanitizer) |
+| `video_embed_youtube_id(string $text)` | `?string` | Extracts an 11-char YouTube ID from a URL or bare ID |
+| `video_embed_youtube(string $text, bool $useIframe = false, bool $useNocookie = false)` | `string` | Legacy renderer: iframe or clickable thumbnail |
+
+```php
+$player = video_embed_iframe('https://vk.com/video-124242569_456239659');
+$player = video_embed_iframe('https://rutube.ru/video/abc123/', ['width' => 854, 'height' => 480]);
+$player = video_embed_iframe('https://www.youtube.com/watch?v=dQw4w9WgXcQ', ['nocookie' => true]);
+
+if ($player !== '') {
+    $item['content'] = $text . $player;
+}
+```
+
+**Supported providers and URL forms:**
+
+| Provider | Hosts | Accepted input |
+|---|---|---|
+| `youtube` | `youtube.com`, `youtube-nocookie.com`, `youtu.be` | `watch?v=`, `youtu.be/`, `shorts/`, `live/`, `embed/`, bare 11-char ID |
+| `vk` | `vk.com`, `vk.ru`, `vkvideo.ru` | `video-OID_ID`, `?z=video-OID_ID`, ready `video_ext.php` (passed through, `hash` preserved) |
+| `rutube` | `rutube.ru` | `/video/<id>`, `/shorts/<id>`, `/play/embed/<id>` |
+| `vimeo` | `vimeo.com` | `/123456789`, channel/staff URLs, unlisted hash (`/id/hash` or `?h=`) |
+| `dzen` | `dzen.ru` | `/video/watch/<id>`, `/embed/<id>` |
+| `ok` | `ok.ru` | `/video/<id>`, `/live/<id>`, `/videoembed/<id>` |
+| `coub` | `coub.com` | `/view/<id>`, `/embed/<id>` |
+| `twitch` | `twitch.tv` | `/videos/<id>`, `/clip/<slug>`, `clips.twitch.tv/<slug>`, `/<channel>` |
+
+**Options:**
+
+| Key | Default | Applies to | Notes |
+|---|---|---|---|
+| `width` | `640` | all | Clamped to 1–3840 |
+| `height` | `360` | all | Clamped to 1–2160 |
+| `title` | `'Video player'` | all | Escaped |
+| `lazy` | `true` | all | `loading="lazy"` vs `"eager"` |
+| `nocookie` | `false` | YouTube | Uses `youtube-nocookie.com` |
+| `parent` | `DOMAIN` env | Twitch | Required by Twitch; without it the URL is not convertible |
+
+> **⚠️ Always check the return value.** `video_embed_iframe()` returns `''` and `video_embed_url()`
+> returns `null` for unsupported URLs — never assume a player was produced. Twitch returns `null`
+> when neither the `parent` option nor the `DOMAIN` environment variable is set.
+
+**Interaction with the HTML preview.** `break_annoying_html_tags($html, true)` keeps `<iframe>`
+only when `is_allowed_video_embed()` accepts it: host must match the registry exactly or by
+subdomain (`evil-youtube.com` does **not** match `youtube.com`), the scheme must be http(s) or
+protocol-relative, and `srcdoc` is rejected outright (it overrides `src` and would execute
+attacker HTML in our origin). Atom/MRSS/JSON never call the sanitizer, so their embeds are
+untouched.
+
+**Adding a provider** — three steps, no changes to `quirks/html.php`:
+
+1. Add the hosts to `VIDEO_EMBED_PROVIDERS`.
+2. Write a `video_embed_<name>_url()` converter returning `?string`.
+3. Add a `match` arm in `video_embed_url()`.
 
 ### Text Filtering (`quirks/filter.php`)
 
@@ -1133,13 +1203,14 @@ When fetching multiple items, use parallel requests or batch endpoints when avai
 - [ ] `Json` imported as `use RSSBridge\Utils\Json;` if used
 - [ ] Relative URLs handled via `urljoin()` (with `use function urljoin;`)
 - [ ] Code passes `phpcs` checks (see [`phpcs.xml`](https://github.com/LordArrin/rss-bridge/blob/master/phpcs.xml))
-- [ ] Code passes `phpstan` analysis at Level 8 (see [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon))
+- [ ] Code passes `phpstan` analysis at project level (see [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon))
 - [ ] Bridge tested with real data in Docker and enabled via `ENABLED_BRIDGES` env var
 - [ ] Malformed HTML handled via `parseHtmlDocument()`; `tidy` only for severe cases
 - [ ] Large cached objects use `igbinary` or `zstd` compression
 - [ ] API authentication uses `sodium` for signatures
 - [ ] APCu used for frequently accessed local data
 - [ ] Used built-in `quirks/` helpers (e.g., `truncate_html_preserve_tags`, `extract_spa_json_variable`, `matches_keyword_rules`) instead of writing custom regex or substring logic
+- [ ] Video players built via `video_embed_iframe()` / `video_embed_url()`; return value checked for `''` / `null`
 
 ## Full Reference Example
 

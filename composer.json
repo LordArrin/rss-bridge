@@ -5,13 +5,13 @@
     "version": "1.3.0",
     "autoload": {
         "psr-4": {
+            "RSSBridge\\Actions\\": "actions/",
             "RSSBridge\\Bridges\\": "bridges-v2/",
             "RSSBridge\\Caches\\": "caches/",
-            "RSSBridge\\Actions\\": "actions/",
             "RSSBridge\\Formats\\": "formats/",
             "RSSBridge\\Middlewares\\": "middlewares/",
-            "RSSBridge\\Proxies\\": "proxies/",
-            "RSSBridge\\PHPStan\\Rules\\": "rules/"
+            "RSSBridge\\PHPStan\\Rules\\": "rules/",
+            "RSSBridge\\Proxies\\": "proxies/"
         },
         "classmap": [
             "lib/BridgeAbstract.php",
@@ -20,11 +20,11 @@
             "lib/BrokenBridgeStub.php",
             "lib/Configuration.php",
             "lib/Container.php",
-            "lib/GithubClient.php",
-            "lib/LocalHost.php",
             "lib/FeedExpander.php",
             "lib/FeedItem.php",
             "lib/FeedParser.php",
+            "lib/GithubClient.php",
+            "lib/LocalHost.php",
             "lib/ParameterValidator.php",
             "lib/Paths.php",
             "lib/RssBridge.php",
@@ -41,7 +41,7 @@
             "lib/utils.php",
             "lib/version.php",
             "quirks/extract.php",
-            "quirks/filter.php", 
+            "quirks/filter.php",
             "quirks/html.php",
             "quirks/json_path.php",
             "quirks/media.php",
@@ -50,7 +50,8 @@
             "quirks/seo.php",
             "quirks/srcset.php",
             "quirks/template.php",
-            "quirks/unicode.php"
+            "quirks/unicode.php",
+            "quirks/video_embed.php"
         ]
     },
     "require": {
