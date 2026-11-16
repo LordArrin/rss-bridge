@@ -23,6 +23,9 @@ final class FileCache extends AbstractCache
     private readonly bool $enablePurge;
     private readonly Logger $logger;
 
+    /** @var array<string, string> */
+    private array $lockTokens = [];
+
     /**
      * @param array<string, mixed> $config
      */
@@ -201,6 +204,16 @@ final class FileCache extends AbstractCache
                 continue;
             }
 
+            if ($this->isOwnLockFile($filename) === true) {
+                if (is_file($cacheFile) === true) {
+                    $lockMtime = filemtime($cacheFile);
+                    if ($lockMtime !== false && ($now - $lockMtime) > 3600) {
+                        unlink($cacheFile);
+                    }
+                }
+                continue;
+            }
+
             if ($this->isOwnCacheFile($filename) === false || is_file($cacheFile) === false) {
                 continue;
             }
@@ -252,6 +265,11 @@ final class FileCache extends AbstractCache
         }
     }
 
+    private function isOwnLockFile(string $filename): bool
+    {
+        return preg_match('/^[0-9a-f]{32}\.lock$/', $filename) === 1;
+    }
+
     private function isOwnCacheFile(string $filename): bool
     {
         return preg_match('/^[0-9a-f]{64}\.cache$/', $filename) === 1;
@@ -268,34 +286,35 @@ final class FileCache extends AbstractCache
      * The lock file is created atomically; its mtime doubles as the lease
      * start. An expired lease (holder crashed or regeneration hung past the
      * terminate timeout) is reclaimed by unlinking and retrying once, so a
-     * dead worker can never block a feed permanently.
+     * dead worker can never block a feed permanently. The random token
+     * written into the file guards releaseLock() against deleting a
+     * successor's lease.
      */
     public function acquireLock(string $key, int $ttlSeconds): bool
     {
         $lockFile = $this->path . md5($key) . '.lock';
 
-        // The loop always returns on its first pass: fopen('xb') either wins,
-        // finds a live lease (false), or reclaims an expired one and retries
-        // the atomic create exactly once.
         for ($attempt = 0; $attempt < 2; $attempt++) {
             $handle = @fopen($lockFile, 'xb');
             if ($handle !== false) {
+                $token = bin2hex(random_bytes(16));
+                $written = @fwrite($handle, $token);
                 fclose($handle);
+                if ($written !== strlen($token)) {
+                    @unlink($lockFile);
+                    return false;
+                }
+                $this->lockTokens[$key] = $token;
                 return true;
             }
 
             clearstatcache(true, $lockFile);
             $mtime = @filemtime($lockFile);
             if ($mtime === false) {
-                // Vanished between fopen and stat: another process released
-                // the lock. Retry the atomic create once.
                 continue;
             }
 
             if ((time() - $mtime) >= $ttlSeconds) {
-                // Stale lease from a crashed/timed-out holder: reclaim it.
-                // Race-safe: two reclaimers both unlink, but only one fopen
-                // with 'xb' can win; the loser falls through to "false".
                 @unlink($lockFile);
                 continue;
             }
@@ -304,6 +323,22 @@ final class FileCache extends AbstractCache
         }
 
         return false;
+    }
+
+    public function releaseLock(string $key): void
+    {
+        $token = $this->lockTokens[$key] ?? null;
+        if (is_string($token) === false) {
+            return;
+        }
+        unset($this->lockTokens[$key]);
+
+        $lockFile = $this->path . md5($key) . '.lock';
+        $stored = @file_get_contents($lockFile);
+        if ($stored === false || $stored !== $token) {
+            return;
+        }
+        @unlink($lockFile);
     }
 
     private function createCacheFile(string $key): string

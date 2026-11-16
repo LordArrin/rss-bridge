@@ -7,7 +7,7 @@ namespace RSSBridge\Caches;
 /**
  * Cache interface for RSS-Bridge.
  *
- * All cache implementations must be final classes with readonly properties.
+ * All cache implementations must be final classes.
  * Follows PSR-16 SimpleCache conventions where applicable.
  *
  * Implementations should extend AbstractCache to inherit JSON serialization
@@ -73,7 +73,7 @@ interface CacheInterface
      * cannot coordinate across processes should return true so regeneration
      * simply proceeds without deduplication.
      *
-     * @param string $key      The key to lock.
+     * @param string $key        The key to lock.
      * @param int    $ttlSeconds Lock lifetime; must exceed the worst-case
      *                           regeneration time so a crashed holder cannot
      *                           block the feed forever.
@@ -81,4 +81,16 @@ interface CacheInterface
      *              false when another process holds it.
      */
     public function acquireLock(string $key, int $ttlSeconds): bool;
+
+    /**
+     * Release a lock previously acquired by this instance via acquireLock().
+     *
+     * Must be a no-op when this instance does not hold the lock, and must
+     * never remove a lease reclaimed by another process after the original
+     * lease expired: ownership is verified against the token/generation
+     * recorded at acquire time.
+     *
+     * @param string $key The key to unlock.
+     */
+    public function releaseLock(string $key): void;
 }

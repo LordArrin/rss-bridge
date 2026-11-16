@@ -23,6 +23,9 @@ final class MemcachedCache extends AbstractCache
     private readonly \Memcached $conn;
     private readonly string $cachePrefix;
 
+    /** @var array<string, string> */
+    private array $lockTokens = [];
+
     // Memcached result codes
     private const RES_SUCCESS = \Memcached::RES_SUCCESS;
     private const RES_NOTFOUND = \Memcached::RES_NOTFOUND;
@@ -176,7 +179,6 @@ final class MemcachedCache extends AbstractCache
 
         $value = $item['value'] ?? null;
 
-        // Chunked entry: the marker lives at $value['__chunks'] (see set()).
         if (is_array($value) === true && isset($value['__chunks']) === true) {
             $chunksList = $value['__chunks'];
             if (is_array($chunksList) === false) {
@@ -185,40 +187,44 @@ final class MemcachedCache extends AbstractCache
                 return ['fresh' => null, 'stale' => null];
             }
 
+            $chunkKeys = [];
             foreach ($chunksList as $chunkKey) {
                 if (is_string($chunkKey) === false) {
                     $this->logger->warning('Corrupted chunk list in memcached (non-string key), invalidating entry');
                     $this->delete($key);
                     return ['fresh' => null, 'stale' => null];
                 }
+                $chunkKeys[] = $chunkKey;
             }
 
-            $payload = $this->readChunked(array_values($chunksList));
+            $payload = $this->readChunked($chunkKeys);
             if ($payload === null) {
+                $this->logger->info(sprintf('Discarding incomplete chunked entry for key "%s"', $key));
+                $this->delete($key);
                 return ['fresh' => null, 'stale' => null];
             }
 
-            try {
-                return $this->decode($payload, $key);
-            } catch (\Throwable $e) {
-                $this->logger->warning('Failed to decode chunked memcached entry: ' . $e->getMessage());
+            $decoded = $this->decode($payload, $key);
+            if ($decoded['fresh'] === null && $decoded['stale'] === null) {
+                $this->delete($key);
                 return ['fresh' => null, 'stale' => null];
             }
+            return $decoded;
         }
 
-        // Non-chunked entry: the value is the JSON string itself.
         if (is_string($value) === false) {
             $this->logger->info(sprintf('Discarding invalid (non-string) cache entry for key "%s"', $key));
             $this->delete($key);
             return ['fresh' => null, 'stale' => null];
         }
 
-        try {
-            return $this->decode($value, $key);
-        } catch (\Throwable $e) {
-            $this->logger->warning('Failed to decode memcached entry: ' . $e->getMessage());
+        $decoded = $this->decode($value, $key);
+        if ($decoded['fresh'] === null && $decoded['stale'] === null) {
+            $this->logger->info(sprintf('Discarding legacy or corrupt cache entry for key "%s"', $key));
+            $this->delete($key);
             return ['fresh' => null, 'stale' => null];
         }
+        return $decoded;
     }
 
     public function set(string $key, mixed $value, ?int $ttl = null): void
@@ -244,7 +250,9 @@ final class MemcachedCache extends AbstractCache
             return;
         }
 
-        $storeValue = $encoded; // Always store the JSON string, never the raw $value
+        $previousChunkKeys = $this->readChunkKeys($cacheKey);
+
+        $storeValue = $encoded;
         $chunkKeys = [];
 
         if (strlen($encoded) > $this->chunkSize) {
@@ -259,10 +267,11 @@ final class MemcachedCache extends AbstractCache
                 return;
             }
 
+            $generation = bin2hex(random_bytes(8));
             $this->conn->setOption(\Memcached::OPT_COMPRESSION, false);
             $chunkFailed = false;
             foreach ($parts as $index => $part) {
-                $chunkKey = $cacheKey . sprintf('#c%04d', $index);
+                $chunkKey = $cacheKey . '#' . $generation . sprintf('c%04d', $index);
                 $chunkKeys[] = $chunkKey;
 
                 if ($this->conn->set($chunkKey, $part, $serverExpiresAt) === false) {
@@ -284,7 +293,7 @@ final class MemcachedCache extends AbstractCache
         }
 
         $item = [
-            'value'       => $storeValue,
+            'value' => $storeValue,
         ];
 
         if ($this->conn->set($cacheKey, $item, $serverExpiresAt) === false) {
@@ -295,6 +304,11 @@ final class MemcachedCache extends AbstractCache
             }
             $itemJson = json_encode($item);
             $this->logStoreFailure($cacheKey, $itemJson === false ? 0 : strlen($itemJson));
+            return;
+        }
+
+        foreach ($previousChunkKeys as $chunkKey) {
+            $this->conn->delete($chunkKey);
         }
     }
 
@@ -302,23 +316,35 @@ final class MemcachedCache extends AbstractCache
     {
         $cacheKey = $this->createCacheKey($key);
 
-        // If this is a chunked entry, delete its chunks too. The chunk marker
-        // lives in $item['value']['__chunks'] (see set()), not at the top level.
-        $item = $this->conn->get($cacheKey);
-        $value = is_array($item) === true ? ($item['value'] ?? null) : null;
-        if (
-            is_array($value) === true
-            && array_key_exists('__chunks', $value) === true
-            && is_array($value['__chunks']) === true
-        ) {
-            foreach ($value['__chunks'] as $chunkKey) {
-                if (is_string($chunkKey) === true) {
-                    $this->conn->delete($chunkKey);
-                }
-            }
+        foreach ($this->readChunkKeys($cacheKey) as $chunkKey) {
+            $this->conn->delete($chunkKey);
         }
 
         $this->conn->delete($cacheKey);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function readChunkKeys(string $cacheKey): array
+    {
+        $item = $this->conn->get($cacheKey);
+        $value = is_array($item) === true ? ($item['value'] ?? null) : null;
+        if (
+            is_array($value) === false
+            || array_key_exists('__chunks', $value) === false
+            || is_array($value['__chunks']) === false
+        ) {
+            return [];
+        }
+
+        $keys = [];
+        foreach ($value['__chunks'] as $chunkKey) {
+            if (is_string($chunkKey) === true) {
+                $keys[] = $chunkKey;
+            }
+        }
+        return $keys;
     }
 
     /**
@@ -367,10 +393,10 @@ final class MemcachedCache extends AbstractCache
         $resultMessage = $this->conn->getResultMessage();
 
         $context = [
-        'key'           => $cacheKey,
-        'size'          => $size,
-        'resultCode'    => $resultCode,
-        'resultMessage' => $resultMessage,
+            'key'           => $cacheKey,
+            'size'          => $size,
+            'resultCode'    => $resultCode,
+            'resultMessage' => $resultMessage,
         ];
 
         if (
@@ -408,9 +434,10 @@ final class MemcachedCache extends AbstractCache
     public function acquireLock(string $key, int $ttlSeconds): bool
     {
         $lockKey = $this->createCacheKey('lock_' . $key);
+        $token = bin2hex(random_bytes(16));
 
         try {
-            $stored = $this->conn->add($lockKey, 1, $ttlSeconds);
+            $stored = $this->conn->add($lockKey, $token, $ttlSeconds);
         } catch (\Exception $e) {
             $this->logger->warning(sprintf(
                 'Memcached lock acquire failed (%s): proceeding without single-flight',
@@ -428,7 +455,49 @@ final class MemcachedCache extends AbstractCache
             return true;
         }
 
+        $this->lockTokens[$key] = $token;
         return true;
+    }
+
+    public function releaseLock(string $key): void
+    {
+        $token = $this->lockTokens[$key] ?? null;
+        if (is_string($token) === false) {
+            return;
+        }
+        unset($this->lockTokens[$key]);
+
+        $lockKey = $this->createCacheKey('lock_' . $key);
+
+        try {
+            $result = $this->conn->get($lockKey, null, \Memcached::GET_EXTENDED);
+            if (is_array($result) === false) {
+                return;
+            }
+
+            $stored = $result['value'] ?? null;
+            if (is_string($stored) === false || $stored !== $token) {
+                return;
+            }
+
+            $casRaw = $result['cas'] ?? null;
+            $cas = null;
+            if (is_float($casRaw) === true) {
+                $cas = $casRaw;
+            } elseif (is_int($casRaw) === true) {
+                $cas = (float) $casRaw;
+            } elseif (is_string($casRaw) === true && is_numeric($casRaw) === true) {
+                $cas = (float) $casRaw;
+            }
+
+            if ($cas === null) {
+                return;
+            }
+
+            $this->conn->cas($cas, $lockKey, '', 1);
+        } catch (\Exception $e) {
+            $this->logger->warning(sprintf('Memcached lock release failed (%s)', $e->getMessage()));
+        }
     }
 
     /**

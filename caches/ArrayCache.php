@@ -44,6 +44,53 @@ final class ArrayCache extends AbstractCache
         return true;
     }
 
+    public function releaseLock(string $key): void
+    {
+        unset($this->locks[$key]);
+    }
+
+    public function prune(): void
+    {
+        $now = time();
+
+        foreach ($this->locks as $lockKey => $expiry) {
+            if ($expiry <= $now) {
+                unset($this->locks[$lockKey]);
+            }
+        }
+
+        foreach ($this->data as $key => $blob) {
+            try {
+                $decoded = json_decode($blob, true, 512, \JSON_THROW_ON_ERROR);
+            } catch (\JsonException $e) {
+                unset($this->data[$key]);
+                continue;
+            }
+
+            if (is_array($decoded) === false || array_key_exists('fresh_until', $decoded) === false) {
+                unset($this->data[$key]);
+                continue;
+            }
+
+            $freshUntilRaw = $decoded['fresh_until'];
+            $freshUntil = 0;
+            if (is_int($freshUntilRaw) === true) {
+                $freshUntil = $freshUntilRaw;
+            } elseif (is_string($freshUntilRaw) === true && is_numeric($freshUntilRaw) === true) {
+                $freshUntil = (int) $freshUntilRaw;
+            }
+
+            if ($freshUntil <= 0) {
+                continue;
+            }
+
+            $hardExpiration = $freshUntil + self::DEFAULT_STALE_TTL;
+            if ($hardExpiration <= $now) {
+                unset($this->data[$key]);
+            }
+        }
+    }
+
     public function getWithStale(string $key): array
     {
         if (array_key_exists($key, $this->data) === false) {
@@ -84,41 +131,5 @@ final class ArrayCache extends AbstractCache
     {
         $this->data = [];
         $this->locks = [];
-    }
-
-    public function prune(): void
-    {
-        $now = time();
-
-        foreach ($this->data as $key => $blob) {
-            try {
-                $decoded = json_decode($blob, true, 512, \JSON_THROW_ON_ERROR);
-            } catch (\JsonException $e) {
-                unset($this->data[$key]);
-                continue;
-            }
-
-            if (is_array($decoded) === false || array_key_exists('fresh_until', $decoded) === false) {
-                unset($this->data[$key]);
-                continue;
-            }
-
-            $freshUntilRaw = $decoded['fresh_until'];
-            $freshUntil = 0;
-            if (is_int($freshUntilRaw) === true) {
-                $freshUntil = $freshUntilRaw;
-            } elseif (is_string($freshUntilRaw) === true && is_numeric($freshUntilRaw) === true) {
-                $freshUntil = (int) $freshUntilRaw;
-            }
-
-            if ($freshUntil <= 0) {
-                continue;
-            }
-
-            $hardExpiration = $freshUntil + self::DEFAULT_STALE_TTL;
-            if ($hardExpiration <= $now) {
-                unset($this->data[$key]);
-            }
-        }
     }
 }

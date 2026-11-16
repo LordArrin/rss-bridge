@@ -40,30 +40,46 @@ final class CacheMiddleware implements Middleware
         $customTimeoutEnabled = filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN);
         $bypassCache = $customTimeoutEnabled === true && self::toInt($request->get('_cache_timeout', -1), -1) === 0;
 
-        if ($bypassCache === false) {
-            $cachedResponse = $this->cache->get($cacheKey);
+        $lockAcquired = false;
 
-            if ($cachedResponse instanceof Response) {
-                if ($cachedResponse->getCode() === 200) {
-                    $notModified = $this->createNotModifiedResponse($request, $cachedResponse);
+        if ($bypassCache === false) {
+            $entry = $this->cache->getWithStale($cacheKey);
+            $freshResponse = $entry['fresh'] ?? null;
+
+            if ($freshResponse instanceof Response) {
+                if ($freshResponse->getCode() === 200) {
+                    $notModified = $this->createNotModifiedResponse($request, $freshResponse);
                     if ($notModified !== null) {
                         return $notModified;
                     }
                 }
-                return $this->attachCacheHeaders($cachedResponse, $this->resolveMaxAge($request, $cachedResponse), $cachedResponse->getHeader('etag'));
+                return $this->attachCacheHeaders($freshResponse, $this->resolveMaxAge($request, $freshResponse), $freshResponse->getHeader('etag'));
             }
 
-            $staleEntry = $this->cache->getWithStale($cacheKey);
-            $staleResponse = $staleEntry['stale'] ?? null;
+            $staleResponse = $entry['stale'] ?? null;
             if ($staleResponse instanceof Response && $staleResponse->getCode() === 200) {
                 if ($this->cache->acquireLock($cacheKey, self::REGENERATION_LOCK_TTL) === false) {
                     return $this->attachStaleHeaders($staleResponse);
                 }
+                $lockAcquired = true;
             }
         }
 
-        $response = $next($request);
+        try {
+            $response = $next($request);
+        } catch (\Throwable $e) {
+            if ($lockAcquired === true) {
+                $this->cache->releaseLock($cacheKey);
+            }
+            throw $e;
+        }
+
         $code = $response->getCode();
+        $isTransient = $this->isTransientStatus($code) === true || $this->isTimeoutResponse($response) === true;
+
+        if ($lockAcquired === true && $isTransient === false) {
+            $this->cache->releaseLock($cacheKey);
+        }
 
         if ($code === 200) {
             $response = $this->attachCacheHeaders(
@@ -80,7 +96,7 @@ final class CacheMiddleware implements Middleware
             return $response;
         }
 
-        if ($this->isTransientStatus($code) === true || $this->isTimeoutResponse($response) === true) {
+        if ($isTransient === true) {
             $isTimeout = $this->isTimeoutResponse($response) === true;
             $stale = $bypassCache === false ? $this->serveStale($cacheKey, $response) : null;
             if ($stale !== null) {
@@ -182,10 +198,8 @@ final class CacheMiddleware implements Middleware
         if ($etag !== null && $ifNoneMatch !== null && self::etagMatches($ifNoneMatch, $etag) === true) {
             return new Response('', 304, self::createNotModifiedHeaders([
                 'etag' => $etag,
-                'cache-control' => $cached->getHeader('cache-control'),
-                'vary' => $cached->getHeader('vary'),
                 'last-modified' => $lastModified,
-            ]));
+            ], $this->resolveMaxAge($request, $cached)));
         }
 
         $ifModifiedSince = $request->server('HTTP_IF_MODIFIED_SINCE');
@@ -201,9 +215,7 @@ final class CacheMiddleware implements Middleware
                 return new Response('', 304, self::createNotModifiedHeaders([
                     'last-modified' => $modificationTimeGMT,
                     'etag' => $etag,
-                    'cache-control' => $cached->getHeader('cache-control'),
-                    'vary' => $cached->getHeader('vary'),
-                ]));
+                ], $this->resolveMaxAge($request, $cached)));
             }
         }
 
@@ -231,39 +243,20 @@ final class CacheMiddleware implements Middleware
         $maxAge = self::STALE_RETRY_AFTER;
 
         $headers = [
-        'x-feed-stale' => '1',
-        'age' => (string) self::estimateStaleAge($stale),
-        'cache-control' => sprintf(
-            'public, max-age=%d, stale-while-revalidate=%d',
-            $maxAge,
-            self::REGENERATION_LOCK_TTL
-        ),
+            'x-feed-stale' => '1',
+            'cache-control' => sprintf(
+                'public, max-age=%d, stale-while-revalidate=%d',
+                $maxAge,
+                self::REGENERATION_LOCK_TTL
+            ),
+            'expires' => gmdate('D, d M Y H:i:s \G\M\T', time() + $maxAge),
         ];
-
-        $lmTimestamp = strtotime((string) $stale->getHeader('last-modified'));
-        if ($lmTimestamp === false) {
-            $lmTimestamp = time();
-        }
-        $headers['expires'] = gmdate('D, d M Y H:i:s \G\M\T', $lmTimestamp + $maxAge);
 
         foreach ($headers as $name => $value) {
             $stale = $stale->withHeader($name, $value);
         }
 
-        return $stale->withoutHeader(self::CACHE_TTL_HEADER);
-    }
-
-    private static function estimateStaleAge(Response $response): int
-    {
-        $lastModified = $response->getHeader('last-modified');
-        if ($lastModified === null) {
-            return 0;
-        }
-        $timestamp = strtotime($lastModified);
-        if ($timestamp === false) {
-            return 0;
-        }
-        return max(0, time() - $timestamp);
+        return $stale->withoutHeader(self::CACHE_TTL_HEADER)->withoutHeader('age');
     }
 
     private function isTimeoutResponse(Response $response): bool
@@ -403,9 +396,14 @@ final class CacheMiddleware implements Middleware
      * @param array<string, string|null> $validators
      * @return array<string, string>
      */
-    private static function createNotModifiedHeaders(array $validators): array
+    private static function createNotModifiedHeaders(array $validators, int $maxAge): array
     {
-        $headers = self::addDateHeader(['vary' => 'Accept-Encoding']);
+        $staleWhileRevalidate = max(self::REGENERATION_LOCK_TTL, intdiv($maxAge, 4));
+        $headers = self::addDateHeader([
+            'vary' => 'Accept-Encoding',
+            'cache-control' => sprintf('public, max-age=%d, stale-while-revalidate=%d', $maxAge, $staleWhileRevalidate),
+            'expires' => gmdate('D, d M Y H:i:s \G\M\T', time() + $maxAge),
+        ]);
         foreach ($validators as $name => $value) {
             if (is_string($value) === true && $value !== '') {
                 $headers[$name] = $value;

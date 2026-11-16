@@ -81,12 +81,15 @@ abstract class AbstractCache implements CacheInterface
         try {
             $decoded = json_decode($blob, true, 512, \JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
-            // Invalidation of legacy/corrupt cache entries.
-            // We do NOT fall back to unserialize() to avoid Object Injection vulnerabilities.
             return ['fresh' => null, 'stale' => null];
         }
 
         if (is_array($decoded) === false || array_key_exists('value', $decoded) === false) {
+            return ['fresh' => null, 'stale' => null];
+        }
+
+        $versionRaw = $decoded['__v'] ?? null;
+        if (is_int($versionRaw) === false || $versionRaw !== self::CACHE_FORMAT_VERSION) {
             return ['fresh' => null, 'stale' => null];
         }
 

@@ -43,4 +43,8 @@ final class NullCache implements CacheInterface
         // caller proceed as if it held the lock.
         return true;
     }
+
+    public function releaseLock(string $key): void
+    {
+    }
 }

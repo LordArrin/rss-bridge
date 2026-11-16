@@ -25,6 +25,9 @@ final class SQLiteCache extends AbstractCache
     private readonly Logger $logger;
     private readonly bool $enablePurge;
 
+    /** @var array<string, int> */
+    private array $lockGenerations = [];
+
     /**
      * SQLITE_BUSY result code. The sqlite3 extension does not define the
      * SQLITE_* constants, so we carry the value ourselves (stable since
@@ -80,11 +83,6 @@ final class SQLiteCache extends AbstractCache
         $this->db = new \SQLite3($file);
         $this->db->enableExceptions(true);
 
-        // Apply the configured busy timeout *before* any statement that takes
-        // the write lock (schema setup below). Without this, concurrent
-        // workers racing to initialize the schema on first requests would hit
-        // SQLITE_BUSY immediately and crash the request with an uncaught
-        // "database is locked" exception.
         $timeoutRaw = $config['timeout'] ?? 5000;
         $timeoutMs = 5000;
         if (is_int($timeoutRaw) === true) {
@@ -96,11 +94,6 @@ final class SQLiteCache extends AbstractCache
         $this->db->busyTimeout($timeoutMs);
         $this->busyTimeoutMs = $timeoutMs;
 
-        // WAL mode for better concurrent access. Must be set before creating
-        // tables so the whole database is born in WAL. It still needs the
-        // write lock and can fail transiently under contention at exactly
-        // this moment; retry briefly before giving up. Falling back to the
-        // default journal is safe: correctness is unchanged, only throughput.
         $walOk = false;
         for ($attempt = 0; $attempt < 5 && $walOk === false; $attempt++) {
             try {
@@ -110,53 +103,20 @@ final class SQLiteCache extends AbstractCache
                 if ($this->db->lastErrorCode() !== self::SQLITE_BUSY) {
                     throw $e;
                 }
-                usleep(200000); // 200 ms
+                usleep(200000);
             }
         }
 
-        // NORMAL synchronous for better performance (safe with WAL)
         if ($walOk === true) {
             $this->db->exec('PRAGMA synchronous = NORMAL');
         }
 
-        if (is_file($file) === false || filesize($file) === 0) {
-            // Guarded by an exclusive create: two processes may both observe
-            // the empty file, but only one can win the O_EXCL race. The loser
-            // skips table creation and relies on the idempotent
-            // CREATE TABLE IF NOT EXISTS statements below; the busy timeout
-            // applied above makes it wait out the winner's schema write.
-            $initLock = @fopen($file . '.initlock', 'xb');
-            if ($initLock !== false) {
-                try {
-                    $this->db->exec("CREATE TABLE IF NOT EXISTS storage (
-                        'key' BLOB PRIMARY KEY,
-                        'value' BLOB,
-                        'expiration' INTEGER
-                    )");
-                    $this->db->exec('CREATE INDEX IF NOT EXISTS idx_storage_expiration ON storage (expiration)');
-                } finally {
-                    fclose($initLock);
-                    @unlink($file . '.initlock');
-                }
-            }
-        }
-
-        // Lease table backing the single-flight lock (acquireLock()). Kept
-        // separate from "storage" so lock churn never rewrites feed payloads.
-        // Idempotent and cheap; runs on every open (also upgrades old DBs).
         $this->db->exec("CREATE TABLE IF NOT EXISTS locks (
             'key' BLOB PRIMARY KEY,
             'expiration' INTEGER
         )");
         $this->db->exec('CREATE INDEX IF NOT EXISTS idx_locks_expiration ON locks (expiration)');
 
-        // The storage table is created unconditionally as well (IF NOT EXISTS
-        // makes it a no-op on existing databases). Relying solely on the
-        // filesize()==0 branch above would leave a window where a concurrent
-        // worker opens the file after another process created it but before
-        // that process has flushed its schema write: sqlite3_open() succeeds
-        // on the zero-filled header, filesize() is non-zero, and the loser
-        // would then fail later with "no such table: storage".
         $this->db->exec("CREATE TABLE IF NOT EXISTS storage (
             'key' BLOB PRIMARY KEY,
             'value' BLOB,
@@ -218,12 +178,11 @@ final class SQLiteCache extends AbstractCache
             $upsert->execute();
 
             $this->db->exec('COMMIT');
+            $this->lockGenerations[$key] = $expiry;
             return true;
         } catch (\Exception $e) {
             try {
-                if ($this->db->lastErrorCode() !== self::SQLITE_BUSY) {
-                    @$this->db->exec('ROLLBACK');
-                }
+                @$this->db->exec('ROLLBACK');
             } catch (\Exception $inner) {
             }
             $this->logger->warning(sprintf(
@@ -233,6 +192,30 @@ final class SQLiteCache extends AbstractCache
             return true;
         } finally {
             $this->db->exec('PRAGMA busy_timeout = ' . $this->busyTimeoutMs);
+        }
+    }
+
+    public function releaseLock(string $key): void
+    {
+        $expiry = $this->lockGenerations[$key] ?? null;
+        if (is_int($expiry) === false) {
+            return;
+        }
+        unset($this->lockGenerations[$key]);
+
+        $lockKey = $this->createCacheKey('lock_' . $key);
+
+        $stmt = $this->db->prepare('DELETE FROM locks WHERE key = :key AND expiration = :expiration');
+        if ($stmt === false) {
+            return;
+        }
+        $stmt->bindValue(':key', $lockKey, \SQLITE3_BLOB);
+        $stmt->bindValue(':expiration', $expiry, \SQLITE3_INTEGER);
+
+        try {
+            $stmt->execute();
+        } catch (\Exception $e) {
+            $this->logger->warning(Url::createSaneExceptionMessage($e));
         }
     }
 

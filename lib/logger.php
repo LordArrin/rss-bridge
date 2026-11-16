@@ -113,7 +113,7 @@ final class LogFormatter
             $context['message'] = Url::sanitizeRoot($e->getMessage());
             $context['file'] = Url::sanitizeRoot($e->getFile());
             $context['line'] = $e->getLine();
-            $context['url'] = Url::getCurrentUrl();
+            $context['url'] = Url::getCanonicalUrl();
             $context['trace'] = Url::traceToCallPoints(Url::traceFromException($e));
             $record['context'] = $context;
         }
