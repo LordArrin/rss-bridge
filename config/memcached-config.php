@@ -31,11 +31,11 @@ $memcachedType = ($memcachedTypeRaw !== false && $memcachedTypeRaw !== '') ? $me
 // If caching is disabled or uses a different backend, output safe defaults
 // and exit cleanly so the calling shell script doesn't fail.
 if ($cacheType !== 'memcached') {
-    printf("MEMCACHED_TYPE=none\n");
+    printf("export MEMCACHED_TYPE=none\n");
     exit(0);
 }
 
-printf("MEMCACHED_TYPE=%s\n", escapeshellarg($memcachedType));
+printf("export MEMCACHED_TYPE=%s\n", escapeshellarg($memcachedType));
 
 if ($memcachedType === 'internal') {
     // Fixed Unix socket path (not user-configurable)
@@ -85,18 +85,18 @@ if ($memcachedType === 'internal') {
     $idleTimeout = 0;
     $verbosity = 0;
 
-    printf("MEMCACHED_SOCKET_PATH=%s\n", escapeshellarg($socketPath));
-    printf("MEMCACHED_MEMORY=%s\n", escapeshellarg($memory));
-    printf("MEMCACHED_MAX_CONNECTIONS=%d\n", $maxConnections);
-    printf("MEMCACHED_THREADS=%d\n", $threads);
-    printf("MEMCACHED_ITEM_SIZE_LIMIT=%s\n", escapeshellarg($itemSizeLimit));
-    printf("MEMCACHED_MODERN=%s\n", $modern);
-    printf("MEMCACHED_PREALLOC=%s\n", $prealloc);
-    printf("MEMCACHED_LOCK_MEMORY=%s\n", $lockMemory);
-    printf("MEMCACHED_HASH_POWER=%d\n", $hashPower);
-    printf("MEMCACHED_BACKLOG=%d\n", $backlog);
-    printf("MEMCACHED_IDLE_TIMEOUT=%d\n", $idleTimeout);
-    printf("MEMCACHED_VERBOSITY=%d\n", $verbosity);
+    printf("export MEMCACHED_SOCKET_PATH=%s\n", escapeshellarg($socketPath));
+    printf("export MEMCACHED_MEMORY=%s\n", escapeshellarg($memory));
+    printf("export MEMCACHED_MAX_CONNECTIONS=%d\n", $maxConnections);
+    printf("export MEMCACHED_THREADS=%d\n", $threads);
+    printf("export MEMCACHED_ITEM_SIZE_LIMIT=%s\n", escapeshellarg($itemSizeLimit));
+    printf("export MEMCACHED_MODERN=%s\n", $modern);
+    printf("export MEMCACHED_PREALLOC=%s\n", $prealloc);
+    printf("export MEMCACHED_LOCK_MEMORY=%s\n", $lockMemory);
+    printf("export MEMCACHED_HASH_POWER=%d\n", $hashPower);
+    printf("export MEMCACHED_BACKLOG=%d\n", $backlog);
+    printf("export MEMCACHED_IDLE_TIMEOUT=%d\n", $idleTimeout);
+    printf("export MEMCACHED_VERBOSITY=%d\n", $verbosity);
 } else {
     // External mode: read settings from environment variables
     $hostRaw = getenv('CACHE_MEMCACHED_HOST');
@@ -105,6 +105,6 @@ if ($memcachedType === 'internal') {
     $portRaw = getenv('CACHE_MEMCACHED_PORT');
     $port = ($portRaw !== false && $portRaw !== '') ? (int) $portRaw : 11211;
 
-    printf("MEMCACHED_HOST=%s\n", escapeshellarg($host));
-    printf("MEMCACHED_PORT=%d\n", $port);
+    printf("export MEMCACHED_HOST=%s\n", escapeshellarg($host));
+    printf("export MEMCACHED_PORT=%d\n", $port);
 }

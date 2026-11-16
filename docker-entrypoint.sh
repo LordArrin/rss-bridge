@@ -73,7 +73,9 @@ fi
 # 6. Read memcached configuration
 eval "$(php /app/config/memcached-config.php)"
 
-if [ "$MEMCACHED_TYPE" = "external" ]; then
+if [ "$MEMCACHED_TYPE" = "none" ]; then
+    echo "Cache: backend ${CACHE_TYPE} (memcached skipped)"
+elif [ "$MEMCACHED_TYPE" = "external" ]; then
     # External TCP memcached: just verify connectivity
     echo "Cache: external (${MEMCACHED_HOST}:${MEMCACHED_PORT})"
     for i in $(seq 1 10); do

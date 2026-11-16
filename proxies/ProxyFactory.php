@@ -22,6 +22,12 @@ final class ProxyFactory
         'trawl' => 'TrawlProxy',
     ];
 
+    private const REQUIRED_CONFIG_KEYS = [
+        'tgws' => 'socks_url',
+        'flaresolverr' => 'url',
+        'trawl' => 'url',
+    ];
+
     public static function fromProfile(string $profileName): ProxyInterface
     {
         $profileName = strtolower($profileName);
@@ -31,9 +37,10 @@ final class ProxyFactory
         }
 
         $config = self::loadProfileConfigFromEnv($profileName);
+        $requiredKey = self::REQUIRED_CONFIG_KEYS[$profileName] ?? null;
+        $isConfigured = $requiredKey === null ? $config !== [] : ($config[$requiredKey] ?? '') !== '';
 
-        // If no configuration is found for this profile, it's not set up
-        if ($config === []) {
+        if ($profileName !== 'direct' && $isConfigured === false) {
             global $container;
             if (isset($container['logger']) === true) {
                 $container['logger']->error(
@@ -117,29 +124,24 @@ final class ProxyFactory
         $prefix = 'PROXY_PROFILE_' . strtoupper($profileName) . '_';
         $prefixLen = strlen($prefix);
 
-        // Combine $_ENV and $_SERVER to ensure we catch variables regardless of PHP SAPI
-        $env = array_merge($_ENV, $_SERVER);
+        $env = getenv();
 
         foreach ($env as $key => $value) {
-            $keyStr = (string) $key;
-
-            if (str_starts_with($keyStr, $prefix) === false) {
+            if (str_starts_with($key, $prefix) === false) {
                 continue;
             }
 
-            // $_SERVER also carries non-scalar entries (e.g. argv); skip them.
-            if (is_scalar($value) === false) {
-                continue;
-            }
+            $configKey = strtolower(substr($key, $prefixLen));
 
-            $configKey = strtolower(substr($keyStr, $prefixLen));
-
-            // Ignore legacy 'type' key if it somehow exists in the environment
             if ($configKey === 'type') {
                 continue;
             }
 
-            $config[$configKey] = (string) $value;
+            if ($value === '') {
+                continue;
+            }
+
+            $config[$configKey] = $value;
         }
 
         return $config;
