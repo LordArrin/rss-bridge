@@ -20,6 +20,7 @@ final class BridgeMetadataCache
     private const CACHE_PREFIX = 'bridge_metadata_v2';
     private const DEFAULT_TTL = 2592000;
     private const BROKEN_RECHECK_TTL = 3600;
+    private const FINGERPRINT_TTL = 5;
 
     private CacheInterface $cache;
 
@@ -293,37 +294,62 @@ final class BridgeMetadataCache
     private function buildCacheKey(): string
     {
         if ($this->cachedHash === null) {
-            $hashParts = [];
-
-            $enabled = getenv('ENABLED_BRIDGES');
-            $disabled = getenv('DISABLED_BRIDGES');
-            $hashParts[] = 'enabled=' . ($enabled === false ? '' : $enabled);
-            $hashParts[] = 'disabled=' . ($disabled === false ? '' : $disabled);
-
-            foreach ($this->bridgesDirs as $dir) {
-                if (is_dir($dir) === true) {
-                    $hashParts[] = $dir;
-                    $files = scandir($dir);
-                    if ($files !== false) {
-                        foreach ($files as $file) {
-                            if ($file === '.' || $file === '..') {
-                                continue;
-                            }
-                            $filepath = $dir . '/' . $file;
-                            $mtime = filemtime($filepath);
-                            $size = filesize($filepath);
-                            $hashParts[] = $file
-                                . ':' . ($mtime === false ? 0 : $mtime)
-                                . ':' . ($size === false ? 0 : $size);
-                        }
-                    }
-                }
-            }
-            $this->cachedHash = md5(implode('|', $hashParts));
+            $this->cachedHash = $this->computeDirectoryHash();
         }
 
         return self::CACHE_PREFIX . '_' . $this->cachedHash;
     }
+
+    private function computeDirectoryHash(): string
+    {
+        $apcuAvailable = function_exists('apcu_enabled') === true && apcu_enabled() === true;
+        $apcuKey = 'rssbridge_bridge_fingerprint_' . md5(implode('|', $this->bridgesDirs));
+
+        if ($apcuAvailable === true) {
+            $cached = apcu_fetch($apcuKey, $success);
+            if ($success === true && is_string($cached) === true) {
+                return $cached;
+            }
+        }
+
+        $hashParts = [];
+
+        $enabled = getenv('ENABLED_BRIDGES');
+        $disabled = getenv('DISABLED_BRIDGES');
+        $hashParts[] = 'enabled=' . ($enabled === false ? '' : $enabled);
+        $hashParts[] = 'disabled=' . ($disabled === false ? '' : $disabled);
+
+        foreach ($this->bridgesDirs as $dir) {
+            if (is_dir($dir) === false) {
+                continue;
+            }
+            $hashParts[] = $dir;
+            $files = scandir($dir);
+            if ($files === false) {
+                continue;
+            }
+            foreach ($files as $file) {
+                if (preg_match('/^[^.]+Bridge\.php$/U', $file) !== 1) {
+                    continue;
+                }
+                $filepath = $dir . '/' . $file;
+                $mtime = filemtime($filepath);
+                $size = filesize($filepath);
+                $hashParts[] = $file
+                    . ':' . ($mtime === false ? 0 : $mtime)
+                    . ':' . ($size === false ? 0 : $size);
+            }
+        }
+
+        $hash = md5(implode('|', $hashParts));
+
+        if ($apcuAvailable === true) {
+            apcu_store($apcuKey, $hash, self::FINGERPRINT_TTL);
+        }
+
+        return $hash;
+    }
+
     /**
      * @return array<string, array{message: string, file: string, line: int, class: string}>|null
      */

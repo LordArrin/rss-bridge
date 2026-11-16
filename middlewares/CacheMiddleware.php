@@ -24,6 +24,8 @@ final class CacheMiddleware implements Middleware
     private const DEFAULT_MAX_AGE = 3600;
     private const SERVICE_UNAVAILABLE_RETRY_AFTER = 600;
     private const TIMEOUT_RETRY_AFTER = 600;
+    private const COLD_WAIT_MS = 2000;
+    private const COLD_POLL_MS = 100;
 
     public function __invoke(Request $request, callable $next): Response
     {
@@ -31,16 +33,18 @@ final class CacheMiddleware implements Middleware
         if ($action !== 'display') {
             $response = $next($request);
             if ($response->getCode() === 200) {
-                $response = $this->attachCacheHeaders($response, self::DEFAULT_MAX_AGE);
+                $maxAge = in_array($action, ['health', 'connectivity'], true) === true ? 0 : self::DEFAULT_MAX_AGE;
+                $response = $this->attachCacheHeaders($response, $maxAge);
             }
             return $response;
         }
 
-        $cacheKey = $this->createCacheKey($request);
+        $cacheKey = $request->getCacheKey();
         $customTimeoutEnabled = filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN);
         $bypassCache = $customTimeoutEnabled === true && self::toInt($request->get('_cache_timeout', -1), -1) === 0;
 
         $lockAcquired = false;
+        $hadStale = false;
 
         if ($bypassCache === false) {
             $entry = $this->cache->getWithStale($cacheKey);
@@ -58,10 +62,26 @@ final class CacheMiddleware implements Middleware
 
             $staleResponse = $entry['stale'] ?? null;
             if ($staleResponse instanceof Response && $staleResponse->getCode() === 200) {
+                $hadStale = true;
                 if ($this->cache->acquireLock($cacheKey, self::REGENERATION_LOCK_TTL) === false) {
                     return $this->attachStaleHeaders($staleResponse);
                 }
                 $lockAcquired = true;
+            } else {
+                if ($this->cache->acquireLock($cacheKey, self::REGENERATION_LOCK_TTL) === true) {
+                    $lockAcquired = true;
+                } else {
+                    $waited = $this->waitForFresh($cacheKey);
+                    if ($waited !== null) {
+                        if ($waited->getCode() === 200) {
+                            $notModified = $this->createNotModifiedResponse($request, $waited);
+                            if ($notModified !== null) {
+                                return $notModified;
+                            }
+                        }
+                        return $this->attachCacheHeaders($waited, $this->resolveMaxAge($request, $waited), $waited->getHeader('etag'));
+                    }
+                }
             }
         }
 
@@ -75,9 +95,9 @@ final class CacheMiddleware implements Middleware
         }
 
         $code = $response->getCode();
-        $isTransient = $this->isTransientStatus($code) === true || $this->isTimeoutResponse($response) === true;
+        $isTransient = $this->isTransientStatus($code) === true || $this->isTimeoutResponse($response, $request) === true;
 
-        if ($lockAcquired === true && $isTransient === false) {
+        if ($lockAcquired === true && ($isTransient === false || $hadStale === false)) {
             $this->cache->releaseLock($cacheKey);
         }
 
@@ -88,16 +108,12 @@ final class CacheMiddleware implements Middleware
                 $response->getHeader('etag')
             );
 
-            if ($bypassCache === true) {
-                $this->cache->delete($cacheKey);
-            }
-
             $this->maybePrune();
             return $response;
         }
 
         if ($isTransient === true) {
-            $isTimeout = $this->isTimeoutResponse($response) === true;
+            $isTimeout = $this->isTimeoutResponse($response, $request) === true;
             $stale = $bypassCache === false ? $this->serveStale($cacheKey, $response) : null;
             if ($stale !== null) {
                 $retryAfter = $isTimeout === true ? self::TIMEOUT_RETRY_AFTER : min(max(self::STALE_RETRY_AFTER, $this->resolveMaxAge($request)), 3600);
@@ -126,6 +142,21 @@ final class CacheMiddleware implements Middleware
         return $response;
     }
 
+    private function waitForFresh(string $cacheKey): ?Response
+    {
+        $waited = 0;
+        while ($waited < self::COLD_WAIT_MS) {
+            usleep(self::COLD_POLL_MS * 1000);
+            $waited += self::COLD_POLL_MS;
+            $entry = $this->cache->getWithStale($cacheKey);
+            $fresh = $entry['fresh'] ?? null;
+            if ($fresh instanceof Response) {
+                return $fresh;
+            }
+        }
+        return null;
+    }
+
     private function maybePrune(): void
     {
         if (random_int(1, 100) === 1) {
@@ -142,7 +173,7 @@ final class CacheMiddleware implements Middleware
     {
         $code = $response->getCode();
         $isRateLimited = $code === 429;
-        $isTimeout = $this->isTimeoutResponse($response) === true;
+        $isTimeout = $this->isTimeoutResponse($response, $request) === true;
 
         if ($isRateLimited === true) {
             $status = 429;
@@ -259,8 +290,12 @@ final class CacheMiddleware implements Middleware
         return $stale->withoutHeader(self::CACHE_TTL_HEADER)->withoutHeader('age');
     }
 
-    private function isTimeoutResponse(Response $response): bool
+    private function isTimeoutResponse(Response $response, Request $request): bool
     {
+        if ($request->getAttribute('_feed_timeout') === true) {
+            return true;
+        }
+
         if ($response->getHeader('x-feed-timeout') !== null) {
             return true;
         }
@@ -410,13 +445,6 @@ final class CacheMiddleware implements Middleware
             }
         }
         return $headers;
-    }
-
-    private function createCacheKey(Request $request): string
-    {
-        $params = $request->getCacheableParams();
-        $encoded = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
-        return 'http_' . ($encoded === false ? '{}' : $encoded);
     }
 
     /**

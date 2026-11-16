@@ -22,6 +22,7 @@ final class MemcachedCache extends AbstractCache
     private readonly Logger $logger;
     private readonly \Memcached $conn;
     private readonly string $cachePrefix;
+    private readonly bool $allowFlush;
 
     /** @var array<string, string> */
     private array $lockTokens = [];
@@ -85,11 +86,12 @@ final class MemcachedCache extends AbstractCache
         int $port,
         string $socketPath = '',
         ?int $itemSizeLimit = null,
-        ?int $maxChunks = null
+        ?int $maxChunks = null,
+        bool $allowFlush = false
     ) {
         $this->logger = $logger;
+        $this->allowFlush = $allowFlush;
 
-        // Effective per-item limit: min(configured item_size_limit, 1MB hard cap)
         $effectiveLimit = self::MAX_ITEM_SIZE;
         if ($itemSizeLimit !== null && $itemSizeLimit > 0 && $itemSizeLimit < $effectiveLimit) {
             $effectiveLimit = $itemSizeLimit;
@@ -97,7 +99,6 @@ final class MemcachedCache extends AbstractCache
         $this->chunkSize = max(65536, $effectiveLimit - self::CHUNK_SAFETY);
         $this->maxChunks = ($maxChunks !== null && $maxChunks > 0) ? $maxChunks : self::MAX_CHUNKS;
 
-        // Determine connection type: Unix socket or TCP
         $isUnixSocket = ($socketPath !== '') || (str_starts_with($host, '/') === true);
 
         if ($isUnixSocket === true) {
@@ -107,39 +108,32 @@ final class MemcachedCache extends AbstractCache
             $persistentId = 'rssbridge_memcached_tcp_' . $host . '_' . $port;
         }
 
-        // Use persistent connection (shared across requests in same FPM worker)
         $this->conn = new \Memcached($persistentId);
 
-        // Only add server if this is a new persistent connection
         if (count($this->conn->getServerList()) === 0) {
             if ($isUnixSocket === true) {
-                // Unix socket connection (port must be 0)
                 if ($this->conn->addServer($socketPath, 0) === false) {
                     throw new \Exception('Unable to add memcached server (unix socket: ' . $socketPath . ')');
                 }
             } else {
-                // TCP connection
                 if ($this->conn->addServer($host, $port) === false) {
                     throw new \Exception('Unable to add memcached server (tcp: ' . $host . ':' . $port . ')');
                 }
             }
         }
 
-        // Performance optimizations
         $this->conn->setOption(\Memcached::OPT_BINARY_PROTOCOL, true);
         $this->conn->setOption(\Memcached::OPT_COMPRESSION, true);
         $this->conn->setOption(\Memcached::OPT_LIBKETAMA_COMPATIBLE, true);
-        $this->conn->setOption(\Memcached::OPT_CONNECT_TIMEOUT, 2000);  // 2 seconds connect timeout
-        $this->conn->setOption(\Memcached::OPT_RETRY_TIMEOUT, 1);  // 1 second retry timeout
-        $this->conn->setOption(\Memcached::OPT_SEND_TIMEOUT, 2000000);  // 2 seconds send timeout
-        $this->conn->setOption(\Memcached::OPT_RECV_TIMEOUT, 2000000);  // 2 seconds receive timeout
+        $this->conn->setOption(\Memcached::OPT_CONNECT_TIMEOUT, 2000);
+        $this->conn->setOption(\Memcached::OPT_RETRY_TIMEOUT, 1);
+        $this->conn->setOption(\Memcached::OPT_SEND_TIMEOUT, 2000000);
+        $this->conn->setOption(\Memcached::OPT_RECV_TIMEOUT, 2000000);
 
-        // TCP-specific optimization (not applicable to Unix socket)
         if ($isUnixSocket === false) {
-            $this->conn->setOption(\Memcached::OPT_TCP_NODELAY, true);  // Disable Nagle's algorithm
+            $this->conn->setOption(\Memcached::OPT_TCP_NODELAY, true);
         }
 
-        // Prefix to avoid conflicts with other applications
         $this->cachePrefix = 'rssbridge:';
     }
 
@@ -205,7 +199,7 @@ final class MemcachedCache extends AbstractCache
             }
 
             $decoded = $this->decode($payload, $key);
-            if ($decoded['fresh'] === null && $decoded['stale'] === null) {
+            if ($decoded === null) {
                 $this->delete($key);
                 return ['fresh' => null, 'stale' => null];
             }
@@ -219,7 +213,7 @@ final class MemcachedCache extends AbstractCache
         }
 
         $decoded = $this->decode($value, $key);
-        if ($decoded['fresh'] === null && $decoded['stale'] === null) {
+        if ($decoded === null) {
             $this->logger->info(sprintf('Discarding legacy or corrupt cache entry for key "%s"', $key));
             $this->delete($key);
             return ['fresh' => null, 'stale' => null];
@@ -417,9 +411,22 @@ final class MemcachedCache extends AbstractCache
 
     public function clear(): void
     {
-        // Cannot use flush() with prefix - need to delete by prefix
-        // For safety, just flush the whole cache (rarely called)
-        $this->conn->flush();
+        if ($this->allowFlush === true) {
+            $this->conn->flush();
+            return;
+        }
+
+        $keys = $this->conn->getAllKeys();
+        if (is_array($keys) === false) {
+            $this->logger->warning('Memcached clear() skipped: getAllKeys() unavailable on external server');
+            return;
+        }
+
+        foreach ($keys as $key) {
+            if (is_string($key) === true && str_starts_with($key, $this->cachePrefix) === true) {
+                $this->conn->delete($key);
+            }
+        }
     }
 
     public function prune(): void

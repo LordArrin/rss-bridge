@@ -210,9 +210,37 @@ function getContents(
         }
     }
 
+    $identityOptions = [
+        CURLOPT_USERAGENT,
+        CURLOPT_COOKIE,
+        CURLOPT_COOKIEFILE,
+        CURLOPT_REFERER,
+        CURLOPT_CUSTOMREQUEST,
+        CURLOPT_POST,
+        CURLOPT_HTTPHEADER,
+        CURLOPT_PROXY,
+    ];
+    $keyOptions = [];
+    foreach ($identityOptions as $option) {
+        if (array_key_exists($option, $curlOptions) === true) {
+            $keyOptions[$option] = $curlOptions[$option];
+        }
+    }
+    $optionsHash = null;
+    if ($keyOptions !== []) {
+        try {
+            $optionsHash = md5(Json::encode($keyOptions, false));
+        } catch (\JsonException $e) {
+            $optionsHash = md5(serialize($keyOptions));
+        }
+    }
+
     $cacheKeyParts = ['server', $url, $requestBodyHash];
     if ($headersHash !== null) {
         $cacheKeyParts[] = $headersHash;
+    }
+    if ($optionsHash !== null) {
+        $cacheKeyParts[] = $optionsHash;
     }
     $cacheKey = implode('_', $cacheKeyParts);
 
@@ -271,9 +299,6 @@ function getContents(
                 $cache->delete($cacheKey);
                 break;
             }
-            if (in_array('no-cache', $directives, true) === true) {
-                break;
-            }
             $cache->set($cacheKey, $response, 86400);
             break;
         case 301:
@@ -290,14 +315,9 @@ function getContents(
                     $directives = array_map('trim', explode(',', strtolower($cacheControl)));
                 }
 
-                $mergedHeaders = $response->getHeaders();
-                foreach (['content-type', 'content-language', 'content-disposition'] as $entityHeader) {
-                    if (isset($mergedHeaders[$entityHeader]) === false) {
-                        $cachedValues = $cachedResponse->getHeader($entityHeader, true);
-                        if ($cachedValues !== null && $cachedValues !== []) {
-                            $mergedHeaders[$entityHeader] = $cachedValues;
-                        }
-                    }
+                $mergedHeaders = $cachedResponse->getHeaders();
+                foreach ($response->getHeaders() as $name => $values) {
+                    $mergedHeaders[$name] = $values;
                 }
                 unset($mergedHeaders['content-length'], $mergedHeaders['content-encoding']);
 
@@ -310,7 +330,7 @@ function getContents(
                 if (in_array('no-store', $directives, true) === true) {
                     $cache->delete($cacheKey);
                 } else {
-                    $freshUntil = responseFreshUntil($response);
+                    $freshUntil = responseFreshUntil($merged);
                     $storageTtl = $freshUntil === null ? 86400 : max(3600, $freshUntil - time());
                     $cache->set($cacheKey, $merged, $storageTtl);
                 }

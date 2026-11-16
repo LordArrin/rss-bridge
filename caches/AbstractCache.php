@@ -74,23 +74,23 @@ abstract class AbstractCache implements CacheInterface
      *
      * @param string $blob The JSON-encoded string from storage.
      * @param string $key  The original cache key (for logging).
-     * @return array{fresh: mixed, stale: mixed} Associative array with 'fresh' and 'stale' keys.
+     * @return array{fresh: mixed, stale: mixed}|null Associative array with 'fresh' and 'stale' keys, or null when the blob is invalid/legacy.
      */
-    protected function decode(string $blob, string $key): array
+    protected function decode(string $blob, string $key): ?array
     {
         try {
             $decoded = json_decode($blob, true, 512, \JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
-            return ['fresh' => null, 'stale' => null];
+            return null;
         }
 
         if (is_array($decoded) === false || array_key_exists('value', $decoded) === false) {
-            return ['fresh' => null, 'stale' => null];
+            return null;
         }
 
         $versionRaw = $decoded['__v'] ?? null;
         if (is_int($versionRaw) === false || $versionRaw !== self::CACHE_FORMAT_VERSION) {
-            return ['fresh' => null, 'stale' => null];
+            return null;
         }
 
         $value = $this->restoreFromJson($decoded['value']);

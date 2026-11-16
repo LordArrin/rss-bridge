@@ -79,7 +79,7 @@ final class FileCache extends AbstractCache
 
         $decoded = $this->decode($data, $key);
 
-        if ($decoded['fresh'] === null && $decoded['stale'] === null) {
+        if ($decoded === null) {
             $this->logger->info(sprintf('Discarding non-JSON legacy cache file: %s', $cacheFile));
             $this->delete($key);
             return ['fresh' => null, 'stale' => null];

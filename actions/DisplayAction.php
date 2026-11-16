@@ -72,7 +72,7 @@ final class DisplayAction implements ActionInterface
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Bridge is not enabled!']), 400);
         }
 
-        $cacheKey = $this->createCacheKey($request);
+        $cacheKey = $request->getCacheKey();
 
         $bridge = $this->safeLoader->createSafely($bridgeClassName);
 
@@ -101,7 +101,7 @@ final class DisplayAction implements ActionInterface
 
         $response = $this->createResponse($request, $bridge, $formatObj);
 
-        if ($response->getCode() === 200 && $ttl > 0) {
+        if ($response->getCode() === 200 && $ttl > 0 && $request->getAttribute('_bridge_error') !== true) {
             $response = $response->withHeader(CacheMiddleware::CACHE_TTL_HEADER, (string) $ttl);
             $this->cache->set($cacheKey, $response, $ttl);
         }
@@ -132,6 +132,15 @@ final class DisplayAction implements ActionInterface
             $bridge->collectData();
             $items = $bridge->getItems();
         } catch (\Throwable $e) {
+            $request->withAttribute('_bridge_error', true);
+
+            $isTimeout = $e instanceof \HttpException
+                && ($e instanceof \RateLimitException) === false
+                && (in_array($e->getCode(), [0, 408, 504], true) === true || str_contains($e->getMessage(), 'cURL error') === true);
+            if ($isTimeout === true) {
+                $request->withAttribute('_feed_timeout', true);
+            }
+
             [$statusCode, $headers] = \httpStatusFromException($e);
 
             if ($e instanceof \RateLimitException) {
@@ -207,13 +216,6 @@ final class DisplayAction implements ActionInterface
         ];
 
         return new Response($body, 200, $headers);
-    }
-
-    private function createCacheKey(Request $request): string
-    {
-        $params = $request->getCacheableParams();
-        $encoded = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
-        return 'http_' . ($encoded === false ? '{}' : $encoded);
     }
 
     /**

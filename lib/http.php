@@ -1333,6 +1333,13 @@ final class Request
         ksort($params);
         return $params;
     }
+
+    public function getCacheKey(): string
+    {
+        $params = $this->getCacheableParams();
+        $encoded = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        return 'http_' . ($encoded === false ? '{}' : $encoded);
+    }
 }
 
 final class Response

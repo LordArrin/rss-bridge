@@ -97,8 +97,12 @@ final class SQLiteCache extends AbstractCache
         $walOk = false;
         for ($attempt = 0; $attempt < 5 && $walOk === false; $attempt++) {
             try {
-                $this->db->exec('PRAGMA journal_mode = WAL');
-                $walOk = true;
+                $mode = $this->db->querySingle('PRAGMA journal_mode = WAL');
+                if (is_string($mode) === true && strtolower($mode) === 'wal') {
+                    $walOk = true;
+                } else {
+                    break;
+                }
             } catch (\Exception $e) {
                 if ($this->db->lastErrorCode() !== self::SQLITE_BUSY) {
                     throw $e;
@@ -109,6 +113,8 @@ final class SQLiteCache extends AbstractCache
 
         if ($walOk === true) {
             $this->db->exec('PRAGMA synchronous = NORMAL');
+        } else {
+            $this->db->exec('PRAGMA synchronous = FULL');
         }
 
         $this->db->exec("CREATE TABLE IF NOT EXISTS locks (
@@ -191,7 +197,11 @@ final class SQLiteCache extends AbstractCache
             ));
             return true;
         } finally {
-            $this->db->exec('PRAGMA busy_timeout = ' . $this->busyTimeoutMs);
+            try {
+                $this->db->exec('PRAGMA busy_timeout = ' . $this->busyTimeoutMs);
+            } catch (\Exception $e) {
+                $this->logger->warning(Url::createSaneExceptionMessage($e));
+            }
         }
     }
 
@@ -205,14 +215,13 @@ final class SQLiteCache extends AbstractCache
 
         $lockKey = $this->createCacheKey('lock_' . $key);
 
-        $stmt = $this->db->prepare('DELETE FROM locks WHERE key = :key AND expiration = :expiration');
-        if ($stmt === false) {
-            return;
-        }
-        $stmt->bindValue(':key', $lockKey, \SQLITE3_BLOB);
-        $stmt->bindValue(':expiration', $expiry, \SQLITE3_INTEGER);
-
         try {
+            $stmt = $this->db->prepare('DELETE FROM locks WHERE key = :key AND expiration = :expiration');
+            if ($stmt === false) {
+                return;
+            }
+            $stmt->bindValue(':key', $lockKey, \SQLITE3_BLOB);
+            $stmt->bindValue(':expiration', $expiry, \SQLITE3_INTEGER);
             $stmt->execute();
         } catch (\Exception $e) {
             $this->logger->warning(Url::createSaneExceptionMessage($e));
@@ -230,18 +239,24 @@ final class SQLiteCache extends AbstractCache
     {
         $cacheKey = $this->createCacheKey($key);
 
-        $stmt = $this->db->prepare('SELECT value, expiration FROM storage WHERE key = :key');
-        if ($stmt === false) {
+        try {
+            $stmt = $this->db->prepare('SELECT value, expiration FROM storage WHERE key = :key');
+            if ($stmt === false) {
+                return ['fresh' => null, 'stale' => null];
+            }
+            $stmt->bindValue(':key', $cacheKey, \SQLITE3_BLOB);
+
+            $result = $stmt->execute();
+            if ($result === false) {
+                return ['fresh' => null, 'stale' => null];
+            }
+
+            $row = $result->fetchArray(\SQLITE3_ASSOC);
+        } catch (\Exception $e) {
+            $this->logger->warning(Url::createSaneExceptionMessage($e));
             return ['fresh' => null, 'stale' => null];
         }
-        $stmt->bindValue(':key', $cacheKey, \SQLITE3_BLOB);
 
-        $result = $stmt->execute();
-        if ($result === false) {
-            return ['fresh' => null, 'stale' => null];
-        }
-
-        $row = $result->fetchArray(\SQLITE3_ASSOC);
         if ($row === false) {
             return ['fresh' => null, 'stale' => null];
         }
@@ -256,7 +271,6 @@ final class SQLiteCache extends AbstractCache
 
         $now = time();
 
-        // Hard-expired: data is too old even for stale serving
         if ($hardExpiration !== 0 && $hardExpiration <= $now) {
             return ['fresh' => null, 'stale' => null];
         }
@@ -264,12 +278,9 @@ final class SQLiteCache extends AbstractCache
         $valueRaw = $row['value'] ?? '';
         $blob = is_string($valueRaw) === true ? $valueRaw : '';
 
-        // Use AbstractCache::decode() for JSON deserialization
         $decoded = $this->decode($blob, $key);
 
-        // If decode() returned nulls due to JsonException (legacy/corrupt data),
-        // invalidate the entry to prevent repeated failures.
-        if ($decoded['fresh'] === null && $decoded['stale'] === null) {
+        if ($decoded === null) {
             $this->logger->info(sprintf('Discarding non-JSON legacy cache entry for key "%s"', $key));
             $this->delete($key);
             return ['fresh' => null, 'stale' => null];
@@ -297,18 +308,17 @@ final class SQLiteCache extends AbstractCache
             return;
         }
 
-        $stmt = $this->db->prepare(
-            'INSERT OR REPLACE INTO storage (key, value, expiration) VALUES (:key, :value, :expiration)'
-        );
-        if ($stmt === false) {
-            $this->logger->warning('Failed to prepare SQLite statement for set()');
-            return;
-        }
-        $stmt->bindValue(':key', $cacheKey, \SQLITE3_BLOB);
-        $stmt->bindValue(':value', $blob, \SQLITE3_BLOB);
-        $stmt->bindValue(':expiration', $hardExpiration, \SQLITE3_INTEGER);
-
         try {
+            $stmt = $this->db->prepare(
+                'INSERT OR REPLACE INTO storage (key, value, expiration) VALUES (:key, :value, :expiration)'
+            );
+            if ($stmt === false) {
+                $this->logger->warning('Failed to prepare SQLite statement for set()');
+                return;
+            }
+            $stmt->bindValue(':key', $cacheKey, \SQLITE3_BLOB);
+            $stmt->bindValue(':value', $blob, \SQLITE3_BLOB);
+            $stmt->bindValue(':expiration', $hardExpiration, \SQLITE3_INTEGER);
             $stmt->execute();
         } catch (\Exception $e) {
             $this->logger->warning(Url::createSaneExceptionMessage($e));
@@ -319,13 +329,12 @@ final class SQLiteCache extends AbstractCache
     {
         $cacheKey = $this->createCacheKey($key);
 
-        $stmt = $this->db->prepare('DELETE FROM storage WHERE key = :key');
-        if ($stmt === false) {
-            return;
-        }
-        $stmt->bindValue(':key', $cacheKey, \SQLITE3_BLOB);
-
         try {
+            $stmt = $this->db->prepare('DELETE FROM storage WHERE key = :key');
+            if ($stmt === false) {
+                return;
+            }
+            $stmt->bindValue(':key', $cacheKey, \SQLITE3_BLOB);
             $stmt->execute();
         } catch (\Exception $e) {
             $this->logger->warning(Url::createSaneExceptionMessage($e));
@@ -340,26 +349,24 @@ final class SQLiteCache extends AbstractCache
 
         $now = time();
 
-        $stmt = $this->db->prepare('DELETE FROM storage WHERE expiration > 0 AND expiration <= :now');
-        if ($stmt !== false) {
-            $stmt->bindValue(':now', $now, \SQLITE3_INTEGER);
-            try {
+        try {
+            $stmt = $this->db->prepare('DELETE FROM storage WHERE expiration > 0 AND expiration <= :now');
+            if ($stmt !== false) {
+                $stmt->bindValue(':now', $now, \SQLITE3_INTEGER);
                 $stmt->execute();
-            } catch (\Exception $e) {
-                $this->logger->warning(Url::createSaneExceptionMessage($e));
             }
+        } catch (\Exception $e) {
+            $this->logger->warning(Url::createSaneExceptionMessage($e));
         }
 
-        // Expired lock leases are pure garbage: no worker will ever reclaim
-        // them through the normal path once the entry is regenerated.
-        $locks = $this->db->prepare('DELETE FROM locks WHERE expiration <= :now');
-        if ($locks !== false) {
-            $locks->bindValue(':now', $now, \SQLITE3_INTEGER);
-            try {
+        try {
+            $locks = $this->db->prepare('DELETE FROM locks WHERE expiration <= :now');
+            if ($locks !== false) {
+                $locks->bindValue(':now', $now, \SQLITE3_INTEGER);
                 $locks->execute();
-            } catch (\Exception $e) {
-                $this->logger->warning(Url::createSaneExceptionMessage($e));
             }
+        } catch (\Exception $e) {
+            $this->logger->warning(Url::createSaneExceptionMessage($e));
         }
     }
 

@@ -99,8 +99,11 @@ final class ArrayCache extends AbstractCache
 
         $blob = $this->data[$key];
 
-        // Use AbstractCache::decode() for JSON deserialization
         $decoded = $this->decode($blob, $key);
+        if ($decoded === null) {
+            unset($this->data[$key]);
+            return ['fresh' => null, 'stale' => null];
+        }
 
         return $decoded;
     }

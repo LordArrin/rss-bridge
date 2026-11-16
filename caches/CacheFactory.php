@@ -18,6 +18,9 @@ final class CacheFactory
 {
     private Logger $logger;
 
+    /** @var array<string, bool> */
+    private static array $verifiedSockets = [];
+
     public function __construct(Logger $logger)
     {
         $this->logger = $logger;
@@ -40,14 +43,9 @@ final class CacheFactory
     private function normalizeName(?string $name): string
     {
         if ($name === null) {
-            // Fallback to 'file' when CACHE_TYPE is unset (CLI context without
-            // load-env). In Docker, load-env always sets it to 'memcached' from
-            // .env.default, so this fallback only applies to bin-scripts and
-            // other non-Docker invocations.
             $name = $this->getEnv('CACHE_TYPE', 'file');
         }
 
-        // Strip common suffixes
         if (preg_match('/(.+)(?:\.php|Cache)$/i', $name, $matches) === 1) {
             $name = $matches[1];
         }
@@ -57,7 +55,6 @@ final class CacheFactory
 
     private function createFileCache(): FileCache
     {
-        // Use centralized path resolution
         $defaultPath = Paths::getCache();
         $path = $this->getEnv('CACHE_FILE_PATH', $defaultPath);
         $enablePurge = filter_var($this->getEnv('CACHE_FILE_PURGE', 'true'), FILTER_VALIDATE_BOOLEAN);
@@ -120,16 +117,16 @@ final class CacheFactory
 
     private function createMemcachedInternal(): MemcachedCache
     {
-        // Socket path is fixed and managed by the container/supervisor
         $socketPath = $this->getEnv('MEMCACHED_SOCKET_PATH', '/var/run/memcached/memcached.sock');
 
-        if (file_exists($socketPath) === false) {
-            throw new \Exception(sprintf('Memcached socket does not exist: %s', $socketPath));
+        if (isset(self::$verifiedSockets[$socketPath]) === false) {
+            $this->waitForSocket($socketPath);
+            self::$verifiedSockets[$socketPath] = true;
         }
 
         [$itemSizeLimit, $maxChunks] = $this->memcachedClientOptions();
 
-        return new MemcachedCache($this->logger, '', 0, $socketPath, $itemSizeLimit, $maxChunks);
+        return new MemcachedCache($this->logger, '', 0, $socketPath, $itemSizeLimit, $maxChunks, true);
     }
 
     private function createMemcachedExternal(): MemcachedCache
@@ -148,7 +145,19 @@ final class CacheFactory
 
         [$itemSizeLimit, $maxChunks] = $this->memcachedClientOptions();
 
-        return new MemcachedCache($this->logger, $host, $portInt, '', $itemSizeLimit, $maxChunks);
+        return new MemcachedCache($this->logger, $host, $portInt, '', $itemSizeLimit, $maxChunks, false);
+    }
+
+    private function waitForSocket(string $socketPath): void
+    {
+        for ($attempt = 0; $attempt < 50; $attempt++) {
+            if (file_exists($socketPath) === true) {
+                return;
+            }
+            usleep(100000);
+        }
+
+        throw new \Exception(sprintf('Memcached socket does not exist after waiting: %s', $socketPath));
     }
 
     /**

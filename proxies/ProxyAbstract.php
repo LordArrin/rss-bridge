@@ -26,6 +26,10 @@ abstract class ProxyAbstract implements ProxyInterface
     protected ?CacheInterface $cache = null;
     protected ?Logger $logger = null;
 
+    private const FLIGHT_LOCK_TTL = 120;
+    private const FLIGHT_WAIT_MS = 2000;
+    private const FLIGHT_POLL_MS = 100;
+
     /**
      * @param array<string, mixed> $config
      */
@@ -128,17 +132,33 @@ abstract class ProxyAbstract implements ProxyInterface
     {
         $cacheTtl = self::toInt($options['cache_ttl'] ?? 3600, 3600);
         $useCache = self::toBool($options['use_cache'] ?? true, true);
+        $cache = $this->cache;
+        $cacheKey = '';
+        if ($useCache === true && $cache instanceof CacheInterface) {
+            $cacheKey = $this->buildCacheKey($url, $options);
+        }
+        $lockAcquired = false;
 
         /** @var array{fresh: mixed, stale: mixed} $cached */
         $cached = ['fresh' => null, 'stale' => null];
 
-        if ($useCache === true && $this->cache instanceof CacheInterface) {
-            $cacheKey = $this->buildCacheKey($url, $options);
-            $cached = $this->cache->getWithStale($cacheKey);
+        if ($useCache === true && $cache instanceof CacheInterface) {
+            $cached = $cache->getWithStale($cacheKey);
 
             if (is_string($cached['fresh']) === true && $cached['fresh'] !== '') {
                 $this->log('debug', sprintf('Cache hit (fresh) for %s', $url));
                 return $cached['fresh'];
+            }
+
+            $lockTtl = max(self::FLIGHT_LOCK_TTL, $this->timeout + 30);
+            if ($cache->acquireLock($cacheKey, $lockTtl) === true) {
+                $lockAcquired = true;
+            } else {
+                $waited = $this->waitForFresh($cacheKey);
+                if (is_string($waited) === true && $waited !== '') {
+                    $this->log('debug', sprintf('Cache hit (fresh, waited) for %s', $url));
+                    return $waited;
+                }
             }
         }
 
@@ -151,20 +171,15 @@ abstract class ProxyAbstract implements ProxyInterface
                 throw new \RuntimeException(sprintf('Proxy returned invalid response for %s', $url));
             }
 
-            if (
-                $useCache === true
-                && $this->cache instanceof CacheInterface
-                && $cacheTtl > 0
-            ) {
-                $cacheKey = $this->buildCacheKey($url, $options);
-                $this->cache->set($cacheKey, $html, $cacheTtl);
+            if ($useCache === true && $cache instanceof CacheInterface && $cacheTtl > 0) {
+                $cache->set($cacheKey, $html, $cacheTtl);
             }
 
             return $html;
         } catch (\Throwable $e) {
             if (
                 $useCache === true
-                && $this->cache instanceof CacheInterface
+                && $cache instanceof CacheInterface
                 && is_string($cached['stale']) === true
                 && $cached['stale'] !== ''
             ) {
@@ -177,6 +192,10 @@ abstract class ProxyAbstract implements ProxyInterface
             }
 
             throw $e;
+        } finally {
+            if ($lockAcquired === true && $cache instanceof CacheInterface) {
+                $cache->releaseLock($cacheKey);
+            }
         }
     }
 
@@ -190,18 +209,34 @@ abstract class ProxyAbstract implements ProxyInterface
     {
         $cacheTtl = self::toInt($options['cache_ttl'] ?? 86400, 86400);
         $useCache = self::toBool($options['use_cache'] ?? true, true);
+        $cache = $this->cache;
+        $cacheKey = '';
+        if ($useCache === true && $cache instanceof CacheInterface) {
+            $cacheKey = $this->buildCacheKey('binary_' . $url, $options);
+        }
+        $lockAcquired = false;
 
         /** @var array{fresh: mixed, stale: mixed} $cached */
         $cached = ['fresh' => null, 'stale' => null];
 
-        if ($useCache === true && $this->cache instanceof CacheInterface) {
-            $cacheKey = $this->buildCacheKey('binary_' . $url, $options);
-            $cached = $this->cache->getWithStale($cacheKey);
+        if ($useCache === true && $cache instanceof CacheInterface) {
+            $cached = $cache->getWithStale($cacheKey);
 
             $fresh = $this->normalizeBinaryPayload($cached['fresh']);
             if ($fresh !== null) {
                 $this->log('debug', sprintf('Cache hit (fresh binary) for %s', $url));
                 return $fresh;
+            }
+
+            $lockTtl = max(self::FLIGHT_LOCK_TTL, $this->timeout + 30);
+            if ($cache->acquireLock($cacheKey, $lockTtl) === true) {
+                $lockAcquired = true;
+            } else {
+                $waited = $this->normalizeBinaryPayload($this->waitForFresh($cacheKey));
+                if ($waited !== null) {
+                    $this->log('debug', sprintf('Cache hit (fresh binary, waited) for %s', $url));
+                    return $waited;
+                }
             }
         }
 
@@ -210,18 +245,13 @@ abstract class ProxyAbstract implements ProxyInterface
         try {
             $payload = $this->doFetchBinary($url, $options);
 
-            if (
-                $useCache === true
-                && $this->cache instanceof CacheInterface
-                && $cacheTtl > 0
-            ) {
-                $cacheKey = $this->buildCacheKey('binary_' . $url, $options);
-                $this->cache->set($cacheKey, $this->encodeBinaryPayload($payload), $cacheTtl);
+            if ($useCache === true && $cache instanceof CacheInterface && $cacheTtl > 0) {
+                $cache->set($cacheKey, $this->encodeBinaryPayload($payload), $cacheTtl);
             }
 
             return $payload;
         } catch (\Throwable $e) {
-            if ($useCache === true && $this->cache instanceof CacheInterface) {
+            if ($useCache === true && $cache instanceof CacheInterface) {
                 $stale = $this->normalizeBinaryPayload($cached['stale']);
                 if ($stale !== null) {
                     $this->log('warning', sprintf(
@@ -234,7 +264,31 @@ abstract class ProxyAbstract implements ProxyInterface
             }
 
             throw $e;
+        } finally {
+            if ($lockAcquired === true && $cache instanceof CacheInterface) {
+                $cache->releaseLock($cacheKey);
+            }
         }
+    }
+
+    protected function waitForFresh(string $cacheKey): mixed
+    {
+        $cache = $this->cache;
+        if ($cache instanceof CacheInterface === false) {
+            return null;
+        }
+
+        $waited = 0;
+        while ($waited < self::FLIGHT_WAIT_MS) {
+            usleep(self::FLIGHT_POLL_MS * 1000);
+            $waited += self::FLIGHT_POLL_MS;
+            $entry = $cache->getWithStale($cacheKey);
+            if ($entry['fresh'] !== null) {
+                return $entry['fresh'];
+            }
+        }
+
+        return null;
     }
 
     /**
