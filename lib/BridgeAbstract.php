@@ -172,7 +172,6 @@ abstract class BridgeAbstract
                 throw new \Exception('Mixed context parameters');
             }
 
-            // Исправление: разрешаем как string, так и int (например, 0 для контекста по умолчанию)
             if (is_string($queriedContext) === true || is_int($queriedContext) === true) {
                 $this->queriedContext = (string) $queriedContext;
             }

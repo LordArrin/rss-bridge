@@ -74,28 +74,29 @@ final class FileCache extends AbstractCache
             return ['fresh' => null, 'stale' => null];
         }
 
-        // Use AbstractCache::decode() for JSON deserialization
         $decoded = $this->decode($data, $key);
 
-        // If decode() returned nulls due to JsonException (legacy/corrupt data),
-        // invalidate the entry to prevent repeated failures.
         if ($decoded['fresh'] === null && $decoded['stale'] === null) {
             $this->logger->info(sprintf('Discarding non-JSON legacy cache file: %s', $cacheFile));
             $this->delete($key);
             return ['fresh' => null, 'stale' => null];
         }
 
-        // Check hard expiration (stale TTL)
-        // Note: decode() already checks fresh_until, but we need to check
-        // if the file itself should be deleted (hard expiration)
-        $fileMtime = filemtime($cacheFile);
-        if ($fileMtime !== false) {
-            $now = time();
-            $hardExpiration = $fileMtime + self::DEFAULT_STALE_TTL;
-            if ($hardExpiration <= $now) {
-                $this->delete($key);
-                return ['fresh' => null, 'stale' => null];
-            }
+        if ($decoded['fresh'] !== null) {
+            return $decoded;
+        }
+
+        $freshUntil = $this->extractFreshUntil($data);
+        if ($freshUntil !== null && $freshUntil > 0) {
+            $hardExpiration = $freshUntil + self::DEFAULT_STALE_TTL;
+        } else {
+            $fileMtime = filemtime($cacheFile);
+            $hardExpiration = $fileMtime !== false ? $fileMtime + self::DEFAULT_STALE_TTL : null;
+        }
+
+        if ($hardExpiration !== null && $hardExpiration <= time()) {
+            $this->delete($key);
+            return ['fresh' => null, 'stale' => null];
         }
 
         return $decoded;
@@ -198,13 +199,20 @@ final class FileCache extends AbstractCache
                 continue;
             }
 
+            if (str_ends_with($filename, '.tmp') === true) {
+                $tmpMtime = filemtime($cacheFile);
+                if ($tmpMtime !== false && ($now - $tmpMtime) > 3600) {
+                    unlink($cacheFile);
+                }
+                continue;
+            }
+
             $data = file_get_contents($cacheFile);
             if ($data === false) {
                 unlink($cacheFile);
                 continue;
             }
 
-            // Try to decode as JSON; if it fails, it's legacy/corrupt - delete it
             try {
                 $decoded = json_decode($data, true, 512, \JSON_THROW_ON_ERROR);
             } catch (\JsonException $e) {
@@ -217,14 +225,29 @@ final class FileCache extends AbstractCache
                 continue;
             }
 
-            // Check hard expiration based on file mtime + stale TTL
-            $fileMtime = filemtime($cacheFile);
-            if ($fileMtime === false) {
-                unlink($cacheFile);
+            $freshUntilRaw = $decoded['fresh_until'];
+            $freshUntil = 0;
+            if (is_int($freshUntilRaw) === true) {
+                $freshUntil = $freshUntilRaw;
+            } elseif (is_string($freshUntilRaw) === true && is_numeric($freshUntilRaw) === true) {
+                $freshUntil = (int) $freshUntilRaw;
+            }
+
+            if ($freshUntil === 0) {
                 continue;
             }
 
-            $hardExpiration = $fileMtime + self::DEFAULT_STALE_TTL;
+            if ($freshUntil > 0) {
+                $hardExpiration = $freshUntil + self::DEFAULT_STALE_TTL;
+            } else {
+                $fileMtime = filemtime($cacheFile);
+                if ($fileMtime === false) {
+                    unlink($cacheFile);
+                    continue;
+                }
+                $hardExpiration = $fileMtime + self::DEFAULT_STALE_TTL;
+            }
+
             if ($hardExpiration <= $now) {
                 unlink($cacheFile);
             }
@@ -283,6 +306,30 @@ final class FileCache extends AbstractCache
 
     private function isExcludedFile(string $filename): bool
     {
-        return in_array($filename, ['.', '..', '.gitkeep', '.htaccess'], true) === true;
+        if (in_array($filename, ['.', '..', '.gitkeep', '.htaccess'], true) === true) {
+            return true;
+        }
+        return str_ends_with($filename, '.lock') === true;
+    }
+
+/**
+ * Extracts fresh_until from the tail of an encoded cache blob without
+ * re-decoding the full payload. The wrapper always serializes fresh_until
+ * as the last key, so an anchored match on the final bytes is sufficient.
+ * Returns null when the field is absent, null-valued, or malformed.
+ */
+    private function extractFreshUntil(string $data): ?int
+    {
+        $pos = strrpos($data, '"fresh_until"');
+        if ($pos === false) {
+            return null;
+        }
+
+        $tail = substr($data, $pos);
+        if (preg_match('/^"fresh_until"\s*:\s*(\d+)\s*}\s*$/', $tail, $m) === 1) {
+            return (int) $m[1];
+        }
+
+        return null;
     }
 }

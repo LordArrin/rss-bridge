@@ -434,13 +434,21 @@ final class CurlHttpClient implements HttpClient
         return self::$ipResolver;
     }
 
-    /**
-     * Checks if SSRF protection is enabled.
-     */
+/**
+ * Checks if SSRF protection is enabled.
+ *
+ * Accepts the usual boolean spellings (1/0, true/false, on/off, yes/no).
+ * Missing, empty or unrecognised values keep the protection ON.
+ */
     private static function isSsrfCheckEnabled(): bool
     {
         $value = getenv('HTTP_SSRF_CHECK');
-        return $value === false || strtolower($value) !== 'false';
+        if ($value === false || trim($value) === '') {
+            return true;
+        }
+
+        $parsed = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        return $parsed ?? true;
     }
 
     /**
@@ -848,6 +856,29 @@ final class CurlHttpClient implements HttpClient
     }
 
     /**
+     * Computes the wall-clock deadline imposed by PHP-FPM's
+     * request_terminate_timeout, anchored at the actual request start time.
+     *
+     * Every getContents() call inside one bridge request shares this budget,
+     * so a sequence of slow upstream calls cannot outlive the FPM worker and
+     * end in a SIGTERM 502. Returns null outside FPM (CLI), where no such
+     * limit exists. Keep PHP_FPM_REQUEST_TERMINATE_TIMEOUT in sync with the
+     * pool template (bin/load-env substitutes the same variable).
+     */
+    private static function fpmWallClockDeadline(): ?float
+    {
+        $requestTime = $_SERVER['REQUEST_TIME_FLOAT'] ?? null;
+        if (is_float($requestTime) === false && is_int($requestTime) === false) {
+            return null;
+        }
+
+        $terminateRaw = getenv('PHP_FPM_REQUEST_TERMINATE_TIMEOUT');
+        $terminate = ($terminateRaw !== false && $terminateRaw !== '' && (int) $terminateRaw > 0) ? (int) $terminateRaw : 90;
+
+        return (float) $requestTime + max(1, $terminate - 5);
+    }
+
+    /**
      * Internal method that performs the actual cURL request with retry logic.
      *
      * @param array<string, mixed> $config
@@ -898,6 +929,11 @@ final class CurlHttpClient implements HttpClient
         }
 
         $deadline = self::toFloat($config['_deadline'] ?? null, microtime(true) + $budget);
+
+        $wallClockDeadline = self::fpmWallClockDeadline();
+        if ($wallClockDeadline !== null) {
+            $deadline = min($deadline, $wallClockDeadline);
+        }
 
         $httpHeaders = [];
         $configHeaders = $config['headers'];
@@ -965,6 +1001,9 @@ final class CurlHttpClient implements HttpClient
         foreach (self::normalizeCurlOptions($config['curl_options'] ?? []) as $option => $value) {
             $curlOptions[$option] = $value;
         }
+
+        $curlOptions[CURLOPT_FOLLOWLOCATION] = false;
+        $curlOptions[CURLOPT_MAXREDIRS] = 0;
 
         if ($resolveEntries !== []) {
             $curlOptions[self::resolveOption()] = $resolveEntries;
@@ -1036,7 +1075,8 @@ final class CurlHttpClient implements HttpClient
                 }
                 break;
             }
-            $attemptTimeout = min($timeoutSeconds, (int)ceil($remaining));
+            $effectiveTimeout = self::toInt($curlOptions[CURLOPT_TIMEOUT] ?? $timeoutSeconds, $timeoutSeconds);
+            $attemptTimeout = $effectiveTimeout > 0 ? min($effectiveTimeout, (int) ceil($remaining)) : (int) ceil($remaining);
             // Honour a caller-supplied CURLOPT_CONNECTTIMEOUT override if present.
             $effectiveConnectTimeout = self::toInt($curlOptions[CURLOPT_CONNECTTIMEOUT] ?? $connectTimeout, $connectTimeout);
             $attemptConnectTimeout = min(
@@ -1242,13 +1282,16 @@ final class Request
     }
 
     /**
-     * Returns a new Request with an added attribute.
+     * Sets an attribute on this Request and returns it.
+     *
+     * The Request instance is shared across the middleware chain and the
+     * action, so attributes set by the action (e.g. the resolved cache TTL
+     * in DisplayAction) are visible to middlewares on the way back out.
      */
     public function withAttribute(string $name, mixed $value = true): self
     {
-        $clone = clone $this;
-        $clone->attributes[$name] = $value;
-        return $clone;
+        $this->attributes[$name] = $value;
+        return $this;
     }
 
     /**
@@ -1267,6 +1310,28 @@ final class Request
     public function toArray(): array
     {
         return $this->get;
+    }
+
+/**
+ * Returns GET parameters normalized for cache keying: authentication and
+ * routing keys are removed, cache-buster (_) and _error_time never affect
+ * the key, and _cache_timeout participates only when CACHE_CUSTOM_TIMEOUT
+ * is enabled. Keys are sorted for a stable representation.
+ *
+ * @return array<string, mixed>
+ */
+    public function getCacheableParams(): array
+    {
+        $params = $this->get;
+        unset($params['token'], $params['action'], $params['_'], $params['_error_time']);
+
+        $customTimeoutEnabled = filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN);
+        if ($customTimeoutEnabled === false) {
+            unset($params['_cache_timeout']);
+        }
+
+        ksort($params);
+        return $params;
     }
 }
 

@@ -33,4 +33,4 @@ pm.process_idle_timeout = {{PHP_FPM_PM_PROCESS_IDLE_TIMEOUT}}
 ; The worker is SIGTERM-terminated before nginx gives up, so php-fpm logs a
 ; clean "execution timed out" instead of nginx silently returning 500/504 and
 ; the pool staying blocked behind a hung curl handle.
-request_terminate_timeout = 90s
+request_terminate_timeout = {{PHP_FPM_REQUEST_TERMINATE_TIMEOUT}}s

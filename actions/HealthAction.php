@@ -8,6 +8,7 @@ use RSSBridge\Utils\Json;
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
 use RSSBridge\Caches\CacheInterface;
+use RSSBridge\Proxies\ProxyFactory;
 use RSSBridge\SafeBridgeLoader;
 
 final class HealthAction implements ActionInterface
@@ -160,34 +161,18 @@ final class HealthAction implements ActionInterface
         return sprintf('%.1f%%', ($hits / $total) * 100);
     }
 
-    /**
-     * @return array{status: string, profiles: list<string>, count: int}
-     */
+/**
+ * @return array{status: string, profiles: list<string>, count: int}
+ */
     private function checkProxy(): array
     {
-        $profiles = [];
-        $possibleProfiles = [
-            'flaresolverr',
-            'tgws',
-            'custom',
-        ];
-
-        foreach ($possibleProfiles as $profileName) {
-            $envKey = 'PROXY_PROFILE_' . strtoupper($profileName) . '_TYPE';
-            $type = getenv($envKey);
-
-            // Explicit strict comparisons to satisfy PHPCS
-            if ($type !== false && trim($type) !== '') {
-                $profiles[] = $profileName;
-            }
-        }
-
-        $status = count($profiles) !== 0 ? 'ok' : 'disabled';
+        $profiles = ProxyFactory::getConfiguredProfiles();
+        $count = count($profiles);
 
         return [
-            'status' => $status,
-            'profiles' => $profiles,
-            'count' => count($profiles),
+        'status' => $count !== 0 ? 'ok' : 'disabled',
+        'profiles' => $profiles,
+        'count' => $count,
         ];
     }
 

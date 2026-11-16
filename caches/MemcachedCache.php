@@ -23,13 +23,16 @@ final class MemcachedCache extends AbstractCache
     private readonly \Memcached $conn;
     private readonly string $cachePrefix;
 
-    // Memcached result codes (numeric values for compatibility)
-    private const RES_SUCCESS = 0;
-    private const RES_NOTFOUND = 16;
-    private const RES_SERVER_END = 2;  // Server connection failed
-    private const RES_TIMEOUT = 5;     // Operation timed out
-    private const RES_E2BIG = 3;       // Item too large
-    private const RES_NOTSTORED = 15;  // Item not stored (conditional failure)
+    // Memcached result codes
+    private const RES_SUCCESS = \Memcached::RES_SUCCESS;
+    private const RES_NOTFOUND = \Memcached::RES_NOTFOUND;
+    private const RES_NOTSTORED = \Memcached::RES_NOTSTORED;
+    private const RES_DATA_EXISTS = \Memcached::RES_DATA_EXISTS;
+    private const RES_E2BIG = \Memcached::RES_E2BIG;
+    private const RES_TIMEOUT = \Memcached::RES_TIMEOUT;
+    private const RES_SERVER_ERROR = \Memcached::RES_SERVER_ERROR;
+    private const RES_CONNECTION_FAILURE = \Memcached::RES_CONNECTION_FAILURE;
+    private const RES_HOST_LOOKUP_FAILURE = \Memcached::RES_HOST_LOOKUP_FAILURE;
 
     /**
      * Hard protocol limit of memcached: a single item cannot exceed 1 MB.
@@ -282,8 +285,6 @@ final class MemcachedCache extends AbstractCache
 
         $item = [
             'value'       => $storeValue,
-            'fresh_until' => $freshUntil,
-            'expires_at'  => $serverExpiresAt,
         ];
 
         if ($this->conn->set($cacheKey, $item, $serverExpiresAt) === false) {
@@ -366,13 +367,18 @@ final class MemcachedCache extends AbstractCache
         $resultMessage = $this->conn->getResultMessage();
 
         $context = [
-            'key'           => $cacheKey,
-            'size'          => $size,
-            'resultCode'    => $resultCode,
-            'resultMessage' => $resultMessage,
+        'key'           => $cacheKey,
+        'size'          => $size,
+        'resultCode'    => $resultCode,
+        'resultMessage' => $resultMessage,
         ];
 
-        if ($resultCode === self::RES_SERVER_END || $resultCode === self::RES_TIMEOUT) {
+        if (
+            $resultCode === self::RES_SERVER_ERROR
+            || $resultCode === self::RES_CONNECTION_FAILURE
+            || $resultCode === self::RES_HOST_LOOKUP_FAILURE
+            || $resultCode === self::RES_TIMEOUT
+        ) {
             $this->logger->error('Failed to store an item in memcached', $context);
         } elseif ($resultCode === self::RES_NOTSTORED) {
             $this->logger->debug('Failed to store an item in memcached', $context);
@@ -406,7 +412,6 @@ final class MemcachedCache extends AbstractCache
         try {
             $stored = $this->conn->add($lockKey, 1, $ttlSeconds);
         } catch (\Exception $e) {
-            // A broken memcached connection must never block regeneration.
             $this->logger->warning(sprintf(
                 'Memcached lock acquire failed (%s): proceeding without single-flight',
                 $e->getMessage()
@@ -416,11 +421,9 @@ final class MemcachedCache extends AbstractCache
 
         if ($stored === false) {
             $code = $this->conn->getResultCode();
-            if ($code === self::RES_NOTSTORED) {
-                // Another process holds the lock.
+            if ($code === self::RES_NOTSTORED || $code === self::RES_DATA_EXISTS) {
                 return false;
             }
-            // Connection/server problem: fail open so feeds keep regenerating.
             $this->logger->warning(sprintf('Memcached add() for lock failed (code %d)', $code));
             return true;
         }

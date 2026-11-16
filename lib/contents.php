@@ -64,15 +64,26 @@ function get_sitemap(string $url): array
 
 /**
  * Computes the unix timestamp until which a cached upstream response may be
- * served without contacting the origin, based on the server's own freshness
- * signals (RFC 9110 section 4.2.1 priority order).
+ * served without contacting the origin.
+ *
+ * Priority (RFC 9111 section 4.2):
+ *   1. Cache-Control: no-store/no-cache/must-revalidate/private forbid blind
+ *      serving; max-age wins otherwise.
+ *   2. Expires header.
+ *   3. Heuristic freshness (RFC 9111 section 4.2.2) for successful responses
+ *      without explicit signals: 10% of the interval since Last-Modified,
+ *      clamped to [60, 86400] seconds; a minimal 60-second freshness when no
+ *      validator exists, so repeated calls to one URL within a collectData()
+ *      run are deduplicated instead of refetched every time.
+ *
+ * Returns null when the response must always be revalidated.
  */
 function responseFreshUntil(Response $response): ?int
 {
     $cacheControl = $response->getHeader('cache-control');
     if (is_string($cacheControl) === true && $cacheControl !== '') {
         $directives = array_map('trim', explode(',', strtolower($cacheControl)));
-        foreach (['no-store', 'no-cache', 'must-revalidate'] as $blocking) {
+        foreach (['no-store', 'no-cache', 'must-revalidate', 'private'] as $blocking) {
             if (in_array($blocking, $directives, true) === true) {
                 return null;
             }
@@ -103,7 +114,30 @@ function responseFreshUntil(Response $response): ?int
         return $timestamp;
     }
 
-    return null;
+    if (in_array($response->getCode(), [200, 201, 202], true) === false) {
+        return null;
+    }
+
+    $date = $response->getHeader('date');
+    $anchor = is_string($date) === true ? strtotime($date) : false;
+    if ($anchor === false) {
+        $anchor = time();
+    }
+    $age = $response->getHeader('age');
+    if (is_string($age) === true && $age !== '' && ctype_digit($age) === true) {
+        $anchor -= (int) $age;
+    }
+
+    $lastModified = $response->getHeader('last-modified');
+    if (is_string($lastModified) === true && $lastModified !== '') {
+        $lastModifiedTimestamp = strtotime($lastModified);
+        if ($lastModifiedTimestamp !== false && $lastModifiedTimestamp <= $anchor) {
+            $heuristic = (int) (($anchor - $lastModifiedTimestamp) * 0.1);
+            return $anchor + max(60, min(86400, $heuristic));
+        }
+    }
+
+    return $anchor + 60;
 }
 
 /**
@@ -129,12 +163,14 @@ function getContents(
     /** @var CacheInterface $cache */
     $cache = $container['cache'];
 
-    $timeout = getenv('HTTP_TIMEOUT');
-    $retries = getenv('HTTP_RETRIES');
+    $timeoutRaw = getenv('HTTP_TIMEOUT');
+    $timeoutValue = ($timeoutRaw !== false && $timeoutRaw !== '' && (int) $timeoutRaw > 0) ? (int) $timeoutRaw : 60;
+    $retriesRaw = getenv('HTTP_RETRIES');
+    $retriesValue = ($retriesRaw !== false && $retriesRaw !== '' && (int) $retriesRaw >= 0) ? (int) $retriesRaw : 2;
 
     $config = [
-        'timeout'      => $timeout !== false ? (int) $timeout : 60,
-        'retries'      => $retries !== false ? (int) $retries : 2,
+        'timeout'      => $timeoutValue,
+        'retries'      => $retriesValue,
         'curl_options' => $curlOptions + [CURLOPT_ENCODING => ''],
     ];
 
@@ -150,17 +186,35 @@ function getContents(
         }
     }
 
+    $keyHeaders = [];
+    foreach ($httpHeadersNormalized as $name => $value) {
+        $keyHeaders[strtolower($name)] = trim($value);
+    }
+    ksort($keyHeaders);
+
+    $headersHash = null;
+    if ($keyHeaders !== []) {
+        try {
+            $headersHash = md5(Json::encode($keyHeaders, false));
+        } catch (\JsonException $e) {
+            $headersHash = md5(serialize($keyHeaders));
+        }
+    }
+
     $requestBodyHash = null;
     if (isset($curlOptions[CURLOPT_POSTFIELDS]) === true) {
         try {
             $requestBodyHash = md5(Json::encode($curlOptions[CURLOPT_POSTFIELDS], false));
         } catch (\JsonException $e) {
-            // Non-JSON-encodable body (e.g. multipart): fall back to a stable hash
-            // so cache keying still works instead of crashing the request.
             $requestBodyHash = md5(serialize($curlOptions[CURLOPT_POSTFIELDS]));
         }
     }
-    $cacheKey = implode('_', ['server', $url, $requestBodyHash]);
+
+    $cacheKeyParts = ['server', $url, $requestBodyHash];
+    if ($headersHash !== null) {
+        $cacheKeyParts[] = $headersHash;
+    }
+    $cacheKey = implode('_', $cacheKeyParts);
 
     $cachedResponse = $cache->get($cacheKey);
     if (($cachedResponse instanceof Response) === false) {
@@ -168,9 +222,6 @@ function getContents(
     }
 
     if ($cachedResponse !== null) {
-        // Serve from cache only while the origin's own freshness signals allow it.
-        // This is standard HTTP client caching and is independent of the bridge's
-        // CACHE_TIMEOUT (which controls how often collectData() runs at all).
         $freshUntil = responseFreshUntil($cachedResponse);
         if ($freshUntil !== null && $freshUntil > time()) {
             if ($returnFull === true) {
@@ -217,13 +268,10 @@ function getContents(
                 $directives = array_map('trim', explode(',', strtolower($cacheControl)));
             }
             if (in_array('no-store', $directives, true) === true) {
-                // Storage forbidden: purge any previously cached copy as well.
                 $cache->delete($cacheKey);
                 break;
             }
             if (in_array('no-cache', $directives, true) === true) {
-                // Storage allowed, but every use must revalidate; responseFreshUntil()
-                // returns null for no-cache, so the entry is never served blindly.
                 break;
             }
             $cache->set($cacheKey, $response, 86400);
@@ -242,10 +290,6 @@ function getContents(
                     $directives = array_map('trim', explode(',', strtolower($cacheControl)));
                 }
 
-                // A 304 has no body and frequently omits entity headers such as
-                // Content-Type. Take fresh validators/Cache-Control/Date from the
-                // 304, but carry entity headers over from the cached 200 so the
-                // merged response stays self-describing for downstream consumers.
                 $mergedHeaders = $response->getHeaders();
                 foreach (['content-type', 'content-language', 'content-disposition'] as $entityHeader) {
                     if (isset($mergedHeaders[$entityHeader]) === false) {
@@ -255,12 +299,8 @@ function getContents(
                         }
                     }
                 }
-                // The cached body is already content-decoded (CURLOPT_ENCODING),
-                // so transfer-era framing headers must not leak into the merge.
                 unset($mergedHeaders['content-length'], $mergedHeaders['content-encoding']);
 
-                // The merged response is exposed as 200: callers receive a usable
-                // representation, while validators are refreshed from the 304.
                 $merged = new Response(
                     $cachedResponse->getBody(),
                     200,
@@ -268,13 +308,8 @@ function getContents(
                 );
 
                 if (in_array('no-store', $directives, true) === true) {
-                    // Origin explicitly forbids storage: drop the entry entirely.
                     $cache->delete($cacheKey);
                 } else {
-                    // Storage TTL is NOT a freshness lifetime. responseFreshUntil()
-                    // decides whether the entry may be served without contacting the
-                    // origin; with no max-age/expires it returns null and every call
-                    // revalidates. The TTL only bounds how long validators are kept.
                     $freshUntil = responseFreshUntil($response);
                     $storageTtl = $freshUntil === null ? 86400 : max(3600, $freshUntil - time());
                     $cache->set($cacheKey, $merged, $storageTtl);
@@ -349,24 +384,45 @@ function getSimpleHTMLDOM(
 /**
  * Retrieves HTML via a named proxy profile.
  *
+ * Configuration failures surface as 500 (server misconfiguration); transient
+ * fetch failures as 503 with Retry-After so CacheMiddleware can serve stale
+ * and feed readers retry later. Already-typed HttpExceptions pass through
+ * with their own status (429/503/...).
+ *
  * @param array<string, mixed> $options
  * @return string HTML content
  */
 function getProtectedContents(string $url, string $profileName, array $options = []): string
 {
-    $proxy = ProxyFactory::safeFromProfile($profileName);
+    try {
+        $proxy = ProxyFactory::safeFromProfile($profileName);
+    } catch (\Throwable $e) {
+        throwServerException(sprintf(
+            "Proxy profile '%s' is not available: %s\n\nConfigure it via PROXY_PROFILE_%s_* environment variables.",
+            $profileName,
+            $e->getMessage(),
+            strtoupper($profileName)
+        ));
+    }
 
     try {
         return $proxy->getHtml($url, $options);
+    } catch (\HttpException $e) {
+        throw $e;
     } catch (\Throwable $e) {
         if ($proxy instanceof DirectProxy) {
-            throwClientException(sprintf(
+            throwServiceUnavailableException(sprintf(
                 "Failed to fetch %s via DirectProxy: %s\n\nIf this site is protected by Cloudflare, configure a FlareSolverr proxy via environment variables:\n\n  PROXY_PROFILE_FLARESOLVERR_URL=http://localhost:8191",
                 $url,
                 $e->getMessage()
-            ));
+            ), 600);
         }
-        throwClientException(sprintf("Proxy profile '%s' failed: %s", $profileName, $e->getMessage()));
+        throwServiceUnavailableException(sprintf(
+            "Proxy profile '%s' failed to fetch %s: %s",
+            $profileName,
+            $url,
+            $e->getMessage()
+        ), 60);
     }
 }
 
@@ -382,7 +438,7 @@ function getProtectedSimpleHTMLDOM(string $url, string $profileName, array $opti
     $html = getProtectedContents($url, $profileName, $options);
 
     if ($html === '') {
-        throwClientException(sprintf("Proxy profile '%s' returned empty HTML for: %s", $profileName, $url));
+        throwServiceUnavailableException(sprintf("Proxy profile '%s' returned empty HTML for: %s", $profileName, $url), 60);
     }
 
     return parseHtmlDocument($html);

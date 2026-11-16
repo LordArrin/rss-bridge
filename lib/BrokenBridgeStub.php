@@ -12,15 +12,12 @@ use RSSBridge\Caches\CacheInterface;
  * cannot be loaded (e.g. because of a syntax error, a compile-time
  * signature mismatch, or any other fatal failure).
  *
- * This class intentionally extends {@see BridgeAbstract} so that the
- * rest of the application can treat it like any other bridge. All
- * metadata getters return safe defaults, and {@see collectData()}
- * throws an exception with the original error message so that
- * {@see \DisplayAction} can surface it to the user.
- *
- * IMPORTANT: Method signatures deliberately omit type hints to avoid
- * any conflict with the untyped signatures of {@see BridgeAbstract},
- * which is required for compatibility with legacy bridges.
+ * This class extends {@see BridgeAbstract} so that the rest of the
+ * application can treat it like any other bridge. All metadata getters
+ * return safe defaults, and {@see collectData()} throws an exception
+ * with the original error message so that {@see \DisplayAction} can
+ * surface it to the user. Broken stubs are short-circuited before any
+ * cache write, so their timeout value (0) is never persisted.
  */
 class BrokenBridgeStub extends BridgeAbstract
 {
@@ -101,17 +98,6 @@ class BrokenBridgeStub extends BridgeAbstract
     public function getMaintainer(): string
     {
         return 'System';
-    }
-
-    /**
-     * Always returns null, since a broken bridge cannot detect parameters
-     * from a URL.
-     *
-     * @param mixed $url
-     */
-    public function detectParameters($url): mixed
-    {
-        return null;
     }
 
     /**

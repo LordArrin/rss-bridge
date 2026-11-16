@@ -19,6 +19,7 @@ final class BridgeMetadataCache
 {
     private const CACHE_PREFIX = 'bridge_metadata_v2';
     private const DEFAULT_TTL = 2592000;
+    private const BROKEN_RECHECK_TTL = 3600;
 
     private CacheInterface $cache;
 
@@ -37,22 +38,27 @@ final class BridgeMetadataCache
         $this->bridgesDirs = $bridgesDirs;
     }
 
-    /**
-     * Returns metadata for all bridges, using cache when available.
-     *
-     * @param BridgeFactory $factory Factory for resolving bridge class names
-     * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
-     * @return array<string, array{
-     *     name: string,
-     *     uri: string,
-     *     description: string,
-     *     parameters: array<string, array<string, mixed>>,
-     *     domain: string,
-     *     short_name: string,
-     *     maintainer: string,
-     *     cache_timeout: int
-     * }> Metadata indexed by bridge class name
-     */
+/**
+ * Returns metadata for all bridges, using cache when available.
+ *
+ * Cached entries that contain broken bridges are revalidated after
+ * BROKEN_RECHECK_TTL seconds, so a transient load failure cannot hide a
+ * bridge for the full DEFAULT_TTL. Entries without broken bridges are
+ * served for the full TTL (file changes invalidate the key via hash).
+ *
+ * @param BridgeFactory $factory Factory for resolving bridge class names
+ * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
+ * @return array<string, array{
+ *     name: string,
+ *     uri: string,
+ *     description: string,
+ *     parameters: array<string, array<string, mixed>>,
+ *     domain: string,
+ *     short_name: string,
+ *     maintainer: string,
+ *     cache_timeout: int
+ * }> Metadata indexed by bridge class name
+ */
     public function getAll(BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
         $cacheKey = $this->buildCacheKey();
@@ -64,9 +70,20 @@ final class BridgeMetadataCache
             && isset($cached['metadata']) === true
             && is_array($cached['metadata']) === true
         ) {
-            // Restore broken bridges list to the loader so FrontpageAction can access it
-            if (isset($cached['broken_bridges']) === true && is_array($cached['broken_bridges']) === true) {
-                foreach ($cached['broken_bridges'] as $bridgeName => $errorInfo) {
+            $brokenBridges = $cached['broken_bridges'] ?? [];
+            $hasBroken = is_array($brokenBridges) === true && $brokenBridges !== [];
+
+            $checkedAtRaw = $cached['broken_checked_at'] ?? 0;
+            $checkedAt = is_int($checkedAtRaw) === true ? $checkedAtRaw : 0;
+
+            if ($hasBroken === true && (time() - $checkedAt) >= self::BROKEN_RECHECK_TTL) {
+                $result = $this->buildMetadata($factory, $loader);
+                $this->cache->set($cacheKey, $result, self::DEFAULT_TTL);
+                return $result['metadata'];
+            }
+
+            if ($hasBroken === true) {
+                foreach ($brokenBridges as $bridgeName => $errorInfo) {
                     if (
                         is_string($bridgeName) === true
                         && is_array($errorInfo) === true
@@ -80,6 +97,7 @@ final class BridgeMetadataCache
                     }
                 }
             }
+
             /** @var array<string, array{name: string, uri: string, description: string, parameters: array<string, array<string, mixed>>, domain: string, short_name: string, maintainer: string, cache_timeout: int}> $metadata */
             $metadata = $cached['metadata'];
             return $metadata;
@@ -163,25 +181,26 @@ final class BridgeMetadataCache
         return $this->cachedHash ?? '';
     }
 
-    /**
-     * Builds metadata for all bridges in the configured directories.
-     *
-     * @param BridgeFactory $factory Factory for resolving bridge class names
-     * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
-     * @return array{
-     *     metadata: array<string, array{
-     *         name: string,
-     *         uri: string,
-     *         description: string,
-     *         parameters: array<string, array<string, mixed>>,
-     *         domain: string,
-     *         short_name: string,
-     *         maintainer: string,
-     *         cache_timeout: int
-     *     }>,
-     *     broken_bridges: array<string, array{message: string, file: string, line: int, class: string}>
-     * }
-     */
+/**
+ * Builds metadata for all bridges in the configured directories.
+ *
+ * @param BridgeFactory $factory Factory for resolving bridge class names
+ * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
+ * @return array{
+ *     metadata: array<string, array{
+ *         name: string,
+ *         uri: string,
+ *         description: string,
+ *         parameters: array<string, array<string, mixed>>,
+ *         domain: string,
+ *         short_name: string,
+ *         maintainer: string,
+ *         cache_timeout: int
+ *     }>,
+ *     broken_bridges: array<string, array{message: string, file: string, line: int, class: string}>,
+ *     broken_checked_at: int
+ * }
+ */
     private function buildMetadata(BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
         $metadata = [];
@@ -203,7 +222,6 @@ final class BridgeMetadataCache
 
                 $shortName = $m[1];
 
-                // Determine full class name based on directory
                 if (str_contains($dir, 'bridges-v2') === true) {
                     $className = 'RSSBridge\\Bridges\\' . $shortName;
                 } else {
@@ -216,27 +234,27 @@ final class BridgeMetadataCache
 
                 $bridge = $loader->createSafely($className);
 
-                // Skip broken bridges - they will be reported separately
                 if ($loader->isBridgeBroken($bridge) === true) {
                     continue;
                 }
 
                 $metadata[$className] = [
-                    'name' => $bridge->getName(),
-                    'uri' => $bridge->getURI(),
-                    'description' => $bridge->getDescription(),
-                    'parameters' => $bridge->getParameters(),
-                    'domain' => $this->extractDomain($bridge->getURI()),
-                    'short_name' => $shortName,
-                    'maintainer' => $bridge->getMaintainer(),
-                    'cache_timeout' => $bridge->getCacheTimeout(),
+                'name' => $bridge->getName(),
+                'uri' => $bridge->getURI(),
+                'description' => $bridge->getDescription(),
+                'parameters' => $bridge->getParameters(),
+                'domain' => $this->extractDomain($bridge->getURI()),
+                'short_name' => $shortName,
+                'maintainer' => $bridge->getMaintainer(),
+                'cache_timeout' => $bridge->getCacheTimeout(),
                 ];
             }
         }
 
         return [
-            'metadata' => $metadata,
-            'broken_bridges' => $loader->getBrokenBridges(),
+        'metadata' => $metadata,
+        'broken_bridges' => $loader->getBrokenBridges(),
+        'broken_checked_at' => time(),
         ];
     }
 

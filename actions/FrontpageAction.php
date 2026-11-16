@@ -35,7 +35,6 @@ final class FrontpageAction implements ActionInterface
 
         $bridgeClassNames = $this->bridgeFactory->getBridgeClassNames();
 
-        // Notifications from BridgeFactory / SafeBridgeLoader (unified system v2)
         foreach ($this->bridgeFactory->getMissingEnabledBridges() as $missingEnabledBridge) {
             notify_warning(
                 sprintf('Bridge "%s" is listed in ENABLED_BRIDGES but was not found and cannot be used.', $missingEnabledBridge),
@@ -68,7 +67,14 @@ final class FrontpageAction implements ActionInterface
             $activeBridges++;
         }
 
-        // Report every bridge that SafeBridgeLoader had to disable (unified system v2)
+        if ($activeBridges === 0) {
+            notify_error(
+                'No bridges are enabled. Check the ENABLED_BRIDGES and DISABLED_BRIDGES environment variables.',
+                'No active bridges',
+                'BridgeFactory'
+            );
+        }
+
         foreach ($this->safeLoader->getBrokenBridges() as $brokenName => $brokenInfo) {
             notify_error(
                 sprintf(
@@ -80,16 +86,16 @@ final class FrontpageAction implements ActionInterface
                 'SafeBridgeLoader',
                 [],
                 [[
-                    'label' => $this->bridgeFactory->getShortClassName($brokenName),
-                    'url'   => './?action=list',
+                'label' => $this->bridgeFactory->getShortClassName($brokenName),
+                'url'   => './?action=list',
                 ]]
             );
         }
 
         $response = new Response(render(__DIR__ . '/../templates/frontpage.html.php', [
-            'bridges'        => $body,
-            'active_bridges' => $activeBridges,
-            'total_bridges'  => count($bridgeClassNames),
+        'bridges'        => $body,
+        'active_bridges' => $activeBridges,
+        'total_bridges'  => count($bridgeClassNames),
         ]));
 
         return $response;
@@ -198,9 +204,9 @@ final class FrontpageAction implements ActionInterface
         return $card;
     }
 
-    /**
-     * @param array<int|string, mixed> $parameters
-     */
+/**
+ * @param array<int|string, mixed> $parameters
+ */
     private static function renderForm(
         string $bridgeClassName,
         string $contextName,
@@ -208,26 +214,25 @@ final class FrontpageAction implements ActionInterface
         ?string $token
     ): string {
         $form = <<<EOD
-        <form method="GET" action="?" class="bridge-form">
-            <input type="hidden" name="action" value="display" />
-            <input type="hidden" name="bridge" value="{$bridgeClassName}" />
+    <form method="GET" action="?" class="bridge-form">
+        <input type="hidden" name="action" value="display" />
+        <input type="hidden" name="bridge" value="{$bridgeClassName}" />
 
-        EOD;
+    EOD;
 
-        // Read authentication setting directly from environment
-        if (filter_var(getenv('AUTHENTICATION_ENABLE'), FILTER_VALIDATE_BOOLEAN) === true && $token !== null && $token !== '') {
+        if ($token !== null && $token !== '') {
             $form .= html_input([
-                'type'  => 'hidden',
-                'name'  => 'token',
-                'value' => $token,
+            'type'  => 'hidden',
+            'name'  => 'token',
+            'value' => $token,
             ]) . "\n";
         }
 
         if ($contextName !== '') {
             $form .= html_input([
-                'type'  => 'hidden',
-                'name'  => 'context',
-                'value' => $contextName,
+            'type'  => 'hidden',
+            'name'  => 'context',
+            'value' => $contextName,
             ]) . "\n";
         }
 
@@ -249,7 +254,6 @@ final class FrontpageAction implements ActionInterface
             $nameRaw = $parameter['name'] ?? '';
             $parameterName = is_string($nameRaw) === true ? $nameRaw : (is_scalar($nameRaw) === true ? (string) $nameRaw : '');
 
-            // Cast is now valid because PHPDoc says $id can be int|string
             $idStr = (string) $id;
             $idArg = 'arg-' . urlencode($bridgeClassName) . '-' . urlencode($contextName) . '-' . urlencode($idStr);
 
@@ -269,10 +273,6 @@ final class FrontpageAction implements ActionInterface
                 continue;
             }
 
-            // Build the tooltip text for the info button. Keep it in a
-            // data-attribute: native title tooltips are unavailable on
-            // touch devices and the JS TooltipManager renders a proper,
-            // viewport-clamped tooltip from this text instead.
             $tooltipLines = [];
 
             $titleRaw = $parameter['title'] ?? null;
@@ -292,12 +292,12 @@ final class FrontpageAction implements ActionInterface
             if ($tooltipLines !== []) {
                 $tooltipText = implode("\n\n", $tooltipLines);
                 $params = [
-                    'class'      => 'info',
-                    'title'      => $tooltipText,
-                    'tabindex'   => '0',
-                    'role'       => 'button',
-                    'aria-label' => 'More information about ' . $parameterName,
-                    'data-for'   => $idArg,
+                'class'      => 'info',
+                'title'      => $tooltipText,
+                'tabindex'   => '0',
+                'role'       => 'button',
+                'aria-label' => 'More information about ' . $parameterName,
+                'data-for'   => $idArg,
                 ];
                 $form .= html_tag('i', 'i', $params) . "\n";
             } else {
@@ -308,10 +308,10 @@ final class FrontpageAction implements ActionInterface
         $form .= "</div>\n\n";
 
         $form .= html_tag('button', 'Generate feed', [
-            'type'       => 'submit',
-            'name'       => 'format',
-            'value'      => 'Html',
-            'formtarget' => '_blank',
+        'type'       => 'submit',
+        'name'       => 'format',
+        'value'      => 'Html',
+        'formtarget' => '_blank',
         ]) . "\n";
 
         return $form . "</form>\n\n";
@@ -359,16 +359,18 @@ final class FrontpageAction implements ActionInterface
         ]);
     }
 
-    /**
-     * @param array<mixed, mixed> $parameter
-     */
+/**
+ * @param array<mixed, mixed> $parameter
+ */
     public static function getCheckboxInput(array $parameter, string $id, string $name): string
     {
+        $default = $parameter['defaultValue'] ?? null;
+
         return html_input([
-            'id'      => $id,
-            'type'    => 'checkbox',
-            'name'    => $name,
-            'checked' => $parameter['defaultValue'] === 'checked',
+        'id'      => $id,
+        'type'    => 'checkbox',
+        'name'    => $name,
+        'checked' => $default === 'checked' || $default === true,
         ]);
     }
 

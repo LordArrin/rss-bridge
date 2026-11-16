@@ -65,18 +65,18 @@ class SafeBridgeLoader
             return $bridge;
         } catch (\Throwable $e) {
             $this->registerBrokenBridge($bridgeClassName, $e);
-            return $this->createStub($bridgeClassName, $e->getMessage(), $e->getFile(), $e->getLine());
+            return $this->createStub($bridgeClassName, $e->getMessage());
         }
     }
 
-    /**
-     * Checks whether a bridge instance is a broken stub.
-     *
-     * @param BridgeAbstract $bridge Bridge instance to check
-     */
+/**
+ * Checks whether a bridge instance is a broken stub.
+ *
+ * @param BridgeAbstract $bridge Bridge instance to check
+ */
     public function isBridgeBroken(BridgeAbstract $bridge): bool
     {
-        return $bridge instanceof BrokenBridgeStub || (method_exists($bridge, 'isBrokenStub') && $bridge->isBrokenStub());
+        return $bridge instanceof BrokenBridgeStub;
     }
 
     /**
@@ -112,15 +112,13 @@ class SafeBridgeLoader
         $this->brokenBridges = [];
     }
 
-    /**
-     * Creates a safe stub for a broken bridge.
-     *
-     * @param string $originalName Original bridge class name
-     * @param string $errorMessage Error message describing the failure
-     * @param string $file File where the error occurred
-     * @param int $line Line number where the error occurred
-     */
-    private function createStub(string $originalName, string $errorMessage, string $file = '', int $line = 0): BrokenBridgeStub
+/**
+ * Creates a safe stub for a broken bridge.
+ *
+ * @param string $originalName Original bridge class name
+ * @param string $errorMessage Error message describing the failure
+ */
+    private function createStub(string $originalName, string $errorMessage): BrokenBridgeStub
     {
         return new BrokenBridgeStub($originalName, $errorMessage, $this->cache, $this->logger);
     }

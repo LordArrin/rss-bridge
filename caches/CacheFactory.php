@@ -40,6 +40,10 @@ final class CacheFactory
     private function normalizeName(?string $name): string
     {
         if ($name === null) {
+            // Fallback to 'file' when CACHE_TYPE is unset (CLI context without
+            // load-env). In Docker, load-env always sets it to 'memcached' from
+            // .env.default, so this fallback only applies to bin-scripts and
+            // other non-Docker invocations.
             $name = $this->getEnv('CACHE_TYPE', 'file');
         }
 

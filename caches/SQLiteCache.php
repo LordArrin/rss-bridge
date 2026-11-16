@@ -182,13 +182,7 @@ final class SQLiteCache extends AbstractCache
 
         try {
             $this->db->exec('PRAGMA busy_timeout = 0');
-
-            if (@$this->db->exec('BEGIN IMMEDIATE') === false) {
-                // Another process is inside its own lock transaction right
-                // now. Treat as "busy elsewhere": caller serves stale instead
-                // of piling onto the contention.
-                return false;
-            }
+            $this->db->exec('BEGIN IMMEDIATE');
 
             $stmt = $this->db->prepare('SELECT expiration FROM locks WHERE key = :key');
             if ($stmt === false) {
@@ -208,7 +202,6 @@ final class SQLiteCache extends AbstractCache
                 }
 
                 if ($expiration > $now) {
-                    // Live lease held by another worker.
                     $this->db->exec('ROLLBACK');
                     return false;
                 }
@@ -228,25 +221,17 @@ final class SQLiteCache extends AbstractCache
             return true;
         } catch (\Exception $e) {
             try {
-                // SQLite3::lastErrorCode() is SQLITE_BUSY (5) when another
-                // process still owns the write lock: rolling back would fail
-                // anyway, so leave it alone and let the lease expire on its
-                // own. Any other error means our (possibly open) transaction
-                // is ours to clean up.
                 if ($this->db->lastErrorCode() !== self::SQLITE_BUSY) {
                     @$this->db->exec('ROLLBACK');
                 }
             } catch (\Exception $inner) {
-                // Ignore rollback failures; the lease simply expires on its own.
             }
-            // Fail open: cache problems must never stop feed regeneration.
             $this->logger->warning(sprintf(
                 'SQLite lock acquire failed (%s): proceeding without single-flight',
                 $e->getMessage()
             ));
             return true;
         } finally {
-            // Restore the configured busy timeout for normal cache traffic.
             $this->db->exec('PRAGMA busy_timeout = ' . $this->busyTimeoutMs);
         }
     }

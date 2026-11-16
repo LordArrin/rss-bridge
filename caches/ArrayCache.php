@@ -103,10 +103,20 @@ final class ArrayCache extends AbstractCache
                 continue;
             }
 
-            $freshUntil = (int) ($decoded['fresh_until'] ?? 0);
-            $hardExpiration = $freshUntil + self::DEFAULT_STALE_TTL;
+            $freshUntilRaw = $decoded['fresh_until'];
+            $freshUntil = 0;
+            if (is_int($freshUntilRaw) === true) {
+                $freshUntil = $freshUntilRaw;
+            } elseif (is_string($freshUntilRaw) === true && is_numeric($freshUntilRaw) === true) {
+                $freshUntil = (int) $freshUntilRaw;
+            }
 
-            if ($hardExpiration !== 0 && $hardExpiration <= $now) {
+            if ($freshUntil <= 0) {
+                continue;
+            }
+
+            $hardExpiration = $freshUntil + self::DEFAULT_STALE_TTL;
+            if ($hardExpiration <= $now) {
                 unset($this->data[$key]);
             }
         }

@@ -18,7 +18,7 @@ final class CacheMiddleware implements Middleware
         $this->cache = $cache;
     }
 
-    private const REMOVE_KEYS = ['token', 'action'];
+    public const CACHE_TTL_HEADER = 'x-rssbridge-cache-ttl';
     private const REGENERATION_LOCK_TTL = 120;
     private const STALE_RETRY_AFTER = 60;
     private const DEFAULT_MAX_AGE = 3600;
@@ -46,7 +46,7 @@ final class CacheMiddleware implements Middleware
                     return $notModified;
                 }
             }
-            return $this->attachCacheHeaders($cachedResponse, $this->resolveMaxAge($request), $cachedResponse->getHeader('etag'));
+            return $this->attachCacheHeaders($cachedResponse, $this->resolveMaxAge($request, $cachedResponse), $cachedResponse->getHeader('etag'));
         }
 
         $staleEntry = $this->cache->getWithStale($cacheKey);
@@ -66,7 +66,9 @@ final class CacheMiddleware implements Middleware
                 $this->resolveMaxAge($request),
                 $response->getHeader('etag')
             );
-            if (self::toInt($request->get('_cache_timeout', -1), -1) === 0) {
+
+            $customTimeoutEnabled = filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN);
+            if ($customTimeoutEnabled === true && self::toInt($request->get('_cache_timeout', -1), -1) === 0) {
                 $this->cache->delete($cacheKey);
             }
             return $response;
@@ -78,9 +80,9 @@ final class CacheMiddleware implements Middleware
             if ($stale !== null) {
                 $retryAfter = $isTimeout === true ? self::TIMEOUT_RETRY_AFTER : min(max(self::STALE_RETRY_AFTER, $this->resolveMaxAge($request)), 3600);
                 return $stale
-                    ->withoutHeader('etag')
-                    ->withoutHeader('last-modified')
-                    ->withHeader('retry-after', (string) $retryAfter);
+                ->withoutHeader('etag')
+                ->withoutHeader('last-modified')
+                ->withHeader('retry-after', (string) $retryAfter);
             }
             return $this->normalizeTransientResponse($response, $request);
         }
@@ -218,13 +220,13 @@ final class CacheMiddleware implements Middleware
         $maxAge = self::STALE_RETRY_AFTER;
 
         $headers = [
-            'x-feed-stale' => '1',
-            'age' => (string) self::estimateStaleAge($stale),
-            'cache-control' => sprintf(
-                'public, max-age=%d, stale-while-revalidate=%d',
-                $maxAge,
-                self::REGENERATION_LOCK_TTL
-            ),
+        'x-feed-stale' => '1',
+        'age' => (string) self::estimateStaleAge($stale),
+        'cache-control' => sprintf(
+            'public, max-age=%d, stale-while-revalidate=%d',
+            $maxAge,
+            self::REGENERATION_LOCK_TTL
+        ),
         ];
 
         $lmTimestamp = strtotime((string) $stale->getHeader('last-modified'));
@@ -237,7 +239,7 @@ final class CacheMiddleware implements Middleware
             $stale = $stale->withHeader($name, $value);
         }
 
-        return $stale;
+        return $stale->withoutHeader(self::CACHE_TTL_HEADER);
     }
 
     private static function estimateStaleAge(Response $response): int
@@ -265,7 +267,7 @@ final class CacheMiddleware implements Middleware
         return str_contains($response->getBody(), 'cURL error') === true;
     }
 
-    private function resolveMaxAge(Request $request): int
+    private function resolveMaxAge(Request $request, ?Response $cached = null): int
     {
         $attribute = $request->getAttribute('_resolved_cache_timeout');
         $attributeInt = self::toInt($attribute, 0);
@@ -273,10 +275,20 @@ final class CacheMiddleware implements Middleware
             return min(86400, max(1, $attributeInt));
         }
 
-        $param = $request->get('_cache_timeout');
-        $paramInt = self::toInt($param, 0);
-        if ($paramInt > 0) {
-            return min(86400, max(1, $paramInt));
+        if ($cached !== null) {
+            $storedTtl = self::toInt($cached->getHeader(self::CACHE_TTL_HEADER), 0);
+            if ($storedTtl > 0) {
+                return min(86400, max(1, $storedTtl));
+            }
+        }
+
+        $customTimeoutEnabled = filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN);
+        if ($customTimeoutEnabled === true) {
+            $param = $request->get('_cache_timeout');
+            $paramInt = self::toInt($param, 0);
+            if ($paramInt > 0) {
+                return min(86400, max(1, $paramInt));
+            }
         }
 
         return self::DEFAULT_MAX_AGE;
@@ -292,16 +304,18 @@ final class CacheMiddleware implements Middleware
             $staleWhileRevalidate = max(self::REGENERATION_LOCK_TTL, intdiv($maxAge, 4));
 
             return $response
-                ->withHeader('etag', $etag)
-                ->withHeader('cache-control', sprintf('public, max-age=%d, stale-while-revalidate=%d', $maxAge, $staleWhileRevalidate))
-                ->withHeader('expires', gmdate('D, d M Y H:i:s \G\M\T', time() + $maxAge))
-                ->withHeader('vary', 'Accept-Encoding');
+            ->withHeader('etag', $etag)
+            ->withHeader('cache-control', sprintf('public, max-age=%d, stale-while-revalidate=%d', $maxAge, $staleWhileRevalidate))
+            ->withHeader('expires', gmdate('D, d M Y H:i:s \G\M\T', time() + $maxAge))
+            ->withHeader('vary', 'Accept-Encoding')
+            ->withoutHeader(self::CACHE_TTL_HEADER);
         }
 
         return $response
-            ->withHeader('cache-control', 'no-store, no-cache, must-revalidate, max-age=0')
-            ->withHeader('pragma', 'no-cache')
-            ->withHeader('expires', gmdate('D, d M Y H:i:s \G\M\T'));
+        ->withHeader('cache-control', 'no-store, no-cache, must-revalidate, max-age=0')
+        ->withHeader('pragma', 'no-cache')
+        ->withHeader('expires', gmdate('D, d M Y H:i:s \G\M\T'))
+        ->withoutHeader(self::CACHE_TTL_HEADER);
     }
 
     /**
@@ -390,11 +404,7 @@ final class CacheMiddleware implements Middleware
 
     private function createCacheKey(Request $request): string
     {
-        $params = $request->toArray();
-        foreach (self::REMOVE_KEYS as $key) {
-            unset($params[$key]);
-        }
-        ksort($params);
+        $params = $request->getCacheableParams();
         $encoded = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
         return 'http_' . ($encoded === false ? '{}' : $encoded);
     }

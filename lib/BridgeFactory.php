@@ -56,14 +56,17 @@ final class BridgeFactory
      */
     private array $missingEnabledBridges = [];
 
-    /**
-     * Per-process sandbox verification results, keyed by path + mtime + size.
-     * Avoids re-running the subprocess for unchanged files within a worker;
-     * editing a file changes mtime/size and invalidates the entry.
-     *
-     * @var array<string, bool>
-     */
+/**
+ * Per-process sandbox verification results, keyed by path + mtime + size.
+ * Positive verdicts live for the worker lifetime; negative verdicts expire
+ * after SANDBOX_NEGATIVE_TTL so transient failures (OOM, fork pressure,
+ * sandbox timeout) do not mark a bridge broken for hundreds of requests.
+ *
+ * @var array<string, array{ok: bool, checked: int}>
+ */
     private static array $sandboxCache = [];
+
+    private const SANDBOX_NEGATIVE_TTL = 60;
 
     public function __construct(CacheInterface $cache, Logger $logger)
     {
@@ -107,16 +110,17 @@ final class BridgeFactory
         sort($this->bridgeClassNames);
     }
 
-    /**
-     * Loads the list of enabled bridges from environment variables.
-     *
-     * Reads ENABLED_BRIDGES and DISABLED_BRIDGES (comma-separated lists).
-     * The special value '*' in ENABLED_BRIDGES enables all discovered bridges.
-     * Bridges listed in ENABLED_BRIDGES but not found on disk are logged
-     * and stored in {@see getMissingEnabledBridges()}.
-     *
-     * @throws \Exception If no bridges are enabled after filtering
-     */
+/**
+ * Loads the list of enabled bridges from environment variables.
+ *
+ * Reads ENABLED_BRIDGES and DISABLED_BRIDGES (comma-separated lists).
+ * The special value '*' in ENABLED_BRIDGES enables all discovered bridges.
+ * Bridges listed in ENABLED_BRIDGES but not found on disk are logged
+ * and stored in {@see getMissingEnabledBridges()}.
+ *
+ * An empty resulting set is logged as an error but does not throw, so the
+ * frontpage and health endpoints stay reachable and can report the problem.
+ */
     private function loadEnabledBridges(): void
     {
         $enabledRaw = getenv('ENABLED_BRIDGES');
@@ -158,7 +162,7 @@ final class BridgeFactory
         $this->enabledBridges = array_values(array_diff($resolvedEnabled, $resolvedDisabled));
 
         if ($this->enabledBridges === []) {
-            throw new \Exception('No bridges are enabled after applying ENABLED_BRIDGES and DISABLED_BRIDGES filters');
+            $this->logger->error('No bridges are enabled after applying ENABLED_BRIDGES and DISABLED_BRIDGES filters');
         }
     }
 
@@ -235,37 +239,37 @@ final class BridgeFactory
         }
     }
 
-    /**
-     * Loads a bridge file inside an isolated PHP subprocess to detect
-     * fatal compile errors (e.g. signature mismatches with parent classes).
-     *
-     * The verdict is written to a dedicated result file, NOT parsed from stdout:
-     * the new Dom\* parser and PHP 8.5 deprecations legitimately emit warnings,
-     * and those must not mark an otherwise working bridge as broken.
-     *
-     * @param string $file Absolute path to the bridge PHP file
-     *
-     * @throws \Exception If the sandbox check fails
-     */
+/**
+ * Loads a bridge file inside an isolated PHP subprocess to detect
+ * fatal compile errors (e.g. signature mismatches with parent classes).
+ *
+ * The verdict is written to a dedicated result file, NOT parsed from stdout:
+ * the new Dom\* parser and PHP 8.5 deprecations legitimately emit warnings,
+ * and those must not mark an otherwise working bridge as broken.
+ *
+ * @param string $file Absolute path to the bridge PHP file
+ *
+ * @throws \Exception If the sandbox check fails
+ */
     private function loadBridgeInSandbox(string $file): void
     {
         $real = realpath($file);
         $mtime = @filemtime($file);
         $size = @filesize($file);
         $cacheKey = ($real !== false ? $real : $file)
-            . '|' . ($mtime === false ? 0 : $mtime)
-            . '|' . ($size === false ? 0 : $size);
+        . '|' . ($mtime === false ? 0 : $mtime)
+        . '|' . ($size === false ? 0 : $size);
 
         if (isset(self::$sandboxCache[$cacheKey]) === true) {
-            if (self::$sandboxCache[$cacheKey] === true) {
+            $entry = self::$sandboxCache[$cacheKey];
+            if ($entry['ok'] === true) {
                 return;
             }
-            throw new \Exception('Bridge compatibility error (cached): ' . $file);
+            if ((time() - $entry['checked']) < self::SANDBOX_NEGATIVE_TTL) {
+                throw new \Exception('Bridge compatibility error (cached): ' . $file);
+            }
         }
 
-        // tempnam() creates the base file; rename it to the .php script so we do
-        // not leak an orphan temp file on every load (the old code unlinked only
-        // the .php variant and left the base behind).
         $tmpBase = tempnam(sys_get_temp_dir(), 'rssbridge_sandbox_');
         if ($tmpBase === false) {
             throw new \Exception('Unable to create sandbox temp file');
@@ -299,7 +303,6 @@ final class BridgeFactory
             $phpBinary = self::getPhpCliBinary();
             $cmd = escapeshellarg($phpBinary) . ' ' . escapeshellarg($testScript) . ' 2>&1';
 
-            // Optional wall-clock guard when coreutils/busybox timeout is present.
             $timeoutBin = is_executable('/usr/bin/timeout') === true ? '/usr/bin/timeout' : (is_executable('/bin/timeout') === true ? '/bin/timeout' : null);
             if ($timeoutBin !== null) {
                 $cmd = $timeoutBin . ' 30 ' . $cmd;
@@ -316,14 +319,13 @@ final class BridgeFactory
 
             if ($result === 'SANDBOX_SUCCESS' && $returnVar === 0) {
                 if ($stdout !== '') {
-                    // Warnings/deprecations are not fatal: log, do not mark broken.
                     $this->logger->debug(sprintf('[sandbox] %s emitted output: %s', basename($file), $stdout));
                 }
-                self::$sandboxCache[$cacheKey] = true;
+                self::$sandboxCache[$cacheKey] = ['ok' => true, 'checked' => time()];
                 return;
             }
 
-            self::$sandboxCache[$cacheKey] = false;
+            self::$sandboxCache[$cacheKey] = ['ok' => false, 'checked' => time()];
             $detail = $result !== '' ? $result : ($stdout !== '' ? $stdout : 'no result (fatal compile error?)');
             throw new \Exception('Bridge compatibility error: ' . $detail);
         } finally {

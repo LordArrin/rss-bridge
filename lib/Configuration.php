@@ -27,6 +27,7 @@ final class Configuration
      * @var array<string, array<string, mixed>>
      */
     private static array $config = [];
+    private static bool $loaded = false;
 
     private function __construct()
     {
@@ -34,34 +35,33 @@ final class Configuration
 
     public static function loadConfiguration(): void
     {
-        // 1. Load default bridge configuration (baked into the image)
         $defaultConfigPath = __DIR__ . '/../.bridges.default';
         if (file_exists($defaultConfigPath) === false) {
             throwServerException('The default bridges configuration file (.bridges.default) is missing');
         }
 
-        // INI_SCANNER_RAW keeps every value as a string: numeric-looking tokens
-        // and secrets keep leading zeros and are NOT silently cast to int.
         $config = parse_ini_file($defaultConfigPath, true, INI_SCANNER_RAW);
         if ($config === false) {
             throwServerException('Error parsing default bridges config');
         }
         self::importConfig($config);
 
-        // 2. Load user bridge configuration (optional, copied to /app/ by docker-entrypoint.sh
-        // to ensure correct read permissions for the nginx PHP-FPM user)
         $userConfigPath = __DIR__ . '/../.bridges';
         if (file_exists($userConfigPath) === true) {
             $userConfig = parse_ini_file($userConfigPath, true, INI_SCANNER_RAW);
-            if ($userConfig !== false) {
+            if ($userConfig === false) {
+                error_log('RSS-Bridge: failed to parse user bridges config (.bridges); bridge-specific options may be missing');
+            } else {
                 self::importConfig($userConfig);
             }
         }
+
+        self::$loaded = true;
     }
 
     public static function getConfig(string $section, string $key, mixed $default = null): mixed
     {
-        if (self::$config === []) {
+        if (self::$loaded === false) {
             throwServerException('Bridge config has not been loaded');
         }
         return self::$config[strtolower($section)][strtolower($key)] ?? $default;
@@ -93,10 +93,9 @@ final class Configuration
             return $value;
         }
 
-        // RAW mode may leave surrounding quotes; strip one matching pair.
         $len = strlen($value);
         if ($len >= 2 && (($value[0] === '"' && $value[$len - 1] === '"') || ($value[0] === "'" && $value[$len - 1] === "'"))) {
-            $value = substr($value, 1, -1);
+            return substr($value, 1, -1);
         }
 
         $lower = strtolower(trim($value));

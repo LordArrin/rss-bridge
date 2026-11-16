@@ -58,6 +58,7 @@ $normalizationRules = [
     'PHP_FPM_PM_MAX_SPARE_SERVERS'    => ['type' => 'int',      'fallback' => '5',   'min' => 0,    'max' => 100],
     'PHP_FPM_PM_MAX_REQUESTS'         => ['type' => 'int',      'fallback' => '450', 'min' => 0,    'max' => 100000],
     'PHP_FPM_PM_PROCESS_IDLE_TIMEOUT' => ['type' => 'duration', 'fallback' => '30s', 'min' => 1,    'max' => 3600],
+    'PHP_FPM_REQUEST_TERMINATE_TIMEOUT' => ['type' => 'int', 'fallback' => '90', 'min' => 10, 'max' => 3600],
 
     // PHP runtime
     'PHP_MEMORY_LIMIT'       => ['type' => 'memory', 'fallback' => '-1',    'allowUnlimited' => true],
@@ -701,11 +702,11 @@ function validateEmail(string $value): ?string
 }
 
 /**
- * Validates a Telegram username or link.
+ * Validates a Telegram username or link and normalizes it to a bare username.
  * Accepts:
- *   - Username: "username" (alphanumeric + underscore, 5+ chars)
- *   - Link: "https://t.me/username" or "https://t.me/channel_name"
- * Returns the validated value or null on failure.
+ *   - Username: "username" or "@username" (alphanumeric + underscore, 5+ chars)
+ *   - Link: "https://t.me/username" (optional trailing slash)
+ * Returns the normalized username, or null on failure.
  * Empty string is valid (optional field).
  */
 function validateTelegram(string $value): ?string
@@ -715,12 +716,11 @@ function validateTelegram(string $value): ?string
         return '';
     }
 
-    // Check if it's a Telegram link
-    if (preg_match('#^https?://t\.me/([a-zA-Z0-9_]{5,})$#', $value, $m) === 1) {
-        return $value;
+    if (preg_match('#^https?://t\.me/([a-zA-Z0-9_]{5,})/?$#', $value, $m) === 1) {
+        return $m[1];
     }
 
-    // Check if it's just a username (without @)
+    $value = ltrim($value, '@');
     if (preg_match('/^[a-zA-Z0-9_]{5,}$/', $value) === 1) {
         return $value;
     }
@@ -811,7 +811,14 @@ function validateBridgeList(string $value): ?string
             continue;
         }
 
-        // Bridge class names are alphanumeric + underscore
+        $pos = strrpos($bridge, '\\');
+        if ($pos !== false) {
+            $bridge = substr($bridge, $pos + 1);
+        }
+        if (str_ends_with(strtolower($bridge), '.php') === true) {
+            $bridge = substr($bridge, 0, -4);
+        }
+
         if (preg_match('/^[a-zA-Z0-9_]+$/', $bridge) !== 1) {
             return null;
         }
@@ -1102,10 +1109,10 @@ function applyTimezone(string $tz): bool
  * Returns array of warnings generated during normalization.
  * Modifies $env in-place, replacing raw values with canonical forms.
  */
-function normalizeEnv(array &$env, array $rules, array $fileDefaults): array
+function normalizeEnv(array &$env, array $rules): array
 {
     $warnings = [];
-    $containerMb = null; // lazy-loaded on first use
+    $containerMb = null;
 
     foreach ($rules as $var => $rule) {
         if (isset($env[$var]) === false) {
@@ -1114,23 +1121,25 @@ function normalizeEnv(array &$env, array $rules, array $fileDefaults): array
 
         $original = (string)$env[$var];
         if ($original === '') {
+            $fallback = (string)($rule['fallback'] ?? '');
+            if ($fallback !== '') {
+                $env[$var] = $fallback;
+                $warnings[] = "{$var} is empty, using fallback '{$fallback}'";
+            }
             continue;
         }
 
         $type = $rule['type'];
         $parsed = null;
 
-        // Parse according to type
         if ($type === 'memory') {
             $parsed = parseMemorySize($original);
 
             if ($parsed === null) {
-                // Invalid format — fall back
                 $fallback = $rule['fallback'] ?? '';
                 $parsed = parseMemorySize($fallback);
                 $warnings[] = "{$var}='{$original}': invalid memory format, using '{$fallback}'";
             } else {
-                // Validate semantic constraints
                 $allowUnlimited = $rule['allowUnlimited'] ?? false;
                 $allowZero = $rule['allowZero'] ?? false;
 
@@ -1148,7 +1157,6 @@ function normalizeEnv(array &$env, array $rules, array $fileDefaults): array
                     $warnings[] = "{$var}='{$original}': invalid value for this variable, using '{$fallback}'";
                 }
 
-                // Container memory cap (e.g. memcached 49% rule)
                 if ($parsed !== null && $parsed > 0 && isset($rule['containerCap']) === true) {
                     if ($containerMb === null) {
                         $containerMb = getContainerMemoryMb();
@@ -1166,12 +1174,10 @@ function normalizeEnv(array &$env, array $rules, array $fileDefaults): array
                 }
             }
 
-            // Apply custom canonicalizer or default memory canonicalization
             if ($parsed !== null) {
                 if (isset($rule['canonicalize']) === true) {
                     $canonical = $rule['canonicalize']($parsed);
                 } else {
-                    // Default: "-1" or "NM" (uppercase M, safe for PHP ini)
                     $canonical = ($parsed === -1)
                         ? '-1'
                         : max(1, (int)round($parsed / 1048576)) . 'M';
@@ -1209,13 +1215,11 @@ function normalizeEnv(array &$env, array $rules, array $fileDefaults): array
                 $env[$var] = $fallback;
                 $warnings[] = "{$var}='{$original}': invalid duration, using '{$fallback}'";
             } else {
-                // Preserve original format if valid, just sanitize
                 $env[$var] = preg_replace('/[^0-9a-zA-Z]/', '', $original);
             }
         } elseif ($type === 'string') {
             $applySanitize = $rule['sanitize'] ?? true;
 
-            // Custom validator
             if (isset($rule['validate']) === true && is_callable($rule['validate'])) {
                 $validated = ($rule['validate'])($original);
                 if ($validated === null) {
@@ -1226,10 +1230,8 @@ function normalizeEnv(array &$env, array $rules, array $fileDefaults): array
                     $env[$var] = $validated;
                 }
             } elseif ($applySanitize === true) {
-                // Default sanitization for INI/shell injection protection
                 $env[$var] = preg_replace('/[^a-zA-Z0-9_.\-\/]/', '', $original);
             } else {
-                // No sanitization, use as-is
                 $env[$var] = $original;
             }
         }
@@ -1311,6 +1313,7 @@ function generatePhpFpmConfig(array $env): int
         'PHP_FPM_PM_MAX_SPARE_SERVERS',
         'PHP_FPM_PM_MAX_REQUESTS',
         'PHP_FPM_PM_PROCESS_IDLE_TIMEOUT',
+        'PHP_FPM_REQUEST_TERMINATE_TIMEOUT',
     ];
 
     $count = 0;
@@ -1319,7 +1322,6 @@ function generatePhpFpmConfig(array $env): int
             continue;
         }
         $value = $env[$envVar];
-        // Values are already validated/normalized, but sanitize once more for defense-in-depth
         $safeValue = preg_replace('/[^a-zA-Z0-9_.\-]/', '', (string)$value);
         $placeholder = '{{' . $envVar . '}}';
         if (str_contains($template, $placeholder) === true) {

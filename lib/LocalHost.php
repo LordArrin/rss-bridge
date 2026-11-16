@@ -25,6 +25,7 @@ final class LocalHost
     private static bool $domainLoaded = false;
 
     private const LOCAL_ADDRESS = 'http://127.0.0.1';
+    private const LOCAL_TIMEOUT_CAP = 30;
 
     /**
      * Fetches raw body of a local bridge display URL.
@@ -187,13 +188,18 @@ final class LocalHost
         }
     }
 
-    /**
-     * Rewrites URL to hit localhost, preserving path, query, and Host header.
-     * Bypasses DNS resolution and TLS certificate verification.
-     *
-     * @param array<string, string>|list<string> $httpHeaders
-     * @param array<int, mixed> $curlOptions
-     */
+/**
+ * Rewrites URL to hit localhost, preserving path, query, and Host header.
+ * Bypasses DNS resolution and TLS certificate verification.
+ *
+ * Self-requests are capped (LOCAL_TIMEOUT_CAP, no retries) and carry a
+ * recursion-guard header: a request that is itself a local sub-request may
+ * not spawn another one, so a saturated FPM pool degrades gracefully instead
+ * of deadlocking workers waiting on each other.
+ *
+ * @param array<string, string>|list<string> $httpHeaders
+ * @param array<int, mixed> $curlOptions
+ */
     private static function fetchLocal(
         string $url,
         array $httpHeaders,
@@ -204,11 +210,15 @@ final class LocalHost
         /** @var \RSSBridge\Http\HttpClient $httpClient */
         $httpClient = $container['http_client'];
 
-        $timeoutEnv = getenv('HTTP_TIMEOUT');
-        $retriesEnv = getenv('HTTP_RETRIES');
+        $depthRaw = $_SERVER['HTTP_X_RSSBRIDGE_LOCAL_DEPTH'] ?? '0';
+        $depth = (is_string($depthRaw) === true && ctype_digit($depthRaw) === true) ? (int) $depthRaw : 0;
+        if ($depth >= 1) {
+            throwClientException('LocalHost: nested local bridge requests are not allowed (recursion guard)');
+        }
 
+        $timeoutEnv = getenv('HTTP_TIMEOUT');
         $timeoutValue = ($timeoutEnv !== false && $timeoutEnv !== '') ? (int) $timeoutEnv : 60;
-        $retriesValue = ($retriesEnv !== false && $retriesEnv !== '') ? (int) $retriesEnv : 2;
+        $timeoutValue = max(1, min($timeoutValue, self::LOCAL_TIMEOUT_CAP));
 
         $parsed = parse_url($url);
         if (is_array($parsed) === false) {
@@ -248,12 +258,14 @@ final class LocalHost
             $headers['Host'] = $originalHost;
         }
 
+        $headers['X-RssBridge-Local-Depth'] = (string) ($depth + 1);
+
         $config = [
-            'timeout'      => $timeoutValue,
-            'retries'      => $retriesValue,
-            'curl_options' => $curlOptions + [CURLOPT_ENCODING => ''],
-            'headers'      => $headers,
-            'ssrf_check'   => false,
+        'timeout'      => $timeoutValue,
+        'retries'      => 0,
+        'curl_options' => $curlOptions + [CURLOPT_ENCODING => ''],
+        'headers'      => $headers,
+        'ssrf_check'   => false,
         ];
 
         return $httpClient->request($localUrl, $config);

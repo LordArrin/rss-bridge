@@ -98,13 +98,7 @@ $container['logger'] = function () {
 
 $container['cache'] = function ($c) {
     $cacheFactory = $c['cache_factory'];
-
-    // CacheFactory::create() now handles reading CACHE_TYPE internally if null is passed.
-    // We pass it explicitly here for clarity, falling back to null if not set.
-    $cacheTypeRaw = getenv('CACHE_TYPE');
-    $cacheType = ($cacheTypeRaw !== false && $cacheTypeRaw !== '') ? $cacheTypeRaw : null;
-
-    return $cacheFactory->create($cacheType);
+    return $cacheFactory->create(null);
 };
 
 $container['bridge_metadata_cache'] = function ($c) {

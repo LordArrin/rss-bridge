@@ -4,16 +4,17 @@ declare(strict_types=1);
 
 namespace RSSBridge\Actions;
 
-use RSSBridge\Utils\Json;
-use RSSBridge\Utils\Url;
-use RSSBridge\Logger\Logger;
 use RSSBridge\BridgeAbstract;
 use RSSBridge\BridgeFactory;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Formats\FormatFactory;
-use RSSBridge\SafeBridgeLoader;
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
+use RSSBridge\Logger\Logger;
+use RSSBridge\Middlewares\CacheMiddleware;
+use RSSBridge\SafeBridgeLoader;
+use RSSBridge\Utils\Json;
+use RSSBridge\Utils\Url;
 
 final class DisplayAction implements ActionInterface
 {
@@ -93,6 +94,7 @@ final class DisplayAction implements ActionInterface
 
         if ($response->getCode() === 200) {
             if ($ttl > 0) {
+                $response = $response->withHeader(CacheMiddleware::CACHE_TTL_HEADER, (string) $ttl);
                 $this->cache->set($cacheKey, $response, $ttl);
             }
         }
@@ -218,9 +220,7 @@ final class DisplayAction implements ActionInterface
 
     private function createCacheKey(Request $request): string
     {
-        $params = $request->toArray();
-        unset($params['token'], $params['action']);
-        ksort($params);
+        $params = $request->getCacheableParams();
         $encoded = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
         return 'http_' . ($encoded === false ? '{}' : $encoded);
     }
