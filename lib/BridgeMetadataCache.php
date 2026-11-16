@@ -324,4 +324,46 @@ final class BridgeMetadataCache
 
         return self::CACHE_PREFIX . '_' . $this->cachedHash;
     }
+    /**
+     * @return array<string, array{message: string, file: string, line: int, class: string}>|null
+     */
+    public function getCachedBrokenBridges(): ?array
+    {
+        $cached = $this->cache->get($this->buildCacheKey());
+
+        if (
+            is_array($cached) === false
+            || isset($cached['metadata']) === false
+            || is_array($cached['metadata']) === false
+        ) {
+            return null;
+        }
+
+        $brokenRaw = $cached['broken_bridges'] ?? [];
+        if (is_array($brokenRaw) === false) {
+            return null;
+        }
+
+        $broken = [];
+        foreach ($brokenRaw as $bridgeName => $errorInfo) {
+            if (
+                is_string($bridgeName) === true
+                && is_array($errorInfo) === true
+                && isset($errorInfo['message'], $errorInfo['file'], $errorInfo['line'], $errorInfo['class']) === true
+                && is_string($errorInfo['message']) === true
+                && is_string($errorInfo['file']) === true
+                && is_int($errorInfo['line']) === true
+                && is_string($errorInfo['class']) === true
+            ) {
+                $broken[$bridgeName] = [
+                    'message' => $errorInfo['message'],
+                    'file' => $errorInfo['file'],
+                    'line' => $errorInfo['line'],
+                    'class' => $errorInfo['class'],
+                ];
+            }
+        }
+
+        return $broken;
+    }
 }

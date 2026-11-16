@@ -75,9 +75,10 @@ eval "$(php /app/config/memcached-config.php)"
 
 if [ "$MEMCACHED_TYPE" = "none" ]; then
     echo "Cache: backend ${CACHE_TYPE} (memcached skipped)"
+    rm -f /etc/supervisor/conf.d/memcached.conf
 elif [ "$MEMCACHED_TYPE" = "external" ]; then
-    # External TCP memcached: just verify connectivity
     echo "Cache: external (${MEMCACHED_HOST}:${MEMCACHED_PORT})"
+    rm -f /etc/supervisor/conf.d/memcached.conf
     for i in $(seq 1 10); do
         if nc -z "$MEMCACHED_HOST" "$MEMCACHED_PORT" 2>/dev/null; then
             break
@@ -89,18 +90,13 @@ elif [ "$MEMCACHED_TYPE" = "external" ]; then
         sleep 1
     done
 else
-    # Internal Unix socket memcached: start local instance
     echo "Cache: internal (${MEMCACHED_SOCKET_PATH})"
 
-    # Prepare socket directory
     mkdir -p "$(dirname "$MEMCACHED_SOCKET_PATH")"
     chown memcached:nginx "$(dirname "$MEMCACHED_SOCKET_PATH")"
     chmod 770 "$(dirname "$MEMCACHED_SOCKET_PATH")"
-
-    # Remove stale socket if exists
     rm -f "$MEMCACHED_SOCKET_PATH" 2>/dev/null || true
 
-    # Build memcached command arguments
     MEMCACHED_ARGS="-u memcached -s $MEMCACHED_SOCKET_PATH"
     MEMCACHED_ARGS="$MEMCACHED_ARGS -a 660"
     MEMCACHED_ARGS="$MEMCACHED_ARGS -m $MEMCACHED_MEMORY"
@@ -116,40 +112,13 @@ else
     [ "$MEMCACHED_PREALLOC" = "true" ] && MEMCACHED_ARGS="$MEMCACHED_ARGS -o slab_reassign -o slab_automove"
     [ "$MEMCACHED_LOCK_MEMORY" = "true" ] && MEMCACHED_ARGS="$MEMCACHED_ARGS -r"
 
-    memcached $MEMCACHED_ARGS &
-    MEMCACHED_PID=$!
-
-    # Wait for socket to be created
-    for i in $(seq 1 10); do
-        if [ -S "$MEMCACHED_SOCKET_PATH" ]; then
-            break
-        fi
-        if [ "$i" = "10" ]; then
-            echo "ERROR: Memcached failed to create socket"
-            kill $MEMCACHED_PID 2>/dev/null || true
-            exit 1
-        fi
-        sleep 1
-    done
-
-    # Ensure correct socket ownership and permissions
-    chown memcached:nginx "$MEMCACHED_SOCKET_PATH"
-    chmod 660 "$MEMCACHED_SOCKET_PATH"
+    export MEMCACHED_ARGS
 fi
 
-# 7. Clean old cache
-php /app/bin/cache-prune >/dev/null 2>&1 || true
-
-# 8. Build bridges metadata cache
-php /app/bin/cache-bridge-metadata
-
-# Fix ownership after cache build
-chown -R nginx:nginx /app/cache
-
-# 9. Ensure supervisor runtime directory exists
+# 7. Ensure supervisor runtime directory exists
 mkdir -p /var/run/supervisor
 chmod 700 /var/run/supervisor
 
-# 10. Start supervisord
+# 8. Start supervisord
 echo "Starting web services..."
 exec supervisord -n -c /etc/supervisord.conf

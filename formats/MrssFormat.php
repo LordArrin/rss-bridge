@@ -70,7 +70,7 @@ final class MrssFormat extends FormatAbstract
                 $channel->appendChild($linkSelf);
                 $linkSelf->setAttribute('rel', 'self');
                 $linkSelf->setAttribute('type', 'application/atom+xml');
-                $feedUrl = Url::getCurrentUrl();
+                $feedUrl = Url::getCanonicalUrl();
                 $linkSelf->setAttribute('href', $feedUrl);
             } elseif ($feedKey === 'icon') {
                 $icon = $feedValue;

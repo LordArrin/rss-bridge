@@ -7,6 +7,7 @@ namespace RSSBridge\Actions;
 use RSSBridge\Utils\Json;
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
+use RSSBridge\BridgeMetadataCache;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Proxies\ProxyFactory;
 use RSSBridge\SafeBridgeLoader;
@@ -15,11 +16,13 @@ final class HealthAction implements ActionInterface
 {
     private SafeBridgeLoader $safeBridgeLoader;
     private CacheInterface $cache;
+    private BridgeMetadataCache $metadataCache;
 
-    public function __construct(SafeBridgeLoader $safeBridgeLoader, CacheInterface $cache)
+    public function __construct(SafeBridgeLoader $safeBridgeLoader, CacheInterface $cache, BridgeMetadataCache $metadataCache)
     {
         $this->safeBridgeLoader = $safeBridgeLoader;
         $this->cache = $cache;
+        $this->metadataCache = $metadataCache;
     }
 
     public function __invoke(Request $request): Response
@@ -52,7 +55,19 @@ final class HealthAction implements ActionInterface
      */
     private function checkBridges(): array
     {
-        $broken = $this->safeBridgeLoader->getBrokenBridges();
+        $runtimeBroken = $this->safeBridgeLoader->getBrokenBridges();
+        $cachedBroken = $this->metadataCache->getCachedBrokenBridges();
+
+        if ($cachedBroken === null) {
+            $brokenCount = count($runtimeBroken);
+            return [
+                'status' => $brokenCount === 0 ? 'unknown' : 'degraded',
+                'broken_count' => $brokenCount,
+                'broken_bridges' => array_keys($runtimeBroken),
+            ];
+        }
+
+        $broken = array_merge($cachedBroken, $runtimeBroken);
         $brokenCount = count($broken);
 
         return [
@@ -161,18 +176,18 @@ final class HealthAction implements ActionInterface
         return sprintf('%.1f%%', ($hits / $total) * 100);
     }
 
-/**
- * @return array{status: string, profiles: list<string>, count: int}
- */
+    /**
+     * @return array{status: string, profiles: list<string>, count: int}
+     */
     private function checkProxy(): array
     {
         $profiles = ProxyFactory::getConfiguredProfiles();
         $count = count($profiles);
 
         return [
-        'status' => $count !== 0 ? 'ok' : 'disabled',
-        'profiles' => $profiles,
-        'count' => $count,
+            'status' => $count !== 0 ? 'ok' : 'disabled',
+            'profiles' => $profiles,
+            'count' => $count,
         ];
     }
 

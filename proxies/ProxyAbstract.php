@@ -181,10 +181,8 @@ abstract class ProxyAbstract implements ProxyInterface
     }
 
     /**
-     * Retrieves binary data via proxy with Stale-while-revalidate fallback.
-     *
-     * @param string $url     URL to fetch
-     * @param array<string, mixed> $options Proxy-specific options
+     * @param string $url
+     * @param array<string, mixed> $options
      * @return array{body: string, type: string}
      * @throws \RuntimeException If fetch fails and no stale data is available
      */
@@ -218,7 +216,7 @@ abstract class ProxyAbstract implements ProxyInterface
                 && $cacheTtl > 0
             ) {
                 $cacheKey = $this->buildCacheKey('binary_' . $url, $options);
-                $this->cache->set($cacheKey, $payload, $cacheTtl);
+                $this->cache->set($cacheKey, $this->encodeBinaryPayload($payload), $cacheTtl);
             }
 
             return $payload;
@@ -280,8 +278,19 @@ abstract class ProxyAbstract implements ProxyInterface
     }
 
     /**
-     * Narrows a mixed cached value into a strictly typed binary payload.
-     *
+     * @param array{body: string, type: string} $payload
+     * @return array{body: string, type: string, body_encoding: string}
+     */
+    protected function encodeBinaryPayload(array $payload): array
+    {
+        return [
+            'body' => base64_encode($payload['body']),
+            'type' => $payload['type'],
+            'body_encoding' => 'base64',
+        ];
+    }
+
+    /**
      * @return array{body: string, type: string}|null
      */
     protected function normalizeBinaryPayload(mixed $value): ?array
@@ -292,12 +301,18 @@ abstract class ProxyAbstract implements ProxyInterface
 
         $body = $value['body'] ?? null;
         $type = $value['type'] ?? null;
+        $encoding = $value['body_encoding'] ?? null;
 
-        if (is_string($body) === false || is_string($type) === false) {
+        if (is_string($body) === false || is_string($type) === false || $encoding !== 'base64') {
             return null;
         }
 
-        return ['body' => $body, 'type' => $type];
+        $decoded = base64_decode($body, true);
+        if ($decoded === false) {
+            return null;
+        }
+
+        return ['body' => $decoded, 'type' => $type];
     }
 
     /**

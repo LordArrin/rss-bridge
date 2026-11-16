@@ -37,23 +37,28 @@ final class CacheMiddleware implements Middleware
         }
 
         $cacheKey = $this->createCacheKey($request);
-        $cachedResponse = $this->cache->get($cacheKey);
+        $customTimeoutEnabled = filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN);
+        $bypassCache = $customTimeoutEnabled === true && self::toInt($request->get('_cache_timeout', -1), -1) === 0;
 
-        if ($cachedResponse instanceof Response) {
-            if ($cachedResponse->getCode() === 200) {
-                $notModified = $this->createNotModifiedResponse($request, $cachedResponse);
-                if ($notModified !== null) {
-                    return $notModified;
+        if ($bypassCache === false) {
+            $cachedResponse = $this->cache->get($cacheKey);
+
+            if ($cachedResponse instanceof Response) {
+                if ($cachedResponse->getCode() === 200) {
+                    $notModified = $this->createNotModifiedResponse($request, $cachedResponse);
+                    if ($notModified !== null) {
+                        return $notModified;
+                    }
                 }
+                return $this->attachCacheHeaders($cachedResponse, $this->resolveMaxAge($request, $cachedResponse), $cachedResponse->getHeader('etag'));
             }
-            return $this->attachCacheHeaders($cachedResponse, $this->resolveMaxAge($request, $cachedResponse), $cachedResponse->getHeader('etag'));
-        }
 
-        $staleEntry = $this->cache->getWithStale($cacheKey);
-        $staleResponse = $staleEntry['stale'] ?? null;
-        if ($staleResponse instanceof Response && $staleResponse->getCode() === 200) {
-            if ($this->cache->acquireLock($cacheKey, self::REGENERATION_LOCK_TTL) === false) {
-                return $this->attachStaleHeaders($staleResponse);
+            $staleEntry = $this->cache->getWithStale($cacheKey);
+            $staleResponse = $staleEntry['stale'] ?? null;
+            if ($staleResponse instanceof Response && $staleResponse->getCode() === 200) {
+                if ($this->cache->acquireLock($cacheKey, self::REGENERATION_LOCK_TTL) === false) {
+                    return $this->attachStaleHeaders($staleResponse);
+                }
             }
         }
 
@@ -67,16 +72,17 @@ final class CacheMiddleware implements Middleware
                 $response->getHeader('etag')
             );
 
-            $customTimeoutEnabled = filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN);
-            if ($customTimeoutEnabled === true && self::toInt($request->get('_cache_timeout', -1), -1) === 0) {
+            if ($bypassCache === true) {
                 $this->cache->delete($cacheKey);
             }
+
+            $this->maybePrune();
             return $response;
         }
 
         if ($this->isTransientStatus($code) === true || $this->isTimeoutResponse($response) === true) {
             $isTimeout = $this->isTimeoutResponse($response) === true;
-            $stale = $this->serveStale($cacheKey, $response);
+            $stale = $bypassCache === false ? $this->serveStale($cacheKey, $response) : null;
             if ($stale !== null) {
                 $retryAfter = $isTimeout === true ? self::TIMEOUT_RETRY_AFTER : min(max(self::STALE_RETRY_AFTER, $this->resolveMaxAge($request)), 3600);
                 return $stale
@@ -87,7 +93,7 @@ final class CacheMiddleware implements Middleware
             return $this->normalizeTransientResponse($response, $request);
         }
 
-        if (in_array($code, [400, 403, 404], true) === true) {
+        if ($bypassCache === false && in_array($code, [400, 403, 404], true) === true) {
             $ttl = 60 + random_int(0, 120);
 
             $retryAfterHint = \HttpException::parseRetryAfter($response->getHeader('retry-after'));
@@ -99,11 +105,16 @@ final class CacheMiddleware implements Middleware
             $this->cache->set($cacheKey, $response, $ttl);
         }
 
+        $this->maybePrune();
+
+        return $response;
+    }
+
+    private function maybePrune(): void
+    {
         if (random_int(1, 100) === 1) {
             $this->cache->prune();
         }
-
-        return $response;
     }
 
     private function isTransientStatus(int $code): bool
@@ -270,9 +281,11 @@ final class CacheMiddleware implements Middleware
     private function resolveMaxAge(Request $request, ?Response $cached = null): int
     {
         $attribute = $request->getAttribute('_resolved_cache_timeout');
-        $attributeInt = self::toInt($attribute, 0);
-        if ($attributeInt > 0) {
-            return min(86400, max(1, $attributeInt));
+        if (is_int($attribute) === true) {
+            if ($attribute <= 0) {
+                return 0;
+            }
+            return min(86400, $attribute);
         }
 
         if ($cached !== null) {
@@ -284,8 +297,7 @@ final class CacheMiddleware implements Middleware
 
         $customTimeoutEnabled = filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN);
         if ($customTimeoutEnabled === true) {
-            $param = $request->get('_cache_timeout');
-            $paramInt = self::toInt($param, 0);
+            $paramInt = self::toInt($request->get('_cache_timeout'), 0);
             if ($paramInt > 0) {
                 return min(86400, max(1, $paramInt));
             }
@@ -296,7 +308,7 @@ final class CacheMiddleware implements Middleware
 
     private function attachCacheHeaders(Response $response, int $maxAge, ?string $etag = null): Response
     {
-        if ($response->getCode() === 200) {
+        if ($response->getCode() === 200 && $maxAge > 0) {
             if (($etag === null || $etag === '') === true) {
                 $etag = '"' . md5($response->getBody()) . '"';
             }

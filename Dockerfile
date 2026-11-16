@@ -500,6 +500,7 @@ RUN set -xe && \
     addgroup -S memcached && \
     adduser -D -S -h /var/cache/memcached -s /sbin/nologin -G memcached memcached && \
     chown -R nginx:nginx /var/run /var/log/nginx /var/lib/nginx /run/php85 /app/cache /etc/nginx && \
+    addgroup nginx memcached && \
     chown memcached:nginx /var/run/memcached && \
     chmod 750 /app/cache/opcache && \
     chmod 770 /var/run/memcached && \
@@ -570,6 +571,8 @@ COPY ./config/nginx.conf /etc/nginx/http.d/default.conf
 COPY ./supervisor/supervisord.conf /etc/supervisord.conf
 COPY ./supervisor/nginx.conf /etc/supervisor/conf.d/nginx.conf
 COPY ./supervisor/php-fpm.conf /etc/supervisor/conf.d/php-fpm.conf
+COPY ./supervisor/memcached.conf /etc/supervisor/conf.d/memcached.conf
+COPY ./supervisor/cache-warmup.conf /etc/supervisor/conf.d/cache-warmup.conf
 
 COPY LICENSE ./
 COPY --chown=nginx:nginx ./ /app/

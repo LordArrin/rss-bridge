@@ -41,7 +41,7 @@ final class JsonFormat extends FormatAbstract
             'version'       => 'https://jsonfeed.org/version/1.1',
             'title'         => $feedArray['name'] ?? '',
             'home_page_url' => $feedArray['uri'] ?? '',
-            'feed_url'      => Url::getCurrentUrl(),
+            'feed_url'      => Url::getCanonicalUrl(),
         ];
 
         if (isset($feedArray['icon']) === true && $feedArray['icon'] !== '') {

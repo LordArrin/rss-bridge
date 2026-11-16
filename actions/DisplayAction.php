@@ -8,6 +8,7 @@ use RSSBridge\BridgeAbstract;
 use RSSBridge\BridgeFactory;
 use RSSBridge\Caches\CacheInterface;
 use RSSBridge\Formats\FormatFactory;
+use RSSBridge\Formats\FormatInterface;
 use RSSBridge\Http\Request;
 use RSSBridge\Http\Response;
 use RSSBridge\Logger\Logger;
@@ -61,6 +62,12 @@ final class DisplayAction implements ActionInterface
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Invalid format parameter']), 400);
         }
 
+        try {
+            $formatObj = (new FormatFactory())->create($format);
+        } catch (\InvalidArgumentException $e) {
+            return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => $e->getMessage()]), 400);
+        }
+
         if ($this->bridgeFactory->isEnabled($bridgeClassName) === false) {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Bridge is not enabled!']), 400);
         }
@@ -82,27 +89,27 @@ final class DisplayAction implements ActionInterface
 
         if ($customTimeoutEnabled === true) {
             if (is_int($ttlRaw) === true) {
-                $ttl = max(1, min($ttlRaw, 86400));
+                $ttl = min($ttlRaw, 86400);
             } elseif (is_string($ttlRaw) === true && is_numeric($ttlRaw) === true) {
-                $ttl = max(1, min((int) $ttlRaw, 86400));
+                $ttl = min((int) $ttlRaw, 86400);
             }
         }
 
+        $ttl = max(0, $ttl);
+
         $request = $request->withAttribute('_resolved_cache_timeout', $ttl);
 
-        $response = $this->createResponse($request, $bridge, $format);
+        $response = $this->createResponse($request, $bridge, $formatObj);
 
-        if ($response->getCode() === 200) {
-            if ($ttl > 0) {
-                $response = $response->withHeader(CacheMiddleware::CACHE_TTL_HEADER, (string) $ttl);
-                $this->cache->set($cacheKey, $response, $ttl);
-            }
+        if ($response->getCode() === 200 && $ttl > 0) {
+            $response = $response->withHeader(CacheMiddleware::CACHE_TTL_HEADER, (string) $ttl);
+            $this->cache->set($cacheKey, $response, $ttl);
         }
 
         return $response;
     }
 
-    private function createResponse(Request $request, BridgeAbstract $bridge, string $format): Response
+    private function createResponse(Request $request, BridgeAbstract $bridge, FormatInterface $formatObj): Response
     {
         $items = [];
 
@@ -170,21 +177,9 @@ final class DisplayAction implements ActionInterface
             }
         }
 
-        $formatFactory = new FormatFactory();
-        $formatObj = $formatFactory->create($format);
-
         $formatObj->setItems($items);
         $formatObj->setFeed($bridge->getFeed());
 
-        // Derive Last-Modified from the content itself (newest item timestamp)
-        // instead of the regeneration time. Identical content then renders
-        // byte-identically (e.g. Atom <updated>), which keeps ETag and
-        // Last-Modified stable across regenerations and consistent with each
-        // other (RFC 9110 sections 8.8.2 / 8.8.3).
-        //
-        // Read timestamps from the NORMALIZED FeedItem objects, not the raw
-        // arrays: setTimestamp() coerces numeric strings to int, and bridges
-        // may push FeedItem instances directly (no array offset access).
         $now = time();
         $lastModifiedTimestamp = 0;
         foreach ($formatObj->getItems() as $feedItem) {
@@ -203,10 +198,6 @@ final class DisplayAction implements ActionInterface
         ini_set('mbstring.substitute_character', 'none');
         $body = mb_convert_encoding($body, 'UTF-8', 'UTF-8');
 
-        // The ETag fingerprints the actual representation: any body change must
-        // change the ETag. Because Last-Modified is content-derived, unchanged
-        // content yields an identical body and therefore a stable ETag, so
-        // conditional requests work without any re-render tricks.
         $etag = '"' . md5($body) . '"';
 
         $headers = [
@@ -235,7 +226,7 @@ final class DisplayAction implements ActionInterface
 
         $item = [
             'title' => $title,
-            'uri' => Url::getCurrentUrl(),
+            'uri' => Url::getCanonicalUrl(),
             'timestamp' => time(),
             'uid' => $bridge->getName() . '_' . $uniqueIdentifier,
             'content' => render_template(__DIR__ . '/../templates/bridge-error.html.php', [
@@ -294,14 +285,20 @@ final class DisplayAction implements ActionInterface
         if (str_contains($maintainer, ',') === true) {
             $maintainers = explode(',', $maintainer);
         } else {
-            $maintainers = [$maintainer];
+            $maintainers = [$bridge->getMaintainer()];
         }
         $maintainers = array_map('trim', $maintainers);
 
         $phpVer = phpversion();
 
+        $queryParams = [];
         $queryStringRaw = $_SERVER['QUERY_STRING'] ?? '';
-        $queryString = is_string($queryStringRaw) === true ? $queryStringRaw : '';
+        if (is_string($queryStringRaw) === true && $queryStringRaw !== '') {
+            parse_str($queryStringRaw, $queryParams);
+        }
+        unset($queryParams['token'], $queryParams['_'], $queryParams['_error_time']);
+        $queryString = http_build_query($queryParams);
+
         $query = [
             'title' => $bridge->getName() . ' failed with: ' . $e->getMessage(),
             'body' => sprintf(

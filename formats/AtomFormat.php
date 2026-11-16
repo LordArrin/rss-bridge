@@ -30,7 +30,7 @@ final class AtomFormat extends FormatAbstract
         $document = \Dom\XMLDocument::createEmpty('1.0', 'UTF-8');
         $document->formatOutput = true;
 
-        $feedUrl = Url::getCurrentUrl();
+        $feedUrl = Url::getCanonicalUrl();
 
         $feed = $document->createElementNS(self::ATOM_NS, 'feed');
         $document->appendChild($feed);

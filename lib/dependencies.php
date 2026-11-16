@@ -46,7 +46,7 @@ $container[FrontpageAction::class] = function ($c) {
 };
 
 $container[HealthAction::class] = function ($c) {
-    return new HealthAction($c['safe_bridge_loader'], $c['cache']);
+    return new HealthAction($c['safe_bridge_loader'], $c['cache'], $c['bridge_metadata_cache']);
 };
 
 $container[ListAction::class] = function ($c) {

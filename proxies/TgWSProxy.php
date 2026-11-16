@@ -474,7 +474,7 @@ final class TgWSProxy extends ProxyAbstract
                 && $cacheTtl > 0
             ) {
                 $cacheKey = $this->buildCacheKey('binary_' . $url, $options);
-                $this->cache->set($cacheKey, $payload, $cacheTtl);
+                $this->cache->set($cacheKey, $this->encodeBinaryPayload($payload), $cacheTtl);
             }
 
             return $payload;

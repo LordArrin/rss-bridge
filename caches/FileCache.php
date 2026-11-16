@@ -163,7 +163,7 @@ final class FileCache extends AbstractCache
         }
 
         foreach ($files as $filename) {
-            if ($this->isExcludedFile($filename) === true) {
+            if ($this->isOwnCacheFile($filename) === false && $this->isOwnTempFile($filename) === false) {
                 continue;
             }
 
@@ -189,21 +189,19 @@ final class FileCache extends AbstractCache
         }
 
         foreach ($files as $filename) {
-            if ($this->isExcludedFile($filename) === true) {
-                continue;
-            }
-
             $cacheFile = $this->path . $filename;
 
-            if (is_file($cacheFile) === false) {
+            if ($this->isOwnTempFile($filename) === true) {
+                if (is_file($cacheFile) === true) {
+                    $tmpMtime = filemtime($cacheFile);
+                    if ($tmpMtime !== false && ($now - $tmpMtime) > 3600) {
+                        unlink($cacheFile);
+                    }
+                }
                 continue;
             }
 
-            if (str_ends_with($filename, '.tmp') === true) {
-                $tmpMtime = filemtime($cacheFile);
-                if ($tmpMtime !== false && ($now - $tmpMtime) > 3600) {
-                    unlink($cacheFile);
-                }
+            if ($this->isOwnCacheFile($filename) === false || is_file($cacheFile) === false) {
                 continue;
             }
 
@@ -254,6 +252,16 @@ final class FileCache extends AbstractCache
         }
     }
 
+    private function isOwnCacheFile(string $filename): bool
+    {
+        return preg_match('/^[0-9a-f]{64}\.cache$/', $filename) === 1;
+    }
+
+    private function isOwnTempFile(string $filename): bool
+    {
+        return preg_match('/^[0-9a-f]{64}\.cache\.[0-9a-f]{16}\.tmp$/', $filename) === 1;
+    }
+
     /**
      * Cross-process single-flight lock built on O_EXCL file creation.
      *
@@ -302,14 +310,6 @@ final class FileCache extends AbstractCache
     {
         // Use AbstractCache::createCacheKey() for consistent SHA-256 hashing
         return $this->path . bin2hex($this->createCacheKey($key)) . '.cache';
-    }
-
-    private function isExcludedFile(string $filename): bool
-    {
-        if (in_array($filename, ['.', '..', '.gitkeep', '.htaccess'], true) === true) {
-            return true;
-        }
-        return str_ends_with($filename, '.lock') === true;
     }
 
 /**

@@ -35,6 +35,34 @@ final class Url
         return self::getBaseUrl() . self::serverValue('REQUEST_URI', '/');
     }
 
+    public static function getCanonicalUrl(): string
+    {
+        $params = $_GET;
+        unset($params['token'], $params['_'], $params['_error_time']);
+
+        $customTimeoutEnabled = filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN);
+        if ($customTimeoutEnabled === false) {
+            unset($params['_cache_timeout']);
+        }
+
+        $clean = [];
+        foreach ($params as $key => $value) {
+            if (is_string($value) === true) {
+                $clean[(string) $key] = $value;
+            }
+        }
+        ksort($clean);
+
+        $path = parse_url(self::serverValue('REQUEST_URI', '/'), PHP_URL_PATH);
+        if (is_string($path) === false || $path === '') {
+            $path = '/';
+        }
+
+        $query = http_build_query($clean);
+
+        return self::getBaseUrl() . $path . ($query !== '' ? '?' . $query : '');
+    }
+
     private static function getBaseUrl(): string
     {
         $https = self::serverValue('HTTPS', '');
