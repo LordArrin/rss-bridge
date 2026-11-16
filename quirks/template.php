@@ -206,7 +206,9 @@ function get_admin_system_messages(): array
  * the unified notification system's $links parameter.
  *
  * Admin contacts (ADMIN_EMAIL and ADMIN_TELEGRAM) are validated at container
- * startup by /bin/load-env and stored as environment variables.
+ * startup by /bin/load-env and stored as environment variables. The Telegram
+ * value is additionally normalized here so link-form values work even when
+ * load-env has not run (non-Docker deployments).
  *
  * @return array<int, array{label: string, url: string}>
  */
@@ -225,9 +227,11 @@ function get_admin_contact_links(): array
     $telegram = is_string($adminTelegramRaw) === true ? trim($adminTelegramRaw) : '';
 
     if ($telegram !== '') {
-        // Normalize: remove @ if present, then construct t.me URL
-        $username = ltrim($telegram, '@');
-        $links[] = ['label' => 'Telegram admin', 'url' => 'https://t.me/' . $username];
+        $username = preg_replace('#^https?://t\.me/#i', '', $telegram);
+        $username = ltrim((string) $username, '@');
+        if ($username !== '') {
+            $links[] = ['label' => 'Telegram admin', 'url' => 'https://t.me/' . $username];
+        }
     }
 
     return $links;

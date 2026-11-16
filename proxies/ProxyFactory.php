@@ -99,16 +99,22 @@ final class ProxyFactory
 
     public static function safeFromProfile(string $profileName): ProxyInterface
     {
+        $profileName = strtolower($profileName);
+
         try {
             return self::fromProfile($profileName);
         } catch (\Exception $e) {
+            if ($profileName === 'direct') {
+                return self::create('Direct', []);
+            }
+
             global $container;
             if (isset($container['logger']) === true) {
-                $container['logger']->warning(
-                    "Failed to load proxy profile '{$profileName}': {$e->getMessage()}. Falling back to DirectProxy."
+                $container['logger']->error(
+                    "Failed to load proxy profile '{$profileName}': {$e->getMessage()}"
                 );
             }
-            return self::create('Direct', []);
+            throw $e;
         }
     }
 
@@ -164,5 +170,58 @@ final class ProxyFactory
         }
 
         return $fqcn;
+    }
+/**
+ * Discovers all proxy profiles configured via PROXY_PROFILE_<NAME>_* environment
+ * variables. Profiles with a known required key are reported only when that key
+ * is non-empty; unknown profiles are reported when any non-empty key exists.
+ * The always-available 'direct' profile is excluded.
+ *
+ * @return list<string> Lowercased profile names, sorted alphabetically.
+ */
+    public static function getConfiguredProfiles(): array
+    {
+        $env = getenv();
+
+        /** @var array<string, array<string, string>> $candidates */
+        $candidates = [];
+
+        foreach ($env as $key => $value) {
+            if (str_starts_with($key, 'PROXY_PROFILE_') === false) {
+                continue;
+            }
+
+            $rest = substr($key, strlen('PROXY_PROFILE_'));
+            $separatorPos = strpos($rest, '_');
+            if ($separatorPos === false || $separatorPos === 0) {
+                continue;
+            }
+
+            $profileName = strtolower(substr($rest, 0, $separatorPos));
+            $configKey = strtolower(substr($rest, $separatorPos + 1));
+
+            if ($configKey === '' || $configKey === 'type' || $value === '') {
+                continue;
+            }
+
+            $candidates[$profileName][$configKey] = $value;
+        }
+
+        $profiles = [];
+        foreach ($candidates as $profileName => $config) {
+            if ($profileName === 'direct') {
+                continue;
+            }
+
+            $requiredKey = self::REQUIRED_CONFIG_KEYS[$profileName] ?? null;
+            $isConfigured = $requiredKey === null ? $config !== [] : ($config[$requiredKey] ?? '') !== '';
+
+            if ($isConfigured === true) {
+                $profiles[] = $profileName;
+            }
+        }
+
+        sort($profiles);
+        return $profiles;
     }
 }

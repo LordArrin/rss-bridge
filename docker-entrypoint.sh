@@ -138,7 +138,7 @@ else
 fi
 
 # 7. Clean old cache
-php /app/bin/cache-clear >/dev/null 2>&1 || true
+php /app/bin/cache-prune >/dev/null 2>&1 || true
 
 # 8. Build bridges metadata cache
 php /app/bin/cache-bridge-metadata

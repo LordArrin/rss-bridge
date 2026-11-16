@@ -22,13 +22,10 @@ set_exception_handler(function (\Throwable $e) use ($logger) {
 });
 
 set_error_handler(function ($code, $message, $file, $line) use ($logger) {
-    // Consider: ini_set('error_reporting', E_ALL & ~E_DEPRECATED);
     if ((error_reporting() & $code) === 0) {
-        // Deprecation messages and other masked errors are typically ignored here
         return false;
     }
     if (getenv('APP_ENV') === 'DEV') {
-        // For development
         throw new \ErrorException($message, 0, $code, $file, $line);
     }
     $text = sprintf(
@@ -38,7 +35,7 @@ set_error_handler(function ($code, $message, $file, $line) use ($logger) {
         $line
     );
     $logger->warning($text);
-    // todo: return false to prevent default error handler from running?
+    return true;
 });
 
 // There might be some fatal errors which are not caught by set_error_handler() or \Throwable.

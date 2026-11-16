@@ -70,9 +70,7 @@ final class TgWSProxy extends ProxyAbstract
         if (isset($this->config['budget_seconds']) === false) {
             $this->config['budget_seconds'] = self::MAX_BUDGET_SECONDS;
         }
-        if (isset($this->config['fallback_direct']) === false) {
-            $this->config['fallback_direct'] = true;
-        }
+        $this->config['fallback_direct'] = self::toBool($this->config['fallback_direct'] ?? true, true);
 
         $this->log('info', sprintf(
             'TgWSProxy initialized: proxy=%s, connect_timeout=%ds, request_timeout=%ds, retries=%d, budget=%ds, fallback_direct=%s',

@@ -32,7 +32,6 @@
         ],
         "files": [
             "lib/contents.php",
-            "lib/dependencies.php",
             "lib/exceptions.php",
             "lib/http.php",
             "lib/json.php",
