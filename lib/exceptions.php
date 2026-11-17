@@ -204,55 +204,51 @@ function throwServiceUnavailableException(string $message = '', int $retryAfter 
 }
 
 /**
- * Maps an exception thrown by a bridge (or anywhere downstream) onto a
- * response status code that is meaningful for feed readers such as
- * FreshRSS:
+ * Maps a bridge/upstream exception onto a per-feed response status.
  *
- *  - HTTP 429 Too Many Requests with Retry-After for rate limiting
- *  - HTTP 503 Service Unavailable with Retry-After for temporary problems
- *    (Cloudflare challenges, upstream timeouts, cURL timeouts)
- *  - The original status code for other HttpExceptions
- *  - HTTP 500 for everything unexpected
+ * Per-feed failures NEVER use 429/503 and NEVER carry Retry-After: FreshRSS
+ * applies a domain-wide cooldown to those codes, which would freeze every
+ * feed served by this instance because of one broken feed. Upstream
+ * politeness is enforced server-side by the backoff marker instead.
  *
- * Transient failures must never be reported as permanent errors (and in
- * particular never as 304 Not Modified), because FreshRSS would mark the
- * feed as broken instead of retrying it later.
+ *  - rate limiting / Cloudflare / temporary upstream unavailability -> 502
+ *  - upstream timeouts / network errors                            -> 504
+ *  - other upstream 5xx                                            -> 502
+ *  - upstream 4xx                                                  -> passthrough
+ *  - anything unexpected                                           -> 500
  *
  * @return array{0: int, 1: array<string,string>} Status code + headers
  */
 function httpStatusFromException(\Throwable $e): array
 {
     if ($e instanceof \RateLimitException) {
-        $retryAfter = $e->retryAfter ?? 3600;
-        return [429, ['retry-after' => (string) max(1, min(86400, $retryAfter))]];
+        return [502, []];
     }
 
     if ($e instanceof \CloudFlareException) {
-        // Cloudflare challenges are temporary: ask the reader to come back later.
-        return [503, ['retry-after' => '600']];
+        return [502, []];
     }
 
     if ($e instanceof \ServiceUnavailableException) {
-        $retryAfter = $e->retryAfter ?? 600;
-        return [503, ['retry-after' => (string) max(1, min(86400, $retryAfter))]];
+        return [502, []];
     }
 
     if ($e instanceof \HttpException) {
         $code = $e->getCode();
         $isTimeout = $code === 0 || $code === 408 || $code === 504
-            || str_contains($e->getMessage(), 'cURL error') === true;
+            || str_contains($e->getMessage(), 'cURL error') === true
+            || str_contains($e->getMessage(), 'no time left within the request deadline') === true;
 
         if ($isTimeout === true) {
-            // Upstream timeout: a temporary problem, not a permanent failure.
-            return [503, ['retry-after' => '600']];
+            return [504, []];
         }
 
-        if (($code >= 400 && $code <= 599) === true) {
-            $headers = [];
-            if ($e->retryAfter !== null && in_array($code, [429, 503], true) === true) {
-                $headers['retry-after'] = (string) max(1, min(86400, $e->retryAfter));
-            }
-            return [$code, $headers];
+        if ($code >= 400 && $code <= 499) {
+            return [$code, []];
+        }
+
+        if ($code >= 500 && $code <= 599) {
+            return [502, []];
         }
 
         return [500, []];

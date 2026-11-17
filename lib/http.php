@@ -935,6 +935,11 @@ final class CurlHttpClient implements HttpClient
             $deadline = min($deadline, $wallClockDeadline);
         }
 
+        $feedDeadline = FeedDeadline::deadline();
+        if ($feedDeadline !== null) {
+            $deadline = min($deadline, $feedDeadline);
+        }
+
         $httpHeaders = [];
         $configHeaders = $config['headers'];
         if (is_array($configHeaders) === true) {
@@ -1334,19 +1339,43 @@ final class Request
         return $params;
     }
 
+    /**
+     * Builds the HTTP response cache key, scoped to the effective host so a
+     * spoofed Host header can never poison another host's cached feed.
+     */
     public function getCacheKey(): string
     {
         $params = $this->getCacheableParams();
         $encoded = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
-        return 'http_' . ($encoded === false ? '{}' : $encoded);
+        return 'http_' . $this->getCacheHost() . '_' . ($encoded === false ? '{}' : $encoded);
     }
 
+    /**
+     * Builds the bridge data cache key (format-independent), host-scoped.
+     */
     public function getDataCacheKey(): string
     {
         $params = $this->getCacheableParams();
         unset($params['format']);
         $encoded = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
-        return 'data_' . ($encoded === false ? '{}' : $encoded);
+        return 'data_' . $this->getCacheHost() . '_' . ($encoded === false ? '{}' : $encoded);
+    }
+
+    /**
+     * Effective host for cache scoping: the configured DOMAIN when present,
+     * otherwise the request Host. Lowercased and trimmed.
+     */
+    private function getCacheHost(): string
+    {
+        $domain = getenv('DOMAIN');
+        if (is_string($domain) === true && $domain !== '') {
+            $host = parse_url($domain, PHP_URL_HOST);
+            if (is_string($host) === true && $host !== '') {
+                return strtolower($host);
+            }
+        }
+        $host = $this->server('HTTP_HOST', $this->server('SERVER_NAME', 'localhost'));
+        return strtolower(trim($host ?? 'localhost'));
     }
 }
 
@@ -1603,5 +1632,89 @@ final class Response
             }
         }
         echo $this->body;
+    }
+}
+
+/**
+ * Per-request wall-clock budget for feed generation.
+ *
+ * Two budgets share the same anchor (the actual request start time):
+ *  - client budget (FEED_TIMEOUT): bounds warm regeneration and every
+ *    single-flight wait, so a feed reader such as FreshRSS (20s timeout)
+ *    always receives a response (fresh or stale) within its own window;
+ *  - hard budget (PHP_FPM_REQUEST_TERMINATE_TIMEOUT minus a reserve):
+ *    bounds cold generation, letting the worker finish and populate the
+ *    cache even after the client disconnected, so the next poll is warm.
+ *
+ * State is static and MUST be re-initialised via begin() on every request
+ * because PHP-FPM reuses workers across requests.
+ */
+final class FeedDeadline
+{
+    private static ?float $clientUntil = null;
+    private static ?float $hardUntil = null;
+    private static bool $useHard = false;
+
+    /**
+     * Initialises both budgets for the current request.
+     */
+    public static function begin(int $clientSeconds): void
+    {
+        $start = self::requestStart();
+        self::$clientUntil = $start + max(1, $clientSeconds);
+
+        $terminateRaw = getenv('PHP_FPM_REQUEST_TERMINATE_TIMEOUT');
+        $terminate = ($terminateRaw !== false && $terminateRaw !== '' && (int) $terminateRaw > 0) ? (int) $terminateRaw : 90;
+        self::$hardUntil = $start + max(1, $terminate - 5);
+        self::$useHard = false;
+    }
+
+    /**
+     * Switches the active generation budget to the hard (FPM) budget.
+     * Used for cold generation where no stale fallback exists.
+     */
+    public static function useHardBudget(): void
+    {
+        self::$useHard = true;
+    }
+
+    /**
+     * Absolute deadline the HTTP client must not exceed, or null when inactive.
+     */
+    public static function deadline(): ?float
+    {
+        if (self::$clientUntil === null) {
+            return null;
+        }
+        return self::$useHard === true ? self::$hardUntil : self::$clientUntil;
+    }
+
+    /**
+     * Seconds left in the client budget, floored at zero.
+     * Returns a large value when no budget was started (CLI / non-feed paths).
+     */
+    public static function clientRemaining(): float
+    {
+        if (self::$clientUntil === null) {
+            return 3600.0;
+        }
+        return max(0.0, self::$clientUntil - microtime(true));
+    }
+
+    /**
+     * Whether a feed budget is active for this request.
+     */
+    public static function started(): bool
+    {
+        return self::$clientUntil !== null;
+    }
+
+    private static function requestStart(): float
+    {
+        $time = $_SERVER['REQUEST_TIME_FLOAT'] ?? null;
+        if (is_float($time) === true || is_int($time) === true) {
+            return (float) $time;
+        }
+        return microtime(true);
     }
 }

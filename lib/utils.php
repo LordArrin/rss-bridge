@@ -63,8 +63,26 @@ final class Url
         return self::getBaseUrl() . $path . ($query !== '' ? '?' . $query : '');
     }
 
+    /**
+     * Base URL for self-referential links. Prefers the configured, validated
+     * DOMAIN so canonical feed identifiers never depend on the client-supplied
+     * Host header (cache-poisoning / feed-identity protection). Falls back to
+     * the request host only when DOMAIN is unavailable.
+     */
     private static function getBaseUrl(): string
     {
+        $domain = getenv('DOMAIN');
+        if (is_string($domain) === true && $domain !== '') {
+            $parts = parse_url($domain);
+            if (is_array($parts) === true && isset($parts['scheme'], $parts['host']) === true) {
+                $base = $parts['scheme'] . '://' . $parts['host'];
+                if (isset($parts['port']) === true) {
+                    $base .= ':' . $parts['port'];
+                }
+                return $base;
+            }
+        }
+
         $https = self::serverValue('HTTPS', '');
         $proto = self::serverValue('HTTP_X_FORWARDED_PROTO', '');
         if ($proto !== '') {

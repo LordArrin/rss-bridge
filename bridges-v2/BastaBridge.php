@@ -25,6 +25,11 @@ final class BastaBridge extends BridgeAbstract
         ]
     ]];
 
+    private const ANTI_BOT_COOKIE_NAME = 'ngacookie';
+    private const ANTI_BOT_FALLBACK_VALUE = 'miamv2';
+    private const ANTI_BOT_COOKIE_TTL = 604800;
+    private const ANTI_BOT_CACHE_KEY = 'basta_antibot_cookie_v1';
+
     public function collectData(): void
     {
         $limit = (int) $this->getInput('limit');
@@ -33,13 +38,19 @@ final class BastaBridge extends BridgeAbstract
         }
 
         $feedUrl = self::URI . 'spip.php?page=backend';
-        $feedHtml = getContents($feedUrl);
-        if ($feedHtml === '') {
-            throwServerException('Failed to fetch RSS feed');
-        }
+        $feedHtml = $this->fetchWithAntiBotCookie($feedUrl);
 
         libxml_use_internal_errors(true);
-        $xml = \Dom\XMLDocument::createFromString($feedHtml);
+        try {
+            $xml = \Dom\XMLDocument::createFromString($feedHtml);
+        } catch (\Throwable $e) {
+            libxml_clear_errors();
+            libxml_use_internal_errors(false);
+            throwServerException(
+                'Upstream feed is not well-formed XML: ' . $e->getMessage()
+            );
+        }
+        libxml_clear_errors();
         libxml_use_internal_errors(false);
 
         $items = $xml->querySelectorAll('item');
@@ -95,24 +106,18 @@ final class BastaBridge extends BridgeAbstract
      */
     private function fetchArticleData(string $uri): array
     {
-        $html = getContents($uri);
-        if ($html === '') {
-            return ['content' => '', 'author' => ''];
-        }
+        $html = $this->fetchWithAntiBotCookie($uri);
 
         libxml_use_internal_errors(true);
         $dom = \Dom\HTMLDocument::createFromString($html);
         libxml_use_internal_errors(false);
 
-        // Extract author before modifying the DOM
         $author = '';
         $authorBlock = $dom->querySelector('.mb-1.c-cartouche-authors');
         if ($authorBlock !== null) {
             $author = trim($authorBlock->textContent ?? '');
         }
 
-        // Main article container. Falls back to the legacy SPIP "div.texte"
-        // for older layouts.
         $content = $dom->querySelector('.o-main-content.o-content');
         if ($content === null) {
             $content = $dom->querySelector('div.texte');
@@ -131,26 +136,107 @@ final class BastaBridge extends BridgeAbstract
         ];
     }
 
-    /**
-     * Removes site chrome and promotional blocks, but KEEPS the article's own
-     * photo blocks (.o-content-logo lead image and .spip_document inline photos).
-     */
+    private function fetchWithAntiBotCookie(string $url): string
+    {
+        $cookieValue = $this->getAntiBotCookieValue();
+        $cookieHeader = self::ANTI_BOT_COOKIE_NAME . '=' . $cookieValue;
+
+        $html = getContents($url, ['Cookie' => $cookieHeader]);
+        if ($html === '') {
+            throwServerException('Failed to fetch ' . $url);
+        }
+
+        if ($this->isAntiBotPage($html) === true) {
+            global $container;
+            $cache = $container['cache'];
+            $cache->delete(self::ANTI_BOT_CACHE_KEY);
+
+            $freshValue = $this->getAntiBotCookieValue();
+            $freshCookieHeader = self::ANTI_BOT_COOKIE_NAME . '=' . $freshValue;
+
+            try {
+                $httpClient = $container['http_client'];
+                $response = $httpClient->request($url, [
+                    'timeout' => 15,
+                    'retries' => 0,
+                    'headers' => ['Cookie' => $freshCookieHeader],
+                ]);
+                $html = $response->getBody();
+            } catch (\Throwable $e) {
+                throwServerException(
+                    'Basta.media anti-bot page still returned after retry: ' . $e->getMessage()
+                );
+            }
+
+            if ($this->isAntiBotPage($html) === true) {
+                throwServerException(
+                    'Basta.media anti-bot page still returned after retry. ' .
+                    'The cookie value may have changed; last tried: ' . $freshValue
+                );
+            }
+        }
+
+        return $html;
+    }
+
+    private function getAntiBotCookieValue(): string
+    {
+        global $container;
+        $cache = $container['cache'];
+
+        $cached = $cache->get(self::ANTI_BOT_CACHE_KEY);
+        if (is_string($cached) === true && $cached !== '') {
+            return $cached;
+        }
+
+        $value = self::ANTI_BOT_FALLBACK_VALUE;
+
+        try {
+            $httpClient = $container['http_client'];
+            $response = $httpClient->request(self::URI, [
+                'timeout' => 15,
+                'retries' => 0,
+            ]);
+            $body = $response->getBody();
+
+            if ($this->isAntiBotPage($body) === true) {
+                $extracted = $this->extractCookieValue($body);
+                if ($extracted !== null) {
+                    $value = $extracted;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $cache->set(self::ANTI_BOT_CACHE_KEY, $value, self::ANTI_BOT_COOKIE_TTL);
+        return $value;
+    }
+
+    private function isAntiBotPage(string $html): bool
+    {
+        return str_contains($html, '<title>Overload</title>') === true
+            && str_contains($html, self::ANTI_BOT_COOKIE_NAME) === true;
+    }
+
+    private function extractCookieValue(string $html): ?string
+    {
+        if (preg_match('/ngacookie=([a-zA-Z0-9_-]+)/', $html, $m) === 1) {
+            return $m[1];
+        }
+        return null;
+    }
+
     private function removeJunk(\Dom\Element $content): void
     {
         $junkSelectors = [
-            // Structural chrome around the body.
             '.o-content-footer',
             '.o-content-aside',
             'aside',
             'form',
             '.ajax-form-container',
             '.formulaire_spip',
-
-            // Interactive maps and embedded widgets.
             '.carto',
             'iframe',
-
-            // Donation / newsletter / "Sur le même sujet" widgets.
             '.c-call--don',
             '.c-call--newsletter',
             '.c-call--modele',
@@ -160,8 +246,6 @@ final class BastaBridge extends BridgeAbstract
             '.c-encart--memesujet-logo',
             '.o-push',
             '.o-push--aside',
-
-            // Legacy related-content blocks.
             '.sur-le-meme-sujet',
             '.meme-sujet',
             '.same-topic',
@@ -171,8 +255,6 @@ final class BastaBridge extends BridgeAbstract
             '.related-articles',
             '.articles-lies',
             '[data-role="related"]',
-
-            // Inline markup that has no place in a feed.
             'script',
             'style',
             'noscript',
@@ -188,11 +270,6 @@ final class BastaBridge extends BridgeAbstract
         }
     }
 
-    /**
-     * Feed readers do not understand <picture>/srcset. Unwrap <picture> into its
-     * fallback <img>, restore lazy-loaded sources, and drop the responsive
-     * attributes so only a plain absolute src remains.
-     */
     private function normalizeMedia(\Dom\Element $content): void
     {
         foreach (iterator_to_array($content->querySelectorAll('picture')) as $picture) {
@@ -220,10 +297,6 @@ final class BastaBridge extends BridgeAbstract
         }
     }
 
-    /**
-     * Replaces a placeholder src (empty or data: URI) with the real image URL
-     * found in one of the lazy-loading attributes.
-     */
     private function restoreLazyImage(\Dom\Element $img): void
     {
         $src = $img->getAttribute('src') ?? '';
@@ -256,9 +329,6 @@ final class BastaBridge extends BridgeAbstract
         }
     }
 
-    /**
-     * Picks the largest candidate from a srcset attribute.
-     */
     private static function bestSrcsetUrl(string $srcset): ?string
     {
         $best = null;
