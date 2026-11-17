@@ -65,6 +65,10 @@ chown -R nginx:nginx /app/cache
 chmod 750 /app/cache/opcache
 rm -rf /app/cache/opcache/* 2>/dev/null || true
 
+if [ "${CACHE_TYPE:-memcached}" = "file" ]; then
+    find "${CACHE_FILE_PATH:-/app/cache}" -maxdepth 1 -name '*.lock' -type f -delete 2>/dev/null || true
+fi
+
 # 5. Generate composer autoloader if missing
 if [ ! -f /app/vendor/autoload.php ]; then
     cd /app && composer dump-autoload --optimize --no-interaction --classmap-authoritative >/dev/null 2>&1

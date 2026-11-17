@@ -152,10 +152,7 @@ final class FileCache extends AbstractCache
     public function delete(string $key): void
     {
         $cacheFile = $this->createCacheFile($key);
-
-        if (file_exists($cacheFile) === true) {
-            unlink($cacheFile);
-        }
+        @unlink($cacheFile);
     }
 
     public function clear(): void
@@ -173,7 +170,7 @@ final class FileCache extends AbstractCache
             $cacheFile = $this->path . $filename;
 
             if (is_file($cacheFile) === true) {
-                unlink($cacheFile);
+                @unlink($cacheFile);
             }
         }
     }
@@ -198,7 +195,7 @@ final class FileCache extends AbstractCache
                 if (is_file($cacheFile) === true) {
                     $tmpMtime = filemtime($cacheFile);
                     if ($tmpMtime !== false && ($now - $tmpMtime) > 3600) {
-                        unlink($cacheFile);
+                        @unlink($cacheFile);
                     }
                 }
                 continue;
@@ -214,19 +211,19 @@ final class FileCache extends AbstractCache
 
             $data = file_get_contents($cacheFile);
             if ($data === false) {
-                unlink($cacheFile);
+                @unlink($cacheFile);
                 continue;
             }
 
             try {
                 $decoded = json_decode($data, true, 512, \JSON_THROW_ON_ERROR);
             } catch (\JsonException $e) {
-                unlink($cacheFile);
+                @unlink($cacheFile);
                 continue;
             }
 
             if (is_array($decoded) === false || array_key_exists('fresh_until', $decoded) === false) {
-                unlink($cacheFile);
+                @unlink($cacheFile);
                 continue;
             }
 
@@ -238,23 +235,14 @@ final class FileCache extends AbstractCache
                 $freshUntil = (int) $freshUntilRaw;
             }
 
-            if ($freshUntil === 0) {
+            if ($freshUntil <= 0) {
                 continue;
             }
 
-            if ($freshUntil > 0) {
-                $hardExpiration = $freshUntil + self::DEFAULT_STALE_TTL;
-            } else {
-                $fileMtime = filemtime($cacheFile);
-                if ($fileMtime === false) {
-                    unlink($cacheFile);
-                    continue;
-                }
-                $hardExpiration = $fileMtime + self::DEFAULT_STALE_TTL;
-            }
+            $hardExpiration = $freshUntil + self::DEFAULT_STALE_TTL;
 
             if ($hardExpiration <= $now) {
-                unlink($cacheFile);
+                @unlink($cacheFile);
             }
         }
     }
@@ -305,6 +293,7 @@ final class FileCache extends AbstractCache
         ftruncate($handle, 0);
         rewind($handle);
         fwrite($handle, (string) (time() + $ttlSeconds));
+        @chmod($lockFile, 0600);
 
         $this->lockHandles[$key] = $handle;
         return true;
@@ -328,12 +317,12 @@ final class FileCache extends AbstractCache
         return $this->path . bin2hex($this->createCacheKey($key)) . '.cache';
     }
 
-/**
- * Extracts fresh_until from the tail of an encoded cache blob without
- * re-decoding the full payload. The wrapper always serializes fresh_until
- * as the last key, so an anchored match on the final bytes is sufficient.
- * Returns null when the field is absent, null-valued, or malformed.
- */
+    /**
+     * Extracts fresh_until from the tail of an encoded cache blob without
+     * re-decoding the full payload. The wrapper always serializes fresh_until
+     * as the last key, so an anchored match on the final bytes is sufficient.
+     * Returns null when the field is absent, null-valued, or malformed.
+     */
     private function extractFreshUntil(string $data): ?int
     {
         $pos = strrpos($data, '"fresh_until"');

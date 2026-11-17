@@ -134,11 +134,12 @@ final class SQLiteCache extends AbstractCache
     /**
      * Cross-process single-flight lock via SQLite's write serialization.
      *
-     * BEGIN IMMEDIATE acquires the write lock upfront and fails fast when a
-     * competing writer already holds it (busy_timeout is deliberately set to
-     * 0 for this short transaction so callers are not blocked behind an
-     * unrelated cache write). The winner upserts a lease row; expired leases
-     * left behind by crashed workers are reclaimed atomically.
+     * BEGIN IMMEDIATE acquires the write lock upfront. busy_timeout is set to
+     * 0 so callers are not blocked behind an unrelated cache write; instead
+     * SQLITE_BUSY is retried a few times with a short sleep, so a concurrent
+     * set()/prune() does not silently disable single-flight. The winner upserts
+     * a lease row; expired leases left by crashed workers are reclaimed
+     * atomically. If the write lock stays busy, we degrade to no dedup.
      */
     public function acquireLock(string $key, int $ttlSeconds): bool
     {
@@ -148,7 +149,25 @@ final class SQLiteCache extends AbstractCache
 
         try {
             $this->db->exec('PRAGMA busy_timeout = 0');
-            $this->db->exec('BEGIN IMMEDIATE');
+
+            $begun = false;
+            for ($attempt = 0; $attempt < 3; $attempt++) {
+                try {
+                    $this->db->exec('BEGIN IMMEDIATE');
+                    $begun = true;
+                    break;
+                } catch (\Exception $e) {
+                    if ($this->db->lastErrorCode() !== self::SQLITE_BUSY) {
+                        throw $e;
+                    }
+                    usleep(30000);
+                }
+            }
+
+            if ($begun === false) {
+                $this->logger->warning('SQLite lock acquire busy after retries: proceeding without single-flight');
+                return true;
+            }
 
             $stmt = $this->db->prepare('SELECT expiration FROM locks WHERE key = :key');
             if ($stmt === false) {

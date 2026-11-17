@@ -68,7 +68,7 @@ function get_sitemap(string $url): array
  *
  * Priority (RFC 9111 section 4.2):
  *   1. Cache-Control: no-store/no-cache/must-revalidate/private forbid blind
- *      serving; max-age wins otherwise.
+ *      serving; s-maxage (shared cache) wins over max-age otherwise.
  *   2. Expires header.
  *   3. Heuristic freshness (RFC 9111 section 4.2.2) for successful responses
  *      without explicit signals: 10% of the interval since Last-Modified,
@@ -88,20 +88,29 @@ function responseFreshUntil(Response $response): ?int
                 return null;
             }
         }
+
+        $maxAge = null;
+        $sMaxAge = null;
         foreach ($directives as $directive) {
             if (str_starts_with($directive, 'max-age=') === true) {
-                $seconds = (int) substr($directive, strlen('max-age='));
-                $date = $response->getHeader('date');
-                $anchor = is_string($date) === true ? strtotime($date) : false;
-                if ($anchor === false) {
-                    $anchor = time();
-                }
-                $age = $response->getHeader('age');
-                if (is_string($age) === true && $age !== '' && ctype_digit($age) === true) {
-                    $anchor -= (int) $age;
-                }
-                return $anchor + max(0, $seconds);
+                $maxAge = (int) trim(substr($directive, strlen('max-age=')), '"');
+            } elseif (str_starts_with($directive, 's-maxage=') === true) {
+                $sMaxAge = (int) trim(substr($directive, strlen('s-maxage=')), '"');
             }
+        }
+
+        $seconds = $sMaxAge ?? $maxAge;
+        if ($seconds !== null) {
+            $date = $response->getHeader('date');
+            $anchor = is_string($date) === true ? strtotime($date) : false;
+            if ($anchor === false) {
+                $anchor = time();
+            }
+            $age = $response->getHeader('age');
+            if (is_string($age) === true && $age !== '' && ctype_digit($age) === true) {
+                $anchor -= (int) $age;
+            }
+            return $anchor + max(0, $seconds);
         }
     }
 
@@ -295,7 +304,7 @@ function getContents(
             if (is_string($cacheControl) === true && $cacheControl !== '') {
                 $directives = array_map('trim', explode(',', strtolower($cacheControl)));
             }
-            if (in_array('no-store', $directives, true) === true) {
+            if (in_array('no-store', $directives, true) === true || in_array('private', $directives, true) === true) {
                 $cache->delete($cacheKey);
                 break;
             }
@@ -327,7 +336,7 @@ function getContents(
                     $mergedHeaders
                 );
 
-                if (in_array('no-store', $directives, true) === true) {
+                if (in_array('no-store', $directives, true) === true || in_array('private', $directives, true) === true) {
                     $cache->delete($cacheKey);
                 } else {
                     $freshUntil = responseFreshUntil($merged);
