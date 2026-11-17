@@ -38,7 +38,6 @@ final class DisplayAction implements ActionInterface
     private Logger $logger;
     private BridgeFactory $bridgeFactory;
     private SafeBridgeLoader $safeLoader;
-
     private const DATA_LOCK_TTL = 180;
     private const DATA_WAIT_MS = 10000;
     private const DATA_POLL_MS = 200;
@@ -75,6 +74,7 @@ final class DisplayAction implements ActionInterface
         }
 
         $bridgeClassName = $this->bridgeFactory->createBridgeClassName($bridgeName);
+
         if ($bridgeClassName === null) {
             return new Response(render(__DIR__ . '/../templates/error.html.php', ['message' => 'Bridge not found']), 404);
         }
@@ -111,7 +111,6 @@ final class DisplayAction implements ActionInterface
 
         $ttl = $bridge->getCacheTimeout();
         $ttlRaw = $request->get('_cache_timeout');
-
         $customTimeoutEnabled = filter_var(getenv('CACHE_CUSTOM_TIMEOUT'), FILTER_VALIDATE_BOOLEAN);
 
         if ($customTimeoutEnabled === true) {
@@ -195,11 +194,11 @@ final class DisplayAction implements ActionInterface
 
         if ($payload === null && $stalePayload === null) {
             FeedDeadline::useHardBudget();
+            ignore_user_abort(true);
         }
 
         try {
             $bridge->loadConfiguration();
-
             $remove = [
                 'token',
                 'action',
@@ -212,6 +211,7 @@ final class DisplayAction implements ActionInterface
 
             $requestArray = $request->toArray();
             $input = array_diff_key($requestArray, array_fill_keys($remove, ''));
+
             $bridge->setInput($input);
 
             if ($payload !== null) {
@@ -221,13 +221,21 @@ final class DisplayAction implements ActionInterface
                 $bridge->collectData();
                 $items = $bridge->getItems();
                 $feed = $bridge->getFeed();
+
                 if ($ttl > 0) {
-                    $this->cache->set($dataKey, ['items' => $items, 'feed' => $feed], $ttl);
+                    $normalizedItems = [];
+                    foreach ($items as $item) {
+                        if ($item instanceof \RSSBridge\FeedItem) {
+                            $normalizedItems[] = $item->toArray();
+                        } elseif (is_array($item) === true) {
+                            $normalizedItems[] = $item;
+                        }
+                    }
+                    $this->cache->set($dataKey, ['items' => $normalizedItems, 'feed' => $feed], $ttl);
                 }
             }
         } catch (\Throwable $e) {
             $request->withAttribute('_bridge_error', true);
-
             [$statusCode, $headers] = \httpStatusFromException($e);
 
             $isPermanentClient = $e instanceof \HttpException
@@ -268,6 +276,7 @@ final class DisplayAction implements ActionInterface
 
                 $reportLimitRaw = getenv('ERROR_REPORT_LIMIT');
                 $reportLimit = 1;
+
                 if (is_string($reportLimitRaw) === true && is_numeric($reportLimitRaw) === true) {
                     $reportLimit = max(1, (int) $reportLimitRaw);
                 }
@@ -308,21 +317,25 @@ final class DisplayAction implements ActionInterface
 
         $now = time();
         $lastModifiedTimestamp = 0;
+
         foreach ($formatObj->getItems() as $feedItem) {
             $itemTimestamp = $feedItem->getTimestamp();
             if ($itemTimestamp !== null && $itemTimestamp > $lastModifiedTimestamp) {
                 $lastModifiedTimestamp = $itemTimestamp;
             }
         }
+
         if ($lastModifiedTimestamp === 0 || $lastModifiedTimestamp > $now) {
             $lastModifiedTimestamp = $now;
         }
+
         $formatObj->setLastModified($lastModifiedTimestamp);
 
         $body = $formatObj->render();
 
         $previousSubstitute = ini_get('mbstring.substitute_character');
         ini_set('mbstring.substitute_character', 'none');
+
         try {
             $body = mb_convert_encoding($body, 'UTF-8', 'UTF-8');
         } finally {
@@ -334,9 +347,9 @@ final class DisplayAction implements ActionInterface
         $etag = '"' . md5($body) . '"';
 
         $headers = [
-            'last-modified' => gmdate('D, d M Y H:i:s \G\M\T', $lastModifiedTimestamp),
-            'etag'          => $etag,
-            'content-type'  => $formatObj->getMimeType() . '; charset=UTF-8',
+            'last-modified' => gmdate('D, d M Y H:i:s GMT', $lastModifiedTimestamp),
+            'etag' => $etag,
+            'content-type' => $formatObj->getMimeType() . '; charset=UTF-8',
         ];
 
         return new Response($body, 200, $headers);
@@ -381,6 +394,7 @@ final class DisplayAction implements ActionInterface
 
         $itemsRaw = $value['items'] ?? null;
         $feedRaw = $value['feed'] ?? null;
+
         if (is_array($itemsRaw) === false || is_array($feedRaw) === false) {
             return null;
         }
@@ -390,6 +404,7 @@ final class DisplayAction implements ActionInterface
             if (is_array($item) === false) {
                 return null;
             }
+
             /** @var array<string, mixed> $item */
             $items[] = $item;
         }
@@ -404,6 +419,7 @@ final class DisplayAction implements ActionInterface
     private function createFeedItemFromException(\Throwable $e, BridgeAbstract $bridge): array
     {
         $uniqueIdentifier = urlencode((string) (int) (time() / 86400));
+
         $title = sprintf('Bridge returned error %s! (%s)', $e->getCode(), $uniqueIdentifier);
 
         $item = [
@@ -425,6 +441,7 @@ final class DisplayAction implements ActionInterface
     private function logBridgeError(string $bridgeName, int $code): int
     {
         $cacheKey = 'error_reporting_' . $bridgeName . '_' . $code;
+
         $stored = $this->cache->get($cacheKey);
 
         $report = null;
@@ -433,6 +450,7 @@ final class DisplayAction implements ActionInterface
         if (is_string($stored) === true && $stored !== '') {
             try {
                 $decoded = Json::decode($stored);
+
                 if (is_array($decoded) === true && isset($decoded['count']) === true && is_int($decoded['count']) === true) {
                     $report = $decoded;
                     $count = $decoded['count'];
@@ -455,6 +473,7 @@ final class DisplayAction implements ActionInterface
         }
 
         $ttl = 86400 * 5;
+
         $this->cache->set($cacheKey, Json::encode($report), $ttl);
 
         return $count;
@@ -463,27 +482,33 @@ final class DisplayAction implements ActionInterface
     private static function createGithubIssueUrl(BridgeAbstract $bridge, \Throwable $e): string
     {
         $maintainer = $bridge->getMaintainer();
+
         if (str_contains($maintainer, ',') === true) {
             $maintainers = explode(',', $maintainer);
         } else {
             $maintainers = [$bridge->getMaintainer()];
         }
+
         $maintainers = array_map('trim', $maintainers);
 
         $phpVer = phpversion();
 
         $queryParams = [];
+
         $queryStringRaw = $_SERVER['QUERY_STRING'] ?? '';
+
         if (is_string($queryStringRaw) === true && $queryStringRaw !== '') {
             parse_str($queryStringRaw, $queryParams);
         }
+
         unset($queryParams['token'], $queryParams['_'], $queryParams['_error_time']);
+
         $queryString = http_build_query($queryParams);
 
         $query = [
             'title' => $bridge->getName() . ' failed with: ' . $e->getMessage(),
             'body' => sprintf(
-                "```\n%s\n\n%s\n\nQuery string: %s\nVersion: %s\nOs: %s\nPHP version: %s\n```\nMaintainer: @%s",
+                "```\n%s\n\n%s\n\nQuery string: %s\nVersion: %s\nOs: %s\nPHP version: %s```\nMaintainer: @%s",
                 Url::createSaneExceptionMessage($e),
                 implode("\n", Url::traceToCallPoints(Url::traceFromException($e))),
                 $queryString,

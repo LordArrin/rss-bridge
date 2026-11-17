@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use RSSBridge\Http\Response;
 
 use function urljoin;
 
@@ -47,7 +48,7 @@ final class BastaBridge extends BridgeAbstract
             libxml_clear_errors();
             libxml_use_internal_errors(false);
             throwServerException(
-                'Upstream feed is not well-formed XML: ' . $e->getMessage()
+                "Upstream feed is not well-formed XML: {$e->getMessage()}"
             );
         }
         libxml_clear_errors();
@@ -143,7 +144,7 @@ final class BastaBridge extends BridgeAbstract
 
         $html = getContents($url, ['Cookie' => $cookieHeader]);
         if ($html === '') {
-            throwServerException('Failed to fetch ' . $url);
+            throwServerException("Failed to fetch {$url}");
         }
 
         if ($this->isAntiBotPage($html) === true) {
@@ -164,14 +165,13 @@ final class BastaBridge extends BridgeAbstract
                 $html = $response->getBody();
             } catch (\Throwable $e) {
                 throwServerException(
-                    'Basta.media anti-bot page still returned after retry: ' . $e->getMessage()
+                    "Basta.media anti-bot page still returned after retry: {$e->getMessage()}"
                 );
             }
 
             if ($this->isAntiBotPage($html) === true) {
                 throwServerException(
-                    'Basta.media anti-bot page still returned after retry. ' .
-                    'The cookie value may have changed; last tried: ' . $freshValue
+                    "Basta.media anti-bot page still returned after retry. The cookie value may have changed; last tried: $freshValue"
                 );
             }
         }
@@ -285,8 +285,13 @@ final class BastaBridge extends BridgeAbstract
         }
 
         foreach ($content->querySelectorAll('img') as $img) {
+            // 1. Restore the real image URL from lazy-loading attributes first
             $this->restoreLazyImage($img);
 
+            // 2. Inline images from the target domain as Base64 to bypass anti-bot checks in feed readers
+            $this->inlineImageWithCookie($img);
+
+            // 3. Clean up unnecessary attributes
             foreach (['srcset', 'sizes', 'loading', 'onload', 'style', 'class', 'data-src', 'data-srcset'] as $attr) {
                 if ($img->hasAttribute($attr) === true) {
                     $img->removeAttribute($attr);
@@ -294,6 +299,58 @@ final class BastaBridge extends BridgeAbstract
             }
 
             $img->setAttribute('style', 'max-width:100%;height:auto;');
+        }
+    }
+
+    /**
+     * Fetches an image with the anti-bot cookie, sanitizes it using the built-in
+     * quirk, and inlines it as a Base64 Data URI. This prevents feed readers
+     * from hitting the anti-bot page when requesting images directly.
+     */
+    private function inlineImageWithCookie(\Dom\Element $img): void
+    {
+        $src = $img->getAttribute('src') ?? '';
+        if ($src === '' || str_starts_with($src, 'data:') === true) {
+            return;
+        }
+
+        // Inline only images from the target domain to avoid slowing down external resources
+        if (str_contains($src, 'basta.media') === false) {
+            return;
+        }
+
+        $cookieValue = $this->getAntiBotCookieValue();
+        $cookieHeader = self::ANTI_BOT_COOKIE_NAME . '=' . $cookieValue;
+
+        try {
+            /** @var Response $response */
+            $response = getContents($src, ['Cookie' => $cookieHeader], [], true);
+
+            $body = $response->getBody();
+            $contentType = $response->getHeader('content-type') ?? '';
+
+            // If the server returned the anti-bot HTML page instead of an image, abort inlining
+            if (str_contains($body, '<title>Overload</title>') === true || str_starts_with($contentType, 'text/html') === true) {
+                return;
+            }
+
+            // Determine MIME type
+            $mime = 'image/jpeg'; // default fallback
+            if (str_starts_with($contentType, 'image/') === true) {
+                $mime = explode(';', $contentType)[0];
+            } elseif (str_ends_with($src, '.png') === true) {
+                $mime = 'image/png';
+            } elseif (str_ends_with($src, '.webp') === true) {
+                $mime = 'image/webp';
+            }
+
+            // Sanitize the image using the built-in quirk to strip EXIF metadata
+            // and neutralize polyglot attacks before embedding.
+            $sanitizedBody = sanitize_image($body);
+
+            $img->setAttribute('src', 'data:' . $mime . ';base64,' . base64_encode($sanitizedBody));
+        } catch (\Throwable $e) {
+            // On failure, silently keep the original src URL as a fallback
         }
     }
 
