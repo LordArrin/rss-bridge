@@ -23,8 +23,8 @@ final class FileCache extends AbstractCache
     private readonly bool $enablePurge;
     private readonly Logger $logger;
 
-    /** @var array<string, string> */
-    private array $lockTokens = [];
+    /** @var array<string, resource> */
+    private array $lockHandles = [];
 
     /**
      * @param array<string, mixed> $config
@@ -205,12 +205,6 @@ final class FileCache extends AbstractCache
             }
 
             if ($this->isOwnLockFile($filename) === true) {
-                if (is_file($cacheFile) === true) {
-                    $lockMtime = filemtime($cacheFile);
-                    if ($lockMtime !== false && ($now - $lockMtime) > 3600) {
-                        unlink($cacheFile);
-                    }
-                }
                 continue;
             }
 
@@ -281,64 +275,51 @@ final class FileCache extends AbstractCache
     }
 
     /**
-     * Cross-process single-flight lock built on O_EXCL file creation.
+     * Cross-process single-flight lock built on flock().
      *
-     * The lock file is created atomically; its mtime doubles as the lease
-     * start. An expired lease (holder crashed or regeneration hung past the
-     * terminate timeout) is reclaimed by unlinking and retrying once, so a
-     * dead worker can never block a feed permanently. The random token
-     * written into the file guards releaseLock() against deleting a
-     * successor's lease.
+     * The kernel releases the lock when the holding process dies, so a
+     * crashed worker can never block a feed, and a live holder can never
+     * have its lease stolen — the unlink/recreate reclaim race is gone by
+     * construction. The expiry written into the file is diagnostic only;
+     * ownership is the open handle. Lock files are intentionally never
+     * deleted (unlinking flock files races with concurrent openers).
      */
     public function acquireLock(string $key, int $ttlSeconds): bool
     {
+        if (isset($this->lockHandles[$key]) === true) {
+            return true;
+        }
+
         $lockFile = $this->path . md5($key) . '.lock';
+        $handle = @fopen($lockFile, 'cb');
+        if ($handle === false) {
+            $this->logger->warning(sprintf('Cannot open lock file "%s": proceeding without single-flight', $lockFile));
+            return true;
+        }
 
-        for ($attempt = 0; $attempt < 2; $attempt++) {
-            $handle = @fopen($lockFile, 'xb');
-            if ($handle !== false) {
-                $token = bin2hex(random_bytes(16));
-                $written = @fwrite($handle, $token);
-                fclose($handle);
-                if ($written !== strlen($token)) {
-                    @unlink($lockFile);
-                    return false;
-                }
-                $this->lockTokens[$key] = $token;
-                return true;
-            }
-
-            clearstatcache(true, $lockFile);
-            $mtime = @filemtime($lockFile);
-            if ($mtime === false) {
-                continue;
-            }
-
-            if ((time() - $mtime) >= $ttlSeconds) {
-                @unlink($lockFile);
-                continue;
-            }
-
+        if (flock($handle, \LOCK_EX | \LOCK_NB) === false) {
+            fclose($handle);
             return false;
         }
 
-        return false;
+        ftruncate($handle, 0);
+        rewind($handle);
+        fwrite($handle, (string) (time() + $ttlSeconds));
+
+        $this->lockHandles[$key] = $handle;
+        return true;
     }
 
     public function releaseLock(string $key): void
     {
-        $token = $this->lockTokens[$key] ?? null;
-        if (is_string($token) === false) {
+        $handle = $this->lockHandles[$key] ?? null;
+        if (is_resource($handle) === false) {
             return;
         }
-        unset($this->lockTokens[$key]);
+        unset($this->lockHandles[$key]);
 
-        $lockFile = $this->path . md5($key) . '.lock';
-        $stored = @file_get_contents($lockFile);
-        if ($stored === false || $stored !== $token) {
-            return;
-        }
-        @unlink($lockFile);
+        flock($handle, \LOCK_UN);
+        fclose($handle);
     }
 
     private function createCacheFile(string $key): string

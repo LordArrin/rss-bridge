@@ -45,6 +45,7 @@ final class CacheMiddleware implements Middleware
 
         $lockAcquired = false;
         $hadStale = false;
+        $staleResponse = null;
 
         if ($bypassCache === false) {
             $entry = $this->cache->getWithStale($cacheKey);
@@ -60,8 +61,9 @@ final class CacheMiddleware implements Middleware
                 return $this->attachCacheHeaders($freshResponse, $this->resolveMaxAge($request, $freshResponse), $freshResponse->getHeader('etag'));
             }
 
-            $staleResponse = $entry['stale'] ?? null;
-            if ($staleResponse instanceof Response && $staleResponse->getCode() === 200) {
+            $staleCandidate = $entry['stale'] ?? null;
+            $staleResponse = $staleCandidate instanceof Response ? $staleCandidate : null;
+            if ($staleResponse !== null && $staleResponse->getCode() === 200) {
                 $hadStale = true;
                 if ($this->cache->acquireLock($cacheKey, self::REGENERATION_LOCK_TTL) === false) {
                     return $this->attachStaleHeaders($staleResponse);
@@ -102,9 +104,15 @@ final class CacheMiddleware implements Middleware
         }
 
         if ($code === 200) {
+            if ($request->getAttribute('_bridge_stale_data') === true) {
+                $this->maybePrune();
+                return $this->attachStaleHeaders($response);
+            }
+
+            $maxAge = $request->getAttribute('_bridge_error') === true ? 0 : $this->resolveMaxAge($request);
             $response = $this->attachCacheHeaders(
                 $response,
-                $this->resolveMaxAge($request),
+                $maxAge,
                 $response->getHeader('etag')
             );
 
@@ -114,7 +122,7 @@ final class CacheMiddleware implements Middleware
 
         if ($isTransient === true) {
             $isTimeout = $this->isTimeoutResponse($response, $request) === true;
-            $stale = $bypassCache === false ? $this->serveStale($cacheKey, $response) : null;
+            $stale = $bypassCache === false ? $this->serveStale($cacheKey, $response, $staleResponse) : null;
             if ($stale !== null) {
                 $retryAfter = $isTimeout === true ? self::TIMEOUT_RETRY_AFTER : min(max(self::STALE_RETRY_AFTER, $this->resolveMaxAge($request)), 3600);
                 return $stale
@@ -253,10 +261,14 @@ final class CacheMiddleware implements Middleware
         return null;
     }
 
-    private function serveStale(string $cacheKey, Response $failed): ?Response
+    private function serveStale(string $cacheKey, Response $failed, ?Response $knownStale = null): ?Response
     {
         if ($failed->getCode() === 200) {
             return null;
+        }
+
+        if ($knownStale !== null && $knownStale->getCode() === 200) {
+            return $this->attachStaleHeaders($knownStale);
         }
 
         $cached = $this->cache->getWithStale($cacheKey);

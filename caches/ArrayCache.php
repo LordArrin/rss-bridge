@@ -24,6 +24,11 @@ final class ArrayCache extends AbstractCache
      */
     private array $locks = [];
 
+    /**
+     * @var array<string, int> key => generation recorded at acquire time
+     */
+    private array $lockGenerations = [];
+
     public function get(string $key, mixed $default = null): mixed
     {
         $cached = $this->getWithStale($key);
@@ -40,13 +45,23 @@ final class ArrayCache extends AbstractCache
             return false;
         }
 
-        $this->locks[$key] = $now + $ttlSeconds;
+        $generation = $now + $ttlSeconds;
+        $this->locks[$key] = $generation;
+        $this->lockGenerations[$key] = $generation;
         return true;
     }
 
     public function releaseLock(string $key): void
     {
-        unset($this->locks[$key]);
+        $generation = $this->lockGenerations[$key] ?? null;
+        if (is_int($generation) === false) {
+            return;
+        }
+        unset($this->lockGenerations[$key]);
+
+        if (($this->locks[$key] ?? null) === $generation) {
+            unset($this->locks[$key]);
+        }
     }
 
     public function prune(): void
@@ -56,6 +71,12 @@ final class ArrayCache extends AbstractCache
         foreach ($this->locks as $lockKey => $expiry) {
             if ($expiry <= $now) {
                 unset($this->locks[$lockKey]);
+            }
+        }
+
+        foreach ($this->lockGenerations as $lockKey => $generation) {
+            if ($generation <= $now) {
+                unset($this->lockGenerations[$lockKey]);
             }
         }
 
@@ -120,7 +141,6 @@ final class ArrayCache extends AbstractCache
         try {
             $this->data[$key] = $this->encode($value, $freshUntil);
         } catch (\JsonException | \InvalidArgumentException $e) {
-            // In-memory cache: skip storing on encode failure (incl. unsupported objects).
             return;
         }
     }
@@ -134,5 +154,6 @@ final class ArrayCache extends AbstractCache
     {
         $this->data = [];
         $this->locks = [];
+        $this->lockGenerations = [];
     }
 }

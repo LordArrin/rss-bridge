@@ -1340,6 +1340,14 @@ final class Request
         $encoded = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
         return 'http_' . ($encoded === false ? '{}' : $encoded);
     }
+
+    public function getDataCacheKey(): string
+    {
+        $params = $this->getCacheableParams();
+        unset($params['format']);
+        $encoded = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        return 'data_' . ($encoded === false ? '{}' : $encoded);
+    }
 }
 
 final class Response

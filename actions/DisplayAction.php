@@ -24,6 +24,10 @@ final class DisplayAction implements ActionInterface
     private BridgeFactory $bridgeFactory;
     private SafeBridgeLoader $safeLoader;
 
+    private const DATA_LOCK_TTL = 180;
+    private const DATA_WAIT_MS = 10000;
+    private const DATA_POLL_MS = 200;
+
     public function __construct(
         CacheInterface $cache,
         Logger $logger,
@@ -99,9 +103,14 @@ final class DisplayAction implements ActionInterface
 
         $request = $request->withAttribute('_resolved_cache_timeout', $ttl);
 
-        $response = $this->createResponse($request, $bridge, $formatObj);
+        $response = $this->createResponse($request, $bridge, $formatObj, $ttl);
 
-        if ($response->getCode() === 200 && $ttl > 0 && $request->getAttribute('_bridge_error') !== true) {
+        if (
+            $response->getCode() === 200
+            && $ttl > 0
+            && $request->getAttribute('_bridge_error') !== true
+            && $request->getAttribute('_bridge_stale_data') !== true
+        ) {
             $response = $response->withHeader(CacheMiddleware::CACHE_TTL_HEADER, (string) $ttl);
             $this->cache->set($cacheKey, $response, $ttl);
         }
@@ -109,9 +118,30 @@ final class DisplayAction implements ActionInterface
         return $response;
     }
 
-    private function createResponse(Request $request, BridgeAbstract $bridge, FormatInterface $formatObj): Response
+    private function createResponse(Request $request, BridgeAbstract $bridge, FormatInterface $formatObj, int $ttl): Response
     {
         $items = [];
+        $feed = [];
+        $dataKey = $request->getDataCacheKey();
+        $payload = null;
+        $stalePayload = null;
+        $dataLockAcquired = false;
+
+        if ($ttl > 0) {
+            $entry = $this->cache->getWithStale($dataKey);
+            $payload = $this->normalizeDataPayload($entry['fresh'] ?? null);
+            $stalePayload = $this->normalizeDataPayload($entry['stale'] ?? null);
+
+            if ($payload === null) {
+                if ($this->cache->acquireLock($dataKey, self::DATA_LOCK_TTL) === true) {
+                    $dataLockAcquired = true;
+                } else {
+                    $waited = $this->waitForFreshData($dataKey);
+                    $payload = $waited['payload'];
+                    $dataLockAcquired = $waited['lock'];
+                }
+            }
+        }
 
         try {
             $bridge->loadConfiguration();
@@ -129,8 +159,18 @@ final class DisplayAction implements ActionInterface
             $requestArray = $request->toArray();
             $input = array_diff_key($requestArray, array_fill_keys($remove, ''));
             $bridge->setInput($input);
-            $bridge->collectData();
-            $items = $bridge->getItems();
+
+            if ($payload !== null) {
+                $items = $payload['items'];
+                $feed = $payload['feed'];
+            } else {
+                $bridge->collectData();
+                $items = $bridge->getItems();
+                $feed = $bridge->getFeed();
+                if ($ttl > 0) {
+                    $this->cache->set($dataKey, ['items' => $items, 'feed' => $feed], $ttl);
+                }
+            }
         } catch (\Throwable $e) {
             $request->withAttribute('_bridge_error', true);
 
@@ -143,51 +183,70 @@ final class DisplayAction implements ActionInterface
 
             [$statusCode, $headers] = \httpStatusFromException($e);
 
-            if ($e instanceof \RateLimitException) {
-                $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
-                return new Response(
-                    render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]),
-                    $statusCode,
-                    $headers
-                );
-            }
+            $isTransient = $isTimeout === true || in_array($statusCode, [408, 429, 500, 502, 503, 504], true) === true;
 
-            if ($e instanceof \HttpException) {
-                $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
-                $code = $e->getCode();
-                if ($code >= 400 && $code <= 599) {
+            if ($stalePayload !== null && $isTransient === true) {
+                $this->logger->warning(sprintf(
+                    'Serving stale bridge data for %s after upstream failure: %s',
+                    $bridge->getShortName(),
+                    $e->getMessage()
+                ));
+                $request->withAttribute('_bridge_stale_data', true);
+                $items = $stalePayload['items'];
+                $feed = $stalePayload['feed'];
+            } else {
+                $feed = $bridge->getFeed();
+
+                if ($e instanceof \RateLimitException) {
+                    $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
+                    return new Response(
+                        render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]),
+                        $statusCode,
+                        $headers
+                    );
+                }
+
+                if ($e instanceof \HttpException) {
+                    $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
+                    $code = $e->getCode();
+                    if ($code >= 400 && $code <= 599) {
+                        return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $statusCode, $headers);
+                    }
+                } else {
+                    $this->logger->error(sprintf('Exception in DisplayAction(%s)', $bridge->getShortName()), ['e' => $e]);
+                }
+
+                $errorOutputRaw = getenv('ERROR_OUTPUT');
+                $errorOutput = (is_string($errorOutputRaw) === true && $errorOutputRaw !== '') ? $errorOutputRaw : 'http';
+
+                $reportLimitRaw = getenv('ERROR_REPORT_LIMIT');
+                $reportLimit = 1;
+                if (is_string($reportLimitRaw) === true && is_numeric($reportLimitRaw) === true) {
+                    $reportLimit = max(1, (int) $reportLimitRaw);
+                }
+
+                $errorCount = 1;
+
+                if ($reportLimit > 1) {
+                    $errorCount = $this->logBridgeError($bridge->getName(), (int) $e->getCode());
+                }
+
+                if ($errorOutput === 'feed') {
+                    if ($errorCount <= $reportLimit) {
+                        $items = [$this->createFeedItemFromException($e, $bridge)];
+                    }
+                } elseif ($errorOutput === 'http') {
                     return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $statusCode, $headers);
                 }
-            } else {
-                $this->logger->error(sprintf('Exception in DisplayAction(%s)', $bridge->getShortName()), ['e' => $e]);
             }
-
-            $errorOutputRaw = getenv('ERROR_OUTPUT');
-            $errorOutput = (is_string($errorOutputRaw) === true && $errorOutputRaw !== '') ? $errorOutputRaw : 'http';
-
-            $reportLimitRaw = getenv('ERROR_REPORT_LIMIT');
-            $reportLimit = 1;
-            if (is_string($reportLimitRaw) === true && is_numeric($reportLimitRaw) === true) {
-                $reportLimit = max(1, (int) $reportLimitRaw);
-            }
-
-            $errorCount = 1;
-
-            if ($reportLimit > 1) {
-                $errorCount = $this->logBridgeError($bridge->getName(), (int) $e->getCode());
-            }
-
-            if ($errorOutput === 'feed') {
-                if ($errorCount <= $reportLimit) {
-                    $items = [$this->createFeedItemFromException($e, $bridge)];
-                }
-            } elseif ($errorOutput === 'http') {
-                return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $statusCode, $headers);
+        } finally {
+            if ($dataLockAcquired === true) {
+                $this->cache->releaseLock($dataKey);
             }
         }
 
         $formatObj->setItems($items);
-        $formatObj->setFeed($bridge->getFeed());
+        $formatObj->setFeed($feed);
 
         $now = time();
         $lastModifiedTimestamp = 0;
@@ -219,6 +278,58 @@ final class DisplayAction implements ActionInterface
     }
 
     /**
+     * @return array{items: list<array<string, mixed>>, feed: array<string, mixed>}|null
+     */
+    private function normalizeDataPayload(mixed $value): ?array
+    {
+        if (is_array($value) === false) {
+            return null;
+        }
+
+        $itemsRaw = $value['items'] ?? null;
+        $feedRaw = $value['feed'] ?? null;
+        if (is_array($itemsRaw) === false || is_array($feedRaw) === false) {
+            return null;
+        }
+
+        $items = [];
+        foreach ($itemsRaw as $item) {
+            if (is_array($item) === false) {
+                return null;
+            }
+            /** @var array<string, mixed> $item */
+            $items[] = $item;
+        }
+
+        /** @var array<string, mixed> $feedRaw */
+        return ['items' => $items, 'feed' => $feedRaw];
+    }
+
+    /**
+     * @return array{payload: array{items: list<array<string, mixed>>, feed: array<string, mixed>}|null, lock: bool}
+     */
+    private function waitForFreshData(string $dataKey): array
+    {
+        $waited = 0;
+        while ($waited < self::DATA_WAIT_MS) {
+            usleep(self::DATA_POLL_MS * 1000);
+            $waited += self::DATA_POLL_MS;
+
+            $entry = $this->cache->getWithStale($dataKey);
+            $payload = $this->normalizeDataPayload($entry['fresh'] ?? null);
+            if ($payload !== null) {
+                return ['payload' => $payload, 'lock' => false];
+            }
+
+            if ($this->cache->acquireLock($dataKey, self::DATA_LOCK_TTL) === true) {
+                return ['payload' => null, 'lock' => true];
+            }
+        }
+
+        return ['payload' => null, 'lock' => false];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function createFeedItemFromException(\Throwable $e, BridgeAbstract $bridge): array
@@ -247,7 +358,6 @@ final class DisplayAction implements ActionInterface
         $cacheKey = 'error_reporting_' . $bridgeName . '_' . $code;
         $stored = $this->cache->get($cacheKey);
 
-        // A corrupted/legacy error-report entry must not crash the error path.
         $report = null;
         $count = 1;
 

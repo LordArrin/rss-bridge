@@ -262,19 +262,22 @@ final class MemcachedCache extends AbstractCache
             }
 
             $generation = bin2hex(random_bytes(8));
-            $this->conn->setOption(\Memcached::OPT_COMPRESSION, false);
             $chunkFailed = false;
-            foreach ($parts as $index => $part) {
-                $chunkKey = $cacheKey . '#' . $generation . sprintf('c%04d', $index);
-                $chunkKeys[] = $chunkKey;
+            $this->conn->setOption(\Memcached::OPT_COMPRESSION, false);
+            try {
+                foreach ($parts as $index => $part) {
+                    $chunkKey = $cacheKey . '#' . $generation . sprintf('c%04d', $index);
+                    $chunkKeys[] = $chunkKey;
 
-                if ($this->conn->set($chunkKey, $part, $serverExpiresAt) === false) {
-                    $this->logStoreFailure($chunkKey, strlen($part));
-                    $chunkFailed = true;
-                    break;
+                    if ($this->conn->set($chunkKey, $part, $serverExpiresAt) === false) {
+                        $this->logStoreFailure($chunkKey, strlen($part));
+                        $chunkFailed = true;
+                        break;
+                    }
                 }
+            } finally {
+                $this->conn->setOption(\Memcached::OPT_COMPRESSION, true);
             }
-            $this->conn->setOption(\Memcached::OPT_COMPRESSION, true);
 
             if ($chunkFailed === true) {
                 foreach ($chunkKeys as $chunkKey) {
