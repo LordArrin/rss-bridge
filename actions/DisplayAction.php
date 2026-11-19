@@ -44,6 +44,9 @@ final class DisplayAction implements ActionInterface
     private const BACKOFF_FLOOR = 120;
     private const BROKEN_BRIDGE_BACKOFF = 600;
 
+    /** IMF-fixdate (RFC 9110) */
+    private const HTTP_DATE_FORMAT = 'D, d M Y H:i:s \G\M\T';
+
     public function __construct(
         CacheInterface $cache,
         Logger $logger,
@@ -347,7 +350,7 @@ final class DisplayAction implements ActionInterface
         $etag = '"' . md5($body) . '"';
 
         $headers = [
-            'last-modified' => gmdate('D, d M Y H:i:s GMT', $lastModifiedTimestamp),
+            'last-modified' => gmdate(self::HTTP_DATE_FORMAT, $lastModifiedTimestamp),
             'etag' => $etag,
             'content-type' => $formatObj->getMimeType() . '; charset=UTF-8',
         ];

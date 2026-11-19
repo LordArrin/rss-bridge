@@ -212,10 +212,11 @@ function throwServiceUnavailableException(string $message = '', int $retryAfter 
  * politeness is enforced server-side by the backoff marker instead.
  *
  *  - rate limiting / Cloudflare / temporary upstream unavailability -> 502
+ *  - upstream 429 (rate limit)                                     -> 502
  *  - upstream timeouts / network errors                            -> 504
  *  - other upstream 5xx                                            -> 502
- *  - upstream 4xx                                                  -> passthrough
- *  - anything unexpected                                           -> 500
+ *  - upstream 4xx (except 429)                                     -> passthrough
+ *  - anything unexpected / local config error (code 0)             -> 500
  *
  * @return array{0: int, 1: array<string,string>} Status code + headers
  */
@@ -235,7 +236,18 @@ function httpStatusFromException(\Throwable $e): array
 
     if ($e instanceof \HttpException) {
         $code = $e->getCode();
-        $isTimeout = $code === 0 || $code === 408 || $code === 504
+
+        // Upstream 429 must never leak to the client: FreshRSS turns 429/503
+        // into a domain-wide Retry-After cooldown, freezing every feed on this
+        // instance. Surface it as a transient 502 so backoff + stale apply.
+        if ($code === 429) {
+            return [502, []];
+        }
+
+        // Timeouts / network failures. code 0 alone is NOT a timeout: it also
+        // covers local/config errors (SSRF block, curl init failure), which
+        // must fall through to 500 below instead of masquerading as 504.
+        $isTimeout = $code === 408 || $code === 504
             || str_contains($e->getMessage(), 'cURL error') === true
             || str_contains($e->getMessage(), 'no time left within the request deadline') === true;
 
