@@ -1,12 +1,12 @@
 # Writing Bridges for LordArrin's RSS-Bridge Fork
 
-This guide covers bridge development for this fork. It assumes familiarity with the upstream [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge) project and focuses on what is different here: PHP 8.5 with strict types, the native `\Dom\HTMLDocument` API, PSR-4 namespacing, and the `quirks/` utility library.
+This guide covers bridge development for this fork. It assumes familiarity with the upstream [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge) project and focuses on what is different here: PHP 8.5 with strict types, the native `\Dom\HTMLDocument` API, PSR-4 namespacing, the `quirks/` utility library, and the FreshRSS-compatible HTTP cache model.
 
 ## Key Differences from Upstream
 
 | Feature | Upstream RSS-Bridge | This Fork |
 |---|---|---|
-| PHP version | 7.4+ | 8.5+ |
+| PHP version | 7.4+ | 8.5 (runtime) / 8.6 (analysis target) |
 | Strict types | Optional | Required (`declare(strict_types=1)`) |
 | HTML parser | `simple_html_dom` (embedded) | `\Dom\HTMLDocument` (PHP 8.4+) |
 | HTML cleanup | Manual | Native `parseHtmlDocument()` helper; optional `tidy` for severe cases |
@@ -14,7 +14,7 @@ This guide covers bridge development for this fork. It assumes familiarity with 
 | HTML utilities | Inline in each bridge | Centralized in `quirks/` directory |
 | Markdown | Embedded Parsedown | `erusev/parsedown` via Composer |
 | URL joining | Embedded | `busybee/urljoin` via Composer |
-| Bridge loading | Direct `include` | Sandboxed subprocess via `SafeBridgeLoader` |
+| Bridge loading | Direct `include` | Sandboxed loading via `SafeBridgeLoader`  |
 | Configuration | INI files only | Environment variables (system) + `.bridges` (tokens) |
 
 Legacy `bridges/` directory is not supported. All bridges live in `bridges-v2/`.
@@ -34,8 +34,10 @@ Before submitting or generating any bridge code, ensure it passes the following 
    - Configuration: [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon)
    - Command: `vendor/bin/phpstan analyse bridges-v2/YourBridge.php`
    - Includes `phpstan-strict-rules` and `phpstan-deprecation-rules`
-   - Includes a custom rule `ForbidOldDomApiRule` that **forbids the legacy DOM API** (`DOMDocument`, `DOMNode`, `DOMElement`, `DOMXPath`, ...) and enforces the new `\Dom\*` API (`\Dom\HTMLDocument`, `\Dom\XMLDocument`, `\Dom\Element`, `\Dom\XPath`, ...)
-   - Includes a custom rule `Utf8EncodingRule` that **rejects files which are not valid UTF-8** (raw CP1251/CP1252 bytes in literals or comments) and shows the likely single-byte decoding
+   - Three custom rules are shipped:
+     - `ForbidOldDomApiRule` — forbids the legacy DOM API (`DOMDocument`, `DOMNode`, `DOMElement`, `DOMXPath`, ...) and enforces the new `\Dom\*` API.
+     - `Utf8EncodingRule` — rejects files that are not valid UTF-8 (raw CP1251/CP1252 bytes in literals or comments) and shows the likely single-byte decoding.
+     - `DomTagNameComparisonRule` (identifier `dom.tagNameLowercaseComparison`) — forbids case-sensitive comparisons against `\Dom\Element::$tagName` (which is UPPERCASE for HTML documents in PHP 8.4+) via `===`, `==`, `!==`, `!=`, `in_array`-needle, or `match` arms; use `$element->localName` instead. It exempts `FeedExpander` subclasses (feed parsers don't go through HTML selectors) and files that contain `\Dom\XMLDocument` (where `tagName` preserves original case), and it does not track variable indirection — when in doubt, compare `localName`.
 
 Key PHPCS rules to keep in mind:
 - `declare(strict_types=1)` is required in every file
@@ -43,7 +45,7 @@ Key PHPCS rules to keep in mind:
 - Short array syntax `[]` only
 - Single-quoted strings unless interpolation or escapes are needed
 - One space around the `.` concatenation operator
-- Max line length: 240 characters
+- Max line length: 240 characters (comments are **ignored**, so long URLs in docblocks do not fail the check)
 - Forbidden functions: `sizeof`→`count`, `join`→`implode`, `print`→`echo`, `intval`/`floatval`/`strval`→casts, `is_null`→`=== null`, `create_function`→`Closure::fromCallable()`, `utf8_encode`/`utf8_decode`→`mb_convert_encoding`, `returnClientError`/`returnServerError`→`throwClientException`/`throwServerException`, plus all debug (`var_dump`, `print_r`, ...) and process-execution (`exec`, `shell_exec`, ...) functions
 
 Composer scripts are available as shortcuts:
@@ -52,18 +54,18 @@ Composer scripts are available as shortcuts:
 composer lint       # phpcs on the whole project
 composer lint:fix   # phpcbf auto-fix
 composer stan       # phpstan (level from phpstan.neon)
-composer test       # phpunit (the tests/ suite is not populated yet)
+composer test       # phpunit
 ```
 
-> **Note:** `composer test` currently has no test cases — the `tests/` directory referenced by `phpunit.xml` is not shipped. For a load-time smoke test of every registered bridge (instantiation via `SafeBridgeLoader`, reporting broken stubs), run `bin/test-bridges`. It does not fetch live data; validate selectors against a real page separately.
+> **Note:** For a load-time smoke test of every registered bridge (instantiation via `SafeBridgeLoader`, reporting broken stubs), run `bin/test-bridges`. It does not fetch live data; validate selectors against a real page separately.
 
-**CI behavior** (`.github/workflows/lint-bridges.yml`, runs on pull requests touching `bridges-v2/**`):
+**CI behavior** (`.github/workflows/lint-bridges.yml`, runs on pull requests touching `bridges-v2/**`, `phpcs.xml`, `phpstan.neon`, the workflow file itself, or `rules/**`):
 - `phpcbf` auto-fixes style issues and commits them back to the PR branch
-- `phpcs` errors fail the build; warnings are reported but tolerated
+- `phpcs` errors fail the build (warning severity 8 — warnings are also reported in CI, though locally `composer lint` hides them)
 - PHPStan Level 8 runs on the changed bridge files
 - Bridge files must **not** have the executable bit set (`git update-index --chmod=-x bridges-v2/YourBridge.php`)
 
-> **⚠️ Note for AI Agents:** When generating or modifying bridge code, you must proactively ensure the output complies with `phpcs.xml` rules (e.g., `declare(strict_types=1)`, proper namespaces, no unused variables) and passes PHPStan Level 8. Fork-specific traps: `getContents()` returns `string` by default and `Response` only when `$returnFull = true` (a `(string)` cast is optional, not required); `foreach` over `querySelectorAll()` already yields `\Dom\Element` (an `instanceof` guard there is redundant, not an error); use `saveHtml()` (not `saveHTML()`); avoid the short ternary `?:` and `?->prop ?? $x` (write `->prop ?? $x`); keep ternaries on one line; files must be valid UTF-8 (no raw CP1251/CP1252 bytes); and the legacy `DOM*` API is forbidden by `ForbidOldDomApiRule`. Do not output code that will fail these checks.
+> **⚠️ Note for AI Agents:** When generating or modifying bridge code, you must proactively ensure the output complies with `phpcs.xml` rules (e.g., `declare(strict_types=1)`, proper namespaces, no unused variables) and passes PHPStan Level 8 including all three custom rules. Fork-specific traps: `getContents()` returns `string` by default and `Response` only when `$returnFull = true` (a `(string)` cast is optional, not required); `foreach` over `querySelectorAll()` already yields `\Dom\Element` (an `instanceof` guard there is redundant, not an error); use `saveHtml()` (not `saveHTML()`); avoid the short ternary `?:` and `?->prop ?? $x` (write `->prop ?? $x`); keep ternaries on one line; files must be valid UTF-8 (no raw CP1251/CP1252 bytes); `tagName` is UPPERCASE in HTML — compare via `localName`; and the legacy `DOM*` API is forbidden by `ForbidOldDomApiRule`. Do not output code that will fail these checks.
 
 ## Available PHP Extensions
 
@@ -116,7 +118,7 @@ final class ExampleBridge extends BridgeAbstract
 }
 ```
 
-Save this as `bridges-v2/ExampleBridge.php` and restart the container. The bridge will appear on the main page (see [Testing Your Bridge](#testing-your-bridge) for Docker specifics).
+Save this as `bridges-v2/ExampleBridge.php` and restart the container. The bridge will appear on the main page.
 
 ## Required Constants
 
@@ -134,7 +136,7 @@ public const CACHE_TIMEOUT = 3600;
 - `URI` — canonical URL of the source site
 - `DESCRIPTION` — one-line description shown on the main page
 - `MAINTAINER` — GitHub username or name, used in error reports
-- `CACHE_TIMEOUT` — default cache TTL in seconds
+- `CACHE_TIMEOUT` — default cache TTL in seconds (used as feed `max-age` and as the storage horizon in `getContents()`; see [Caching](#caching))
 
 `BridgeAbstract` provides fallbacks (`NAME`/`URI` default to `null`, `DESCRIPTION` to `'No description provided'`, `MAINTAINER` to `'No maintainer'`, `CACHE_TIMEOUT` to `3600`), but defining all five explicitly is the convention.
 
@@ -178,6 +180,8 @@ public const PARAMETERS = [
 ```
 
 Supported parameter types: `text` (default), `number`, `checkbox`, `list`.
+
+> **Gotcha:** `number` is validated via `FILTER_VALIDATE_INT` — only integers are accepted. A value like `"1.5"` becomes `null`, which fails `required` and raises a `ClientException`. Use `text` and parse yourself if you need floats.
 
 Supported parameter keys:
 
@@ -269,6 +273,8 @@ $token = $this->getOption('api_token');
 $cookie = $this->getOption('session_cookie');
 ```
 
+`Configuration` lowercases section and key names, coerces the strings `true`/`false`/`null`/`yes`/`no`/`on`/`off` to their PHP counterparts, but **numbers remain strings** — always cast with `(int)` / `(float)` when needed.
+
 If a required option is missing, `loadConfiguration()` throws an exception before `collectData()` runs. Options may also declare a `defaultValue`.
 
 ## Fetching and Parsing HTML
@@ -303,14 +309,26 @@ $response = getContents($url, [], [], true);  // requests the full Response obje
 
 ### How getContents() Caching Works
 
-- Successful responses (HTTP 200/201/202) are cached for **24 hours** (`86400` seconds). `Cache-Control: no-store` forbids storage entirely; `no-cache`/`must-revalidate` responses are stored but always revalidated before use
-- Cached responses are revalidated with `ETag` (`If-None-Match`) and `Last-Modified`; freshness honors `Cache-Control: max-age`, `Expires`, and `Age`
-- The cache key includes the POST body hash, so different POST payloads are cached separately
-- Non-2xx responses (except redirects and 304) throw `HttpException::fromResponse()` — Cloudflare challenge pages are automatically detected and thrown as `CloudFlareException`
-- Global settings apply via environment variables: `HTTP_TIMEOUT` (60s default), `HTTP_RETRIES` (2 default; `0` disables retries), `HTTP_MAX_FILESIZE` (40 MB default)
-- **SSRF protection is on by default** (`HTTP_SSRF_CHECK=true`): requests to internal/reserved IP ranges are blocked, with DNS pinning against rebinding
+Responses are cached for up to **24 hours** (86400 seconds) of *storage horizon*, but freshness is computed per RFC 9111 and is almost never that long:
 
-For sitemaps there is a dedicated helper returning a list of `{loc, lastmod, changefreq, priority}` entries:
+- **Storage horizon** (86400 s) caps how long the response body is kept in the cache backend, regardless of freshness directives.
+- **Freshness** (how long a cached response can be served without revalidation) is computed in this order:
+  1. `s-maxage` if present (overrides `max-age` — this is how CDNs override origin caches, and how you should trust a CDN-tuned value).
+  2. `max-age`.
+  3. `Expires` header.
+  4. Heuristic: 10% of `(Date − Last-Modified)`, clamped to **[60, 86400]** seconds.
+  5. A floor of **60 seconds** when no validator is present, so an upstream without cache headers still benefits from brief coalescing.
+- Successful responses are served with `public, max-age=<full TTL>, stale-while-revalidate=max(120, TTL/4)` and an RFC-9111 `Age` header (current-age model, verified against FreshRSS 1.30.4).
+- `no-store` and `private` both forbid storage; `private` additionally **deletes any already-stored entry** for that key (so flipping the directive back does not revive stale data). `no-cache` is stored but revalidated on every use.
+- **`must-revalidate` is deliberately NOT a blocking directive** in this fork — it is honored without forcing a revalidation on every call while the response is still fresh. This differs from strict RFC reading but is necessary to keep feeds responsive against sites that set `must-revalidate` on content that changes far less often than the directive suggests.
+- Cached responses are revalidated with `ETag` (`If-None-Match`) and `Last-Modified` (`If-Modified-Since`).
+- The cache key is a hash of **(url, POST body, headers, identity-curl-options)** — specifically `UA`, `Cookie`, `Referer`, `CUSTOMREQUEST`, `POST`, `HTTPHEADER`, and `PROXY`. Calling `getContents($url)` with and without a `User-Agent` header produces two different cache entries.
+- Non-2xx responses (except redirects and 304) throw `HttpException::fromResponse()` — Cloudflare challenge pages are automatically detected and thrown as `CloudFlareException`.
+- A 304 without any stored response is retried once without validators; a second 304 raises `HttpException` with status 502.
+- Global settings apply via environment variables: `HTTP_TIMEOUT` (60 s default), `HTTP_RETRIES` (2 default; `0` disables retries), `HTTP_MAX_FILESIZE` (40 MB default — **set by `.env.default`, not hardcoded in `HttpClient`**, which defaults to `null`).
+- **SSRF protection is on by default** (`HTTP_SSRF_CHECK=true`): requests to internal/reserved IP ranges are blocked, with DNS pinning against rebinding.
+
+For sitemaps there is a dedicated helper returning a list of `{loc, lastmod, changefreq, priority}` entries (values are nullable), and additionally a `news` key for sitemap-news items:
 
 ```php
 $urls = get_sitemap('https://example.com/sitemap.xml');
@@ -332,6 +350,8 @@ if (is_string($cachedHtml) === false || $cachedHtml === '') {
 
 $dom = parseHtmlDocument($cachedHtml);
 ```
+
+If you only need a fragment (e.g. a `<div>` from a larger page), use the sibling `parseHtmlFragment()` instead — it tolerates unbalanced wrappers better than `parseHtmlDocument()`.
 
 ### Parsing XML and Atom Feeds
 
@@ -360,7 +380,7 @@ foreach ($xml->querySelectorAll('entry') as $entry) {
 
 For HTML, use the `parseHtmlDocument()` helper instead — it handles malformed markup, control characters and invalid UTF-8, and restores the libxml state. Note: `\Dom\HTMLDocument::createFromString()` accepts `LIBXML_NOERROR` but **rejects** `LIBXML_NOWARNING`.
 
-If your goal is to *expand* an existing feed, prefer [`FeedExpander`](#expanding-existing-feeds-feedexpander) instead of manual XML parsing.
+If your goal is to *expand* an existing feed, prefer `FeedExpander` instead of manual XML parsing.
 
 ### Selectors
 
@@ -419,7 +439,7 @@ $date = $post->querySelector('time')?->getAttribute('datetime');
 
 ### Traversing the Tree
 
-> **⚠️ PHPStan trap:** In PHP 8.4+ `\Dom\HTMLDocument`, the `tagName` property returns the tag name in **UPPERCASE** (e.g., `'DIV'`, `'A'`) for HTML documents, following the WHATWG DOM spec. Comparing it to a lowercase string (e.g., `$node->tagName === 'div'`) will **always fail**. Always use `$node->localName` for case-insensitive comparisons.
+> **⚠️ PHPStan trap:** In PHP 8.4+ `\Dom\HTMLDocument`, the `tagName` property returns the tag name in **UPPERCASE** (e.g., `'DIV'`, `'A'`) for HTML documents, following the WHATWG DOM spec. Comparing it to a lowercase string (e.g., `$node->tagName === 'div'`) will **always fail**. Always use `$node->localName` for case-insensitive comparisons. The `DomTagNameComparisonRule` enforces this automatically.
 
 ```php
 $current = $node;
@@ -714,7 +734,8 @@ $dataUri = media_embed_url_to_data_uri(
     media_embed_parse_size('2m'),     // max size in bytes, 0 = unlimited
     null,                             // ?string proxy profile name
     $this->logger,                    // ?Logger
-    1                                 // retry attempts
+    1,                                // retry attempts
+    []                                // additional options
 );
 
 // Low-level fetch with retries/backoff; returns ['body' => ..., 'type' => ...] or null
@@ -779,7 +800,7 @@ public function collectData(): void
 - `Json::decode(string $json, bool $assoc = true): mixed` and `Json::encode(mixed $value, bool $pretty = true, bool $asciiSafe = false): string` both throw `\JsonException` on invalid input (`JSON_THROW_ON_ERROR`)
 - The `(string)` cast on `getContents()` is house style; PHPStan already infers `string` here via the conditional return type, so the cast is optional
 - An equally valid pattern used by bridges: `json_decode((string) getContents($url, $headers), true, 512, JSON_THROW_ON_ERROR)`
-- For deeply nested payloads, combine with `read_json_path()` (see [quirks](#json-path-traversal-quirksjson_pathphp))
+- For deeply nested payloads, combine with `read_json_path()` (see quirks)
 
 ## APCu In-Memory Cache
 
@@ -805,12 +826,12 @@ public function collectData(): void
 }
 ```
 
-**APCu vs Memcached:**
+**APCu vs the default bridge cache (memcached):**
 
-- **APCu**: In-memory, local to container, ~1µs access time, lost on container restart
-- **Memcached**: Network-based, shared across containers, ~100µs access time, persistent (default cache type is controlled via `CACHE_TYPE` environment variable, defaulting to `memcached`)
+- **APCu**: In-memory, local to the container, ~1 µs access time, lost on container restart. Use it for hot, rarely-changing data like per-bridge API configuration or pagination cursors.
+- **Memcached (`CACHE_TYPE=memcached`)**: By default, `CACHE_MEMCACHED_TYPE=internal` — a unix-socket instance running **inside the same container under supervisor**, so it is fast but **not shared across containers** and **not persistent across restarts** (data lives in RAM, not disk). Use `CACHE_MEMCACHED_TYPE=external` with `CACHE_MEMCACHED_HOST`/`CACHE_MEMCACHED_PORT` to point at a shared, persistent instance (e.g. a dedicated memcached deployment). There is no automatic APCu→Memcached→File fallback chain — pick a backend via `CACHE_TYPE` (`memcached`, `sqlite`, `file`, `array`, `null`).
 
-**Best practice:** Use APCu for frequently accessed, rarely changing data (config, metadata). Use memcached for shared data across multiple instances.
+**Best practice:** Use APCu for frequently accessed, rarely changing data. Use memcached (external) for shared data across multiple instances.
 
 ## Advanced Compression with Zstd
 
@@ -887,9 +908,27 @@ throwServiceUnavailableException('Upstream temporarily unavailable');
 throw new \HttpException('Not Found', 404);
 ```
 
-`getContents()` throws `HttpException::fromResponse()` automatically on non-2xx responses; Cloudflare challenge pages are detected and raised as `CloudFlareException`. The `Retry-After` header is parsed into `HttpException::$retryAfter`.
+`getContents()` throws `HttpException::fromResponse()` automatically on non-2xx responses; Cloudflare challenge pages are detected and raised as `CloudFlareException`. The `Retry-After` header is parsed into `HttpException::$retryAfter` **and is used only to size the server-side backoff window (floored at 120 s, capped at 3600 s, stored as `<key>|backoff`)** — it is **never forwarded to the client**.
 
-All exceptions are caught by the framework and rendered according to the `ERROR_OUTPUT` environment variable (`feed`, `http`, or `none`, default: `http`).
+### What the client actually sees
+
+The HTTP status returned to feed readers is determined by `httpStatusFromException()` in `lib/exceptions.php` and is **not a 1:1 echo of the bridge's exception code**:
+
+| Bridge exception / condition | HTTP status to client |
+|---|---|
+| `ClientException` (most 4xx, passthrough) | **passthrough** — the original 4xx is returned |
+| `RateLimitException`, `CloudFlareException`, `ServiceUnavailableException`, or any unhandled upstream 429 | **502** (per-feed, stale-first applies) |
+| 408 / 504 / cURL errno 28 (timeout) | **504** |
+| Other 5xx (`ServerException`, `HttpException` ≥ 500) | **502** |
+| Bridge instantiation failure (broken stub) | **500** + server backoff 600 s |
+
+Only `MaintenanceMiddleware` may raise a true 503 to the client.
+
+### Stale-first serving
+
+When a bridge call fails temporarily **and a stale cached response exists**, the framework serves the stale body with HTTP 200, `public, max-age≥60, must-revalidate`, and an `x-feed-stale: 1` header **regardless of `ERROR_OUTPUT`**. `ERROR_OUTPUT` (feed/http/none) is only consulted when there is **no** stale data to fall back to.
+
+Constant 4xx responses are **negatively cached** for 60–180 seconds, so a repeatedly failing bridge does not hammer its upstream on every reader poll.
 
 ## Feed Item Structure
 
@@ -908,13 +947,31 @@ $this->items[] = [
 ];
 ```
 
-The `uid` field is used by feed readers to detect duplicates. If omitted, the framework generates one from the item content.
+### The `uid` chain
 
-Additional custom keys are allowed — `FeedItem::fromArray()` stores unknown keys in a `misc` bag and round-trips them back via `toArray()`. This is how `FeedExpander` bridges pass extra data (e.g. `apod` metadata) between `collectExpandableDatas()` and `parseItem()`.
+The `uid` field is used by feed readers to detect duplicates, and its journey through the framework is more opinionated than it looks:
+
+1. If the bridge supplies a `uid`, `FeedItem::setUid()` **sha1-hashes it** unless it is already a 40-character hex string. Expect a one-time duplicate spike in readers the first time an existing bridge switches to this fork (the hashed uid differs from the old literal).
+2. In `AtomFormat`, the final entry ID is: `urn:sha1:<uid>` if `uid` was set; otherwise the entry's `uri`; and as a last resort `urn:sha1:<sha1(title . content)>`.
+3. The RSS/MRSS formats use similar fallbacks and likewise emit deterministic IDs so that re-imports do not re-create the same item under a different ID.
+
+Custom keys beyond the documented set are allowed — `FeedItem::fromArray()` stores them in a `misc` bag and round-trips them back via `toArray()`. This is how `FeedExpander` bridges pass extra data (e.g. `apod` metadata) between `collectExpandableDatas()` and `parseItem()`. `AtomFormat` additionally supports a **single podcast-style enclosure** under `enclosure` (with `url`, `length`, `type` keys) via the misc bag.
+
+### Enclosures and data: URIs
+
+`FeedItem::setEnclosures()` accepts a flat list of URL strings. `data:` URIs are accepted **only** for base64-encoded raster images (png/jpeg/gif/webp/avif), and only under a hard length limit (`FeedItem::MAX_DATA_URI_LENGTH`) — anything else is silently dropped to avoid feed bloat and scriptable payloads.
 
 ## Caching
 
-HTTP responses are cached automatically by `getContents()` for up to **24 hours**, with conditional revalidation via `ETag`/`Last-Modified` and respect for `Cache-Control` headers. For caching parsed or processed data, use the bridge-level cache helpers:
+Two layers of caching coexist; they are often confused:
+
+### Upstream HTTP cache (`getContents()`)
+
+Successful responses are stored automatically by `getContents()` for up to **86400 seconds** of storage horizon, with freshness computed per RFC 9111 (see *How getContents() Caching Works*). The cache key incorporates the URL, POST body, headers, and identity-relevant curl options, so different requests to the same URL with different `User-Agent` / `Cookie` / `Referer` headers do not collide.
+
+### Bridge-level cache (`loadCacheValue` / `saveCacheValue`)
+
+For caching parsed or processed data, use the bridge-level cache helpers:
 
 ```php
 $cacheKey = 'example_' . md5($url);
@@ -931,7 +988,11 @@ $this->saveCacheValue($cacheKey, $processedData, 3600); // default TTL: 86400
 
 `loadCacheValue()`/`saveCacheValue()` automatically prefix the key with the bridge's short name (e.g. `ExampleBridge_example_...`), so keys never collide between bridges.
 
-Values passed to `saveCacheValue()` must be JSON-serializable (scalars and arrays; `Response` is specially supported). Arbitrary objects throw `InvalidArgumentException` — the cache deliberately avoids PHP `unserialize()` for security. Raw binary strings are corrupted by the JSON encoding, so base64-encode them first (see the Zstd example above).
+Values passed to `saveCacheValue()` must be JSON-serializable (scalars and arrays; `Response` is specially supported **only as the top-level value** — nested `Response` objects throw `InvalidArgumentException`). Arbitrary objects throw `InvalidArgumentException` — the cache deliberately avoids PHP `unserialize()` for security. Raw binary strings are corrupted by the JSON encoding, so base64-encode them first (see the Zstd example above).
+
+The effective feed `max-age` and the bridge-cache TTL are driven by the bridge's `CACHE_TIMEOUT` constant, which is applied **unconditionally** by `DisplayAction`. A user may override it with `?_cache_timeout=<seconds>` on the feed URL, **but only when the `CACHE_CUSTOM_TIMEOUT=true` environment variable is set**, and values above **86400** (`MAX_CACHE_TIMEOUT` / `MAX_MAX_AGE`) are clamped. The magic value `_cache_timeout=0` bypasses the cache for that single request. `CACHE_TIMEOUT=0` disables caching for the bridge entirely.
+
+> **Note on `.env.default`:** an older comment in `.env.default` used to claim that `CACHE_CUSTOM_TIMEOUT=false` "enforces the global TTL" and ignores the bridge constant. That is outdated — `CACHE_TIMEOUT` is always honored; `CACHE_CUSTOM_TIMEOUT` only gates the URL-override knob.
 
 Alternatively, access the cache backend directly (no prefixing) and the logger:
 
@@ -947,14 +1008,12 @@ if ($this->logger !== null) {
 
 Both `$this->cache` and `$this->logger` are injected by `BridgeFactory` through the constructor. Do not define your own constructor unless you forward `($cache, $logger)` to `parent::__construct()`.
 
-**Cache backend selection:** the backend is chosen explicitly via the `CACHE_TYPE` environment variable (`memcached`, `sqlite`, `file`, `array`, `null`; default `memcached`). There is no automatic APCu→Memcached→File fallback chain — APCu is a separate, manually-used local cache (see above).
-
 ## Proxy Profiles
 
 For Cloudflare-protected sites or sites requiring specific IPs, use the proxy system:
 
 ```php
-// Fetch raw HTML via a named proxy profile (throws ClientException on failure)
+// Fetch raw HTML via a named proxy profile
 $html = getProtectedContents($url, 'flaresolverr');
 
 // Fetch and parse into \Dom\HTMLDocument
@@ -970,6 +1029,8 @@ if ($binary !== null) {
 ```
 
 All three accept an optional third parameter `array $options = []`.
+
+> **⚠️ What they actually throw:** if the profile is referenced but not configured via environment variables, `getProtectedContents()` throws a **`ServerException`** (→ HTTP 500 to the client), with a message that lists the expected `PROXY_PROFILE_*` variables. On a network/fetch failure they throw **`ServiceUnavailableException`** with `retryAfter` = 600 s for `DirectProxy` and 60 s for other proxies (→ HTTP 502 per the table in *Error Handling*). They do not throw `ClientException` — a proxy failure is never the reader's fault.
 
 ### Configuring Proxy Profiles
 
@@ -1004,7 +1065,7 @@ PROXY_PROFILE_TGWS_BUDGET_SECONDS=45
 PROXY_PROFILE_TGWS_FALLBACK_DIRECT=true
 ```
 
-If a profile is referenced but not configured, `getProtectedContents()` throws a `ClientException` with a hint about the missing configuration. The system automatically falls back to `DirectProxy` when using `safeFromProfile()`.
+The system automatically falls back to `DirectProxy` when using `safeFromProfile()`.
 
 ## Relative URLs
 
@@ -1072,10 +1133,10 @@ final class MyBlogExpanderBridge extends FeedExpander
 }
 ```
 
-- `collectExpandableDatas(string $url, int $maxItems = -1, array $headers = []): void` fetches and parses the feed (`-1` means up to 999 items)
-- `parseItem(array $item): array|false` is called for every item; return `false` or `[]` to drop it. An override that never drops items may narrow the return type to `array` (as above) — PHPStan Level 8 requires the declared return type to match what the method actually returns
-- `getName()`, `getURI()`, and `getIcon()` are automatically taken from the parsed feed
-- Custom keys survive the round-trip through the `misc` bag (see [Feed Item Structure](#feed-item-structure))
+- `collectExpandableDatas(string $url, int $maxItems = -1, array $headers = []): void` fetches and parses the feed (`-1` means up to 999 items). It sends `Accept: application/rss+xml, application/atom+xml, */*`, which produces a **separate upstream-cache entry** from a plain `getContents()` on the same URL.
+- `parseItem(array $item): array|false` is called for every item; return `false` or `[]` to drop it. An override that never drops items may narrow the return type to `array` (as above) — PHPStan Level 8 requires the declared return type to match what the method actually returns.
+- `getName()`, `getURI()`, and `getIcon()` are automatically taken from the parsed feed.
+- Custom keys survive the round-trip through the `misc` bag (see *Feed Item Structure*).
 
 ## Namespaced Core Classes
 
@@ -1096,6 +1157,8 @@ use RSSBridge\Logger\Logger;           // type hints for logger parameters
 **Exceptions are the opposite:** `HttpException`, `ClientException`, `ServerException`, `RateLimitException`, `ServiceUnavailableException`, `CloudFlareException` and the `throwClientException()`/`throwServerException()`/`throwRateLimitException()`/`throwServiceUnavailableException()` helpers are all in the **global namespace** — do **not** import them. The same applies to `getContents()`, `getSimpleHTMLDOM()`, `getProtected*()`, `get_sitemap()` and all `quirks/` functions.
 
 `RSSBridge\FeedItem` and `RSSBridge\FeedParser` exist but are framework internals — bridges normally work with plain arrays.
+
+> **⚠️ Custom-base-class trap.** The Docker image runs Composer with `--classmap-authoritative`, so the autoloader trusts the classmap **only**. The built-in abstract bases (`GelbooruBase`, `HoyoBase`, etc.) are present in the classmap; a base class you drop into `/config/bridges-v2/` at runtime is **not** in the classmap and will fail to autoload, making the subclass bridge register as a `BrokenBridgeStub`. If you need shared logic between multiple custom bridges, put it in a separate non-bridge file (no `*Bridge.php` suffix) under `bridges-v2/` and rely on the direct `require` that `BridgeFactory` performs — or keep your bridges self-contained and inherit only from `BridgeAbstract` / `FeedExpander` / the built-in bases.
 
 ## Running Quality Checks
 
@@ -1143,7 +1206,7 @@ If the bridge fails to load, check the container logs:
 docker logs rss-bridge | grep -i "YourBridge"
 ```
 
-Bridges are loaded safely via `SafeBridgeLoader`, which catches instantiation and compile-time errors (e.g., syntax errors, missing classes, signature mismatches) and returns a `BrokenBridgeStub` instead of crashing the whole application.
+Bridges are loaded safely in two stages: `BridgeFactory::loadBridgeInSandbox()` runs each bridge file in an **isolated PHP CLI subprocess** (30 s `timeout`, verdict written to a file — NOT parsed from stdout, because the new `\Dom\*` API and PHP 8.5 deprecations legitimately emit warnings that must not mark an otherwise working bridge as broken; verdicts are memoized in APCu with 86400 s positive / 60 s negative TTL keyed by path+mtime+size). `SafeBridgeLoader` then wraps the in-process instantiation in try/catch and returns a `BrokenBridgeStub` on any `Throwable`, preserving the rest of the UI.
 
 > **⚠️ Note:** This protection only applies to the loading/instantiation phase. Runtime fatal errors inside `collectData()` (e.g., calling undefined functions, out of memory) will still crash the process unless handled by an outer execution sandbox or caught explicitly.
 
@@ -1203,25 +1266,28 @@ When fetching multiple items, use parallel requests or batch endpoints when avai
 - [ ] File is valid UTF-8 — no raw CP1251/CP1252 bytes (enforced by `Utf8EncodingRule`)
 - [ ] `declare(strict_types=1)` at the top
 - [ ] `namespace RSSBridge\Bridges;` declared
-- [ ] Class is `final` and extends `BridgeAbstract` (or `FeedExpander`)
+- [ ] **Concrete** bridges are `final`; abstract bases are an exception (but see the classmap-authoritative trap under *Namespaced Core Classes*) and extend `BridgeAbstract` (or `FeedExpander`)
 - [ ] All five required constants defined with `public const`
 - [ ] No `simple_html_dom` calls (`str_get_html()`, `->find()`, `->plaintext`) and no legacy `DOM*` classes (`DOMDocument`, `DOMXPath`, ...) — forbidden by `ForbidOldDomApiRule`
+- [ ] No case-sensitive comparisons against `\Dom\Element::$tagName` (use `$element->localName`) — enforced by `DomTagNameComparisonRule`
 - [ ] Uses `getSimpleHTMLDOM()`, `\Dom\HTMLDocument`, or `\Dom\XMLDocument` for parsing
-- [ ] `getContents()` handled correctly: `string` by default (cast optional), `Response` read via `getBody()` when `$returnFull = true`
+- [ ] `getContents()` handled correctly: `string` by default (cast optional), `Response` read via `getBody()` when `$returnFull = true`; be aware of the freshness/storage split described in *How getContents() Caching Works*
 - [ ] `foreach` over `querySelectorAll()` used directly (items are `\Dom\Element`); `instanceof` narrowing only for `->item($i)` / `mixed`
 - [ ] Null-safe operator `?->` used for optional elements; no `?->prop ?? $x` (use `->prop ?? $x`) and no short ternary `?:`
-- [ ] Exception helpers (`throwClientException`, ...) used from the **global namespace** — no imports
+- [ ] Exception helpers (`throwClientException`, ...) used from the **global namespace** — no imports; remember they map to HTTP statuses per the table in *Error Handling* (429/CloudFlare/503 → 502 to the client)
 - [ ] `Json` imported as `use RSSBridge\Utils\Json;` if used
 - [ ] Relative URLs handled via `urljoin()` (with `use function urljoin;`)
-- [ ] Code passes `phpcs` checks (see [`phpcs.xml`](https://github.com/LordArrin/rss-bridge/blob/master/phpcs.xml))
-- [ ] Code passes `phpstan` analysis at project level (see [`phpstan.neon`](https://github.com/LordArrin/rss-bridge/blob/master/phpstan.neon))
+- [ ] Code passes `phpcs` checks (see `phpcs.xml`)
+- [ ] Code passes `phpstan` analysis at project level (see `phpstan.neon`) including all three custom rules
 - [ ] Bridge tested with real data in Docker and enabled via `ENABLED_BRIDGES` env var
 - [ ] Malformed HTML handled via `parseHtmlDocument()`; `tidy` only for severe cases
-- [ ] Large cached objects use `igbinary`/`zstd` compression, base64-wrapped before `saveCacheValue()`
+- [ ] Large cached objects use `igbinary`/`zstd` compression, base64-wrapped before `saveCacheValue()`; `Response` objects passed to `saveCacheValue()` only as the top-level value
 - [ ] API authentication uses `sodium` for signatures
 - [ ] APCu used for frequently accessed local data
 - [ ] Used built-in `quirks/` helpers (e.g., `truncate_html_preserve_tags`, `extract_spa_json_variable`, `matches_keyword_rules`) instead of writing custom regex or substring logic
 - [ ] Video players built via `video_embed_iframe()` / `video_embed_url()`; return value checked for `''` / `null`
+- [ ] `number` parameters hold only integers; floats are handled via `text` + manual parsing
+- [ ] Custom base classes (if any) are either in the composer classmap or loaded via the direct `require` that `BridgeFactory` performs
 
 ## Full Reference Example
 

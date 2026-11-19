@@ -556,9 +556,14 @@ function validateMaintenance(string $value): ?string
 /**
  * Validates a DOMAIN value.
  * Must be http:// or https:// followed by:
- *   - hostname (alphanumeric + hyphens, dots for subdomains)
- *   - or IPv4 address
- * Optionally followed by :port (1-65535)
+ *   - a hostname: dot-separated labels (letters, digits, hyphens; underscores
+ *     are tolerated for Docker service/container names such as rss_bridge).
+ *     Single-label hosts are valid (Docker DNS): rss-bridge, rssbridge.
+ *     A trailing FQDN dot is accepted and stripped.
+ *   - an IPv4 address, or a bracketed IPv6 literal ([::1], [2001:db8::1])
+ * Optionally followed by :port (1-65535). Paths, queries, fragments and
+ * userinfo are rejected: DOMAIN is strictly scheme://host[:port].
+ * The host is lowercased in the canonical form.
  * Returns the validated/normalized value, or null on failure.
  */
 function validateDomain(string $value): ?string
@@ -576,29 +581,40 @@ function validateDomain(string $value): ?string
     $protocol = strtolower($m[1]);
     $rest = $m[2];
 
-    // Split host:port
+    // DOMAIN is scheme://host[:port] only — no path, query, fragment or userinfo.
+    if (preg_match('#[/?\#@]#', $rest) === 1) {
+        return null;
+    }
+
+    // Split host:port (also handles [IPv6]:port).
     $host = $rest;
     $port = null;
 
-    // Handle IPv4 or hostname with port
     if (preg_match('#^(.+):(\d{1,5})$#', $rest, $pm) === 1) {
         $host = $pm[1];
-        $port = (int)$pm[2];
+        $port = (int) $pm[2];
         if ($port < 1 || $port > 65535) {
             return null;
         }
     }
 
-    // Validate host: hostname or IPv4
+    $host = strtolower($host);
+
+    // Validate host: IPv4, bracketed IPv6, or hostname.
     $isValidHost = false;
 
-    // Check IPv4
-    if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+    if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
         $isValidHost = true;
-    }
-    // Check hostname: labels separated by dots
-    elseif (preg_match('/^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]{2,63}$/', $host) === 1) {
-        $isValidHost = true;
+    } elseif (str_starts_with($host, '[') === true && str_ends_with($host, ']') === true) {
+        $isValidHost = filter_var(substr($host, 1, -1), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false;
+    } else {
+        // Accept and strip a trailing FQDN dot, then validate LDH labels.
+        // Underscores are allowed inside labels for Docker names; hyphens may
+        // not lead or trail a label. Single-character labels are allowed.
+        $host = rtrim($host, '.');
+        if (preg_match('/^(?=.{1,253}$)[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?(?:\.[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?)*$/', $host) === 1) {
+            $isValidHost = true;
+        }
     }
 
     if ($isValidHost === false) {
@@ -1427,7 +1443,7 @@ foreach (array_keys($finalEnv) as $key) {
 }
 
 // 4. Normalize values (validates, canonicalizes, applies container caps)
-$warnings = normalizeEnv($finalEnv, $normalizationRules, $defaultEnv);
+$warnings = normalizeEnv($finalEnv, $normalizationRules);
 foreach ($warnings as $w) {
     fwrite(STDERR, "Env: WARNING {$w}\n");
 }

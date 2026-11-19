@@ -56,7 +56,6 @@ final class DisplayAction implements ActionInterface
     private const DATA_POLL_MS = 200;
     private const BACKOFF_FLOOR = 120;
     private const BROKEN_BRIDGE_BACKOFF = 600;
-    private const MAX_CACHE_TIMEOUT = 86400;
 
     /** IMF-fixdate (RFC 9110) */
     private const HTTP_DATE_FORMAT = 'D, d M Y H:i:s \G\M\T';
@@ -132,13 +131,17 @@ final class DisplayAction implements ActionInterface
 
         if ($customTimeoutEnabled === true) {
             if (is_int($ttlRaw) === true) {
-                $ttl = min($ttlRaw, self::MAX_CACHE_TIMEOUT);
+                $ttl = $ttlRaw;
             } elseif (is_string($ttlRaw) === true && is_numeric($ttlRaw) === true) {
-                $ttl = min((int) $ttlRaw, self::MAX_CACHE_TIMEOUT);
+                $ttl = (int) $ttlRaw;
             }
         }
 
-        $ttl = max(0, $ttl);
+        // Single cap for the advertised max-age AND the storage TTL. Without it
+        // a bridge CACHE_TIMEOUT above MAX_MAX_AGE stays "fresh" server-side
+        // while readers see Age exceed max-age and revalidate in a loop without
+        // the feed ever regenerating (RFC 9111: age must not exceed freshness).
+        $ttl = max(0, min(CacheMiddleware::MAX_MAX_AGE, $ttl));
 
         $request = $request->withAttribute('_resolved_cache_timeout', $ttl);
 

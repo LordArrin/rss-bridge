@@ -35,7 +35,14 @@ final class CacheMiddleware implements Middleware
     public const CACHE_GENERATED_HEADER = 'x-rssbridge-generated';
     private const REGENERATION_LOCK_TTL = 120;
     private const DEFAULT_MAX_AGE = 3600;
-    private const MAX_MAX_AGE = 86400;
+
+    /**
+     * Hard cap for BOTH the advertised max-age and the storage TTL. Public so
+     * DisplayAction clamps bridge CACHE_TIMEOUT / custom timeouts to the same
+     * value, keeping server-side freshness and client-side max-age in sync.
+     */
+    public const MAX_MAX_AGE = 86400;
+
     private const COLD_WAIT_MS = 2000;
     private const COLD_POLL_MS = 100;
     private const BACKOFF_KEY_SUFFIX = '|backoff';
