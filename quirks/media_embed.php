@@ -17,6 +17,7 @@
  * - Base64 encoding into data URI format
  * - Optional size limits (returns original URL if exceeded)
  * - Optional persistent caching (via CacheInterface)
+ * - A short negative cache so failed URLs are not retried on every regeneration
  *
  * Loading mechanism: registered in composer.json "files" autoload,
  * so the functions are available globally without any require.
@@ -49,6 +50,24 @@ const MEDIA_EMBED_MIME_TYPES = [
 ];
 
 /**
+ * Negative-cache lifetime for transient fetch failures (seconds).
+ * Kept short so a feed self-heals within a couple of regeneration cycles.
+ */
+const MEDIA_EMBED_FAIL_TTL = 900;
+
+/**
+ * Extra jitter added to the transient negative-cache TTL (seconds),
+ * so concurrent feeds do not all retry the same dead URL at once.
+ */
+const MEDIA_EMBED_FAIL_JITTER = 300;
+
+/**
+ * Negative-cache lifetime for deterministic "too large" rejections (seconds).
+ * The size of a given CDN object does not change, so this can be long.
+ */
+const MEDIA_EMBED_SIZE_FAIL_TTL = 21600;
+
+/**
  * Convert a remote media URL into an embedded data URI.
  *
  * Fetches the media, detects its MIME type, encodes it as base64, and
@@ -58,7 +77,8 @@ const MEDIA_EMBED_MIME_TYPES = [
  * Behavior:
  * - If $maxSize > 0 and the fetched content exceeds it, returns the original URL.
  * - If $cache is provided, the result is cached under key 'embed_' . md5($url).
- * - If fetching fails, returns the original URL as fallback.
+ * - If fetching fails, returns the original URL as fallback and records a
+ *   short-lived negative cache entry so the URL is not retried immediately.
  *
  * @param string $url The remote media URL to fetch.
  * @param CacheInterface|null $cache Optional cache for persistent storage.
@@ -67,6 +87,8 @@ const MEDIA_EMBED_MIME_TYPES = [
  * @param string|null $proxyProfile Optional proxy profile name for protected fetch.
  * @param Logger|null $logger Optional logger for warnings on fetch failures.
  * @param int $retries Number of retry attempts on transient failures.
+ * @param array<string, mixed> $options Extra options forwarded to the proxy fetch
+ *                                      (e.g. 'timeout', 'cache_ttl').
  * @return string The data URI, or the original URL on failure/size limit.
  */
 function media_embed_url_to_data_uri(
@@ -76,29 +98,42 @@ function media_embed_url_to_data_uri(
     int $maxSize = 0,
     ?string $proxyProfile = null,
     ?Logger $logger = null,
-    int $retries = 1
+    int $retries = 1,
+    array $options = []
 ): string {
     if ($url === '') {
         return '';
     }
 
+    $cacheKey = 'embed_' . md5($url);
+
     // 1. Check persistent cache first
     if ($cache !== null) {
-        $cacheKey = 'embed_' . md5($url);
         $cached = $cache->get($cacheKey);
         if (is_string($cached) === true && $cached !== '') {
             return $cached;
         }
+
+        // Recently failed? Skip the fetch entirely for a while.
+        if (media_embed_is_neg_cached($cache, $url) === true) {
+            return $url;
+        }
     }
 
-    // 2. Fetch binary content
-    $media = media_embed_fetch_binary($url, $proxyProfile, $logger, $retries);
+    // 2. Fetch binary content (size limit enforced during transfer when possible)
+    $media = media_embed_fetch_binary($url, $proxyProfile, $logger, $retries, $maxSize, $options);
     if ($media === null) {
+        if ($cache !== null) {
+            media_embed_record_failure($cache, $url, 'fetch');
+        }
         return $url;
     }
 
-    // 3. Check size limit
+    // 3. Check size limit (safety net; the fetch already aborts oversized transfers)
     if ($maxSize > 0 && strlen($media['body']) > $maxSize) {
+        if ($cache !== null) {
+            media_embed_record_failure($cache, $url, 'size');
+        }
         return $url;
     }
 
@@ -122,23 +157,61 @@ function media_embed_url_to_data_uri(
 }
 
 /**
+ * Whether a URL is currently under a negative-cache marker.
+ */
+function media_embed_is_neg_cached(CacheInterface $cache, string $url): bool
+{
+    $marker = $cache->get('embed_fail_' . md5($url));
+    return is_array($marker) === true;
+}
+
+/**
+ * Record a fetch failure so the URL is not retried on every regeneration.
+ *
+ * @param string $reason 'size' for deterministic oversize rejections,
+ *                       anything else for transient failures.
+ */
+function media_embed_record_failure(CacheInterface $cache, string $url, string $reason): void
+{
+    if ($reason === 'size') {
+        $ttl = MEDIA_EMBED_SIZE_FAIL_TTL;
+    } else {
+        $ttl = MEDIA_EMBED_FAIL_TTL + random_int(0, MEDIA_EMBED_FAIL_JITTER);
+    }
+
+    $cache->set('embed_fail_' . md5($url), [
+        'reason' => $reason,
+        'time'   => time(),
+    ], $ttl);
+}
+
+/**
  * Fetch binary content from a remote URL with optional retry and proxy.
  *
  * Returns an array with the body and detected MIME type, or null on failure.
  * Images are automatically sanitized to strip EXIF metadata and neutralize
  * polyglot attacks.
  *
+ * When a proxy profile is given, the protected fetch is the only path used:
+ * a direct fallback would bypass the proxy and (for blocked hosts) is
+ * guaranteed to fail, wasting time and load. The proxy itself may still
+ * perform its own configured direct fallback internally.
+ *
  * @param string $url The URL to fetch.
  * @param string|null $proxyProfile Optional proxy profile name.
  * @param Logger|null $logger Optional logger for warnings.
  * @param int $retries Number of retry attempts.
+ * @param int $maxSize Maximum allowed size in bytes (0 = unlimited).
+ * @param array<string, mixed> $options Extra options forwarded to the proxy fetch.
  * @return array{body: string, type: string}|null The fetched content or null on failure.
  */
 function media_embed_fetch_binary(
     string $url,
     ?string $proxyProfile = null,
     ?Logger $logger = null,
-    int $retries = 1
+    int $retries = 1,
+    int $maxSize = 0,
+    array $options = []
 ): ?array {
     if ($retries < 1) {
         $retries = 1;
@@ -148,12 +221,16 @@ function media_embed_fetch_binary(
 
     for ($attempt = 1; $attempt <= $retries; $attempt++) {
         try {
-            // Try protected fetch via proxy if profile is specified
+            // Protected fetch via proxy if a profile is specified.
             if ($proxyProfile !== null && $proxyProfile !== '' && function_exists('getProtectedBinary') === true) {
+                $fetchOptions = $options;
+                if ($maxSize > 0) {
+                    $fetchOptions['max_size'] = $maxSize;
+                }
+
                 /** @var array{body: string, type: string}|null $data */
-                $data = getProtectedBinary($url, $proxyProfile);
+                $data = getProtectedBinary($url, $proxyProfile, $fetchOptions);
                 if ($data !== null) {
-                    // Sanitize images to strip EXIF and neutralize polyglot attacks
                     if (str_starts_with($data['type'], 'image/') === true) {
                         $sanitized = sanitize_image($data['body']);
                         if ($sanitized !== $data['body']) {
@@ -163,10 +240,24 @@ function media_embed_fetch_binary(
                     }
                     return $data;
                 }
+
+                // Proxy was requested but failed: do NOT fall back to a direct
+                // fetch here. The proxy owns any direct fallback it is configured
+                // for; a blind direct attempt to a blocked host only adds latency.
+                return null;
             }
 
-            // Fall back to direct fetch
-            $response = getContents($url, [], [], true);
+            // Direct fetch (only when no proxy profile was requested).
+            $curlOptions = [];
+            if ($maxSize > 0) {
+                $curlOptions[CURLOPT_MAXFILESIZE] = $maxSize;
+                $curlOptions[CURLOPT_NOPROGRESS] = false;
+                $curlOptions[CURLOPT_XFERINFOFUNCTION] = function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($maxSize): int {
+                    return $downloaded > $maxSize ? 1 : 0;
+                };
+            }
+
+            $response = getContents($url, [], $curlOptions, true);
 
             $body = $response->getBody();
 
@@ -174,11 +265,14 @@ function media_embed_fetch_binary(
                 throw new \RuntimeException('Empty response body');
             }
 
+            if ($maxSize > 0 && strlen($body) > $maxSize) {
+                throw new \RuntimeException(sprintf('Media exceeds size limit (%d bytes)', $maxSize));
+            }
+
             $headers = $response->getHeaders();
             $contentType = $headers['content-type'][0] ?? 'application/octet-stream';
             $type = trim(explode(';', $contentType)[0]);
 
-            // Sanitize images to strip EXIF and neutralize polyglot attacks
             if (str_starts_with($type, 'image/') === true) {
                 $sanitized = sanitize_image($body);
                 if ($sanitized !== $body) {

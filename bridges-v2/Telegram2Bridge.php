@@ -16,6 +16,13 @@ final class Telegram2Bridge extends BridgeAbstract
 
     private const PROXY_PROFILE = 'tgws';
 
+    /**
+     * Telegram CDN objects are immutable, so embedded media is cached far
+     * longer than the feed itself. Tying this to CACHE_TIMEOUT caused every
+     * feed regeneration to re-fetch and re-encode all media.
+     */
+    private const MEDIA_CACHE_TTL = 604800;
+
     public const PARAMETERS = [[
         'username' => [
             'name' => 'Channel name',
@@ -107,9 +114,9 @@ TXT,
     private const TG_HOSTS = '(?:[\w-]+\.)*(?:telegram\.org|t\.me|telesco\.pe)';
 
     private const MAX_PAGES = 100;
-    private const PROXY_RETRIES = 4;
+    private const PROXY_RETRIES = 2;
     private const PAGE_DELAY_US = 1000000;
-    private const RETRY_BUDGET_SECONDS = 30;
+    private const RETRY_BUDGET_SECONDS = 15;
 
     private const MAX_TITLE_LENGTH = 60;
     private const MIN_TITLE_SPACE_POS = 30;
@@ -1432,7 +1439,7 @@ CSS,
     {
         $embedMaxSize = $this->getOption('embed_max_size');
         if ($embedMaxSize === null || $embedMaxSize === '') {
-            $embedMaxSize = '10m';
+            $embedMaxSize = '32m';
         }
         $maxSize = \media_embed_parse_size($embedMaxSize);
 
@@ -1441,11 +1448,12 @@ CSS,
         return \media_embed_url_to_data_uri(
             url: $url,
             cache: $this->cache,
-            cacheTtl: $this->getCacheTimeout(),
+            cacheTtl: self::MEDIA_CACHE_TTL,
             maxSize: $maxSize,
             proxyProfile: $useProxy === true ? self::PROXY_PROFILE : null,
             logger: $this->logger,
-            retries: 1
+            retries: 1,
+            options: ['timeout' => 60]
         );
     }
 

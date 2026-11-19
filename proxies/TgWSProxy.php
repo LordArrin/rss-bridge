@@ -4,9 +4,37 @@ declare(strict_types=1);
 
 namespace RSSBridge\Proxies;
 
+use RSSBridge\Caches\CacheInterface;
+use RSSBridge\Http\FeedDeadline;
+
 final class TgWSProxy extends ProxyAbstract
 {
     private const MAX_BUDGET_SECONDS = 45;
+
+    /**
+     * Binary downloads may run longer than page fetches; the ceiling is the
+     * hard FPM budget (see feedDeadline()). This lock TTL must stay above the
+     * longest possible single-flight fetch so a slow download does not outlive
+     * its own lease and trigger a duplicate fetch.
+     */
+    private const BINARY_LOCK_TTL = 150;
+    private const BINARY_FLIGHT_WAIT_MS = 2000;
+    private const BINARY_FLIGHT_POLL_MS = 100;
+
+    /**
+     * Stall detection for binary transfers: abort only when the stream is
+     * genuinely dead (below the speed floor for the whole window), not when a
+     * large file is simply slow. A hard CURLOPT_TIMEOUT would kill big media.
+     */
+    private const DEFAULT_LOW_SPEED_LIMIT = 16384;
+    private const DEFAULT_LOW_SPEED_TIME = 15;
+
+    /**
+     * Options that describe the transport contract, not the identity of the
+     * cached resource. Excluded from the cache key so callers with different
+     * size limits / timeouts / TTLs still share one cached blob.
+     */
+    private const NON_IDENTITY_OPTIONS = ['cache_ttl', 'use_cache', 'timeout', 'max_size'];
 
     private const CURL_MAX_ERRNO = 98;
 
@@ -35,6 +63,7 @@ final class TgWSProxy extends ProxyAbstract
         'command unsupported',
         'authentication failed',
         'access denied',
+        'size limit exceeded',
     ];
 
     private const RETRYABLE_ERROR_PATTERNS = [
@@ -91,6 +120,36 @@ final class TgWSProxy extends ProxyAbstract
     public function isAvailable(): bool
     {
         return $this->proxyUrl !== null && $this->proxyUrl !== '';
+    }
+
+    /**
+     * Build a cache key from the resource identity only. Transport options
+     * (size limit, timeout, TTL, cache toggle) must not fragment the cache.
+     *
+     * @param array<string, mixed> $options
+     */
+    protected function buildCacheKey(string $url, array $options): string
+    {
+        foreach (self::NON_IDENTITY_OPTIONS as $name) {
+            unset($options[$name]);
+        }
+        return 'proxy_' . md5($url . serialize($options));
+    }
+
+    /**
+     * Clamp a local deadline to the hard FPM budget when a feed budget is
+     * active, so a proxy fetch can never outlive the worker and end in a
+     * SIGTERM 502. Outside a feed request (CLI) the local deadline stands.
+     */
+    private function applyFeedDeadline(float $deadline): float
+    {
+        if (FeedDeadline::started() === true) {
+            $requestStart = $_SERVER['REQUEST_TIME_FLOAT'] ?? null;
+            $anchor = (is_float($requestStart) === true || is_int($requestStart) === true) ? (float) $requestStart : microtime(true);
+            $hardUntil = $anchor + FeedDeadline::hardBudgetSeconds();
+            return min($deadline, $hardUntil);
+        }
+        return $deadline;
     }
 
     private function maskProxyUrl(?string $url): string
@@ -288,6 +347,45 @@ final class TgWSProxy extends ProxyAbstract
     }
 
     /**
+     * Direct binary fallback through the canonical HTTP client (SSRF checks,
+     * redirects, retries). Used only when fallback_direct is enabled; for a
+     * blocked host this is expected to fail and should be disabled in config.
+     *
+     * @param array<string, mixed> $options
+     * @return array{body: string, type: string}
+     */
+    private function directBinaryFallback(string $url, array $options): array
+    {
+        $maxSize = self::toInt($options['max_size'] ?? 0, 0);
+
+        $curlOptions = [];
+        if ($maxSize > 0) {
+            $curlOptions[CURLOPT_MAXFILESIZE] = $maxSize;
+            $curlOptions[CURLOPT_NOPROGRESS] = false;
+            $curlOptions[CURLOPT_XFERINFOFUNCTION] = function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($maxSize): int {
+                return $downloaded > $maxSize ? 1 : 0;
+            };
+        }
+
+        $response = getContents($url, [], $curlOptions, true);
+        $body = $response->getBody();
+
+        if ($body === '') {
+            throw new \RuntimeException('Empty response body from direct fallback');
+        }
+
+        if ($maxSize > 0 && strlen($body) > $maxSize) {
+            throw new \RuntimeException(sprintf('Media exceeds size limit (%d bytes)', $maxSize));
+        }
+
+        $headers = $response->getHeaders();
+        $contentType = $headers['content-type'][0] ?? 'application/octet-stream';
+        $type = trim(explode(';', $contentType)[0]);
+
+        return ['body' => $body, 'type' => $type];
+    }
+
+    /**
      * @param array<string, mixed> $options
      */
     protected function fetchHtml(string $url, array $options): string
@@ -312,7 +410,7 @@ final class TgWSProxy extends ProxyAbstract
             max(1, self::toInt($this->config['budget_seconds'] ?? self::MAX_BUDGET_SECONDS, self::MAX_BUDGET_SECONDS)),
             self::MAX_BUDGET_SECONDS
         );
-        $deadline = microtime(true) + $budget;
+        $deadline = $this->applyFeedDeadline(microtime(true) + $budget);
 
         $lastException = null;
 
@@ -431,6 +529,9 @@ final class TgWSProxy extends ProxyAbstract
     }
 
     /**
+     * Binary fetch with single-flight locking, stale-while-revalidate fallback,
+     * stall-based timeouts and a mid-transfer size guard.
+     *
      * @param array<string, mixed> $options
      * @return array{body: string, type: string}
      */
@@ -444,42 +545,53 @@ final class TgWSProxy extends ProxyAbstract
             $this->log('warning', $e->getMessage());
             if (($this->config['fallback_direct'] ?? false) === true) {
                 $this->log('info', sprintf('Falling back to direct connection for binary %s', $url));
-                return parent::getBinary($url, $options);
+                return $this->directBinaryFallback($url, $options);
             }
             throw $e;
         }
 
-        $cacheTtl = self::toInt($options['cache_ttl'] ?? 86400, 86400);
+        $cacheTtl = self::toInt($options['cache_ttl'] ?? 604800, 604800);
         $useCache = self::toBool($options['use_cache'] ?? true, true);
+        $cache = $this->cache;
+        $cacheKey = '';
+        $lockAcquired = false;
 
         /** @var array{fresh: mixed, stale: mixed} $cached */
         $cached = ['fresh' => null, 'stale' => null];
 
-        if ($useCache === true && $this->cache instanceof \RSSBridge\Caches\CacheInterface) {
+        if ($useCache === true && $cache instanceof CacheInterface) {
             $cacheKey = $this->buildCacheKey('binary_' . $url, $options);
-            $cached = $this->cache->getWithStale($cacheKey);
+            $cached = $cache->getWithStale($cacheKey);
 
             $fresh = $this->normalizeBinaryPayload($cached['fresh']);
             if ($fresh !== null) {
+                $this->log('debug', sprintf('Cache hit (fresh binary) for %s', $url));
                 return $fresh;
             }
+
+            if ($cache->acquireLock($cacheKey, self::BINARY_LOCK_TTL) === true) {
+                $lockAcquired = true;
+            } else {
+                $waited = $this->waitForFreshBinary($cacheKey);
+                if ($waited !== null) {
+                    $this->log('debug', sprintf('Cache hit (fresh binary, waited) for %s', $url));
+                    return $waited;
+                }
+            }
         }
+
+        $this->log('info', sprintf('Fetching binary %s via %s', $url, $this->getName()));
 
         try {
             $payload = $this->doFetchBinaryInternal($url, $options);
 
-            if (
-                $useCache === true
-                && $this->cache instanceof \RSSBridge\Caches\CacheInterface
-                && $cacheTtl > 0
-            ) {
-                $cacheKey = $this->buildCacheKey('binary_' . $url, $options);
-                $this->cache->set($cacheKey, $this->encodeBinaryPayload($payload), $cacheTtl);
+            if ($useCache === true && $cache instanceof CacheInterface && $cacheTtl > 0) {
+                $cache->set($cacheKey, $this->encodeBinaryPayload($payload), $cacheTtl);
             }
 
             return $payload;
         } catch (\Throwable $e) {
-            if ($useCache === true && $this->cache instanceof \RSSBridge\Caches\CacheInterface) {
+            if ($useCache === true && $cache instanceof CacheInterface) {
                 $stale = $this->normalizeBinaryPayload($cached['stale']);
                 if ($stale !== null) {
                     $this->log('warning', sprintf(
@@ -492,7 +604,37 @@ final class TgWSProxy extends ProxyAbstract
             }
 
             throw $e;
+        } finally {
+            if ($lockAcquired === true && $cache instanceof CacheInterface) {
+                $cache->releaseLock($cacheKey);
+            }
         }
+    }
+
+    /**
+     * Wait for a concurrent single-flight fetch to publish a fresh binary.
+     *
+     * @return array{body: string, type: string}|null
+     */
+    private function waitForFreshBinary(string $cacheKey): ?array
+    {
+        $cache = $this->cache;
+        if ($cache instanceof CacheInterface === false) {
+            return null;
+        }
+
+        $waited = 0;
+        while ($waited < self::BINARY_FLIGHT_WAIT_MS) {
+            usleep(self::BINARY_FLIGHT_POLL_MS * 1000);
+            $waited += self::BINARY_FLIGHT_POLL_MS;
+            $entry = $cache->getWithStale($cacheKey);
+            $fresh = $this->normalizeBinaryPayload($entry['fresh']);
+            if ($fresh !== null) {
+                return $fresh;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -502,16 +644,16 @@ final class TgWSProxy extends ProxyAbstract
     private function doFetchBinaryInternal(string $url, array $options): array
     {
         $connectTimeout = self::toInt($this->config['connect_timeout'] ?? 5, 5);
-        $requestTimeout = min(
-            self::toInt($options['timeout'] ?? ($this->config['binary_request_timeout'] ?? 30), 30),
-            60
-        );
         $maxRetries = self::toInt($this->config['retries'] ?? 2, 2);
         $budget = min(
             max(1, self::toInt($this->config['budget_seconds'] ?? self::MAX_BUDGET_SECONDS, self::MAX_BUDGET_SECONDS)),
             self::MAX_BUDGET_SECONDS
         );
-        $deadline = microtime(true) + $budget;
+        $deadline = $this->applyFeedDeadline(microtime(true) + $budget);
+
+        $maxSize = self::toInt($options['max_size'] ?? 0, 0);
+        $lowSpeedLimit = self::toInt($this->config['low_speed_limit'] ?? self::DEFAULT_LOW_SPEED_LIMIT, self::DEFAULT_LOW_SPEED_LIMIT);
+        $lowSpeedTime = self::toInt($this->config['low_speed_time'] ?? self::DEFAULT_LOW_SPEED_TIME, self::DEFAULT_LOW_SPEED_TIME);
 
         $lastException = null;
 
@@ -537,10 +679,12 @@ final class TgWSProxy extends ProxyAbstract
                 };
 
                 $effConnect = max(1, min($connectTimeout, (int) floor($remaining)));
-                $effRequest = max(1, min($requestTimeout, (int) floor($remaining)));
+                // Ceiling for the whole transfer; liveness is enforced by the
+                // low-speed watchdog below so slow-but-alive large media survive.
+                $effRequest = max(1, (int) floor($remaining));
 
                 assert($url !== '');
-                curl_setopt_array($ch, [
+                $curlOptions = [
                     CURLOPT_URL            => $url,
                     CURLOPT_CONNECTTIMEOUT => $effConnect,
                     CURLOPT_TIMEOUT        => $effRequest,
@@ -549,7 +693,19 @@ final class TgWSProxy extends ProxyAbstract
                     CURLOPT_HEADERFUNCTION => $headerCallback,
                     CURLOPT_HTTPGET        => true,
                     CURLOPT_HTTPHEADER     => [],
-                ]);
+                    CURLOPT_LOW_SPEED_LIMIT => $lowSpeedLimit,
+                    CURLOPT_LOW_SPEED_TIME => $lowSpeedTime,
+                ];
+
+                if ($maxSize > 0) {
+                    $curlOptions[CURLOPT_MAXFILESIZE_LARGE] = $maxSize;
+                    $curlOptions[CURLOPT_NOPROGRESS] = false;
+                    $curlOptions[CURLOPT_XFERINFOFUNCTION] = function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($maxSize): int {
+                        return $downloaded > $maxSize ? 1 : 0;
+                    };
+                }
+
+                curl_setopt_array($ch, $curlOptions);
 
                 if ($attempt > 1) {
                     $baseDelay = min($attempt * 500000, 1500000);
@@ -573,6 +729,10 @@ final class TgWSProxy extends ProxyAbstract
                 $curlError = curl_error($ch);
                 $curlErrno = curl_errno($ch);
 
+                if ($maxSize > 0 && $curlErrno === \CURLE_ABORTED_BY_CALLBACK) {
+                    throw new \RuntimeException(sprintf('Media size limit exceeded (%d bytes) for %s', $maxSize, $url));
+                }
+
                 if ($body === false || $curlErrno !== 0) {
                     throw new \RuntimeException(sprintf(
                         'cURL error %d: %s (HTTP %d)',
@@ -588,6 +748,10 @@ final class TgWSProxy extends ProxyAbstract
 
                 if (is_string($body) === false || $body === '') {
                     throw new \RuntimeException('Empty response');
+                }
+
+                if ($maxSize > 0 && strlen($body) > $maxSize) {
+                    throw new \RuntimeException(sprintf('Media size limit exceeded (%d bytes) for %s', $maxSize, $url));
                 }
 
                 $contentType = 'application/octet-stream';
@@ -635,7 +799,7 @@ final class TgWSProxy extends ProxyAbstract
                 $url
             ));
             try {
-                return parent::getBinary($url, $options);
+                return $this->directBinaryFallback($url, $options);
             } catch (\Throwable $e) {
                 $this->log('error', sprintf('Direct fallback also failed: %s', $e->getMessage()));
             }
