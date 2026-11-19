@@ -412,8 +412,8 @@ CSS,
                 }
 
                 $remaining = $deadline - microtime(true);
-                if ($remaining <= 1.0 || $i >= self::PROXY_RETRIES - 1) {
-                    if ($remaining <= 1.0 && $this->logger !== null) {
+                if ($remaining <= 1.0) {
+                    if ($this->logger !== null) {
                         $this->logger->warning(sprintf(
                             '%s retry budget (%ds) exhausted after %d attempt(s)%s: %s',
                             $context,
@@ -426,20 +426,22 @@ CSS,
                     break;
                 }
 
-                if ($this->logger !== null) {
-                    $this->logger->warning(sprintf(
-                        '%s failed (attempt %d/%d)%s: %s',
-                        $context,
-                        $i + 1,
-                        self::PROXY_RETRIES,
-                        $url !== '' ? " for {$url}" : '',
-                        $errorMsg
-                    ));
-                }
+                if ($i < self::PROXY_RETRIES - 1) {
+                    if ($this->logger !== null) {
+                        $this->logger->warning(sprintf(
+                            '%s failed (attempt %d/%d)%s: %s',
+                            $context,
+                            $i + 1,
+                            self::PROXY_RETRIES,
+                            $url !== '' ? " for {$url}" : '',
+                            $errorMsg
+                        ));
+                    }
 
-                $delayUs = min(($i + 1) * 500000, 2000000);
-                $delayUs = min($delayUs, (int) (($remaining - 1.0) * 1000000));
-                usleep(max(100000, $delayUs));
+                    $delayUs = min(($i + 1) * 500000, 2000000);
+                    $delayUs = min($delayUs, (int) (($remaining - 1.0) * 1000000));
+                    usleep(max(100000, $delayUs));
+                }
             }
         }
 

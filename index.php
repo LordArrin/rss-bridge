@@ -57,9 +57,13 @@ register_shutdown_function(function () use ($logger) {
 // Request Processing
 // ============================================================================
 
-$argv = $argv ?? null;
-if (is_array($argv) === true) {
-    parse_str(implode('&', array_slice($argv, 1)), $cliArgs);
+// Detect CLI by SAPI, never by $argv: with register_argc_argv=On (the PHP
+// default) FPM populates $argv from the query string, which would turn every
+// feed request into an empty frontpage request. CLI always has $argv.
+if (PHP_SAPI === 'cli') {
+    $cliArgs = [];
+    $cliArgv = $argv ?? [];
+    parse_str(implode('&', array_slice($cliArgv, 1)), $cliArgs);
     $request = Request::fromCli($cliArgs);
 } else {
     $request = Request::fromGlobals();

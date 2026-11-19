@@ -36,8 +36,16 @@ final class HealthAction implements ActionInterface
         $overallStatus = $this->calculateOverallStatus($checks);
         $httpCode = $this->getHttpCode($overallStatus);
 
+        // Maintenance is an operational flag, not a health failure: it is
+        // reported for visibility but never affects the HTTP status, so the
+        // container stays healthy while MaintenanceMiddleware serves 503 to
+        // feed readers.
+        $maintenanceRaw = getenv('MAINTENANCE');
+        $maintenance = strtoupper((string) $maintenanceRaw) === 'ON';
+
         $response = [
             'status' => $overallStatus,
+            'maintenance' => $maintenance,
             'timestamp' => date('c'),
             'version' => get_rssbridge_version(),
             'checks' => $checks,

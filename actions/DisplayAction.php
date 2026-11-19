@@ -34,9 +34,9 @@ use RSSBridge\Utils\Url;
  *
  * Cache bookkeeping: a stored response carries its full TTL together with the
  * generation stamp of the bridge data it was rendered from, and it expires
- * together with that data. CacheMiddleware turns the pair into "remaining
- * max-age plus Age", so a reader never extends its own cache past the moment
- * this instance regenerates the feed.
+ * together with that data. CacheMiddleware advertises the full TTL as max-age
+ * together with the current Age, so a reader never extends its own cache past
+ * the moment this instance regenerates the feed.
  */
 final class DisplayAction implements ActionInterface
 {
@@ -174,6 +174,11 @@ final class DisplayAction implements ActionInterface
      * upstream failures arm a server-side backoff marker; permanent 4xx are
      * left to the middleware negative cache.
      *
+     * When no stale payload is available, the error is rendered according to
+     * ERROR_OUTPUT (feed item, plain HTTP error, or empty feed) for EVERY
+     * exception type, including upstream HTTP errors. The protection
+     * attributes set in the catch block are independent of that choice.
+     *
      * Publishes _bridge_data_generated so the response layer can align the
      * response lifetime with the lifetime of the data it was rendered from.
      */
@@ -298,16 +303,17 @@ final class DisplayAction implements ActionInterface
 
                 if ($e instanceof \HttpException) {
                     $this->logger->debug(sprintf('Exception in DisplayAction(%s): %s', $bridge->getShortName(), Url::createSaneExceptionMessage($e)));
-                    $rawCode = $e->getCode();
-                    if ($rawCode >= 400 && $rawCode <= 599) {
-                        return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $statusCode, $headers);
-                    }
                 } else {
                     $this->logger->error(sprintf('Exception in DisplayAction(%s)', $bridge->getShortName()), ['e' => $e]);
                 }
 
+                // ERROR_OUTPUT governs the representation of EVERY bridge
+                // exception, including upstream HTTP errors. Server-side
+                // protection (stale serving, backoff marker, negative cache)
+                // is keyed on the request attributes set above and stays
+                // active regardless of the chosen output mode.
                 $errorOutputRaw = getenv('ERROR_OUTPUT');
-                $errorOutput = (is_string($errorOutputRaw) === true && $errorOutputRaw !== '') ? $errorOutputRaw : 'http';
+                $errorOutput = (is_string($errorOutputRaw) === true && $errorOutputRaw !== '') ? strtolower($errorOutputRaw) : 'http';
 
                 $reportLimitRaw = getenv('ERROR_REPORT_LIMIT');
                 $reportLimit = 1;
@@ -326,7 +332,11 @@ final class DisplayAction implements ActionInterface
                     if ($errorCount <= $reportLimit) {
                         $items = [$this->createFeedItemFromException($e, $bridge)];
                     }
-                } elseif ($errorOutput === 'http') {
+                } elseif ($errorOutput === 'none') {
+                    // Silently drop the error: an empty feed is rendered.
+                    $items = [];
+                } else {
+                    // 'http' and any unknown value: plain HTTP error response.
                     return new Response(render(__DIR__ . '/../templates/exception.html.php', ['e' => $e]), $statusCode, $headers);
                 }
             }

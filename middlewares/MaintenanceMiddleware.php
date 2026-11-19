@@ -11,11 +11,13 @@ use RSSBridge\Http\Response;
  * Maintenance mode middleware.
  *
  * Reads the MAINTENANCE environment variable (ON/OFF) set by /bin/load-env.
- * When enabled, returns HTTP 503 Service Unavailable with Retry-After header
+ * When enabled, returns HTTP 503 Service Unavailable with a Retry-After header
  * to signal clients (especially FreshRSS and other feed readers) to retry later.
  *
- * Clients must respects the Retry-After header and will not retry until the
- * specified time has elapsed, preventing unnecessary polling during maintenance.
+ * The health endpoint is exempt so container orchestrators keep seeing a
+ * healthy instance during maintenance: the Docker HEALTHCHECK cannot send
+ * credentials and must not flip the container to unhealthy just because an
+ * operator enabled maintenance. Feed readers still receive 503 + Retry-After.
  */
 final class MaintenanceMiddleware implements Middleware
 {
@@ -31,6 +33,13 @@ final class MaintenanceMiddleware implements Middleware
         // Accept ON/on/On (case-insensitive), default to OFF if not set
         $maintenanceMode = getenv('MAINTENANCE');
         if (strtoupper((string) $maintenanceMode) !== 'ON') {
+            return $next($request);
+        }
+
+        // Health must stay reachable for orchestrators (same exemption as the
+        // authentication middlewares), otherwise the container flips to
+        // unhealthy and may be restarted while maintenance is intentional.
+        if ($request->get('action') === 'health') {
             return $next($request);
         }
 

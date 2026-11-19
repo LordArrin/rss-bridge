@@ -56,17 +56,20 @@ final class BridgeFactory
      */
     private array $missingEnabledBridges = [];
 
-/**
- * Per-process sandbox verification results, keyed by path + mtime + size.
- * Positive verdicts live for the worker lifetime; negative verdicts expire
- * after SANDBOX_NEGATIVE_TTL so transient failures (OOM, fork pressure,
- * sandbox timeout) do not mark a bridge broken for hundreds of requests.
- *
- * @var array<string, array{ok: bool, checked: int}>
- */
+    /**
+     * Per-request memo of sandbox verdicts (L1), keyed by path + mtime + size.
+     * The durable cross-worker store is APCu (L2); this array only avoids
+     * repeated APCu lookups within one request and acts as a fallback when
+     * APCu is unavailable. A changed file gets a new key; negative verdicts
+     * expire after SANDBOX_NEGATIVE_TTL so transient failures (OOM, fork
+     * pressure, sandbox timeout) do not mark a bridge broken for long.
+     *
+     * @var array<string, array{ok: bool, checked: int}>
+     */
     private static array $sandboxCache = [];
 
     private const SANDBOX_NEGATIVE_TTL = 60;
+    private const SANDBOX_POSITIVE_TTL = 86400;
 
     public function __construct(CacheInterface $cache, Logger $logger)
     {
@@ -270,6 +273,29 @@ final class BridgeFactory
             }
         }
 
+        // Shared verdict cache across FPM workers. APCu is container-local and
+        // bound to the file identity (path + mtime + size), so a changed file
+        // gets a fresh key and a container restart (new image) clears it.
+        $apcuKey = 'rssbridge_sandbox_' . md5($cacheKey);
+        if (function_exists('apcu_fetch') === true) {
+            $stored = apcu_fetch($apcuKey, $success);
+            if (
+                $success === true && is_array($stored) === true
+                && isset($stored['ok'], $stored['checked']) === true
+                && is_bool($stored['ok']) === true && is_int($stored['checked']) === true
+            ) {
+                $ok = $stored['ok'];
+                $checked = $stored['checked'];
+                self::$sandboxCache[$cacheKey] = ['ok' => $ok, 'checked' => $checked];
+                if ($ok === true) {
+                    return;
+                }
+                if ((time() - $checked) < self::SANDBOX_NEGATIVE_TTL) {
+                    throw new \Exception('Bridge compatibility error (cached): ' . $file);
+                }
+            }
+        }
+
         $tmpBase = tempnam(sys_get_temp_dir(), 'rssbridge_sandbox_');
         if ($tmpBase === false) {
             throw new \Exception('Unable to create sandbox temp file');
@@ -321,16 +347,29 @@ final class BridgeFactory
                 if ($stdout !== '') {
                     $this->logger->debug(sprintf('[sandbox] %s emitted output: %s', basename($file), $stdout));
                 }
-                self::$sandboxCache[$cacheKey] = ['ok' => true, 'checked' => time()];
+                $this->rememberSandboxVerdict($cacheKey, $apcuKey, true);
                 return;
             }
 
-            self::$sandboxCache[$cacheKey] = ['ok' => false, 'checked' => time()];
+            $this->rememberSandboxVerdict($cacheKey, $apcuKey, false);
             $detail = $result !== '' ? $result : ($stdout !== '' ? $stdout : 'no result (fatal compile error?)');
             throw new \Exception('Bridge compatibility error: ' . $detail);
         } finally {
             @unlink($testScript);
             @unlink($resultFile);
+        }
+    }
+
+    /**
+     * Stores a sandbox verdict in the per-request memo and, when available, in
+     * APCu so other FPM workers skip the subprocess for an unchanged file.
+     */
+    private function rememberSandboxVerdict(string $cacheKey, string $apcuKey, bool $ok): void
+    {
+        $entry = ['ok' => $ok, 'checked' => time()];
+        self::$sandboxCache[$cacheKey] = $entry;
+        if (function_exists('apcu_store') === true) {
+            apcu_store($apcuKey, $entry, $ok === true ? self::SANDBOX_POSITIVE_TTL : self::SANDBOX_NEGATIVE_TTL);
         }
     }
 

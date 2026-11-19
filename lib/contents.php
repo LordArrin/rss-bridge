@@ -319,6 +319,13 @@ function getContents(
         case 200:
         case 201:
         case 202:
+            // curl transparently decodes the body (CURLOPT_ENCODING), so the
+            // upstream Content-Encoding/Content-Length no longer describe the
+            // stored representation. Strip them so cached and revalidated
+            // responses stay truthful (the 304 merge below does the same).
+            $response = $response
+            ->withoutHeader('content-encoding')
+            ->withoutHeader('content-length');
             $cacheControl = $response->getHeader('cache-control');
             $directives = [];
             if (is_string($cacheControl) === true && $cacheControl !== '') {

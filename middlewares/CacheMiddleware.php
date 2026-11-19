@@ -17,12 +17,15 @@ use RSSBridge\Http\Response;
  *
  * Contract with feed readers (verified against FreshRSS 1.30.4):
  *  - per-feed failures are never normalised to 429/503 and never carry
- *    Retry-After: FreshRSS turns those codes into a domain-wide cooldown that
- *    would freeze every feed served by this instance;
- *  - FreshRSS derives its local cache lifetime from "max-age minus Age" and
- *    clamps it between cache_duration_min and cache_duration_max, so a stored
- *    response advertises its REMAINING lifetime plus its current Age, never
- *    the full original TTL;
+ *    Retry-After: FreshRSS turns those codes into a Retry-After cooldown
+ *    (domain-wide when this instance is publicly reachable, per-URL on
+ *    private networks) that would freeze feeds served by this instance;
+ *  - responses advertise the FULL freshness lifetime as max-age plus the
+ *    current Age (RFC 9111 current-age model). FreshRSS/SimplePie computes
+ *    "max-age minus Age" itself and floors the result at cache_duration
+ *    (default 800s), so subtracting Age here as well would double-count it;
+ *  - stale/backoff responses carry must-revalidate, which lowers that floor
+ *    to cache_duration_min (default 60s) so readers come back quickly;
  *  - the bookkeeping headers CACHE_TTL_HEADER and CACHE_GENERATED_HEADER are
  *    internal and are stripped from every outgoing response.
  */
@@ -142,7 +145,7 @@ final class CacheMiddleware implements Middleware
                 return $this->attachStaleHeaders($response, $maxAge);
             }
 
-            $maxAge = $request->getAttribute('_bridge_error') === true ? 0 : $this->remainingMaxAge($request, $response);
+            $maxAge = $request->getAttribute('_bridge_error') === true ? 0 : $this->resolveMaxAge($request, $response);
             $response = $this->attachCacheHeaders($response, $maxAge, $response->getHeader('etag'), $this->responseAge($response));
 
             $this->maybePrune();
@@ -164,8 +167,8 @@ final class CacheMiddleware implements Middleware
 
     /**
      * Serves a stored response, answering 304 when the client validators still
-     * match. The advertised lifetime is what is left of the entry, not the TTL
-     * it was created with.
+     * match. Advertises the full freshness lifetime plus the current Age; the
+     * reader derives the remaining lifetime itself (max-age minus Age).
      */
     private function serveCached(Request $request, Response $cached): Response
     {
@@ -178,7 +181,7 @@ final class CacheMiddleware implements Middleware
 
         return $this->attachCacheHeaders(
             $cached,
-            $this->remainingMaxAge($request, $cached),
+            $this->resolveMaxAge($request, $cached),
             $cached->getHeader('etag'),
             $this->responseAge($cached)
         );
@@ -274,10 +277,14 @@ final class CacheMiddleware implements Middleware
     /**
      * Decorates a stale 200 response with short-lived cache headers.
      *
-     * Age is deliberately omitted here: the payload is already older than its
-     * original TTL and the short max-age is an intentional "come back soon"
-     * hint. No Retry-After is emitted either, because FreshRSS ignores it on
-     * 200 while the upstream backoff is enforced server-side by the marker.
+     * must-revalidate is intentional: FreshRSS floors a plain max-age at
+     * cache_duration (default 800s) but lowers the floor to cache_duration_min
+     * (default 60s) when must-revalidate is present, so the "come back soon"
+     * hint is actually honoured. stale-while-revalidate is omitted because
+     * RFC 9111 forbids serving stale without revalidation under
+     * must-revalidate. Age is omitted (the short max-age already is the
+     * remaining hint) and no Retry-After is emitted: FreshRSS ignores it on
+     * 200 while the backoff is enforced server-side by the marker.
      */
     private function attachStaleHeaders(Response $stale, int $maxAge): Response
     {
@@ -285,7 +292,7 @@ final class CacheMiddleware implements Middleware
 
         $headers = [
             'x-feed-stale' => '1',
-            'cache-control' => sprintf('public, max-age=%d, stale-while-revalidate=%d', $maxAge, self::REGENERATION_LOCK_TTL),
+            'cache-control' => sprintf('public, max-age=%d, must-revalidate', $maxAge),
             'expires' => gmdate('D, d M Y H:i:s \G\M\T', time() + $maxAge),
         ];
 
@@ -328,7 +335,7 @@ final class CacheMiddleware implements Middleware
     {
         $etag = $cached->getHeader('etag');
         $lastModified = $cached->getHeader('last-modified');
-        $maxAge = $this->remainingMaxAge($request, $cached);
+        $maxAge = $this->resolveMaxAge($request, $cached);
         $age = $this->responseAge($cached);
 
         $ifNoneMatch = $request->server('HTTP_IF_NONE_MATCH');
@@ -407,22 +414,12 @@ final class CacheMiddleware implements Middleware
     }
 
     /**
-     * Remaining freshness of a response, floored at 1 second so an entry that
-     * is about to expire is never advertised as already stale. A resolved
-     * lifetime of 0 stays 0 and disables caching.
-     */
-    private function remainingMaxAge(Request $request, Response $response): int
-    {
-        $maxAge = $this->resolveMaxAge($request, $response);
-        if ($maxAge <= 0) {
-            return 0;
-        }
-        return max(1, $maxAge - $this->responseAge($response));
-    }
-
-    /**
      * Adds cache validators and lifetime headers to a response, or disables
      * caching entirely when the response is not a cacheable 200.
+     *
+     * $maxAge is the FULL freshness lifetime; $age is the current Age.
+     * Expires mirrors the remaining lifetime (max-age minus Age) for
+     * HTTP/1.0 caches, while max-age itself stays constant per RFC 9111.
      */
     private function attachCacheHeaders(Response $response, int $maxAge, ?string $etag = null, int $age = 0): Response
     {
@@ -432,11 +429,12 @@ final class CacheMiddleware implements Middleware
             }
 
             $staleWhileRevalidate = max(self::REGENERATION_LOCK_TTL, intdiv($maxAge, 4));
+            $remaining = max(1, $maxAge - $age);
 
             $response = $response
             ->withHeader('etag', $etag)
             ->withHeader('cache-control', sprintf('public, max-age=%d, stale-while-revalidate=%d', $maxAge, $staleWhileRevalidate))
-            ->withHeader('expires', gmdate('D, d M Y H:i:s \G\M\T', time() + $maxAge))
+            ->withHeader('expires', gmdate('D, d M Y H:i:s \G\M\T', time() + $remaining))
             ->withHeader('vary', 'Accept-Encoding')
             ->withoutHeader(self::CACHE_TTL_HEADER)
             ->withoutHeader(self::CACHE_GENERATED_HEADER);
@@ -545,10 +543,11 @@ final class CacheMiddleware implements Middleware
     private static function createNotModifiedHeaders(array $validators, int $maxAge, int $age = 0): array
     {
         $staleWhileRevalidate = max(self::REGENERATION_LOCK_TTL, intdiv($maxAge, 4));
+        $remaining = max(1, $maxAge - $age);
         $headers = self::addDateHeader([
             'vary' => 'Accept-Encoding',
             'cache-control' => sprintf('public, max-age=%d, stale-while-revalidate=%d', $maxAge, $staleWhileRevalidate),
-            'expires' => gmdate('D, d M Y H:i:s \G\M\T', time() + $maxAge),
+            'expires' => gmdate('D, d M Y H:i:s \G\M\T', time() + $remaining),
         ]);
         if ($age > 0) {
             $headers['age'] = (string) $age;
