@@ -11,6 +11,11 @@ use RSSBridge\Utils\Url;
  * https://tools.ietf.org/html/rfc4287
  *
  * Validator: https://validator.w3.org/feed/
+ *
+ * Rendering is deterministic for a given (feed, items, lastModified) triple:
+ * no wall-clock value is read once DisplayAction has supplied a lastModified
+ * anchor, so the rendered body - and therefore the ETag derived from it - stays
+ * byte-identical across repeated renders of the same cached payload.
  */
 final class AtomFormat extends FormatAbstract
 {
@@ -31,6 +36,11 @@ final class AtomFormat extends FormatAbstract
         $document->formatOutput = true;
 
         $feedUrl = Url::getCanonicalUrl();
+
+        $feedUpdated = $this->getLastModified();
+        if ($feedUpdated === 0) {
+            $feedUpdated = time();
+        }
 
         $feed = $document->createElementNS(self::ATOM_NS, 'feed');
         $document->appendChild($feed);
@@ -88,7 +98,7 @@ final class AtomFormat extends FormatAbstract
 
         $updatedNode = $document->createElementNS(self::ATOM_NS, 'updated');
         $feed->appendChild($updatedNode);
-        $updatedNode->appendChild($document->createTextNode(gmdate(\DATE_ATOM, $this->getLastModified())));
+        $updatedNode->appendChild($document->createTextNode(gmdate(\DATE_ATOM, $feedUpdated)));
 
         $feedAuthor = 'RSS-Bridge';
         $authorNode = $document->createElementNS(self::ATOM_NS, 'author');
@@ -141,13 +151,10 @@ final class AtomFormat extends FormatAbstract
             $title->appendChild($document->createTextNode($entryTitle));
 
             // RFC 4287 requires atom:updated on every entry. Without an item
-            // timestamp, fall back to the feed's Last-Modified (content-derived
-            // in DisplayAction) so the feed stays valid and stable. atom:published
-            // is optional and only emitted when a real item timestamp exists.
-            $updatedTimestamp = $entryTimestamp ?? $this->getLastModified();
-            if ($updatedTimestamp === 0) {
-                $updatedTimestamp = time();
-            }
+            // timestamp, fall back to the feed's stable lastModified anchor so
+            // the feed stays valid and byte-stable. atom:published is optional
+            // and only emitted when a real item timestamp exists.
+            $updatedTimestamp = $entryTimestamp ?? $feedUpdated;
             $entryUpdated = $document->createElementNS(self::ATOM_NS, 'updated');
             $entry->appendChild($entryUpdated);
             $entryUpdated->appendChild($document->createTextNode(gmdate(\DATE_ATOM, $updatedTimestamp)));
@@ -218,8 +225,7 @@ final class AtomFormat extends FormatAbstract
                 $entryCategory->setAttribute('term', $category);
             }
 
-            $thumbnail = method_exists($item, 'getThumbnail') === true ? $item->getThumbnail() : ($itemArray['thumbnail'] ?? null);
-            $thumbnailUrl = self::stringify($thumbnail);
+            $thumbnailUrl = self::stringify($itemArray['thumbnail'] ?? null);
             if ($thumbnailUrl !== '') {
                 $thumbnailElement = $document->createElementNS(self::MRSS_NS, 'media:thumbnail');
                 $entry->appendChild($thumbnailElement);

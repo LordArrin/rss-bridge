@@ -47,8 +47,10 @@ abstract class AbstractCache implements CacheInterface
     /**
      * Encodes a value with metadata into a JSON string for storage.
      *
-     * @param mixed    $value     The value to store (will be normalized for JSON).
-     * @param int|null $freshUntil Unix timestamp when the value becomes stale, or null for forever.
+     * @param mixed    $value      The value to store (will be normalized for JSON).
+     * @param int|null $freshUntil Unix timestamp when the value becomes stale.
+     *                             0 (or null) means "never stale"; callers
+     *                             normally pass 0 for forever-fresh entries.
      * @return string JSON-encoded string.
      * @throws \JsonException If encoding fails.
      * @throws \InvalidArgumentException If the value contains unsupported objects.
@@ -187,13 +189,21 @@ abstract class AbstractCache implements CacheInterface
      * them from the cache.
      *
      * Base64-encoded binary data is automatically decoded back to raw bytes.
+     * The Response marker is only honoured when the full shape (body + headers)
+     * is present, so an ordinary cached array that happens to carry a
+     * '__type' key can never be misread as a Response.
      *
      * @param mixed $value The decoded value from JSON.
      * @return mixed The restored object or original value.
      */
     private function restoreFromJson(mixed $value): mixed
     {
-        if (is_array($value) === true && ($value['__type'] ?? null) === 'Http\\Response') {
+        if (
+            is_array($value) === true
+            && ($value['__type'] ?? null) === 'Http\\Response'
+            && array_key_exists('body', $value) === true
+            && array_key_exists('headers', $value) === true
+        ) {
             $bodyRaw = $value['body'] ?? '';
             $body = is_string($bodyRaw) === true ? $bodyRaw : '';
 

@@ -16,6 +16,12 @@ use RSSBridge\Utils\Url;
  *
  * Storage format per file:
  *   JSON-encoded: {"__v":2, "value":..., "fresh_until":...}
+ *
+ * Locking: single-flight uses flock() on a persistent per-key lock file. The
+ * lease is bound to the open handle (released by the kernel when the holder
+ * dies), so the TTL passed to acquireLock() is diagnostic only. Lock files are
+ * intentionally never unlinked, because removing a flock file races with
+ * concurrent openers and would break mutual exclusion.
  */
 final class FileCache extends AbstractCache
 {
@@ -175,6 +181,15 @@ final class FileCache extends AbstractCache
         }
     }
 
+    /**
+     * Garbage-collects hard-expired entries and orphaned temp files.
+     *
+     * Fast path reads only the trailing bytes of each file to recover
+     * fresh_until (the wrapper always serializes it last), avoiding a full
+     * JSON decode of potentially large payloads. Files whose tail cannot be
+     * parsed fall back to a full decode so corrupt/legacy entries are still
+     * discarded exactly as before. Lock files are never touched.
+     */
     public function prune(): void
     {
         if ($this->enablePurge === false) {
@@ -209,41 +224,90 @@ final class FileCache extends AbstractCache
                 continue;
             }
 
-            $data = file_get_contents($cacheFile);
-            if ($data === false) {
-                @unlink($cacheFile);
+            $freshUntil = $this->readFreshUntilTail($cacheFile);
+            if ($freshUntil === null) {
+                $this->pruneViaFullDecode($cacheFile, $now);
                 continue;
-            }
-
-            try {
-                $decoded = json_decode($data, true, 512, \JSON_THROW_ON_ERROR);
-            } catch (\JsonException $e) {
-                @unlink($cacheFile);
-                continue;
-            }
-
-            if (is_array($decoded) === false || array_key_exists('fresh_until', $decoded) === false) {
-                @unlink($cacheFile);
-                continue;
-            }
-
-            $freshUntilRaw = $decoded['fresh_until'];
-            $freshUntil = 0;
-            if (is_int($freshUntilRaw) === true) {
-                $freshUntil = $freshUntilRaw;
-            } elseif (is_string($freshUntilRaw) === true && is_numeric($freshUntilRaw) === true) {
-                $freshUntil = (int) $freshUntilRaw;
             }
 
             if ($freshUntil <= 0) {
                 continue;
             }
 
-            $hardExpiration = $freshUntil + self::DEFAULT_STALE_TTL;
-
-            if ($hardExpiration <= $now) {
+            if ($freshUntil + self::DEFAULT_STALE_TTL <= $now) {
                 @unlink($cacheFile);
             }
+        }
+    }
+
+    /**
+     * Fallback prune for a single file whose tail could not be parsed: decode
+     * the whole blob and discard it when corrupt/legacy or hard-expired.
+     */
+    private function pruneViaFullDecode(string $cacheFile, int $now): void
+    {
+        $data = file_get_contents($cacheFile);
+        if ($data === false) {
+            @unlink($cacheFile);
+            return;
+        }
+
+        try {
+            $decoded = json_decode($data, true, 512, \JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            @unlink($cacheFile);
+            return;
+        }
+
+        if (is_array($decoded) === false || array_key_exists('fresh_until', $decoded) === false) {
+            @unlink($cacheFile);
+            return;
+        }
+
+        $freshUntilRaw = $decoded['fresh_until'];
+        $freshUntil = 0;
+        if (is_int($freshUntilRaw) === true) {
+            $freshUntil = $freshUntilRaw;
+        } elseif (is_string($freshUntilRaw) === true && is_numeric($freshUntilRaw) === true) {
+            $freshUntil = (int) $freshUntilRaw;
+        }
+
+        if ($freshUntil <= 0) {
+            return;
+        }
+
+        if ($freshUntil + self::DEFAULT_STALE_TTL <= $now) {
+            @unlink($cacheFile);
+        }
+    }
+
+    /**
+     * Reads fresh_until from the trailing bytes of a cache file without
+     * loading the whole payload. Returns null when the field is absent or
+     * malformed, signalling the caller to fall back to a full decode.
+     */
+    private function readFreshUntilTail(string $cacheFile): ?int
+    {
+        $handle = @fopen($cacheFile, 'rb');
+        if ($handle === false) {
+            return null;
+        }
+
+        try {
+            $size = filesize($cacheFile);
+            $tail = false;
+            if ($size !== false && $size > 128 && fseek($handle, -128, SEEK_END) === 0) {
+                $tail = fread($handle, 128);
+            }
+            if ($tail === false) {
+                $tail = stream_get_contents($handle);
+            }
+            if ($tail === false) {
+                return null;
+            }
+            return $this->extractFreshUntil($tail);
+        } finally {
+            fclose($handle);
         }
     }
 
@@ -271,6 +335,9 @@ final class FileCache extends AbstractCache
      * construction. The expiry written into the file is diagnostic only;
      * ownership is the open handle. Lock files are intentionally never
      * deleted (unlinking flock files races with concurrent openers).
+     *
+     * Reentrant within this instance: a second acquire of a key already held
+     * here returns true without reopening the handle.
      */
     public function acquireLock(string $key, int $ttlSeconds): bool
     {
@@ -292,7 +359,7 @@ final class FileCache extends AbstractCache
 
         ftruncate($handle, 0);
         rewind($handle);
-        fwrite($handle, (string) (time() + $ttlSeconds));
+        fwrite($handle, (string) (time() + max(1, $ttlSeconds)));
         @chmod($lockFile, 0600);
 
         $this->lockHandles[$key] = $handle;

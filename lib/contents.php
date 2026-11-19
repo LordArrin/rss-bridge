@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use RSSBridge\Caches\CacheInterface;
-use RSSBridge\Configuration;
 use RSSBridge\Http\Response;
 use RSSBridge\Utils\Json;
 use RSSBridge\Proxies\DirectProxy;
@@ -67,14 +66,20 @@ function get_sitemap(string $url): array
  * served without contacting the origin.
  *
  * Priority (RFC 9111 section 4.2):
- *   1. Cache-Control: no-store/no-cache/must-revalidate/private forbid blind
- *      serving; s-maxage (shared cache) wins over max-age otherwise.
+ *   1. Cache-Control: no-store and no-cache forbid blind serving, and private
+ *      forbids it for this shared cache; s-maxage wins over max-age otherwise.
  *   2. Expires header.
  *   3. Heuristic freshness (RFC 9111 section 4.2.2) for successful responses
  *      without explicit signals: 10% of the interval since Last-Modified,
  *      clamped to [60, 86400] seconds; a minimal 60-second freshness when no
  *      validator exists, so repeated calls to one URL within a collectData()
  *      run are deduplicated instead of refetched every time.
+ *
+ * must-revalidate is deliberately NOT a blocking directive here: per RFC 9111
+ * it only forbids serving a STALE response without revalidation. Callers
+ * compare the returned timestamp against time() and revalidate once it has
+ * passed, so the directive is honoured without forcing a revalidation on
+ * every call while the response is still fresh.
  *
  * Returns null when the response must always be revalidated.
  */
@@ -83,7 +88,7 @@ function responseFreshUntil(Response $response): ?int
     $cacheControl = $response->getHeader('cache-control');
     if (is_string($cacheControl) === true && $cacheControl !== '') {
         $directives = array_map('trim', explode(',', strtolower($cacheControl)));
-        foreach (['no-store', 'no-cache', 'must-revalidate', 'private'] as $blocking) {
+        foreach (['no-store', 'no-cache', 'private'] as $blocking) {
             if (in_array($blocking, $directives, true) === true) {
                 return null;
             }
@@ -150,7 +155,17 @@ function responseFreshUntil(Response $response): ?int
 }
 
 /**
- * Fetch data from an http url
+ * Fetch data from an http url, with a shared upstream response cache.
+ *
+ * Storage lifetime and freshness lifetime are separate concerns: a 200/304
+ * response is stored for 86400 seconds so its validators stay available for
+ * conditional requests, while responseFreshUntil() decides on every read
+ * whether the stored body may still be served without contacting the origin.
+ *
+ * The cache key is a hash of the full identity tuple (url, body, headers,
+ * identity-defining cURL options). Hashing the encoded tuple instead of
+ * joining its parts with a separator removes any ambiguity between a URL
+ * that contains separators and the hash fields that follow it.
  *
  * @template T of bool
  * @param array<string, string>|list<string> $httpHeaders E.g. ['Accept' => 'application/json'] or ['Accept: application/json']
@@ -251,7 +266,12 @@ function getContents(
     if ($optionsHash !== null) {
         $cacheKeyParts[] = $optionsHash;
     }
-    $cacheKey = implode('_', $cacheKeyParts);
+
+    try {
+        $cacheKey = 'server_' . md5(Json::encode($cacheKeyParts, false));
+    } catch (\JsonException $e) {
+        $cacheKey = 'server_' . md5(serialize($cacheKeyParts));
+    }
 
     $cachedResponse = $cache->get($cacheKey);
     if (($cachedResponse instanceof Response) === false) {
@@ -287,7 +307,7 @@ function getContents(
 
     $response = $httpClient->request($url, $config);
 
-    if ($response->getCode() === 304 && ($cachedResponse instanceof Response) === false) {
+    if ($response->getCode() === 304 && $cachedResponse === null) {
         foreach (['if-none-match', 'if-modified-since'] as $staleValidator) {
             unset($httpHeadersNormalized[$staleValidator]);
         }
@@ -317,34 +337,41 @@ function getContents(
         case 308:
             break;
         case 304:
-            if ($cachedResponse instanceof Response) {
-                $cacheControl = $response->getHeader('cache-control');
-                $directives = [];
-                if (is_string($cacheControl) === true && $cacheControl !== '') {
-                    $directives = array_map('trim', explode(',', strtolower($cacheControl)));
-                }
-
-                $mergedHeaders = $cachedResponse->getHeaders();
-                foreach ($response->getHeaders() as $name => $values) {
-                    $mergedHeaders[$name] = $values;
-                }
-                unset($mergedHeaders['content-length'], $mergedHeaders['content-encoding']);
-
-                $merged = new Response(
-                    $cachedResponse->getBody(),
-                    200,
-                    $mergedHeaders
-                );
-
-                if (in_array('no-store', $directives, true) === true || in_array('private', $directives, true) === true) {
-                    $cache->delete($cacheKey);
-                } else {
-                    $freshUntil = responseFreshUntil($merged);
-                    $storageTtl = $freshUntil === null ? 86400 : max(3600, $freshUntil - time());
-                    $cache->set($cacheKey, $merged, $storageTtl);
-                }
-                $response = $merged;
+            if ($cachedResponse === null) {
+                throw new \HttpException(sprintf(
+                    '%s returned 304 Not Modified but no stored response is available to revalidate',
+                    $url
+                ), 502);
             }
+
+            $cacheControl = $response->getHeader('cache-control');
+            $directives = [];
+            if (is_string($cacheControl) === true && $cacheControl !== '') {
+                $directives = array_map('trim', explode(',', strtolower($cacheControl)));
+            }
+
+            $mergedHeaders = $cachedResponse->getHeaders();
+            foreach ($response->getHeaders() as $name => $values) {
+                $mergedHeaders[$name] = $values;
+            }
+            unset($mergedHeaders['content-length'], $mergedHeaders['content-encoding']);
+
+            if (isset($mergedHeaders['date']) === false) {
+                $mergedHeaders['date'] = [gmdate('D, d M Y H:i:s \G\M\T')];
+            }
+
+            $merged = new Response(
+                $cachedResponse->getBody(),
+                200,
+                $mergedHeaders
+            );
+
+            if (in_array('no-store', $directives, true) === true || in_array('private', $directives, true) === true) {
+                $cache->delete($cacheKey);
+            } else {
+                $cache->set($cacheKey, $merged, 86400);
+            }
+            $response = $merged;
             break;
         default:
             $e = \HttpException::fromResponse($response, $url);
@@ -413,10 +440,12 @@ function getSimpleHTMLDOM(
 /**
  * Retrieves HTML via a named proxy profile.
  *
- * Configuration failures surface as 500 (server misconfiguration); transient
- * fetch failures as 503 with Retry-After so CacheMiddleware can serve stale
- * and feed readers retry later. Already-typed HttpExceptions pass through
- * with their own status (429/503/...).
+ * Configuration failures surface as 500 (server misconfiguration). Transient
+ * fetch failures surface as ServiceUnavailableException, which
+ * httpStatusFromException() maps to a per-feed 502 while its retryAfter hint
+ * sizes the server-side backoff window. No 429/503 and no Retry-After ever
+ * reach the reader: FreshRSS would turn those into a domain-wide cooldown.
+ * Already-typed HttpExceptions pass through with their own status.
  *
  * @param array<string, mixed> $options
  * @return string HTML content

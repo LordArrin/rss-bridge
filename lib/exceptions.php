@@ -20,7 +20,11 @@ use RSSBridge\Http\Response;
 
 /**
  * Base class for HTTP-related exceptions.
- * Contains status code, optional Response object, and Retry-After hint.
+ *
+ * Carries the upstream status code, the upstream Response (when one exists)
+ * and a Retry-After hint. The hint is a SERVER-SIDE backoff input only: it is
+ * consumed by DisplayAction to arm the CacheMiddleware backoff marker and is
+ * never forwarded to the feed reader as a Retry-After header.
  */
 class HttpException extends \Exception
 {
@@ -28,6 +32,7 @@ class HttpException extends \Exception
 
     /**
      * Delay hint parsed from the upstream Retry-After header (seconds).
+     * Used exclusively to size the server-side backoff window.
      */
     public ?int $retryAfter = null;
 
@@ -41,11 +46,13 @@ class HttpException extends \Exception
     /**
      * Parses a Retry-After header value per RFC 9110 section 10.2.3.
      *
-     * Accepts either delta-seconds ("120") or an HTTP-date. Negative or
-     * otherwise invalid delays are rejected (null) so that callers fall back
-     * to their own defaults instead of forwarding a bogus value such as
-     * "Retry-After: -5", which some feed readers misinterpret as an expired
-     * date and answer with immediate retry storms against the upstream.
+     * Accepts either delta-seconds ("120") or an HTTP-date, and clamps the
+     * result to [1, 86400]. Anything unusable yields null so the caller picks
+     * its own backoff floor instead of honouring a bogus upstream value.
+     * Past or "now" dates mean "retry immediately", which would defeat the
+     * backoff and hammer the upstream, so they are rejected as well. A leading
+     * minus is rejected up front because relative-date spellings such as
+     * "-2 days ago" could otherwise resolve to a future timestamp.
      */
     public static function parseRetryAfter(?string $value): ?int
     {
@@ -66,8 +73,6 @@ class HttpException extends \Exception
         }
         $delay = $timestamp - time();
         if ($delay < 1) {
-            // Past or "now" dates mean "retry immediately", which we do not
-            // want to advertise: let the caller pick its default instead.
             return null;
         }
         return min(86400, $delay);
@@ -94,11 +99,19 @@ class HttpException extends \Exception
 
 /**
  * Thrown when Cloudflare protection is detected.
+ *
+ * Always mapped to a per-feed 502 by httpStatusFromException(), regardless of
+ * the status Cloudflare itself returned (403, 503, ...), so a challenge page
+ * never turns into a domain-wide cooldown in the reader.
  */
 final class CloudFlareException extends HttpException
 {
     /**
      * Checks if the response indicates Cloudflare protection.
+     *
+     * The title list is a heuristic and includes one generic "Access denied"
+     * page; a false positive only changes the exception class, not the
+     * resulting 502, so it is safe to keep the broad match.
      */
     public static function isCloudFlareResponse(Response $response): bool
     {
@@ -143,14 +156,18 @@ class ServerException extends HttpException
 }
 
 /**
- * Thrown when rate limit is exceeded (HTTP 429).
+ * Thrown when the upstream rate limit is exceeded (upstream HTTP 429).
+ *
+ * The 429 status describes the UPSTREAM, not this instance: it is translated
+ * to a per-feed 502 before anything is sent to the reader. retryAfter only
+ * sizes the server-side backoff window.
  */
 class RateLimitException extends ClientException
 {
     public function __construct(string $message = '', int $retryAfter = 3600, ?Response $response = null)
     {
         parent::__construct($message, 429, $response);
-        $this->retryAfter = $retryAfter;
+        $this->retryAfter = max(0, min(86400, $retryAfter));
     }
 }
 
@@ -180,11 +197,14 @@ function throwRateLimitException(string $message = '', int $retryAfter = 3600): 
 
 /**
  * Thrown when the service (or an upstream dependency) is temporarily
- * unavailable and the request may succeed again later (HTTP 503).
+ * unavailable and the request may succeed again later.
  *
- * FreshRSS treats 503 as a temporary error and retries the feed on the
- * next polling cycle, so bridges and core code should prefer this over
- * generic 5xx errors for transient failures.
+ * The 503 code is internal bookkeeping only. httpStatusFromException() maps
+ * it to a per-feed 502, because FreshRSS turns a real 503 into a domain-wide
+ * Retry-After cooldown that would freeze every feed on this instance.
+ * retryAfter sizes the server-side backoff window; it is never emitted as a
+ * header. Whole-instance unavailability is signalled by MaintenanceMiddleware
+ * instead, which is the only component allowed to answer 503.
  */
 class ServiceUnavailableException extends ServerException
 {
@@ -209,16 +229,25 @@ function throwServiceUnavailableException(string $message = '', int $retryAfter 
  * Per-feed failures NEVER use 429/503 and NEVER carry Retry-After: FreshRSS
  * applies a domain-wide cooldown to those codes, which would freeze every
  * feed served by this instance because of one broken feed. Upstream
- * politeness is enforced server-side by the backoff marker instead.
+ * politeness is enforced server-side by the backoff marker instead, which is
+ * why the header array is always empty and kept only for API compatibility.
  *
- *  - rate limiting / Cloudflare / temporary upstream unavailability -> 502
- *  - upstream 429 (rate limit)                                     -> 502
- *  - upstream timeouts / network errors                            -> 504
- *  - other upstream 5xx                                            -> 502
- *  - upstream 4xx (except 429)                                     -> passthrough
- *  - anything unexpected / local config error (code 0)             -> 500
+ *  - rate limiting / Cloudflare / temporary unavailability -> 502
+ *  - upstream 429                                          -> 502
+ *  - explicit 408/504, request-deadline exhaustion,
+ *    libcurl CURLE_OPERATION_TIMEDOUT (28)                 -> 504
+ *  - other upstream 5xx and transport failures             -> 502
+ *  - libcurl local/configuration errors (1, 2, 3, 4)       -> 500
+ *  - upstream 4xx (except 429)                             -> passthrough
+ *  - anything unexpected / local config error (code 0)     -> 500
  *
- * @return array{0: int, 1: array<string,string>} Status code + headers
+ * An explicit HTTP status always wins; the message-based libcurl heuristic
+ * is only consulted for code 0, which is what CurlHttpClient throws for
+ * transport failures. Classifying by errno instead of by the bare presence
+ * of "cURL error" keeps DNS, TLS and malformed-URL failures from being
+ * reported as gateway timeouts.
+ *
+ * @return array{0: int, 1: array<string, string>} Status code + headers
  */
 function httpStatusFromException(\Throwable $e): array
 {
@@ -237,21 +266,11 @@ function httpStatusFromException(\Throwable $e): array
     if ($e instanceof \HttpException) {
         $code = $e->getCode();
 
-        // Upstream 429 must never leak to the client: FreshRSS turns 429/503
-        // into a domain-wide Retry-After cooldown, freezing every feed on this
-        // instance. Surface it as a transient 502 so backoff + stale apply.
         if ($code === 429) {
             return [502, []];
         }
 
-        // Timeouts / network failures. code 0 alone is NOT a timeout: it also
-        // covers local/config errors (SSRF block, curl init failure), which
-        // must fall through to 500 below instead of masquerading as 504.
-        $isTimeout = $code === 408 || $code === 504
-            || str_contains($e->getMessage(), 'cURL error') === true
-            || str_contains($e->getMessage(), 'no time left within the request deadline') === true;
-
-        if ($isTimeout === true) {
+        if ($code === 408 || $code === 504) {
             return [504, []];
         }
 
@@ -260,6 +279,27 @@ function httpStatusFromException(\Throwable $e): array
         }
 
         if ($code >= 500 && $code <= 599) {
+            return [502, []];
+        }
+
+        $message = $e->getMessage();
+
+        if (str_contains($message, 'no time left within the request deadline') === true) {
+            return [504, []];
+        }
+
+        if (preg_match('/cURL error (\d+)/', $message, $matches) === 1) {
+            $errno = (int) $matches[1];
+            if ($errno === 28) {
+                return [504, []];
+            }
+            if (in_array($errno, [1, 2, 3, 4], true) === true) {
+                return [500, []];
+            }
+            return [502, []];
+        }
+
+        if (str_contains($message, 'cURL error') === true) {
             return [502, []];
         }
 

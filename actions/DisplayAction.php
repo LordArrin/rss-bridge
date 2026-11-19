@@ -31,6 +31,12 @@ use RSSBridge\Utils\Url;
  *  - transient failures arm a server-side backoff marker (request attributes
  *    consumed by CacheMiddleware) instead of advertising Retry-After, which
  *    FreshRSS would turn into a domain-wide cooldown.
+ *
+ * Cache bookkeeping: a stored response carries its full TTL together with the
+ * generation stamp of the bridge data it was rendered from, and it expires
+ * together with that data. CacheMiddleware turns the pair into "remaining
+ * max-age plus Age", so a reader never extends its own cache past the moment
+ * this instance regenerates the feed.
  */
 final class DisplayAction implements ActionInterface
 {
@@ -38,11 +44,19 @@ final class DisplayAction implements ActionInterface
     private Logger $logger;
     private BridgeFactory $bridgeFactory;
     private SafeBridgeLoader $safeLoader;
+
+    /**
+     * Lease for data regeneration. Must stay above the hard FPM budget
+     * (PHP_FPM_REQUEST_TERMINATE_TIMEOUT minus its reserve), otherwise a slow
+     * generation outlives its own lease and a second worker starts a duplicate
+     * upstream fetch.
+     */
     private const DATA_LOCK_TTL = 180;
     private const DATA_WAIT_MS = 10000;
     private const DATA_POLL_MS = 200;
     private const BACKOFF_FLOOR = 120;
     private const BROKEN_BRIDGE_BACKOFF = 600;
+    private const MAX_CACHE_TIMEOUT = 86400;
 
     /** IMF-fixdate (RFC 9110) */
     private const HTTP_DATE_FORMAT = 'D, d M Y H:i:s \G\M\T';
@@ -118,9 +132,9 @@ final class DisplayAction implements ActionInterface
 
         if ($customTimeoutEnabled === true) {
             if (is_int($ttlRaw) === true) {
-                $ttl = min($ttlRaw, 86400);
+                $ttl = min($ttlRaw, self::MAX_CACHE_TIMEOUT);
             } elseif (is_string($ttlRaw) === true && is_numeric($ttlRaw) === true) {
-                $ttl = min((int) $ttlRaw, 86400);
+                $ttl = min((int) $ttlRaw, self::MAX_CACHE_TIMEOUT);
             }
         }
 
@@ -136,8 +150,15 @@ final class DisplayAction implements ActionInterface
             && $request->getAttribute('_bridge_error') !== true
             && $request->getAttribute('_bridge_stale_data') !== true
         ) {
-            $response = $response->withHeader(CacheMiddleware::CACHE_TTL_HEADER, (string) $ttl);
-            $this->cache->set($cacheKey, $response, $ttl);
+            $generatedRaw = $request->getAttribute('_bridge_data_generated');
+            $generated = (is_int($generatedRaw) === true && $generatedRaw > 0) ? $generatedRaw : time();
+            $storageTtl = max(1, $ttl - max(0, time() - $generated));
+
+            $response = $response
+            ->withHeader(CacheMiddleware::CACHE_TTL_HEADER, (string) $ttl)
+            ->withHeader(CacheMiddleware::CACHE_GENERATED_HEADER, (string) $generated);
+
+            $this->cache->set($cacheKey, $response, $storageTtl);
         }
 
         return $response;
@@ -152,6 +173,9 @@ final class DisplayAction implements ActionInterface
      * cache is populated even if the client already timed out. Transient
      * upstream failures arm a server-side backoff marker; permanent 4xx are
      * left to the middleware negative cache.
+     *
+     * Publishes _bridge_data_generated so the response layer can align the
+     * response lifetime with the lifetime of the data it was rendered from.
      */
     private function createResponse(Request $request, BridgeAbstract $bridge, FormatInterface $formatObj, int $ttl): Response
     {
@@ -161,6 +185,7 @@ final class DisplayAction implements ActionInterface
         $payload = null;
         $stalePayload = null;
         $dataLockAcquired = false;
+        $dataGenerated = 0;
 
         if ($ttl > 0) {
             $entry = $this->cache->getWithStale($dataKey);
@@ -185,7 +210,7 @@ final class DisplayAction implements ActionInterface
                 $request->withAttribute('_bridge_stale_data', true);
                 $request->withAttribute('_bridge_backoff', self::BACKOFF_FLOOR);
                 $request->withAttribute('_bridge_failure_status', 502);
-                return $this->renderFeed($formatObj, $stalePayload['items'], $stalePayload['feed']);
+                return $this->renderFeed($formatObj, $stalePayload['items'], $stalePayload['feed'], $stalePayload['generated']);
             }
 
             $request->withAttribute('_bridge_backoff', self::BACKOFF_FLOOR);
@@ -220,21 +245,27 @@ final class DisplayAction implements ActionInterface
             if ($payload !== null) {
                 $items = $payload['items'];
                 $feed = $payload['feed'];
+                $dataGenerated = $payload['generated'];
             } else {
                 $bridge->collectData();
                 $items = $bridge->getItems();
                 $feed = $bridge->getFeed();
+                $dataGenerated = time();
 
                 if ($ttl > 0) {
                     $normalizedItems = [];
                     foreach ($items as $item) {
-                        if ($item instanceof \RSSBridge\FeedItem) {
+                        if ($item instanceof FeedItem) {
                             $normalizedItems[] = $item->toArray();
                         } elseif (is_array($item) === true) {
                             $normalizedItems[] = $item;
                         }
                     }
-                    $this->cache->set($dataKey, ['items' => $normalizedItems, 'feed' => $feed], $ttl);
+                    $this->cache->set($dataKey, [
+                        'items' => $normalizedItems,
+                        'feed' => $feed,
+                        'generated' => $dataGenerated,
+                    ], $ttl);
                 }
             }
         } catch (\Throwable $e) {
@@ -261,6 +292,7 @@ final class DisplayAction implements ActionInterface
                 $request->withAttribute('_bridge_stale_data', true);
                 $items = $stalePayload['items'];
                 $feed = $stalePayload['feed'];
+                $dataGenerated = $stalePayload['generated'];
             } else {
                 $feed = $bridge->getFeed();
 
@@ -304,16 +336,24 @@ final class DisplayAction implements ActionInterface
             }
         }
 
-        return $this->renderFeed($formatObj, $items, $feed);
+        $request->withAttribute('_bridge_data_generated', $dataGenerated);
+
+        return $this->renderFeed($formatObj, $items, $feed, $dataGenerated);
     }
 
     /**
      * Renders items/feed into the final 200 response with validators.
      *
+     * Last-Modified is derived from the newest item timestamp. When no item
+     * carries a timestamp, the data generation time is used instead of the
+     * render time: the body then stays byte-identical across renders of the
+     * same cached payload, which keeps the ETag stable and enables 304
+     * responses. Without any anchor at all it falls back to now.
+     *
      * @param list<FeedItem|array<string, mixed>> $items
      * @param array<string, mixed> $feed
      */
-    private function renderFeed(FormatInterface $formatObj, array $items, array $feed): Response
+    private function renderFeed(FormatInterface $formatObj, array $items, array $feed, int $dataGenerated = 0): Response
     {
         $formatObj->setItems($items);
         $formatObj->setFeed($feed);
@@ -326,6 +366,10 @@ final class DisplayAction implements ActionInterface
             if ($itemTimestamp !== null && $itemTimestamp > $lastModifiedTimestamp) {
                 $lastModifiedTimestamp = $itemTimestamp;
             }
+        }
+
+        if ($lastModifiedTimestamp === 0 && $dataGenerated > 0) {
+            $lastModifiedTimestamp = $dataGenerated;
         }
 
         if ($lastModifiedTimestamp === 0 || $lastModifiedTimestamp > $now) {
@@ -362,7 +406,7 @@ final class DisplayAction implements ActionInterface
      * Waits for a concurrent regeneration to publish fresh data, bounded by
      * the client budget. Never falls back to uncoordinated regeneration.
      *
-     * @return array{payload: array{items: list<array<string, mixed>>, feed: array<string, mixed>}|null, lock: bool}
+     * @return array{payload: array{items: list<array<string, mixed>>, feed: array<string, mixed>, generated: int}|null, lock: bool}
      */
     private function waitForFreshData(string $dataKey): array
     {
@@ -387,7 +431,11 @@ final class DisplayAction implements ActionInterface
     }
 
     /**
-     * @return array{items: list<array<string, mixed>>, feed: array<string, mixed>}|null
+     * Validates a cached data payload. Entries written before the generation
+     * stamp existed report generated = 0 and keep the previous render-time
+     * behaviour until they are regenerated.
+     *
+     * @return array{items: list<array<string, mixed>>, feed: array<string, mixed>, generated: int}|null
      */
     private function normalizeDataPayload(mixed $value): ?array
     {
@@ -412,8 +460,11 @@ final class DisplayAction implements ActionInterface
             $items[] = $item;
         }
 
+        $generatedRaw = $value['generated'] ?? null;
+        $generated = (is_int($generatedRaw) === true && $generatedRaw > 0) ? $generatedRaw : 0;
+
         /** @var array<string, mixed> $feedRaw */
-        return ['items' => $items, 'feed' => $feedRaw];
+        return ['items' => $items, 'feed' => $feedRaw, 'generated' => $generated];
     }
 
     /**

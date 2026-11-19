@@ -19,6 +19,13 @@ use RSSBridge\Utils\Url;
  *
  * The 'expiration' column stores the hard-expiry timestamp (fresh + stale TTL)
  * and is used exclusively by prune() for garbage collection.
+ *
+ * Locking: leases are rows in the 'locks' table keyed by the lock key, with
+ * 'expiration' as the generation token. Generations strictly increase (a new
+ * lease is only written after the previous one expired), so releaseLock()
+ * matching on the recorded generation can never delete a lease reclaimed by
+ * another process. When the write lock stays busy, acquireLock() degrades to
+ * "no deduplication" (returns true) rather than blocking the feed.
  */
 final class SQLiteCache extends AbstractCache
 {
@@ -140,12 +147,14 @@ final class SQLiteCache extends AbstractCache
      * set()/prune() does not silently disable single-flight. The winner upserts
      * a lease row; expired leases left by crashed workers are reclaimed
      * atomically. If the write lock stays busy, we degrade to no dedup.
+     *
+     * Not reentrant: a second acquire of a still-held key returns false.
      */
     public function acquireLock(string $key, int $ttlSeconds): bool
     {
         $lockKey = $this->createCacheKey('lock_' . $key);
         $now = time();
-        $expiry = $now + $ttlSeconds;
+        $expiry = $now + max(1, $ttlSeconds);
 
         try {
             $this->db->exec('PRAGMA busy_timeout = 0');

@@ -25,10 +25,15 @@ abstract class FormatAbstract implements FormatInterface
     protected array $feed = [];
 
     /**
-     * @var FeedItem[]
+     * @var list<FeedItem>
      */
     protected array $items = [];
 
+    /**
+     * Unix epoch of the newest item, or the data generation time when no item
+     * carries a timestamp. 0 means "not set"; DisplayAction always supplies a
+     * positive, stable anchor before render() so formats never read the clock.
+     */
     protected int $lastModified = 0;
 
     /**
@@ -78,7 +83,7 @@ abstract class FormatAbstract implements FormatInterface
     /**
      * {@inheritdoc}
      *
-     * @return FeedItem[]
+     * @return list<FeedItem>
      */
     public function getItems(): array
     {
@@ -102,7 +107,7 @@ abstract class FormatAbstract implements FormatInterface
     }
 
     /**
-     * Get the last modification timestamp.
+     * Get the last modification timestamp (0 when not set).
      */
     protected function getLastModified(): int
     {

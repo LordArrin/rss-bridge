@@ -15,7 +15,7 @@ use RSSBridge\Logger\Logger;
  * its fresh TTL to allow serving stale content when upstream fails.
  *
  * Uses JSON serialization via AbstractCache to avoid Object Injection vulnerabilities.
- * Large values are automatically chunked to respect memcached's 1MB item size limit.
+ * Large values are automatically chunked to respect memcached's default 1MB item limit.
  */
 final class MemcachedCache extends AbstractCache
 {
@@ -39,9 +39,11 @@ final class MemcachedCache extends AbstractCache
     private const RES_HOST_LOOKUP_FAILURE = \Memcached::RES_HOST_LOOKUP_FAILURE;
 
     /**
-     * Hard protocol limit of memcached: a single item cannot exceed 1 MB.
-     * This is NOT affected by the server's -I flag (which only controls slab
-     * sizes below this ceiling). Anything larger must be chunked client-side.
+     * Default memcached item ceiling (1 MB). A server started with -I can raise
+     * this up to 128 MB, but we chunk client-side at the DEFAULT ceiling so the
+     * cache works against any server configuration without depending on -I
+     * tuning. The configured itemSizeLimit may only LOWER the chunk threshold
+     * (e.g. to satisfy a memory budget), never raise it above this default.
      */
     private const MAX_ITEM_SIZE = 1048576;
 
@@ -263,6 +265,9 @@ final class MemcachedCache extends AbstractCache
 
             $generation = bin2hex(random_bytes(8));
             $chunkFailed = false;
+            // Compression is disabled for raw chunk slices so each stored chunk
+            // is exactly the bytes we concatenate on read; the metadata item
+            // below is still written with compression enabled.
             $this->conn->setOption(\Memcached::OPT_COMPRESSION, false);
             try {
                 foreach ($parts as $index => $part) {
@@ -438,8 +443,10 @@ final class MemcachedCache extends AbstractCache
     }
 
     /**
-     * Distributed single-flight lock using memcached's CAS semantics:
+     * Distributed single-flight lock using memcached's add() semantics:
      * add() only stores when the key is absent, so exactly one process wins.
+     * The TTL is clamped to >= 1 because a zero/relative expiry of 0 would
+     * mean "never expire" and a crashed holder would block the feed forever.
      */
     public function acquireLock(string $key, int $ttlSeconds): bool
     {
@@ -447,7 +454,7 @@ final class MemcachedCache extends AbstractCache
         $token = bin2hex(random_bytes(16));
 
         try {
-            $stored = $this->conn->add($lockKey, $token, $ttlSeconds);
+            $stored = $this->conn->add($lockKey, $token, max(1, $ttlSeconds));
         } catch (\Exception $e) {
             $this->logger->warning(sprintf(
                 'Memcached lock acquire failed (%s): proceeding without single-flight',
@@ -469,6 +476,15 @@ final class MemcachedCache extends AbstractCache
         return true;
     }
 
+    /**
+     * Releases the lock atomically only if this instance still owns it.
+     *
+     * A CAS write of an empty value with a 1-second expiry replaces a plain
+     * delete: it verifies the token in the same atomic step, so a lease that
+     * expired and was reclaimed by another process between the read and the
+     * write can never be removed by us. The key lingers for up to one second
+     * before a new acquireLock() can win it again.
+     */
     public function releaseLock(string $key): void
     {
         $token = $this->lockTokens[$key] ?? null;

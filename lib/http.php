@@ -434,12 +434,12 @@ final class CurlHttpClient implements HttpClient
         return self::$ipResolver;
     }
 
-/**
- * Checks if SSRF protection is enabled.
- *
- * Accepts the usual boolean spellings (1/0, true/false, on/off, yes/no).
- * Missing, empty or unrecognised values keep the protection ON.
- */
+    /**
+     * Checks if SSRF protection is enabled.
+     *
+     * Accepts the usual boolean spellings (1/0, true/false, on/off, yes/no).
+     * Missing, empty or unrecognised values keep the protection ON.
+     */
     private static function isSsrfCheckEnabled(): bool
     {
         $value = getenv('HTTP_SSRF_CHECK');
@@ -771,9 +771,11 @@ final class CurlHttpClient implements HttpClient
      *
      * Method/body semantics per RFC 9110: 303 always becomes GET; 301/302 turn
      * POST into GET (the de-facto browser/curl behaviour); 307/308 preserve the
-     * original method and body. Sensitive headers are dropped when the hop
-     * crosses to a different effective domain so credentials never leak to an
-     * unrelated site.
+     * original method and body. Credentials are dropped when the hop crosses
+     * to a different effective domain, whether they were supplied through the
+     * headers array or through raw cURL options, so they never leak to an
+     * unrelated site. Proxy credentials are kept: they authenticate against
+     * the proxy, not against the redirect target.
      *
      * @param array<string, mixed> $config
      * @return array<string, mixed>
@@ -791,10 +793,9 @@ final class CurlHttpClient implements HttpClient
             $curlOptions[CURLOPT_HTTPGET] = true;
         }
 
-        $config['curl_options'] = $curlOptions;
-
         if (self::isSameEffectiveDomain($fromHost, $toHost) === false) {
             $sensitive = ['authorization', 'cookie', 'proxy-authorization', 'x-api-key'];
+
             $headers = $config['headers'] ?? [];
             if (is_array($headers) === true) {
                 $filtered = [];
@@ -806,7 +807,28 @@ final class CurlHttpClient implements HttpClient
                 }
                 $config['headers'] = $filtered;
             }
+
+            unset(
+                $curlOptions[CURLOPT_USERPWD],
+                $curlOptions[CURLOPT_HTTPAUTH],
+                $curlOptions[CURLOPT_COOKIE],
+                $curlOptions[CURLOPT_COOKIEFILE]
+            );
+
+            if (isset($curlOptions[CURLOPT_HTTPHEADER]) === true && is_array($curlOptions[CURLOPT_HTTPHEADER]) === true) {
+                $filteredHeaders = [];
+                foreach ($curlOptions[CURLOPT_HTTPHEADER] as $line) {
+                    $name = strtolower(trim(explode(':', self::scalarToString($line), 2)[0]));
+                    if (in_array($name, $sensitive, true) === true) {
+                        continue;
+                    }
+                    $filteredHeaders[] = $line;
+                }
+                $curlOptions[CURLOPT_HTTPHEADER] = $filteredHeaders;
+            }
         }
+
+        $config['curl_options'] = $curlOptions;
 
         return $config;
     }
@@ -820,7 +842,8 @@ final class CurlHttpClient implements HttpClient
     {
         if ($url === '') {
             // Permanent configuration/programming error, not a transient timeout.
-            // An explicit code avoids httpStatusFromException() mapping code 0 to 503.
+            // An explicit code keeps this out of the code-0 transport heuristic
+            // in httpStatusFromException().
             throw new \HttpException('URL cannot be empty', 500);
         }
 
@@ -862,8 +885,9 @@ final class CurlHttpClient implements HttpClient
      * Every getContents() call inside one bridge request shares this budget,
      * so a sequence of slow upstream calls cannot outlive the FPM worker and
      * end in a SIGTERM 502. Returns null outside FPM (CLI), where no such
-     * limit exists. Keep PHP_FPM_REQUEST_TERMINATE_TIMEOUT in sync with the
-     * pool template (bin/load-env substitutes the same variable).
+     * limit exists. The budget itself is derived from
+     * FeedDeadline::hardBudgetSeconds() so the HTTP client and the feed
+     * generation path can never disagree about it.
      */
     private static function fpmWallClockDeadline(): ?float
     {
@@ -872,10 +896,7 @@ final class CurlHttpClient implements HttpClient
             return null;
         }
 
-        $terminateRaw = getenv('PHP_FPM_REQUEST_TERMINATE_TIMEOUT');
-        $terminate = ($terminateRaw !== false && $terminateRaw !== '' && (int) $terminateRaw > 0) ? (int) $terminateRaw : 90;
-
-        return (float) $requestTime + max(1, $terminate - 5);
+        return (float) $requestTime + FeedDeadline::hardBudgetSeconds();
     }
 
     /**
@@ -951,19 +972,19 @@ final class CurlHttpClient implements HttpClient
         $impersonate = self::getImpersonateTarget();
 
         $curlOptions = [
-            CURLOPT_HEADER          => false,
-            CURLOPT_HTTPHEADER      => $httpHeaders,
-            CURLOPT_RETURNTRANSFER  => true,
-            CURLOPT_FOLLOWLOCATION  => false,
-            CURLOPT_MAXREDIRS       => 0,
-            CURLOPT_TIMEOUT         => $timeoutSeconds,
-            CURLOPT_CONNECTTIMEOUT  => $connectTimeout,
-            CURLOPT_NOSIGNAL        => true,
+            CURLOPT_HEADER              => false,
+            CURLOPT_HTTPHEADER          => $httpHeaders,
+            CURLOPT_RETURNTRANSFER      => true,
+            CURLOPT_FOLLOWLOCATION      => false,
+            CURLOPT_MAXREDIRS           => 0,
+            CURLOPT_TIMEOUT             => $timeoutSeconds,
+            CURLOPT_CONNECTTIMEOUT      => $connectTimeout,
+            CURLOPT_NOSIGNAL            => true,
             // Advertise and transparently decode all supported content encodings.
             // Callers may override via curl_options; this is the safe default.
-            CURLOPT_ENCODING        => '',
-            CURLOPT_PROTOCOLS       => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_ENCODING            => '',
+            CURLOPT_PROTOCOLS_STR       => 'http,https',
+            CURLOPT_REDIR_PROTOCOLS_STR => 'http,https',
         ];
 
         $configuredUa = $config['useragent'] ?? null;
@@ -990,15 +1011,12 @@ final class CurlHttpClient implements HttpClient
         }
 
         if ($config['max_filesize'] !== null) {
-            $curlOptions[CURLOPT_MAXFILESIZE] = $config['max_filesize'];
-            $curlOptions[CURLOPT_NOPROGRESS] = false;
-            if (defined('CURLOPT_XFERINFOFUNCTION') === true) {
-                $curlOptions[CURLOPT_XFERINFOFUNCTION] = function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($config) {
-                    return ($downloaded > $config['max_filesize']) ? 1 : 0;
-                };
-            } else {
-                $curlOptions[CURLOPT_PROGRESSFUNCTION] = function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($config) {
-                    return ($downloaded > $config['max_filesize']) ? -1 : 0;
+            $maxFilesize = self::toInt($config['max_filesize'], 0);
+            if ($maxFilesize > 0) {
+                $curlOptions[CURLOPT_MAXFILESIZE] = $maxFilesize;
+                $curlOptions[CURLOPT_NOPROGRESS] = false;
+                $curlOptions[CURLOPT_XFERINFOFUNCTION] = function ($ch, $downloadSize, $downloaded, $uploadSize, $uploaded) use ($maxFilesize) {
+                    return $downloaded > $maxFilesize ? 1 : 0;
                 };
             }
         }
@@ -1112,6 +1130,8 @@ final class CurlHttpClient implements HttpClient
                     CURLE_URL_MALFORMAT,
                     CURLE_COULDNT_RESOLVE_HOST,
                     CURLE_OPERATION_TIMEDOUT,
+                    CURLE_ABORTED_BY_CALLBACK,
+                    CURLE_FILESIZE_EXCEEDED,
                 ], true) === true
             ) {
                 break;
@@ -1317,14 +1337,14 @@ final class Request
         return $this->get;
     }
 
-/**
- * Returns GET parameters normalized for cache keying: authentication and
- * routing keys are removed, cache-buster (_) and _error_time never affect
- * the key, and _cache_timeout participates only when CACHE_CUSTOM_TIMEOUT
- * is enabled. Keys are sorted for a stable representation.
- *
- * @return array<string, mixed>
- */
+    /**
+     * Returns GET parameters normalized for cache keying: authentication and
+     * routing keys are removed, cache-buster (_) and _error_time never affect
+     * the key, and _cache_timeout participates only when CACHE_CUSTOM_TIMEOUT
+     * is enabled. Keys are sorted for a stable representation.
+     *
+     * @return array<string, mixed>
+     */
     public function getCacheableParams(): array
     {
         $params = $this->get;
@@ -1414,7 +1434,7 @@ final class Response
         // Client errors
         400 => 'Bad Request',
         401 => 'Unauthorized',
-        402 => 'Not Acceptable',
+        402 => 'Payment Required',
         403 => 'Forbidden',
         404 => 'Not Found',
         405 => 'Method Not Allowed',
@@ -1646,14 +1666,33 @@ final class Response
  *    bounds cold generation, letting the worker finish and populate the
  *    cache even after the client disconnected, so the next poll is warm.
  *
- * State is static and MUST be re-initialised via begin() on every request
- * because PHP-FPM reuses workers across requests.
+ * State is static and therefore per-request: PHP-FPM resets userland static
+ * properties between requests, so nothing leaks from one feed into the next.
+ * begin() must still be called once per display request to arm the budgets;
+ * without it deadline() returns null and the HTTP client falls back to its
+ * own timeouts, which is the intended behaviour for CLI and non-feed actions.
  */
 final class FeedDeadline
 {
+    public const DEFAULT_TERMINATE_TIMEOUT = 90;
+    public const TERMINATE_RESERVE = 5;
+
     private static ?float $clientUntil = null;
     private static ?float $hardUntil = null;
     private static bool $useHard = false;
+
+    /**
+     * Seconds available to a request before PHP-FPM would terminate it,
+     * with a reserve for rendering and writing the cache. Single source of
+     * truth for both the feed generation path and the HTTP client.
+     */
+    public static function hardBudgetSeconds(): int
+    {
+        $terminateRaw = getenv('PHP_FPM_REQUEST_TERMINATE_TIMEOUT');
+        $terminate = ($terminateRaw !== false && $terminateRaw !== '' && (int) $terminateRaw > 0) ? (int) $terminateRaw : self::DEFAULT_TERMINATE_TIMEOUT;
+
+        return max(1, $terminate - self::TERMINATE_RESERVE);
+    }
 
     /**
      * Initialises both budgets for the current request.
@@ -1662,10 +1701,7 @@ final class FeedDeadline
     {
         $start = self::requestStart();
         self::$clientUntil = $start + max(1, $clientSeconds);
-
-        $terminateRaw = getenv('PHP_FPM_REQUEST_TERMINATE_TIMEOUT');
-        $terminate = ($terminateRaw !== false && $terminateRaw !== '' && (int) $terminateRaw > 0) ? (int) $terminateRaw : 90;
-        self::$hardUntil = $start + max(1, $terminate - 5);
+        self::$hardUntil = $start + self::hardBudgetSeconds();
         self::$useHard = false;
     }
 

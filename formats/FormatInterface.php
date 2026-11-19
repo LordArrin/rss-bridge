@@ -11,6 +11,10 @@ use RSSBridge\FeedItem;
  *
  * Formats convert bridge items into syndication standards
  * (Atom, RSS, JSON Feed, HTML, etc.)
+ *
+ * render() must be deterministic for a given (feed, items, lastModified)
+ * triple: it must not read the wall clock, so the same cached payload always
+ * produces a byte-identical body and a stable ETag.
  */
 interface FormatInterface
 {
@@ -48,12 +52,16 @@ interface FormatInterface
     /**
      * Get the feed items.
      *
-     * @return FeedItem[]
+     * @return list<FeedItem>
      */
     public function getItems(): array;
 
     /**
      * Set the last modification timestamp (Unix epoch).
+     *
+     * DisplayAction supplies a stable, content-derived anchor (newest item
+     * timestamp, else the data generation time). 0 means "not set" and is only
+     * expected when a format is used outside the display pipeline.
      */
     public function setLastModified(int $lastModified): void;
 }

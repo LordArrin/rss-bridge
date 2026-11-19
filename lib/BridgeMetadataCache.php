@@ -14,6 +14,11 @@ use RSSBridge\Caches\CacheInterface;
  *
  * It also caches the list of broken bridges that failed to load, so that
  * the frontend can display warnings even when metadata is served from cache.
+ *
+ * Locking: rebuilds are single-flighted through a shared build lock. Only the
+ * caller that actually acquired the lock releases it (in a finally block);
+ * buildAndStore() itself never touches the lock, so a degraded lockless rebuild
+ * or an explicit CLI rebuild cannot release a lease held by another worker.
  */
 final class BridgeMetadataCache
 {
@@ -25,6 +30,7 @@ final class BridgeMetadataCache
     private const BUILD_WAIT_MS = 5000;
     private const BUILD_POLL_MS = 100;
     private const APCU_METADATA_TTL = 60;
+    private const BUILD_LOCK_SUFFIX = '_build';
 
     private CacheInterface $cache;
 
@@ -53,8 +59,10 @@ final class BridgeMetadataCache
      *
      * Rebuilds are single-flighted: only one worker rebuilds at a time while
      * the others wait briefly and then serve the shared result (or degrade to
-     * a local rebuild). An APCu L1 keeps the frontpage alive during a
-     * memcached outage and avoids re-fetching the large payload on every hit.
+     * a local lockless rebuild). An APCu L1 keeps the frontpage alive during a
+     * memcached outage and avoids re-fetching the large payload on every hit;
+     * an L1 entry whose broken list is due for revalidation is skipped so the
+     * L2 recheck path can run.
      *
      * @param BridgeFactory $factory Factory for resolving bridge class names
      * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
@@ -72,16 +80,21 @@ final class BridgeMetadataCache
     public function getAll(BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
         $cacheKey = $this->buildCacheKey();
+        $lockKey = $cacheKey . self::BUILD_LOCK_SUFFIX;
         $apcuAvailable = function_exists('apcu_enabled') === true && apcu_enabled() === true;
         $apcuKey = 'rssbridge_metadata_' . $cacheKey;
 
         if ($apcuAvailable === true) {
             $local = apcu_fetch($apcuKey, $success);
             if ($success === true && $this->isValidResult($local) === true) {
-                $this->restoreBroken($local, $loader);
-                /** @var array<string, array{name: string, uri: string, description: string, parameters: array<string, array<string, mixed>>, domain: string, short_name: string, maintainer: string, cache_timeout: int}> $metadata */
-                $metadata = $local['metadata'];
-                return $metadata;
+                $localBroken = $local['broken_bridges'];
+                $localCheckedAt = $local['broken_checked_at'];
+                if ($localBroken === [] || (time() - $localCheckedAt) < self::BROKEN_RECHECK_TTL) {
+                    $this->restoreBroken($local, $loader);
+                    /** @var array<string, array{name: string, uri: string, description: string, parameters: array<string, array<string, mixed>>, domain: string, short_name: string, maintainer: string, cache_timeout: int}> $metadata */
+                    $metadata = $local['metadata'];
+                    return $metadata;
+                }
             }
         }
 
@@ -92,8 +105,12 @@ final class BridgeMetadataCache
             $checkedAt = $cached['broken_checked_at'];
 
             if ($hasBroken === true && (time() - $checkedAt) >= self::BROKEN_RECHECK_TTL) {
-                if ($this->cache->acquireLock($cacheKey . '_build', self::BUILD_LOCK_TTL) === true) {
-                    return $this->buildAndStore($cacheKey, $apcuKey, $apcuAvailable, $factory, $loader);
+                if ($this->cache->acquireLock($lockKey, self::BUILD_LOCK_TTL) === true) {
+                    try {
+                        return $this->buildAndStore($cacheKey, $apcuKey, $apcuAvailable, $factory, $loader);
+                    } finally {
+                        $this->cache->releaseLock($lockKey);
+                    }
                 }
             }
 
@@ -106,8 +123,12 @@ final class BridgeMetadataCache
             return $metadata;
         }
 
-        if ($this->cache->acquireLock($cacheKey . '_build', self::BUILD_LOCK_TTL) === true) {
-            return $this->buildAndStore($cacheKey, $apcuKey, $apcuAvailable, $factory, $loader);
+        if ($this->cache->acquireLock($lockKey, self::BUILD_LOCK_TTL) === true) {
+            try {
+                return $this->buildAndStore($cacheKey, $apcuKey, $apcuAvailable, $factory, $loader);
+            } finally {
+                $this->cache->releaseLock($lockKey);
+            }
         }
 
         $waited = 0;
@@ -155,6 +176,11 @@ final class BridgeMetadataCache
     /**
      * Rebuilds the cache and returns the fresh metadata.
      *
+     * This is an explicit administrative rebuild (CLI warmup / --force) and
+     * deliberately does not take the build lock: it must produce a result even
+     * when a web worker holds the lease. It never releases a lock it does not
+     * own.
+     *
      * @param BridgeFactory $factory Factory for resolving bridge class names
      * @param SafeBridgeLoader $loader Loader for safely instantiating bridges
      * @return array<string, array{
@@ -176,15 +202,15 @@ final class BridgeMetadataCache
     }
 
     /**
-     * Checks whether the current cache entry is fresh (exists and matches current hash).
+     * Checks whether the current cache entry is fresh: a structurally valid
+     * result exists under the key derived from the current directory hash.
      *
      * @return bool True if cache is fresh, false otherwise
      */
     public function isFresh(): bool
     {
-        $cacheKey = $this->buildCacheKey();
-        $cached = $this->cache->get($cacheKey);
-        return $cached !== null && is_array($cached) === true && isset($cached['metadata']) === true;
+        $cached = $this->cache->get($this->buildCacheKey());
+        return $this->isValidResult($cached);
     }
 
     /**
@@ -196,8 +222,7 @@ final class BridgeMetadataCache
      */
     public function getCurrentHash(): string
     {
-        $this->buildCacheKey();
-        return $this->cachedHash ?? '';
+        return $this->currentHash();
     }
 
     /**
@@ -235,7 +260,7 @@ final class BridgeMetadataCache
             }
 
             foreach ($files as $file) {
-                if (preg_match('/^([^.]+Bridge)\.php$/U', $file, $m) !== 1) {
+                if (preg_match('/^([^.]+Bridge)\.php$/', $file, $m) !== 1) {
                     continue;
                 }
 
@@ -311,17 +336,29 @@ final class BridgeMetadataCache
      */
     private function buildCacheKey(): string
     {
+        return self::CACHE_PREFIX . '_' . $this->currentHash();
+    }
+
+    /**
+     * Memoised directory fingerprint for the lifetime of this instance.
+     */
+    private function currentHash(): string
+    {
         if ($this->cachedHash === null) {
             $this->cachedHash = $this->computeDirectoryHash();
         }
-
-        return self::CACHE_PREFIX . '_' . $this->cachedHash;
+        return $this->cachedHash;
     }
 
     private function computeDirectoryHash(): string
     {
+        $enabled = getenv('ENABLED_BRIDGES');
+        $disabled = getenv('DISABLED_BRIDGES');
+        $enabled = $enabled === false ? '' : $enabled;
+        $disabled = $disabled === false ? '' : $disabled;
+
         $apcuAvailable = function_exists('apcu_enabled') === true && apcu_enabled() === true;
-        $apcuKey = 'rssbridge_bridge_fingerprint_' . md5(implode('|', $this->bridgesDirs));
+        $apcuKey = 'rssbridge_bridge_fingerprint_' . md5(implode('|', $this->bridgesDirs) . '|' . $enabled . '|' . $disabled);
 
         if ($apcuAvailable === true) {
             $cached = apcu_fetch($apcuKey, $success);
@@ -331,11 +368,8 @@ final class BridgeMetadataCache
         }
 
         $hashParts = [];
-
-        $enabled = getenv('ENABLED_BRIDGES');
-        $disabled = getenv('DISABLED_BRIDGES');
-        $hashParts[] = 'enabled=' . ($enabled === false ? '' : $enabled);
-        $hashParts[] = 'disabled=' . ($disabled === false ? '' : $disabled);
+        $hashParts[] = 'enabled=' . $enabled;
+        $hashParts[] = 'disabled=' . $disabled;
 
         foreach ($this->bridgesDirs as $dir) {
             if (is_dir($dir) === false) {
@@ -347,7 +381,7 @@ final class BridgeMetadataCache
                 continue;
             }
             foreach ($files as $file) {
-                if (preg_match('/^[^.]+Bridge\.php$/U', $file) !== 1) {
+                if (preg_match('/^[^.]+Bridge\.php$/', $file) !== 1) {
                     continue;
                 }
                 $filepath = $dir . '/' . $file;
@@ -374,58 +408,26 @@ final class BridgeMetadataCache
     public function getCachedBrokenBridges(): ?array
     {
         $cached = $this->cache->get($this->buildCacheKey());
-
-        if (
-            is_array($cached) === false
-            || isset($cached['metadata']) === false
-            || is_array($cached['metadata']) === false
-        ) {
+        if ($this->isValidResult($cached) === false) {
             return null;
         }
-
-        $brokenRaw = $cached['broken_bridges'] ?? [];
-        if (is_array($brokenRaw) === false) {
-            return null;
-        }
-
-        $broken = [];
-        foreach ($brokenRaw as $bridgeName => $errorInfo) {
-            if (
-                is_string($bridgeName) === true
-                && is_array($errorInfo) === true
-                && isset($errorInfo['message'], $errorInfo['file'], $errorInfo['line'], $errorInfo['class']) === true
-                && is_string($errorInfo['message']) === true
-                && is_string($errorInfo['file']) === true
-                && is_int($errorInfo['line']) === true
-                && is_string($errorInfo['class']) === true
-            ) {
-                $broken[$bridgeName] = [
-                    'message' => $errorInfo['message'],
-                    'file' => $errorInfo['file'],
-                    'line' => $errorInfo['line'],
-                    'class' => $errorInfo['class'],
-                ];
-            }
-        }
-
-        return $broken;
+        return $this->normalizeBrokenBridges($cached['broken_bridges']);
     }
 
     /**
+     * Builds and stores a fresh result. Does NOT acquire or release the build
+     * lock; callers that hold the lease are responsible for releasing it.
+     *
      * @return array<string, array{name: string, uri: string, description: string, parameters: array<string, array<string, mixed>>, domain: string, short_name: string, maintainer: string, cache_timeout: int}>
      */
     private function buildAndStore(string $cacheKey, string $apcuKey, bool $apcuAvailable, BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
-        try {
-            $result = $this->buildMetadata($factory, $loader);
-            $this->cache->set($cacheKey, $result, self::DEFAULT_TTL);
-            if ($apcuAvailable === true) {
-                apcu_store($apcuKey, $result, self::APCU_METADATA_TTL);
-            }
-            return $result['metadata'];
-        } finally {
-            $this->cache->releaseLock($cacheKey . '_build');
+        $result = $this->buildMetadata($factory, $loader);
+        $this->cache->set($cacheKey, $result, self::DEFAULT_TTL);
+        if ($apcuAvailable === true) {
+            apcu_store($apcuKey, $result, self::APCU_METADATA_TTL);
         }
+        return $result['metadata'];
     }
 
     /**
@@ -443,11 +445,19 @@ final class BridgeMetadataCache
     }
 
     /**
-     * @param array{metadata: array<string, mixed>, broken_bridges: array<string, mixed>, broken_checked_at: int} $result
+     * Validates and normalises a raw broken-bridges payload into the typed
+     * shape consumed by SafeBridgeLoader and the health endpoint.
+     *
+     * @return array<string, array{message: string, file: string, line: int, class: string}>
      */
-    private function restoreBroken(array $result, SafeBridgeLoader $loader): void
+    private function normalizeBrokenBridges(mixed $raw): array
     {
-        foreach ($result['broken_bridges'] as $bridgeName => $errorInfo) {
+        if (is_array($raw) === false) {
+            return [];
+        }
+
+        $broken = [];
+        foreach ($raw as $bridgeName => $errorInfo) {
             if (
                 is_string($bridgeName) === true
                 && is_array($errorInfo) === true
@@ -457,13 +467,24 @@ final class BridgeMetadataCache
                 && is_int($errorInfo['line']) === true
                 && is_string($errorInfo['class']) === true
             ) {
-                $loader->restoreBrokenBridge($bridgeName, [
+                $broken[$bridgeName] = [
                     'message' => $errorInfo['message'],
                     'file' => $errorInfo['file'],
                     'line' => $errorInfo['line'],
                     'class' => $errorInfo['class'],
-                ]);
+                ];
             }
+        }
+        return $broken;
+    }
+
+    /**
+     * @param array{metadata: array<string, mixed>, broken_bridges: array<string, mixed>, broken_checked_at: int} $result
+     */
+    private function restoreBroken(array $result, SafeBridgeLoader $loader): void
+    {
+        foreach ($this->normalizeBrokenBridges($result['broken_bridges']) as $bridgeName => $errorInfo) {
+            $loader->restoreBrokenBridge($bridgeName, $errorInfo);
         }
     }
 }
