@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use RSSBridge\VKClient;
 
 final class Vk2Bridge extends BridgeAbstract
 {
@@ -14,15 +15,11 @@ final class Vk2Bridge extends BridgeAbstract
     public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 900;
 
-    private const VK_API_VER = 5.199;
-    private const VK_API_MAX_COUNT = 100;
     private const DEFAULT_POST_LIMIT = 10;
     private const MAX_TITLE_LENGTH = 60;
     private const MAX_PREVIEW_LENGTH = 200;
     private const MIN_TITLE_SPACE_POS = 30;
     private const MAX_PAGES = 5;
-    private const MAX_RETRIES = 3;
-    private const RETRY_DELAY_US = 500_000;
 
     private const URL_REGEX = '/^https?:\/\/(?:www\.|m\.)?vk\.ru\/([a-zA-Z0-9_.]+)\/?$/i';
 
@@ -31,44 +28,6 @@ final class Vk2Bridge extends BridgeAbstract
         'login', 'reg', 'restore', 'im', 'mail', 'news', 'search', 'apps', 'games',
         'gifts', 'support', 'write', 'wall', 'board', 'albums', 'docs', 'topics',
         'public', 'event', 'market', 'contacts', 'about', 'reviews', 'edit',
-    ];
-
-    private const RATE_LIMIT_DELAYS = [
-        self::API_ERR_RATE_LIMIT => 15,
-        self::API_ERR_RATE_LIMIT_EXTENDED => 1800,
-    ];
-
-    private const API_ERR_UNKNOWN_METHOD = 3;
-    private const API_ERR_RATE_LIMIT = 6;
-    private const API_ERR_CAPTCHA_NEEDED = 14;
-    private const API_ERR_ACCESS_DENIED = 15;
-    private const API_ERR_USER_DELETED = 18;
-    private const API_ERR_RATE_LIMIT_EXTENDED = 29;
-
-    private const ERR_OWNER_NOT_FOUND = 'owner_not_found';
-    private const ERR_INVALID_API_RESPONSE = 'invalid_api_response';
-    private const ERR_MISSING_ACCESS_TOKEN = 'missing_access_token';
-    private const ERR_INVALID_JSON = 'invalid_json';
-    private const ERR_API_ERROR = 'api_error';
-    private const ERR_NO_POSTS_FOUND = 'no_posts_found';
-    private const ERR_CAPTCHA_NEEDED = 'captcha_needed';
-    private const ERR_ACCESS_DENIED = 'access_denied';
-    private const ERR_USER_DELETED = 'user_deleted';
-    private const ERR_UNKNOWN_METHOD = 'unknown_method';
-    private const ERR_RATE_LIMIT = 'rate_limit';
-    private const ERR_RATE_LIMIT_EXTENDED = 'rate_limit_extended';
-
-    private const ERROR_MESSAGES = [
-        self::ERR_OWNER_NOT_FOUND => 'Could not detect owner id. Check the short name.',
-        self::ERR_INVALID_API_RESPONSE => 'Invalid API response from',
-        self::ERR_MISSING_ACCESS_TOKEN => 'Access token is required.',
-        self::ERR_INVALID_JSON => 'Invalid JSON response from VK API.',
-        self::ERR_API_ERROR => 'API returned error:',
-        self::ERR_NO_POSTS_FOUND => 'Feed is empty:',
-        self::ERR_CAPTCHA_NEEDED => 'Captcha required:',
-        self::ERR_ACCESS_DENIED => 'Access denied. The wall or group might be private.',
-        self::ERR_USER_DELETED => 'User was deleted or banned.',
-        self::ERR_UNKNOWN_METHOD => 'Unknown API method.',
     ];
 
     public const PARAMETERS = [
@@ -93,12 +52,6 @@ final class Vk2Bridge extends BridgeAbstract
         ],
     ];
 
-    public const CONFIGURATION = [
-        'access_token' => [
-            'required' => true,
-        ],
-    ];
-
     public const TEST_DETECT_PARAMETERS = [
         'https://vk.ru/rebel_jack' => ['u' => 'rebel_jack'],
     ];
@@ -110,6 +63,8 @@ final class Vk2Bridge extends BridgeAbstract
 
     /** @var array<string, string> */
     private array $photoDescriptions = [];
+
+    private ?VKClient $vkClient = null;
 
     public function getURI(): string
     {
@@ -145,13 +100,16 @@ final class Vk2Bridge extends BridgeAbstract
 
     public function collectData(): void
     {
-        if ($this->loadCacheValue($this->getRateLimitCacheKey()) === true) {
-            throwRateLimitException();
+        $client = $this->vk();
+
+        $owner = $client->resolveOwner((string) $this->getInput('u'));
+        $ownerId = $owner['ownerId'];
+        if ($owner['iconUrl'] !== null) {
+            $this->iconUrl = $owner['iconUrl'];
         }
 
-        $ownerId = $this->detectOwnerId($this->getInput('u'));
         $limitInput = $this->getInput('limit');
-        $targetCount = max(1, min(self::VK_API_MAX_COUNT, (int) ($limitInput ?? self::DEFAULT_POST_LIMIT)));
+        $targetCount = max(1, min(VKClient::MAX_COUNT, (int) ($limitInput ?? self::DEFAULT_POST_LIMIT)));
         $hideReposts = (bool) $this->getInput('hide_reposts');
         $filteredPosts = [];
         $offset = 0;
@@ -161,22 +119,11 @@ final class Vk2Bridge extends BridgeAbstract
             ($page < self::MAX_PAGES) === true && (count($filteredPosts) < $targetCount) === true;
             $page++
         ) {
-            $batchSize = min(self::VK_API_MAX_COUNT, max($targetCount - count($filteredPosts) + 10, 10));
+            $batchSize = min(VKClient::MAX_COUNT, max($targetCount - count($filteredPosts) + 10, 10));
 
-            $r = $this->api('wall.get', [
-                'owner_id' => $ownerId,
-                'extended' => '1',
-                'count' => $batchSize,
-                'offset' => $offset,
-                'fields' => 'photo_200,photo_100,photo_50',
-            ]);
-
-            if (isset($r['response']['items']) === false) {
-                $this->handleError(self::ERR_INVALID_API_RESPONSE, 'wall.get');
-            }
-
-            $this->cacheOwnerData($r['response'], $ownerId);
-            $items = $r['response']['items'];
+            $wall = $client->fetchWall($ownerId, $batchSize, $offset);
+            $this->cacheOwnerData($wall, $ownerId);
+            $items = $wall['items'];
 
             if ($items === []) {
                 break;
@@ -207,8 +154,7 @@ final class Vk2Bridge extends BridgeAbstract
         }
 
         if ($filteredPosts === []) {
-            $reason = $hideReposts === true ? 'No original posts found after filtering reposts.' : 'No posts found in the feed.';
-            $this->handleError(self::ERR_NO_POSTS_FOUND, $reason);
+            throwServerException($hideReposts === true ? 'No original posts found after filtering reposts.' : 'No posts found in the feed.');
         }
 
         $postsForFeed = array_slice($filteredPosts, 0, $targetCount);
@@ -216,8 +162,19 @@ final class Vk2Bridge extends BridgeAbstract
 
         $groupName = $this->getInput('u');
         if ($groupName !== null && $groupName !== '') {
-            $this->processArticlesFromPosts($postsForFeed, $groupName);
+            $this->processArticlesFromPosts($postsForFeed, (string) $groupName);
         }
+    }
+
+    private function vk(): VKClient
+    {
+        if ($this->vkClient === null) {
+            if ($this->cache === null || $this->logger === null) {
+                throw new \RuntimeException('Cache and logger are required for VK API requests');
+            }
+            $this->vkClient = new VKClient($this->cache, $this->logger);
+        }
+        return $this->vkClient;
     }
 
     /**
@@ -394,107 +351,6 @@ final class Vk2Bridge extends BridgeAbstract
     }
 
     /**
-     * @param array<string, mixed> $params
-     * @param list<int> $expectedErrorCodes
-     * @return array<string, mixed>
-     */
-    protected function api(string $method, array $params, array $expectedErrorCodes = []): array
-    {
-        $accessToken = $this->getOption('access_token');
-        if ($accessToken === null || $accessToken === '') {
-            $this->handleError(self::ERR_MISSING_ACCESS_TOKEN);
-        }
-
-        $params['v'] = self::VK_API_VER;
-        $url = 'https://api.vk.ru/method/' . $method . '?' . http_build_query($params);
-        $retryDelayUs = self::RETRY_DELAY_US;
-
-        for ($attempt = 0; $attempt <= self::MAX_RETRIES; $attempt++) {
-            try {
-                $response = getContents($url, ['Authorization: Bearer ' . $accessToken]);
-            } catch (\Exception $e) {
-                if ($attempt < self::MAX_RETRIES) {
-                    usleep($retryDelayUs);
-                    $retryDelayUs *= 2;
-                    continue;
-                }
-                $this->handleError(self::ERR_API_ERROR, 'Network error: ' . $e->getMessage());
-            }
-
-            if (json_validate($response) === false) {
-                $this->handleError(self::ERR_INVALID_JSON);
-            }
-
-            $r = json_decode($response, true);
-
-            if (is_array($r) === false) {
-                $this->handleError(self::ERR_INVALID_JSON);
-            }
-
-            if (isset($r['error']) === false) {
-                return $r;
-            }
-
-            $errorCode = (int) ($r['error']['error_code'] ?? 0);
-            $apiError = $this->mapApiErrorCode($errorCode);
-
-            if (
-                $apiError === self::ERR_RATE_LIMIT
-                && ($attempt < self::MAX_RETRIES) === true
-            ) {
-                usleep($retryDelayUs);
-                $retryDelayUs *= 2;
-                continue;
-            }
-
-            if ($apiError === self::ERR_CAPTCHA_NEEDED) {
-                $this->saveCacheValue($this->getRateLimitCacheKey(), true, 300);
-                $this->handleError(self::ERR_CAPTCHA_NEEDED, $r['error']['error_msg'] ?? 'Captcha needed');
-            }
-
-            if ($apiError === self::ERR_ACCESS_DENIED) {
-                $this->handleError(self::ERR_ACCESS_DENIED, $r['error']['error_msg'] ?? 'Access denied');
-            }
-
-            if ($apiError === self::ERR_USER_DELETED) {
-                $this->handleError(self::ERR_USER_DELETED, $r['error']['error_msg'] ?? 'User deleted or banned');
-            }
-
-            if ($apiError === self::ERR_UNKNOWN_METHOD) {
-                $this->handleError(self::ERR_UNKNOWN_METHOD, $r['error']['error_msg'] ?? 'Unknown method');
-            }
-
-            if (in_array($errorCode, $expectedErrorCodes, true) === true) {
-                return $r;
-            }
-
-            if (isset(self::RATE_LIMIT_DELAYS[$errorCode]) === true) {
-                $this->saveCacheValue($this->getRateLimitCacheKey(), true, self::RATE_LIMIT_DELAYS[$errorCode]);
-            }
-
-            $this->handleError(
-                self::ERR_API_ERROR,
-                ($r['error']['error_msg'] ?? 'Unknown error') . " ({$errorCode})"
-            );
-        }
-
-        throw new \RuntimeException('VK API: max retries exceeded for ' . $method);
-    }
-
-    private function mapApiErrorCode(int $code): ?string
-    {
-        return match ($code) {
-            self::API_ERR_UNKNOWN_METHOD => self::ERR_UNKNOWN_METHOD,
-            self::API_ERR_RATE_LIMIT => self::ERR_RATE_LIMIT,
-            self::API_ERR_CAPTCHA_NEEDED => self::ERR_CAPTCHA_NEEDED,
-            self::API_ERR_ACCESS_DENIED => self::ERR_ACCESS_DENIED,
-            self::API_ERR_USER_DELETED => self::ERR_USER_DELETED,
-            self::API_ERR_RATE_LIMIT_EXTENDED => self::ERR_RATE_LIMIT_EXTENDED,
-            default => null,
-        };
-    }
-
-    /**
      * @param list<array<string, mixed>> $posts
      */
     private function generateFeed(array $posts, int $ownerId): void
@@ -555,9 +411,9 @@ final class Vk2Bridge extends BridgeAbstract
                     continue;
                 }
                 $p = $attachment['photo'] ?? [];
-                $oid = $p['owner_id'] ?? 0;
-                $pid = $p['id'] ?? 0;
-                if ($oid !== 0 && $pid !== 0) {
+                $oid = $p['owner_id'] ?? null;
+                $pid = $p['id'] ?? null;
+                if (is_int($oid) === true && is_int($pid) === true && $oid !== 0 && $pid !== 0) {
                     $photoKeys[] = $oid . '_' . $pid;
                 }
             }
@@ -567,35 +423,42 @@ final class Vk2Bridge extends BridgeAbstract
             return;
         }
 
-        $r = $this->api(
-            'photos.getById',
-            ['photos' => implode(',', array_unique($photoKeys))],
-            [self::API_ERR_RATE_LIMIT, self::API_ERR_RATE_LIMIT_EXTENDED]
-        );
-
-        foreach ($r['response'] ?? [] as $photo) {
-            $key = ($photo['owner_id'] ?? 0) . '_' . ($photo['id'] ?? 0);
-            $this->photoDescriptions[$key] = $photo['text'] ?? '';
+        foreach ($this->vk()->fetchPhotoTexts($photoKeys) as $key => $text) {
+            $this->photoDescriptions[$key] = $text;
         }
     }
 
     /**
-     * @param array<string, mixed> $response
+     * @param array{items: list<array<string, mixed>>, profiles: list<array<string, mixed>>, groups: list<array<string, mixed>>} $wall
      */
-    private function cacheOwnerData(array $response, int $ownerId): void
+    private function cacheOwnerData(array $wall, int $ownerId): void
     {
-        foreach ($response['profiles'] ?? [] as $profile) {
-            $this->ownerNames[$profile['id']] = trim((string) ($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? ''));
-            if ($profile['id'] === $ownerId) {
-                $this->iconUrl = $profile['photo_100'] ?? $profile['photo_50'] ?? $this->iconUrl;
+        foreach ($wall['profiles'] as $profile) {
+            $id = $profile['id'] ?? null;
+            if (is_int($id) === false) {
+                continue;
+            }
+            $this->ownerNames[$id] = trim((string) ($profile['first_name'] ?? '') . ' ' . (string) ($profile['last_name'] ?? ''));
+            if ($id === $ownerId) {
+                $photo = $profile['photo_100'] ?? $profile['photo_50'] ?? null;
+                if (is_string($photo) === true && $photo !== '') {
+                    $this->iconUrl = $photo;
+                }
             }
         }
 
-        foreach ($response['groups'] ?? [] as $group) {
-            $id = -(int) $group['id'];
-            $this->ownerNames[$id] = $group['name'] ?? 'Unknown';
+        foreach ($wall['groups'] as $group) {
+            $gid = $group['id'] ?? null;
+            if (is_int($gid) === false) {
+                continue;
+            }
+            $id = -$gid;
+            $this->ownerNames[$id] = (string) ($group['name'] ?? 'Unknown');
             if ($id === $ownerId) {
-                $this->iconUrl = $group['photo_200'] ?? $group['photo_100'] ?? $group['photo_50'] ?? $this->iconUrl;
+                $photo = $group['photo_200'] ?? $group['photo_100'] ?? $group['photo_50'] ?? null;
+                if (is_string($photo) === true && $photo !== '') {
+                    $this->iconUrl = $photo;
+                }
             }
         }
     }
@@ -606,45 +469,6 @@ final class Vk2Bridge extends BridgeAbstract
     private function isRepost(array $post): bool
     {
         return isset($post['copy_history'][0]) === true;
-    }
-
-    private function detectOwnerId(string $u): int
-    {
-        if (preg_match('/^(club|public)(\d+)$/', $u, $m) === 1) {
-            return -(int) $m[2];
-        }
-        if (preg_match('/^id(\d+)$/', $u, $m) === 1) {
-            return (int) $m[1];
-        }
-
-        $cacheKey = 'vk2_owner_' . md5(strtolower($u));
-        $cached = $this->loadCacheValue($cacheKey);
-
-        if (is_array($cached) === true && isset($cached['ownerId']) === true) {
-            $this->iconUrl = $cached['iconUrl'] ?? null;
-            return (int) $cached['ownerId'];
-        }
-
-        $r = $this->api('groups.getById', ['group_ids' => $u, 'fields' => 'photo_200,photo_100,photo_50'], [self::API_ERR_RATE_LIMIT]);
-        $group = $r['response']['groups'][0] ?? $r['response'][0] ?? null;
-
-        if ($group !== null && isset($group['id']) === true) {
-            $ownerId = -(int) $group['id'];
-            $this->iconUrl = $group['photo_200'] ?? $group['photo_100'] ?? $group['photo_50'] ?? null;
-            $this->saveCacheValue($cacheKey, ['ownerId' => $ownerId, 'iconUrl' => $this->iconUrl], 86400);
-            return $ownerId;
-        }
-
-        $r = $this->api('users.get', ['user_ids' => $u, 'fields' => 'photo_100,photo_50']);
-
-        if (isset($r['response'][0]['id']) === true) {
-            $user = $r['response'][0];
-            $this->iconUrl = $user['photo_100'] ?? $user['photo_50'] ?? null;
-            $this->saveCacheValue($cacheKey, ['ownerId' => $user['id'], 'iconUrl' => $this->iconUrl], 86400);
-            return $user['id'];
-        }
-
-        $this->handleError(self::ERR_OWNER_NOT_FOUND, "Short name '{$u}'");
     }
 
     /**
@@ -1646,19 +1470,5 @@ final class Vk2Bridge extends BridgeAbstract
             return getProxiedUri($url);
         }
         return $url;
-    }
-
-    private function getRateLimitCacheKey(): string
-    {
-        return 'vk2_rate_limit_' . md5($this->getOption('access_token') ?? '');
-    }
-
-    private function handleError(string $code, string $details = ''): never
-    {
-        $message = self::ERROR_MESSAGES[$code] ?? 'Unknown error.';
-        if ($details !== '') {
-            $message .= ' ' . $details;
-        }
-        throwServerException($message);
     }
 }

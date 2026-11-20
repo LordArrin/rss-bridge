@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use RSSBridge\VKClient;
 
 final class VkVideoBridge extends BridgeAbstract
 {
     public const NAME = 'VK Video';
     public const URI = 'https://vkvideo.ru';
     public const DESCRIPTION = 'Returns videos from a VK Video channel or playlist';
-    public const MAINTAINER = 'No maintainer';
+    public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 3600;
 
     public const PARAMETERS = [
@@ -45,8 +46,10 @@ final class VkVideoBridge extends BridgeAbstract
 
     private const USER_AGENT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
     private const MAX_IMAGE_WIDTH = 1600;
+    private const API_DENIAL_TTL = 3600;
 
     private ?string $feedName = null;
+    private ?VKClient $vkClient = null;
 
     public function getURI(): string
     {
@@ -86,6 +89,12 @@ final class VkVideoBridge extends BridgeAbstract
 
     public function collectData(): void
     {
+        $apiItems = $this->tryCollectViaApi();
+        if ($apiItems !== null) {
+            $this->items = $apiItems;
+            return;
+        }
+
         $html = $this->fetchHtml($this->getURI());
 
         if ($html === '') {
@@ -105,6 +114,189 @@ final class VkVideoBridge extends BridgeAbstract
             $this->feedName = $this->extractPageTitle($html);
             $this->items = $this->collectPlaylistItems($gallery, $html);
         }
+    }
+
+    private function vk(): VKClient
+    {
+        if ($this->vkClient === null) {
+            if ($this->cache === null || $this->logger === null) {
+                throw new \RuntimeException('Cache and logger are required for VK API requests');
+            }
+            $this->vkClient = new VKClient($this->cache, $this->logger);
+        }
+        return $this->vkClient;
+    }
+
+    /**
+     * @return list<array<string, mixed>>|null
+     */
+    private function tryCollectViaApi(): ?array
+    {
+        if ($this->loadCacheValue('vkvideo_api_denied') === true) {
+            return null;
+        }
+
+        $skipDescription = (bool) $this->getInput('skip_description');
+
+        try {
+            $client = $this->vk();
+            if ($client->hasToken() === false) {
+                return null;
+            }
+
+            $channelInput = $this->getInput('u');
+            if (is_string($channelInput) === true && $channelInput !== '') {
+                $handle = ltrim($this->extractChannelHandle($channelInput), '@');
+                $owner = $client->resolveOwner($handle);
+                $this->feedName = $owner['name'] !== '' ? $owner['name'] : null;
+                $videos = $client->fetchVideos($owner['ownerId']);
+                $items = $this->buildApiItems($videos['items'], $skipDescription);
+                if ($items === []) {
+                    return null;
+                }
+                $this->saveCacheValue('vkvideo_api_denied', false, self::API_DENIAL_TTL);
+                return $items;
+            }
+
+            $playlistInput = (string) $this->getInput('p');
+            $parts = $this->splitPlaylistId($this->extractPlaylistId($playlistInput));
+            if ($parts === null) {
+                return null;
+            }
+
+            [$ownerId, $albumId] = $parts;
+            $videos = $client->fetchVideos($ownerId, $albumId);
+            $items = $this->buildApiItems($videos['items'], $skipDescription);
+            if ($items === []) {
+                return null;
+            }
+            $this->saveCacheValue('vkvideo_api_denied', false, self::API_DENIAL_TTL);
+            return $items;
+        } catch (\Throwable) {
+            $this->saveCacheValue('vkvideo_api_denied', true, self::API_DENIAL_TTL);
+            if ($this->logger !== null) {
+                $this->logger->info('vkvideo: API path unavailable, falling back to HTML scraping');
+            }
+            return null;
+        }
+    }
+
+    /**
+     * @param list<array<string, mixed>> $videos
+     * @return list<array<string, mixed>>
+     */
+    private function buildApiItems(array $videos, bool $skipDescription): array
+    {
+        $items = [];
+        foreach ($videos as $video) {
+            $item = $this->buildApiItem($video, $skipDescription);
+            if ($item === null) {
+                continue;
+            }
+            $uri = (string) $item['uri'];
+            if (isset($items[$uri]) === true) {
+                continue;
+            }
+            $items[$uri] = $item;
+        }
+
+        usort($items, static function (array $a, array $b): int {
+            return ($b['timestamp'] ?? 0) <=> ($a['timestamp'] ?? 0);
+        });
+
+        return $items;
+    }
+
+    /**
+     * @param array<string, mixed> $video
+     * @return array<string, mixed>|null
+     */
+    private function buildApiItem(array $video, bool $skipDescription): ?array
+    {
+        $ownerId = $video['owner_id'] ?? null;
+        $id = $video['id'] ?? null;
+        if (is_int($ownerId) === false || is_int($id) === false || $id === 0) {
+            return null;
+        }
+
+        $uri = self::URI . '/video' . $ownerId . '_' . $id;
+        $accessKey = $video['access_key'] ?? null;
+        if (is_string($accessKey) === true && $accessKey !== '') {
+            $uri .= '?access_key=' . urlencode($accessKey);
+        }
+
+        $title = trim((string) ($video['title'] ?? ''));
+        if ($title === '') {
+            $title = 'Untitled';
+        }
+
+        $description = (string) ($video['description'] ?? '');
+        $categories = $this->extractHashtags($description);
+        if ($description !== '') {
+            $description = $this->removeHashtags($description);
+        }
+
+        $images = $video['image'] ?? [];
+        $thumbnail = $this->largestImage(is_array($images) === true ? $images : []);
+
+        $content = '';
+        if ($thumbnail !== '') {
+            $imgStyle = sprintf('max-width: %dpx; width: auto;', self::MAX_IMAGE_WIDTH);
+            $content .= sprintf(
+                '<p><a href="%s"><img src="%s" style="%s"></a></p>',
+                htmlspecialchars($uri, ENT_QUOTES, 'UTF-8'),
+                htmlspecialchars($thumbnail, ENT_QUOTES, 'UTF-8'),
+                htmlspecialchars($imgStyle, ENT_QUOTES, 'UTF-8')
+            );
+        }
+
+        if ($skipDescription === false && $description !== '') {
+            $content .= '<p>' . $this->formatDescription($this->linkifyUrls($description)) . '</p>';
+        }
+
+        $date = $video['date'] ?? null;
+        $timestamp = is_int($date) === true && $date > 0 ? $date : null;
+
+        return [
+            'uri' => $uri,
+            'title' => $title,
+            'timestamp' => $timestamp,
+            'content' => $content !== '' ? $content : htmlspecialchars($title, ENT_QUOTES, 'UTF-8'),
+            'categories' => $categories,
+            'uid' => 'vk:video' . $ownerId . '_' . $id,
+        ];
+    }
+
+    /**
+     * @param array<array-key, mixed> $images
+     */
+    private function largestImage(array $images): string
+    {
+        $best = '';
+        $bestWidth = 0;
+        foreach ($images as $image) {
+            if (is_array($image) === false) {
+                continue;
+            }
+            $url = $image['url'] ?? null;
+            $width = $image['width'] ?? null;
+            if (is_string($url) === true && $url !== '' && is_int($width) === true && $width > $bestWidth) {
+                $bestWidth = $width;
+                $best = $url;
+            }
+        }
+        return $best;
+    }
+
+    /**
+     * @return array{0: int, 1: int}|null
+     */
+    private function splitPlaylistId(string $input): ?array
+    {
+        if (preg_match('/^(-?\d+)_(-?\d+)$/', $input, $matches) === 1) {
+            return [(int) $matches[1], (int) $matches[2]];
+        }
+        return null;
     }
 
     /**

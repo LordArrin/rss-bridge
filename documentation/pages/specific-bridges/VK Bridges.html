@@ -1,0 +1,47 @@
+<!-- meta:uri:https://vk.ru/ -->
+<p>This bridge uses the official <a href="https://dev.vk.com/reference" target="_blank" rel="noopener">VK API</a>. The same configuration and access token are shared across all VK-based bridges (e.g., VK Posts, VK Video).</p>
+
+<ul>
+    <li>
+        <strong>Stability.</strong>
+        Relies on the official API, making it immune to HTML structure changes on VK pages.
+    </li>
+    <li>
+        <strong>Requires an access token.</strong>
+        A valid VK user or service token is required. Ensure the token has the necessary permissions (e.g., <code>wall</code> for posts, <code>video</code> for videos).
+    </li>
+    <li>
+        <strong>Rate limits.</strong>
+        Subject to VK API limits (e.g., up to 20 requests/second for community tokens). The bridge includes built-in request pacing and local counter tracking to prevent <code>Too many requests</code> errors.
+    </li>
+</ul>
+
+<h4>Configuration</h4>
+<ol>
+    <li>
+        <span>Follow this <a href="https://oauth.vk.com/authorize?client_id=5149410&scope=offline&redirect_uri=https://oauth.vk.com/blank.html&display=page&response_type=token" target="_blank" rel="noopener">OAuth link</a>.</span>
+    </li>
+    <li>
+        <span>Authorize the <code>my_personal_app</code> application.</span>
+    </li>
+    <li>
+        <span>You will be redirected to a URL like <code>https://oauth.vk.com/blank.html#access_token=TOKEN&expires_in=0&user_id=123456</code>. Copy the <code>TOKEN</code> value.</span>
+    </li>
+    <li>
+        <span>Add the token to the <code>[VK]</code> section of your <code>.bridges</code> (or <code>config.ini.php</code>) file:</span>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>[VK]
+access_token = "YOUR_TOKEN_HERE"</code></pre>
+        </div>
+    </li>
+</ol>
+
+<div class="note info">
+    💡 <strong>Note:</strong> The link in step 1 uses a convenient standalone application maintained by <a href="https://github.com/em92" target="_blank" rel="noopener">em92</a>. You may create and use your own VK application instead by replacing the <code>client_id</code> value in the URL.
+</div>

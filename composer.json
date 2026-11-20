@@ -28,7 +28,8 @@
             "lib/ParameterValidator.php",
             "lib/Paths.php",
             "lib/RssBridge.php",
-            "lib/SafeBridgeLoader.php"
+            "lib/SafeBridgeLoader.php",
+            "lib/VKClient.php"
         ],
         "files": [
             "lib/contents.php",
