@@ -12,9 +12,12 @@ final class SearchFloorBridge extends BridgeAbstract
 {
     public const NAME = 'SearchFloor';
     public const URI = 'https://searchfloor.org';
-    public const DESCRIPTION = 'Returns updates to all books by an author or a single book by ID.';
+    public const DESCRIPTION = 'Returns updates to all books by an author, a single book by ID, or shared Boosty posts by an author';
     public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 3600;
+
+    private const BOOSTY_CACHE_TTL = 86400;
+    private const COVER_CACHE_TTL = 604800;
 
     public const PARAMETERS = [
         'Author' => [
@@ -39,6 +42,33 @@ final class SearchFloorBridge extends BridgeAbstract
                 'exampleValue' => 14144,
             ],
         ],
+        'Boosty Shared' => [
+            'boosty_author' => [
+                'name' => 'Boosty author',
+                'required' => true,
+                'exampleValue' => 'sedrik-rakot',
+                'title' => 'Author nickname or link like https://searchfloor.org/boosty/sedrik-rakot',
+            ],
+            'limit' => [
+                'name' => 'Number of posts in feed',
+                'type' => 'number',
+                'required' => false,
+                'exampleValue' => 5,
+            ],
+            'full_content' => [
+                'name' => 'Try to fetch full chapter content',
+                'type' => 'checkbox',
+                'defaultValue' => false,
+                'title' => 'Download the full post text into the feed; by default only a link to the post is included',
+            ],
+            'filter' => [
+                'name' => 'Title filter',
+                'type' => 'text',
+                'required' => false,
+                'exampleValue' => 'Нальфейн*, -*Восход*',
+                'title' => 'Comma-separated rules: * is a wildcard, a leading - excludes, + joins parts with AND, \\ escapes special characters. Without * a part matches as a substring, case-insensitive',
+            ],
+        ],
     ];
 
     public function getIcon(): string
@@ -60,6 +90,18 @@ final class SearchFloorBridge extends BridgeAbstract
             }
         }
 
+        if ($this->queriedContext === 'Boosty Shared') {
+            $slug = $this->getBoostySlug();
+            if ($slug === '') {
+                return self::NAME;
+            }
+
+            $cached = $this->loadCacheValue('boosty_name_' . $slug);
+            $name = is_string($cached) === true && $cached !== '' ? $cached : $slug;
+
+            return $name . ' (Boosty)';
+        }
+
         return self::NAME;
     }
 
@@ -74,6 +116,11 @@ final class SearchFloorBridge extends BridgeAbstract
             return self::URI . '/b/' . $this->getInputInt('book_id');
         }
 
+        if ($this->queriedContext === 'Boosty Shared') {
+            $slug = $this->getBoostySlug();
+            return $slug !== '' ? self::URI . '/boosty/' . rawurlencode($slug) : self::URI;
+        }
+
         return self::URI;
     }
 
@@ -82,6 +129,7 @@ final class SearchFloorBridge extends BridgeAbstract
         match ($this->queriedContext) {
             'Author' => $this->collectAuthor(),
             'Work' => $this->collectWork(),
+            'Boosty Shared' => $this->collectBoostyShared(),
             default => throw new \Exception('Unknown context.'),
         };
     }
@@ -115,6 +163,211 @@ final class SearchFloorBridge extends BridgeAbstract
         }
 
         $this->items[] = $this->buildItem($book, $book['author']);
+    }
+
+    private function collectBoostyShared(): void
+    {
+        $slug = $this->getBoostySlug();
+        if ($slug === '') {
+            throwClientException('Invalid Boosty author: use a nickname or a https://searchfloor.org/boosty/... link.');
+        }
+
+        $limit = $this->getInputInt('limit', 10);
+        $limit = min(50, max(1, $limit));
+        $fullContent = (bool) $this->getInput('full_content');
+        $filter = trim((string) $this->getInput('filter'));
+
+        $baseUri = self::URI . '/boosty/' . rawurlencode($slug);
+        $dom = getSimpleHTMLDOM($baseUri);
+
+        $authorName = trim($dom->querySelector('h1')->textContent ?? '');
+        if ($authorName !== '') {
+            $this->saveCacheValue('boosty_name_' . $slug, $authorName, self::BOOSTY_CACHE_TTL);
+        }
+
+        $posts = [];
+        $seen = [];
+        $page = 1;
+
+        while (true) {
+            $batch = $this->extractBoostyPosts($dom);
+            if ($batch === []) {
+                break;
+            }
+
+            $added = 0;
+            foreach ($batch as $post) {
+                if (in_array($post['id'], $seen, true) === true) {
+                    continue;
+                }
+
+                $seen[] = $post['id'];
+                $added++;
+                if ($filter === '' || matches_keyword_rules($post['title'], $filter) === true) {
+                    $posts[] = $post;
+                }
+            }
+
+            if ($added === 0 || count($posts) >= $limit || $page >= 10) {
+                break;
+            }
+
+            $nextAttr = $dom->querySelector('#btn-next-page')?->getAttribute('data-page');
+            if ($nextAttr === null || preg_match('/^\d+$/', $nextAttr) !== 1) {
+                break;
+            }
+
+            $next = (int) $nextAttr;
+            if ($next <= $page) {
+                break;
+            }
+
+            try {
+                $fragment = (string) getContents($baseUri . '?page=' . $next);
+            } catch (\Throwable) {
+                break;
+            }
+
+            if (strlen(trim($fragment)) <= 10) {
+                break;
+            }
+
+            $dom = parseHtmlDocument($fragment);
+            $page = $next;
+        }
+
+        if ($posts === []) {
+            throwServerException('No Boosty posts found for this author. Check the nickname and the title filter.');
+        }
+
+        usort($posts, static fn (array $a, array $b): int => ($b['date'] ?? 0) <=> ($a['date'] ?? 0));
+        $posts = array_slice($posts, 0, $limit);
+
+        foreach ($posts as $post) {
+            $content = '<p><a href="' . e($post['uri']) . '">Read on SearchFloor</a></p>';
+            if ($fullContent === true) {
+                $full = $this->fetchBoostyPostContent($post['uri']);
+                if ($full !== '') {
+                    $content = $full;
+                }
+            }
+
+            $this->items[] = [
+                'uri' => $post['uri'],
+                'title' => $post['title'],
+                'timestamp' => $post['date'] ?? time(),
+                'author' => $authorName !== '' ? $authorName : $slug,
+                'uid' => 'boosty-' . $post['id'],
+                'categories' => $post['tags'],
+                'content' => $content,
+            ];
+        }
+    }
+
+    private function getBoostySlug(): string
+    {
+        $input = trim((string) $this->getInput('boosty_author'));
+        if ($input === '') {
+            return '';
+        }
+
+        if (str_contains($input, '/') === true) {
+            if (preg_match('#(?:^|/)boosty/([A-Za-z0-9_.-]+)#', $input, $match) === 1) {
+                return $match[1];
+            }
+
+            return '';
+        }
+
+        return preg_match('/^[A-Za-z0-9_.-]+$/', $input) === 1 ? $input : '';
+    }
+
+    /**
+     * @return list<array{id: int, title: string, uri: string, date: int|null, tags: list<string>}>
+     */
+    private function extractBoostyPosts(\Dom\HTMLDocument $dom): array
+    {
+        $posts = [];
+
+        foreach ($dom->querySelectorAll('div.card') as $card) {
+            $rawId = $card->getAttribute('id') ?? '';
+            if (preg_match('/^\d+$/', $rawId) !== 1) {
+                continue;
+            }
+
+            $title = strip_invisible_unicode(trim($card->querySelector('h5.card-title')->textContent ?? ''));
+            if ($title === '') {
+                continue;
+            }
+
+            $date = null;
+            $dateAttr = $card->querySelector('p.date[data-date]')?->getAttribute('data-date');
+            if ($dateAttr !== null && $dateAttr !== '') {
+                $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d H:i', $dateAttr, new \DateTimeZone('Europe/Moscow'));
+                if ($parsed !== false) {
+                    $date = $parsed->getTimestamp();
+                }
+            }
+
+            $tags = [];
+            foreach ($card->querySelectorAll('#post_tags a') as $tagNode) {
+                $tag = trim($tagNode->textContent ?? '');
+                if ($tag !== '' && in_array($tag, $tags, true) === false) {
+                    $tags[] = $tag;
+                }
+            }
+
+            $posts[] = [
+                'id' => (int) $rawId,
+                'title' => $title,
+                'uri' => self::URI . '/boosty/post/' . $rawId,
+                'date' => $date,
+                'tags' => $tags,
+            ];
+        }
+
+        return $posts;
+    }
+
+    private function fetchBoostyPostContent(string $postUri): string
+    {
+        $cacheKey = 'boosty_post_' . md5($postUri);
+        $cached = $this->loadCacheValue($cacheKey);
+        if (is_string($cached) === true && $cached !== '') {
+            return $cached;
+        }
+
+        try {
+            $dom = getSimpleHTMLDOM($postUri);
+        } catch (\Throwable) {
+            return '';
+        }
+
+        $node = $dom->querySelector('#postContent');
+        if ($node === null) {
+            return '';
+        }
+
+        foreach ($node->querySelectorAll('img[src]') as $img) {
+            $src = $img->getAttribute('src') ?? '';
+            if ($src !== '' && str_starts_with($src, 'http') === false && str_starts_with($src, 'data:') === false) {
+                $img->setAttribute('src', urljoin($postUri, $src));
+            }
+        }
+
+        foreach ($node->querySelectorAll('a[href]') as $anchor) {
+            $href = $anchor->getAttribute('href') ?? '';
+            if ($href !== '' && str_starts_with($href, 'http') === false && str_starts_with($href, '#') === false && str_starts_with($href, 'mailto:') === false) {
+                $anchor->setAttribute('href', urljoin($postUri, $href));
+            }
+        }
+
+        $content = break_annoying_html_tags($node->innerHTML);
+        if ($content !== '') {
+            $this->saveCacheValue($cacheKey, $content, self::BOOSTY_CACHE_TTL);
+        }
+
+        return $content;
     }
 
     private function loadHtml(string $url, string $errorMessage): \Dom\HTMLDocument
@@ -223,7 +476,15 @@ final class SearchFloorBridge extends BridgeAbstract
     private function buildItem(array $book, string $author): array
     {
         $meta = $this->fetchBookMeta($book['id']);
-        $coverDataUri = $this->processCover($this->fetchCoverBytes($book['id']));
+        $coverUri = media_embed_url_to_data_uri(
+            self::URI . '/cover/' . $book['id'],
+            $this->cache,
+            self::COVER_CACHE_TTL,
+            media_embed_parse_size('2m'),
+            null,
+            $this->logger,
+            1
+        );
         $readerLink = self::URI . '/book-reader/' . $book['id'];
 
         return [
@@ -231,7 +492,7 @@ final class SearchFloorBridge extends BridgeAbstract
             'title' => $this->buildItemTitle($book['title'], $meta['chapter']),
             'timestamp' => $book['date'] ?? time(),
             'author' => $author,
-            'content' => $this->buildItemContent($book['title'], $meta['description'], $readerLink, $coverDataUri),
+            'content' => $this->buildItemContent($book['title'], $meta['description'], $readerLink, $coverUri),
         ];
     }
 
@@ -288,12 +549,12 @@ final class SearchFloorBridge extends BridgeAbstract
         return $prefix . ' - ' . $bookTitle;
     }
 
-    private function buildItemContent(string $bookTitle, string $description, string $readerLink, string $coverDataUri): string
+    private function buildItemContent(string $bookTitle, string $description, string $readerLink, string $coverUri): string
     {
         $parts = [];
 
-        if ($coverDataUri !== '') {
-            $parts[] = sprintf('<img src="%s" alt="%s" />', $coverDataUri, $this->escape($bookTitle));
+        if ($coverUri !== '') {
+            $parts[] = sprintf('<img src="%s" alt="%s" />', e($coverUri), $this->escape($bookTitle));
         }
         if ($description !== '') {
             $parts[] = '<p>' . $this->escape($description) . '</p>';
@@ -324,87 +585,5 @@ final class SearchFloorBridge extends BridgeAbstract
     {
         $value = $this->getInput($key);
         return $value !== null ? (int) $value : $default;
-    }
-
-    private function fetchCoverBytes(int $bookId): string
-    {
-        try {
-            return getContents(self::URI . '/cover/' . $bookId);
-        } catch (\Exception) {
-            return '';
-        }
-    }
-
-    private function detectMime(string $data): string
-    {
-        $signature = substr($data, 0, 8);
-        $prefix = substr($data, 0, 16);
-
-        return match (true) {
-            str_starts_with($signature, "\x89PNG") => 'image/png',
-            str_starts_with($signature, "\xFF\xD8\xFF") => 'image/jpeg',
-            str_starts_with($signature, 'GIF') => 'image/gif',
-            str_starts_with($signature, 'RIFF') && str_contains($prefix, 'WEBP') => 'image/webp',
-            default => 'image/png',
-        };
-    }
-
-    private function fallbackDataUri(string $data): string
-    {
-        return 'data:' . $this->detectMime($data) . ';base64,' . base64_encode($data);
-    }
-
-    private function processCover(string $data): string
-    {
-        if ($data === '' || function_exists('imagecreatefromstring') === false) {
-            return $data !== '' ? $this->fallbackDataUri($data) : '';
-        }
-
-        $source = @imagecreatefromstring($data);
-        if ($source === false) {
-            return $this->fallbackDataUri($data);
-        }
-
-        $origW = imagesx($source);
-        $origH = imagesy($source);
-
-        [$newW, $newH] = $this->calculateDimensions($origW, $origH);
-        if ($newW < 1 || $newH < 1) {
-            return $this->fallbackDataUri($data);
-        }
-        $resized = imagecreatetruecolor($newW, $newH);
-
-        if ($resized === false) {
-            return $this->fallbackDataUri($data);
-        }
-
-        $white = imagecolorallocate($resized, 255, 255, 255);
-        if ($white !== false) {
-            imagefill($resized, 0, 0, $white);
-        }
-        imagecopyresampled($resized, $source, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
-
-        ob_start();
-        $ok = imagejpeg($resized, null, 90);
-        $jpegData = ob_get_clean();
-
-        if ($ok === false || $jpegData === false || $jpegData === '') {
-            return $this->fallbackDataUri($data);
-        }
-
-        return 'data:image/jpeg;base64,' . base64_encode($jpegData);
-    }
-
-    /**
-     * @return list<int>
-     */
-    private function calculateDimensions(int $origW, int $origH): array
-    {
-        if ($origH <= 300) {
-            return [$origW, $origH];
-        }
-
-        $newW = max(1, (int) round($origW * (300 / $origH)));
-        return [$newW, 300];
     }
 }

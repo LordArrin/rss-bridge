@@ -701,23 +701,34 @@ untouched.
 
 ### Text Filtering (`quirks/filter.php`)
 
-Filter feed items based on complex user-defined keyword rules. Loaded globally via Composer `files` autoload.
+Filter feed items based on user-defined keyword rules. Loaded globally via Composer `files` autoload.
 
 ```php
-// Check if a string matches a set of keyword rules.
+// Syntax:
 // - Commas act as logical OR: "word1, word2" matches if EITHER is present.
 // - Plus signs act as logical AND: "word1+word2" matches only if BOTH are present.
-// - Matching is case-insensitive.
-$includeRules = 'apple, microsoft+windows, linux+ubuntu';
-$excludeRules = 'ads+sponsored';
+// - "*" is a wildcard: a part with "*" is a whole-string glob ("Семь*" = starts with,
+//   "*Земля*" = contains); a part without "*" matches as a substring.
+// - A leading "-" marks an exclusion: exclusions are checked first and win over inclusions.
+//   A ruleset of only exclusions keeps everything that is not excluded.
+// - "\" escapes the next character (\*, \+, \-, \, are literal).
+// - Matching is case-insensitive; whitespace runs are collapsed to single spaces.
+// - Empty haystack or empty rules never match.
+$rules = 'Семь*, -*Земля*';
 
-if (matches_keyword_rules($itemTitle, $includeRules) === true &&
-    matches_keyword_rules($itemTitle, $excludeRules) === false) {
+if ($filter === '' || matches_keyword_rules($itemTitle, $filter) === true) {
     // Keep the item
 }
 ```
 
-> **⚠️ Note for AI Agents:** When implementing user-configurable inclusion/exclusion filters in a bridge's `PARAMETERS`, **always** delegate the matching logic to `matches_keyword_rules()`. Do not write custom `str_contains()` loops, as they usually miss the logical AND (`+`) operator and edge cases with empty strings.
+Lower-level helpers are also global: matches_keyword_rule() (single AND rule),
+matches_keyword_pattern() (single glob/substring pattern), split_keyword_rules()
+(escape-aware splitting), keyword_normalize_text().
+
+> ** ⚠️ Note for AI Agents: Always delegate keyword filtering to matches_keyword_rules().
+    A single mixed include/exclude string is supported via the - prefix; the legacy
+    two-parameter pattern (separate include and exclude strings, negating the second call)
+    remains valid. Remember that + is AND — a literal plus must be escaped as \+.
 
 ### Binary Embedding (`quirks/media_embed.php`)
 
