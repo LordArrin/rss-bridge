@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use RSSBridge\Utils\Json;
 
 final class CnHBridge extends BridgeAbstract
 {
     public const NAME = 'Cyanide and Happiness';
-    public const URI = 'https://explosm.net/';
+    public const URI = 'https://explosm.net';
     public const DESCRIPTION = 'A Webcomic by Kris Wilson, Rob DenBleyker, and Dave McElfatrick';
     public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 7200;
@@ -18,12 +19,12 @@ final class CnHBridge extends BridgeAbstract
 
     public function getURI(): string
     {
-        return self::URI . 'comics/latest#comic';
+        return self::URI;
     }
 
     public function collectData(): void
     {
-        $url = $this->getURI();
+        $url = self::URI . '/comics/' . $this->getLatestSlug();
 
         for ($i = 0; $i < self::ITEM_LIMIT; $i++) {
             $result = $this->fetchComicPage($url);
@@ -58,11 +59,9 @@ final class CnHBridge extends BridgeAbstract
             return null;
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($htmlString);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($htmlString);
 
-        $item = $this->extractComicItem($dom);
+        $item = $this->extractComicItem($dom, $url);
         if ($item === null) {
             return null;
         }
@@ -78,7 +77,7 @@ final class CnHBridge extends BridgeAbstract
     /**
      * @return array{uid: string, author: string, title: string, uri: string, timestamp: int|null, content: string}|null
      */
-    private function extractComicItem(\Dom\HTMLDocument $dom): ?array
+    private function extractComicItem(\Dom\HTMLDocument $dom, string $url): ?array
     {
         $comicElement = $dom->querySelector('[class*=ComicImage]');
         if ($comicElement === null) {
@@ -100,11 +99,6 @@ final class CnHBridge extends BridgeAbstract
             return null;
         }
 
-        $link = $dom->querySelector('[rel=canonical]')?->getAttribute('href');
-        if ($link === null || $link === '') {
-            return null;
-        }
-
         $safeImageSrc = htmlspecialchars($imageSrc, ENT_QUOTES, 'UTF-8');
 
         $timestamp = null;
@@ -113,6 +107,8 @@ final class CnHBridge extends BridgeAbstract
         if ($parsed !== false) {
             $timestamp = $parsed;
         }
+
+        $link = explode('#', $url)[0];
 
         return [
             'uid' => $link,
@@ -133,5 +129,52 @@ final class CnHBridge extends BridgeAbstract
         }
 
         return self::URI . $href;
+    }
+
+    private function getLatestSlug(): string
+    {
+        $htmlString = getContents(self::URI);
+        if ($htmlString === '') {
+            throwServerException('Could not fetch Explosm homepage');
+        }
+
+        $dom = parseHtmlDocument($htmlString);
+        $script = $dom->querySelector('script#__NEXT_DATA__');
+        if ($script === null) {
+            throwServerException('Could not find latest Explosm comic');
+        }
+
+        $data = Json::decode($script->textContent ?? '');
+        if (is_array($data) === false) {
+            throwServerException('Invalid JSON in __NEXT_DATA__');
+        }
+
+        $urqlState = $data['props']['pageProps']['urqlState'] ?? [];
+        if (is_array($urqlState) === false) {
+            throwServerException('Could not find latest Explosm comic');
+        }
+
+        foreach ($urqlState as $entry) {
+            if (is_array($entry) === false) {
+                continue;
+            }
+
+            $entryData = $entry['data'] ?? null;
+            if (is_string($entryData) === false || $entryData === '') {
+                continue;
+            }
+
+            $parsed = Json::decode($entryData);
+            if (is_array($parsed) === false) {
+                continue;
+            }
+
+            $slug = $parsed['latest'][0]['slug'] ?? null;
+            if (is_string($slug) === true && $slug !== '') {
+                return $slug;
+            }
+        }
+
+        throwServerException('Could not find latest Explosm comic');
     }
 }

@@ -10,7 +10,7 @@ use function urljoin;
 
 final class FicbookBridge extends BridgeAbstract
 {
-    public const NAME = 'Ficbook.net';
+    public const NAME = 'Ficbook';
     public const URI = 'https://ficbook.net/';
     public const DESCRIPTION = 'Retrieves fanfiction updates by chapter from the ficbook.net';
     public const MAINTAINER = 'LordArrin';
