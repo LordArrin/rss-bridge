@@ -1,18 +1,18 @@
 #!/usr/bin/env php
 <?php
 
-declare(strict_types=1);
-
-use RSSBridge\Configuration;
-
 /**
  * Benchmark cache performance.
- * 
+ *
  * Tests:
  * - Simple get/set operations
  * - Large object serialization
  * - Network latency (for memcached)
  */
+
+declare(strict_types=1);
+
+use RSSBridge\Configuration;
 
 require __DIR__ . '/../vendor/autoload.php';
 Configuration::loadConfiguration();
@@ -42,10 +42,18 @@ for ($i = 0; $i < $iterations; $i++) {
 }
 $getTime = round((microtime(true) - $start) * 1000, 2);
 
-echo sprintf("Simple set: %d ops in %sms (%.1f ops/s)\n", 
-    $iterations, $setTime, $iterations / $setTime * 1000);
-echo sprintf("Simple get: %d ops in %sms (%.1f ops/s)\n", 
-    $iterations, $getTime, $iterations / $getTime * 1000);
+echo sprintf(
+    "Simple set: %d ops in %sms (%.1f ops/s)\n",
+    $iterations,
+    $setTime,
+    $iterations / $setTime * 1000
+);
+echo sprintf(
+    "Simple get: %d ops in %sms (%.1f ops/s)\n",
+    $iterations,
+    $getTime,
+    $iterations / $getTime * 1000
+);
 
 // Cleanup
 for ($i = 0; $i < $iterations; $i++) {
@@ -73,8 +81,12 @@ $start = microtime(true);
 $result = $cache->get($largeKey);
 $largeGetTime = round((microtime(true) - $start) * 1000, 2);
 
-echo sprintf("Large object (%d bytes): set=%sms, get=%sms\n",
-    strlen(serialize($largeData)), $largeSetTime, $largeGetTime);
+echo sprintf(
+    "Large object (%d bytes): set=%sms, get=%sms\n",
+    strlen(serialize($largeData)),
+    $largeSetTime,
+    $largeGetTime
+);
 
 // Cleanup
 $cache->delete($largeKey);
@@ -90,10 +102,15 @@ if ($cache instanceof \RSSBridge\Caches\MemcachedCache) {
         $cache->get($pingKey);
         $latencies[] = (microtime(true) - $start) * 1000;
     }
-    echo sprintf("Network latency (avg 10 pings): %.2fms\n", 
-        array_sum($latencies) / count($latencies));
-    echo sprintf("Latency range: %.2fms - %.2fms\n", 
-        min($latencies), max($latencies));
+    echo sprintf(
+        "Network latency (avg 10 pings): %.2fms\n",
+        array_sum($latencies) / count($latencies)
+    );
+    echo sprintf(
+        "Latency range: %.2fms - %.2fms\n",
+        min($latencies),
+        max($latencies)
+    );
 }
 
 echo "\n";

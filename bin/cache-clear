@@ -1,15 +1,15 @@
 #!/usr/bin/env php
 <?php
 
+/**
+ * Clear all cached data (except bridge metadata).
+ *
+ * Useful for troubleshooting or when cache becomes corrupted.
+ */
+
 declare(strict_types=1);
 
 use RSSBridge\Configuration;
-
-/**
- * Clear all cached data (except bridge metadata).
- * 
- * Useful for troubleshooting or when cache becomes corrupted.
- */
 
 require __DIR__ . '/../vendor/autoload.php';
 Configuration::loadConfiguration();

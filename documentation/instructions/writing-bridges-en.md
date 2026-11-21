@@ -1,12 +1,12 @@
 # Writing Bridges for LordArrin's RSS-Bridge Fork
 
-This guide covers bridge development for this fork. It assumes familiarity with the upstream [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge) project and focuses on what is different here: PHP 8.5 with strict types, the native `\Dom\HTMLDocument` API, PSR-4 namespacing, the `quirks/` utility library, and the FreshRSS-compatible HTTP cache model.
+This guide covers bridge development for this fork. It assumes familiarity with the upstream [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge) project and focuses on what is different here: PHP 8.6 with strict types, the native `\Dom\HTMLDocument` API, PSR-4 namespacing, the `quirks/` utility library, and the FreshRSS-compatible HTTP cache model.
 
 ## Key Differences from Upstream
 
 | Feature | Upstream RSS-Bridge | This Fork |
 |---|---|---|
-| PHP version | 7.4+ | 8.5 (runtime) / 8.6 (analysis target) |
+| PHP version | 7.4+ | 8.6+ |
 | Strict types | Optional | Required (`declare(strict_types=1)`) |
 | HTML parser | `simple_html_dom` (embedded) | `\Dom\HTMLDocument` (PHP 8.4+) |
 | HTML cleanup | Manual | Native `parseHtmlDocument()` helper; optional `tidy` for severe cases |
@@ -51,10 +51,10 @@ Key PHPCS rules to keep in mind:
 Composer scripts are available as shortcuts:
 
 ```bash
-composer lint       # phpcs on the whole project
-composer lint:fix   # phpcbf auto-fix
-composer stan       # phpstan (level from phpstan.neon)
-composer test       # phpunit
+composer lint        # phpcs on the whole project
+composer lint:fix    # phpcbf auto-fix
+composer lint:compat # PHPCompatibility 
+composer stan        # phpstan (level from phpstan.neon)
 ```
 
 > **Note:** For a load-time smoke test of every registered bridge (instantiation via `SafeBridgeLoader`, reporting broken stubs), run `bin/test-bridges`. It does not fetch live data; validate selectors against a real page separately.
@@ -75,13 +75,13 @@ This fork also includes modern PHP extensions that enable advanced features (all
 |---|---|---|
 | `tidy` | HTML cleanup | Fix malformed HTML before parsing |
 | `sodium` | Cryptography | HMAC signatures, API authentication |
-| `igbinary` | Fast serialization | Efficient caching of complex data |
 | `msgpack` | Alternative serialization | JSON-like binary format |
 | `zstd` | Compression | Compress large cached objects |
 | `brotli` | Compression | Alternative compression codec |
 | `apcu` | In-memory cache | Ultra-fast local caching |
 | `gd` | Image processing | Thumbnails, image manipulation |
-| `ffi` | C library integration | Direct calls to native libraries |
+
+> FFI is intentionally not built (no native-call attack surface). `igbinary` was removed — use `msgpack` for compact binary serialization.
 
 ## Minimal Bridge
 
@@ -136,7 +136,7 @@ public const CACHE_TIMEOUT = 3600;
 - `URI` — canonical URL of the source site
 - `DESCRIPTION` — one-line description shown on the main page
 - `MAINTAINER` — GitHub username or name, used in error reports
-- `CACHE_TIMEOUT` — default cache TTL in seconds (used as feed `max-age` and as the storage horizon in `getContents()`; see [Caching](#caching))
+- `CACHE_TIMEOUT` — default cache TTL in seconds (used as the feed `max-age` and the bridge-cache TTL)
 
 `BridgeAbstract` provides fallbacks (`NAME`/`URI` default to `null`, `DESCRIPTION` to `'No description provided'`, `MAINTAINER` to `'No maintainer'`, `CACHE_TIMEOUT` to `3600`), but defining all five explicitly is the convention.
 
@@ -320,7 +320,7 @@ Responses are cached for up to **24 hours** (86400 seconds) of *storage horizon*
   5. A floor of **60 seconds** when no validator is present, so an upstream without cache headers still benefits from brief coalescing.
 - Successful responses are served with `public, max-age=<full TTL>, stale-while-revalidate=max(120, TTL/4)` and an RFC-9111 `Age` header (current-age model, verified against FreshRSS 1.30.4).
 - `no-store` and `private` both forbid storage; `private` additionally **deletes any already-stored entry** for that key (so flipping the directive back does not revive stale data). `no-cache` is stored but revalidated on every use.
-- **`must-revalidate` is deliberately NOT a blocking directive** in this fork — it is honored without forcing a revalidation on every call while the response is still fresh. This differs from strict RFC reading but is necessary to keep feeds responsive against sites that set `must-revalidate` on content that changes far less often than the directive suggests.
+- **`must-revalidate` while fresh is RFC-compliant** — a fresh response may be reused without revalidation. The fork's deliberate divergence is **stale-first serving** (see below): on a transient upstream failure a stale body is served even though `must-revalidate` forbids stale reuse (RFC 9111 §4.2.4). This keeps feeds responsive against sites that set `must-revalidate` on slow-changing content.
 - Cached responses are revalidated with `ETag` (`If-None-Match`) and `Last-Modified` (`If-Modified-Since`).
 - The cache key is a hash of **(url, POST body, headers, identity-curl-options)** — specifically `UA`, `Cookie`, `Referer`, `CUSTOMREQUEST`, `POST`, `HTTPHEADER`, and `PROXY`. Calling `getContents($url)` with and without a `User-Agent` header produces two different cache entries.
 - Non-2xx responses (except redirects and 304) throw `HttpException::fromResponse()` — Cloudflare challenge pages are automatically detected and thrown as `CloudFlareException`.
@@ -1191,7 +1191,7 @@ Or use the Composer shortcuts: `composer lint`, `composer lint:fix`, `composer s
 From inside the Docker container (the Alpine image exposes PHP as `php86`; dev dependencies are installed in the image):
 
 ```bash
-docker exec rss-bridge php86 /app/vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php
+docker exec rss-bridge php /app/vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php
 ```
 
 ## Testing Your Bridge
@@ -1217,7 +1217,7 @@ If the bridge fails to load, check the container logs:
 docker logs rss-bridge | grep -i "YourBridge"
 ```
 
-Bridges are loaded safely in two stages: `BridgeFactory::loadBridgeInSandbox()` runs each bridge file in an **isolated PHP CLI subprocess** (30 s `timeout`, verdict written to a file — NOT parsed from stdout, because the new `\Dom\*` API and PHP 8.5 deprecations legitimately emit warnings that must not mark an otherwise working bridge as broken; verdicts are memoized in APCu with 86400 s positive / 60 s negative TTL keyed by path+mtime+size). `SafeBridgeLoader` then wraps the in-process instantiation in try/catch and returns a `BrokenBridgeStub` on any `Throwable`, preserving the rest of the UI.
+Bridges are loaded safely in two stages: `BridgeFactory::loadBridgeInSandbox()` runs each bridge file in an **isolated PHP CLI subprocess** (30 s `timeout`, verdict written to a file — NOT parsed from stdout, because the new `\Dom\*` API and PHP 8.6 deprecations legitimately emit warnings that must not mark an otherwise working bridge as broken; verdicts are memoized in APCu with 86400 s positive / 60 s negative TTL keyed by path+mtime+size). `SafeBridgeLoader` then wraps the in-process instantiation in try/catch and returns a `BrokenBridgeStub` on any `Throwable`, preserving the rest of the UI.
 
 > **⚠️ Note:** This protection only applies to the loading/instantiation phase. Runtime fatal errors inside `collectData()` (e.g., calling undefined functions, out of memory) will still crash the process unless handled by an outer execution sandbox or caught explicitly.
 
@@ -1230,9 +1230,9 @@ git update-index --chmod=-x bridges-v2/YourBridge.php
 ## Performance Optimization Tips
 
 ### 1. Use Efficient Serialization
-For caching large datasets, use `igbinary_serialize()` instead of native `serialize()`. The cache is JSON-based and corrupts raw binary, so base64-encode the result before storing:
+For caching large datasets, use `msgpack_pack()` instead of native `serialize()`. The cache is JSON-based and corrupts raw binary, so base64-encode the result before storing:
 ```php
-$serialized = igbinary_serialize($data);
+$serialized = msgpack_pack($data);
 if (is_string($serialized) === true) {
     $this->saveCacheValue($key, base64_encode($serialized), $ttl);
 }
@@ -1292,7 +1292,7 @@ When fetching multiple items, use parallel requests or batch endpoints when avai
 - [ ] Code passes `phpstan` analysis at project level (see `phpstan.neon`) including all three custom rules
 - [ ] Bridge tested with real data in Docker and enabled via `ENABLED_BRIDGES` env var
 - [ ] Malformed HTML handled via `parseHtmlDocument()`; `tidy` only for severe cases
-- [ ] Large cached objects use `igbinary`/`zstd` compression, base64-wrapped before `saveCacheValue()`; `Response` objects passed to `saveCacheValue()` only as the top-level value
+- [ ] Large cached objects use `msgpack`/`zstd` compression, base64-wrapped before `saveCacheValue()`; `Response` objects passed to `saveCacheValue()` only as the top-level value
 - [ ] API authentication uses `sodium` for signatures
 - [ ] APCu used for frequently accessed local data
 - [ ] Used built-in `quirks/` helpers (e.g., `truncate_html_preserve_tags`, `extract_spa_json_variable`, `matches_keyword_rules`) instead of writing custom regex or substring logic

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ruleset name="RSS-Bridge Ruleset">
   <description>
-    Modernized ruleset for RSS-Bridge (PHP 8.5+).
+    Modernized ruleset for RSS-Bridge (PHP 8.6+).
     Based on PSR-12 with strict typing and modern PHP practices.
   </description>
 
@@ -11,7 +11,6 @@
   <!-- Default check paths -->
   <file>./.github</file>
   <file>./actions</file>
-  <file>./bin</file>
   <file>./bridges-v2</file>
   <file>./caches</file>
   <file>./config</file>
@@ -20,13 +19,21 @@
   <file>./middlewares</file>
   <file>./proxies</file>
   <file>./quirks</file>
+  <file>./rules</file>
+  <file>./index.php</file>
+
+  <!-- Explicitly include bin scripts -->
+  <file>./bin/bench-cache</file>
+  <file>./bin/cache-bridge-metadata</file>
+  <file>./bin/cache-clear</file>
+  <file>./bin/cache-prune</file>
+  <file>./bin/check-opcache</file>
+  <file>./bin/load-env</file>
+  <file>./bin/test</file>
+  <file>./bin/test-bridges</file>
 
   <!-- Exceptions -->
   <exclude-pattern>./cache/*</exclude-pattern>
-  <exclude-pattern>./config.default.ini.php</exclude-pattern>
-  <exclude-pattern>./config.ini.php</exclude-pattern>
-  <exclude-pattern>./static/*</exclude-pattern>
-  <exclude-pattern>./templates/*</exclude-pattern>
   <exclude-pattern>./vendor/*</exclude-pattern>
 
   <!-- Basic standard PSR-12 -->
@@ -57,10 +64,10 @@
     </properties>
   </rule>
 
-  <!-- Disabled, deprecated, and specific Features -->
   <rule ref="Generic.PHP.ForbiddenFunctions">
     <properties>
       <property name="forbiddenFunctions" type="array">
+        <!-- aliases / casts -->
         <element key="sizeof" value="count"/>
         <element key="delete" value="unset"/>
         <element key="print" value="echo"/>
@@ -71,11 +78,36 @@
         <element key="intval" value="(int)"/>
         <element key="strval" value="(string)"/>
         <element key="is_null" value="=== null"/>
+        <element key="is_double" value="is_float"/>
+        <element key="is_long" value="is_int"/>
+        <element key="is_integer" value="is_int"/>
+        <!-- removed in PHP 8.x -->
         <element key="create_function" value="Closure::fromCallable()"/>
+        <element key="each" value="foreach"/>
+        <element key="__autoload" value="spl_autoload_register"/>
+        <element key="money_format" value="NumberFormatter::formatCurrency"/>
+        <element key="get_magic_quotes_gpc" value=""/>
+        <element key="get_magic_quotes_runtime" value=""/>
         <element key="utf8_encode" value="mb_convert_encoding"/>
         <element key="utf8_decode" value="mb_convert_encoding"/>
+        <element key="strftime" value="IntlDateFormatter::format"/>
+        <element key="gmstrftime" value="IntlDateFormatter::format"/>
+        <!-- deprecated in PHP 8.6 -->
+        <element key="spl_object_hash" value="spl_object_id"/>
+        <element key="spl_classes" value="ReflectionExtension::getClassNames"/>
+        <element key="strcoll" value="Collator::compare"/>
+        <element key="metaphone" value=""/>
+        <element key="mb_ereg" value="preg_match"/>
+        <element key="mb_eregi" value="preg_match"/>
+        <element key="mb_ereg_replace" value="preg_replace"/>
+        <element key="mb_eregi_replace" value="preg_replace"/>
+        <element key="mb_split" value="preg_split"/>
+        <element key="mb_ereg_match" value="preg_match"/>
+        <element key="mb_ereg_search" value="preg_match"/>
+        <!-- fork helpers -->
         <element key="returnClientError" value="throwClientException"/>
         <element key="returnServerError" value="throwServerException"/>
+        <!-- debug / process execution -->
         <element key="var_dump" value=""/>
         <element key="print_r" value=""/>
         <element key="var_export" value=""/>
@@ -127,22 +159,5 @@
   <rule ref="Squiz.Strings.DoubleQuoteUsage">
     <exclude name="Squiz.Strings.DoubleQuoteUsage.ContainsVar"/>
   </rule>
-
-  <!-- PHP 8.6 compatibility: additional forbidden/deprecated functions -->
-  <rule ref="Generic.PHP.ForbiddenFunctions">
-    <properties>
-      <property name="forbiddenFunctions" type="array">
-        <element key="each" value="foreach"/>
-        <element key="money_format" value="NumberFormatter::formatCurrency"/>
-        <element key="get_magic_quotes_gpc" value=""/>
-        <element key="get_magic_quotes_runtime" value=""/>
-        <element key="__autoload" value="spl_autoload_register"/>
-        <element key="strftime" value="IntlDateFormatter::format"/>
-        <element key="gmstrftime" value="IntlDateFormatter::format"/>
-      </property>
-    </properties>
-  </rule>
-
-  <rule ref="Generic.PHP.DeprecatedFunctions"/>
 
 </ruleset>

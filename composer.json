@@ -56,17 +56,27 @@
     },
     "require": {
         "php": ">=8.5",
+        "ext-apcu": "*",
         "ext-curl": "*",
         "ext-dom": "*",
+        "ext-filter": "*",
+        "ext-iconv": "*",
         "ext-intl": "*",
         "ext-mbstring": "*",
+        "ext-memcached": "*",
         "ext-simplexml": "*",
         "ext-sqlite3": "*",
         "ext-tidy": "*",
         "ext-xml": "*",
-        "ext-zip": "*",
         "busybee/urljoin": "^1.0",
         "erusev/parsedown": "^1.8"
+    },
+    "suggest": {
+        "ext-sodium": "API request signing in some bridges",
+        "ext-gd": "Image processing (thumbnails, conversion)",
+        "ext-msgpack": "Compact binary serialization for caching",
+        "ext-zstd": "Zstandard compression for cached payloads",
+        "ext-brotli": "Brotli compression for cached payloads"
     },
     "require-dev": {
         "phpcompatibility/php-compatibility": "^10.0.0@dev",
@@ -82,6 +92,7 @@
         "test": "phpunit",
         "lint": "phpcs . --standard=phpcs.xml --warning-severity=0 --extensions=php -p",
         "lint:fix": "phpcbf . --standard=phpcs.xml --extensions=php -p",
+        "lint:compat": "phpcs . --standard=phpcompatibility.xml --extensions=php -p",
         "stan": "phpstan analyse --no-progress"
     },
     "config": {

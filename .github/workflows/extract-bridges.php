@@ -6,6 +6,9 @@ $bridgesDir = __DIR__ . '/../../bridges-v2';
 $bridgeFiles = [];
 
 $files = glob($bridgesDir . '/*.php');
+if ($files === false) {
+    $files = [];
+}
 sort($files);
 
 foreach ($files as $file) {
@@ -16,6 +19,9 @@ foreach ($files as $file) {
     }
 
     $content = file_get_contents($file);
+    if ($content === false) {
+        continue;
+    }
 
     $name = '';
     $uri = '';

@@ -2,7 +2,7 @@
 user = nginx
 group = nginx
 
-listen = /run/php86/php-fpm.sock
+listen = /run/php/php-fpm.sock
 listen.owner = nginx
 listen.group = nginx
 listen.mode = 0660

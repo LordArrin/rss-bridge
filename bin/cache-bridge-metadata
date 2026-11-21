@@ -23,14 +23,14 @@ $verbose = in_array('--verbose', $argv ?? [], true) || in_array('-v', $argv ?? [
 $isFresh = $cache->isFresh();
 $currentHash = $cache->getCurrentHash();
 
-if ($verbose) {
+if ($verbose === true) {
     fprintf(STDERR, "Current bridges hash: %s\n", substr($currentHash, 0, 12));
-    fprintf(STDERR, "Cache fresh: %s\n", $isFresh ? 'yes' : 'no');
-    fprintf(STDERR, "Force rebuild: %s\n", $force ? 'yes' : 'no');
+    fprintf(STDERR, "Cache fresh: %s\n", $isFresh === true ? 'yes' : 'no');
+    fprintf(STDERR, "Force rebuild: %s\n", $force === true ? 'yes' : 'no');
 }
 
-if ($isFresh && !$force) {
-    if ($verbose) {
+if ($isFresh === true && $force === false) {
+    if ($verbose === true) {
         fprintf(STDERR, "Cache is fresh, skipping rebuild (use --force to override)\n");
     } else {
         echo sprintf("Cache is fresh [hash: %s], skipping\n", substr($currentHash, 0, 8));
@@ -59,7 +59,7 @@ try {
     exit(0);
 } catch (\Throwable $e) {
     fprintf(STDERR, "[ERROR] Failed to build cache: %s\n", $e->getMessage());
-    if ($verbose) {
+    if ($verbose === true) {
         fprintf(STDERR, "%s\n", $e->getTraceAsString());
     }
     exit(1);

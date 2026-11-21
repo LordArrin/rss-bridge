@@ -9,7 +9,7 @@ ARG MIMALLOC_VERSION=3.7.0
 ARG ZLIB_NG_VERSION=2.3.3
 ARG LIBEVENT_VERSION=2.2.2-alpha
 ARG MEMCACHED_VERSION=1.6.45
-ARG IMAGE_VERSION=1.3.0
+ARG IMAGE_VERSION=1.3.1
 ARG VERSION_PLACEHOLDER=__RSSBRIDGE_IMAGE_VERSION__
 
 # PHP
@@ -60,7 +60,7 @@ ENV CCACHE_DIR=/ccache \
     CCACHE_MAXSIZE=2G \
     PATH=/usr/lib/ccache:$PATH
 
-# Shared compile flags -> /tmp/env.sh, sourced by every build step
+# Shared compile flags -> /tmp/env.sh, sourced by every build step.
 RUN <<'SCRIPT'
 set -eu
 
@@ -83,7 +83,7 @@ export NB_PROC='$NB_PROC'
 export LTO_FLAG='$LTO_FLAG'
 export MARCH='$MARCH' MTUNE='$MTUNE' CFI_FLAGS='$CFI_FLAGS'
 export HARDENING_CFLAGS='$HARDENING_CFLAGS'
-export OPT_CFLAGS='-O3 -march=$MARCH -mtune=$MTUNE -pipe $LTO_FLAG $HARDENING_CFLAGS'
+export OPT_CFLAGS='-O3 -march=$MARCH -mtune=$MTUNE -pipe -g1 -grecord-gcc-switches $LTO_FLAG $HARDENING_CFLAGS'
 export OPT_LDFLAGS='-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wl,-z,defs $CFI_FLAGS $LTO_FLAG'
 export CC='ccache gcc' CXX='ccache g++'
 EOF
@@ -183,7 +183,7 @@ RUN --mount=type=cache,target=/ccache \
         LDFLAGS="$OPT_LDFLAGS" && \
     make -j "$NB_PROC" && make install
 
-# memcached 
+# memcached (static)
 RUN --mount=type=cache,target=/ccache \
     . /tmp/env.sh && \
     wget -O - --tries=3 https://memcached.org/files/memcached-${MEMCACHED_VERSION}.tar.gz | tar zxf - -C /tmp && \
@@ -205,7 +205,7 @@ RUN --mount=type=cache,target=/ccache \
     strip --strip-unneeded memcached && \
     make install
 
-# OpenSSL (shared: also replaces system libs in the runtime stage)
+# OpenSSL (shared; also replaces system libs in runtime)
 RUN --mount=type=cache,target=/ccache \
     . /tmp/env.sh && \
     wget -O - --tries=3 https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz | tar xzf - -C /tmp && \
@@ -220,8 +220,7 @@ RUN --mount=type=cache,target=/ccache \
         -DOPENSSL_TLS_SECURITY_LEVEL=3 ${CFI_FLAGS} -fuse-ld=mold ${LTO_FLAG} && \
     make -j "$NB_PROC" && make install_sw install_ssldirs
 
-# curl-impersonate (BoringSSL-based; expensive and bumped often — kept late).
-# Build environment intentionally self-contained: no ccache/CC override here.
+# curl-impersonate (BoringSSL; self-contained env, no ccache override)
 RUN apk add --no-cache --virtual .curl-build-deps \
         build-base linux-headers cmake ninja make patch autoconf automake pkgconfig libtool gperf \
         xz-libs xz-dev xz-static python3 python3-dev go bzip2 unzip git curl bash ca-certificates patchelf && \
@@ -268,8 +267,7 @@ RUN git clone --depth 1 ${HEADERS_MORE_URL} /tmp/ngx_headers_more
 # freenginx source
 RUN wget -O - --tries=3 https://freenginx.org/download/freenginx-${NGINX_VERSION}.tar.gz | tar zxf - -C /tmp
 
-# Fingerprinting patches: remove Server header (h1/h2/h3) and error-page footer.
-# grep assertions fail the build if upstream changes the patched code.
+# Fingerprinting patches: strip Server header (h1/h2/h3) + error-page footer.
 RUN <<'SCRIPT'
 set -eu
 cd "/tmp/freenginx-${NGINX_VERSION}"
@@ -285,8 +283,6 @@ for f in "$h1" "$h2" "$h3"; do
     sed -i 's@r->headers_out.server == NULL@0@g' "$f"
 done
 
-# Footer is macro-concatenated: "<hr><center>" NGINX_NAME "</center>".
-# Strip all three variants (NGINX_VER / NGINX_VER_BUILD / NGINX_NAME).
 grep -Eq '"<hr><center>"[[:space:]]+NGINX_(VER_BUILD|VER|NAME)[[:space:]]+"</center>"' "$sp" || \
     { echo "ERROR: footer pattern not found in $sp" >&2; exit 1; }
 sed -E -i 's@"<hr><center>"[[:space:]]+NGINX_(VER_BUILD|VER|NAME)[[:space:]]+"</center>"@@g' "$sp"
@@ -328,11 +324,7 @@ RUN --mount=type=cache,target=/ccache \
         --with-pcre-jit && \
     make -j "$NB_PROC"
 
-# Hardening gates: fail the build if a promised protection is missing.
-# Symbol gates run on the unstripped binary.
-# NOTE: never use `producer | grep -q` here: under pipefail, grep -q exits
-# on the first match, the producer dies with SIGPIPE (141) and the gate
-# fails even on success. `grep ... >/dev/null` consumes the full input.
+# Hardening gates (symbol gates on unstripped binary; no grep -q on pipes: SIGPIPE).
 RUN --mount=type=cache,target=/ccache <<'SCRIPT'
 set -eu
 . /tmp/env.sh
@@ -341,42 +333,26 @@ BIN=objs/nginx
 
 fail() { echo "HARDENING GATE FAILED: $*" >&2; exit 1; }
 
-# PIE (full ASLR)
 file "$BIN" | grep 'pie executable' >/dev/null || fail "binary is not PIE"
-
-# Full RELRO: GNU_RELRO segment + immediate binding
 readelf -lW "$BIN" | grep 'GNU_RELRO' >/dev/null || fail "no GNU_RELRO segment"
 readelf -dW "$BIN" | grep 'NOW' >/dev/null || fail "no BIND_NOW (partial RELRO only)"
-
-# Non-executable stack
 readelf -lW "$BIN" | grep 'GNU_STACK' >/dev/null || fail "no GNU_STACK segment"
 if readelf -lW "$BIN" | grep 'GNU_STACK' | grep 'RWE' >/dev/null; then
     fail "executable stack"
 fi
-
-# Stack protector (matches __stack_chk_fail and __stack_chk_fail_local)
 readelf -sW "$BIN" | grep '__stack_chk_fail' >/dev/null || fail "stack protector dropped"
 
-# OpenSSL is SHARED here: the version string lives in libcrypto, not nginx
 strings /usr/local/ssl/lib*/libcrypto.so | grep "OpenSSL ${OPENSSL_VERSION}" >/dev/null || \
     fail "OpenSSL ${OPENSSL_VERSION} not found in libcrypto"
 readelf -dW "$BIN" | grep 'libssl' >/dev/null || fail "nginx is not linked against libssl"
-
-# zlib-ng instead of stock zlib (static, embedded into nginx)
 strings "$BIN" | grep 'zlib-ng' >/dev/null || fail "zlib-ng signature missing"
-
-# PCRE2 JIT compiled in
 readelf -sW "$BIN" | grep 'pcre2_jit_compile' >/dev/null || fail "PCRE2 JIT missing"
 
-# GCC LTO bytecode in our objects (when LTO is enabled)
 if [ -n "$LTO_FLAG" ]; then
     readelf -SW objs/src/core/nginx.o | grep '\.gnu\.lto_' >/dev/null || fail "no LTO bytecode in nginx.o"
 fi
 
-# CFI instrumentation in our own objects (when CFI flags are set).
-# The final-binary note is AND-merged with distro crt objects; Alpine gcc
-# is built with --disable-cet, so the note is lost at link time. musl does
-# not activate CET at runtime either — gate our objects, report the rest.
+# CFI: gate our objects; final-binary CET note is lost at link (distro crt unmarked).
 if [ -n "$CFI_FLAGS" ]; then
     case "$(uname -m)" in
         x86_64)
@@ -394,9 +370,7 @@ if [ -n "$CFI_FLAGS" ]; then
     esac
 fi
 
-# FORTIFY functional probe: an out-of-bounds copy into a known-size heap
-# buffer must trap. Alpine uses fortify-headers (inline checks + ud2),
-# so there are no __*_chk symbols to grep for.
+# FORTIFY probe: OOB copy into known-size heap buffer must trap (fortify-headers ud2).
 cat > /tmp/fortify-probe.c <<'EOF'
 #include <stdlib.h>
 #include <string.h>
@@ -423,13 +397,14 @@ ccache -s
 SCRIPT
 
 # =============================================================================
-# PHP
+# PHP core
 # =============================================================================
 
+# FFI not built (no code uses it).
 RUN apk add --no-cache \
         autoconf xz \
         libxml2-dev sqlite-dev oniguruma-dev tidyhtml-dev \
-        libsodium-dev icu-dev libffi-dev \
+        libsodium-dev icu-dev \
         libpng-dev libjpeg-turbo-dev freetype-dev libwebp-dev libavif-dev \
         libmemcached-dev cyrus-sasl-dev zstd-dev brotli-dev
 
@@ -470,11 +445,12 @@ wget -O /tmp/php.tar.xz --tries=3 "https://www.php.net/distributions/php-${PHP_V
 tar xJf /tmp/php.tar.xz -C /tmp
 cd "/tmp/php-${PHP_VERSION}"
 
+# Unversioned config paths; ARG PHP_VERSION is the single source of truth.
 ./configure \
     --prefix=/usr/local/php \
     --with-libdir=lib \
-    --with-config-file-path=/etc/php86 \
-    --with-config-file-scan-dir=/etc/php86/conf.d \
+    --with-config-file-path=/etc/php \
+    --with-config-file-scan-dir=/etc/php/conf.d \
     --enable-option-checking=fatal \
     --enable-cli \
     --enable-fpm \
@@ -510,8 +486,7 @@ cd "/tmp/php-${PHP_VERSION}"
     --with-avif \
     --enable-calendar \
     --enable-pcntl \
-    --enable-shmop \
-    --with-ffi
+    --enable-shmop
 
 make -j "$NB_PROC"
 make install
@@ -524,9 +499,13 @@ fail() { echo "PHP GATE FAILED: $*" >&2; exit 1; }
 "$PHP_BIN" -v | grep 'Zend OPcache' >/dev/null || fail "opcache missing"
 "$FPM_BIN" -v >/dev/null || fail "php-fpm not runnable"
 
-for ext in ctype tokenizer Phar fileinfo dom xml xmlreader xmlwriter SimpleXML mbstring intl iconv curl openssl sodium zlib pcre sqlite3 pdo_sqlite tidy gd calendar pcntl shmop FFI session posix filter; do
+for ext in ctype tokenizer Phar fileinfo dom xml xmlreader xmlwriter SimpleXML mbstring intl iconv curl openssl sodium zlib pcre sqlite3 pdo_sqlite tidy gd calendar pcntl shmop session posix filter; do
     "$PHP_BIN" -m | grep -ix "$ext" >/dev/null || fail "extension missing: $ext"
 done
+
+if "$PHP_BIN" -m | grep -ix FFI >/dev/null; then
+    fail "FFI extension must not be built"
+fi
 
 "$PHP_BIN" -r 'exit(str_contains(curl_version()["ssl_version"], "BoringSSL") ? 0 : 1);' || fail "curl is not impersonate/BoringSSL"
 "$PHP_BIN" -r 'exit(str_contains(OPENSSL_VERSION_TEXT, getenv("OPENSSL_VERSION")) ? 0 : 1);' || fail "OpenSSL version mismatch"
@@ -562,6 +541,17 @@ if [ -n "$CFI_FLAGS" ]; then
     esac
 fi
 
+# Hardening proven by __stack_chk_fail gate above + functional probes.
+# No DW_AT_producer gate: unreliable under LTO/ccache.
+cat > /tmp/ftrapv-probe.c <<'EOF'
+#include <limits.h>
+int main(void) { volatile int x = INT_MAX; volatile int y = x + 1; (void)y; return 0; }
+EOF
+cc $OPT_CFLAGS -o /tmp/ftrapv-probe /tmp/ftrapv-probe.c
+if /tmp/ftrapv-probe; then
+    fail "-ftrapv probe survived a signed overflow"
+fi
+
 cat > /tmp/php-fortify-probe.c <<'EOF'
 #include <stdlib.h>
 #include <string.h>
@@ -587,15 +577,20 @@ strip --strip-unneeded "$PHP_BIN" "$FPM_BIN"
 echo "php gates: OK"
 SCRIPT
 
+# =============================================================================
+# PHP extensions (tarball + phpize, explicit CFLAGS export)
+# =============================================================================
 RUN --mount=type=cache,target=/ccache <<'SCRIPT'
 set -eu
 . /tmp/env.sh
 export PATH=/usr/local/php/bin:$PATH
-export PKG_CONFIG_PATH="/usr/local/ssl/lib64/pkgconfig:/usr/local/ssl/lib/pkgconfig:/usr/local/zlib-ng/lib/pkgconfig:/tmp/curl-install/lib/pkgconfig"
+export PKG_CONFIG_PATH="/usr/local/ssl/lib64/pkgconfig:/usr/local/ssl/lib/pkgconfig:/tmp/curl-install/lib/pkgconfig"
 export LD_LIBRARY_PATH="/usr/local/ssl/lib64:/usr/local/ssl/lib:/tmp/curl-install/lib"
 export CFLAGS="$OPT_CFLAGS"
 export LDFLAGS="-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack $CFI_FLAGS $LTO_FLAG -fuse-ld=mold"
+fail() { echo "EXT GATE FAILED: $*" >&2; exit 1; }
 
+# Legacy API shims for PECL sources against self-built PHP (no-ops if unused).
 build_ext() {
     name="$1"
     version="$2"
@@ -622,7 +617,15 @@ build_ext memcached "$MEMCACHED_EXT_VERSION" \
     --disable-memcached-sasl \
     --with-libmemcached-dir=/usr
 
-mkdir -p /etc/php86/conf.d /tmp/php-conf
+# Prove hardening reached each .so (before strip): __stack_chk_fail =>
+# -fstack-protector-strong, same HARDENING_CFLAGS as -ftrapv.
+EXTDIR=/usr/local/php/lib/php/extensions
+for so in apcu zstd brotli memcached msgpack; do
+    readelf -sW "$EXTDIR/$so.so" | grep '__stack_chk_fail' >/dev/null \
+        || fail "$so.so: hardening CFLAGS not applied"
+done
+
+mkdir -p /etc/php/conf.d /tmp/php-conf
 cat > /tmp/php-conf/00-extensions.ini <<'EOF'
 extension_dir = /usr/local/php/lib/php/extensions
 extension = apcu.so
@@ -632,21 +635,21 @@ extension = brotli.so
 extension = memcached.so
 apc.enable_cli = 1
 EOF
-cp /tmp/php-conf/00-extensions.ini /etc/php86/conf.d/00-extensions.ini
+cp /tmp/php-conf/00-extensions.ini /etc/php/conf.d/00-extensions.ini
 
 for ext in apcu msgpack zstd brotli memcached; do
-    php -m | grep -ix "$ext" >/dev/null || { echo "PECL GATE FAILED: $ext not loaded" >&2; exit 1; }
+    php -m | grep -ix "$ext" >/dev/null || fail "$ext not loaded"
 done
-php -r 'exit(function_exists("apcu_store") && function_exists("msgpack_pack") && function_exists("zstd_compress") && function_exists("brotli_compress") && class_exists("Memcached") ? 0 : 1);' || { echo "PECL GATE FAILED: smoke test" >&2; exit 1; }
+php -r 'exit(function_exists("apcu_store") && function_exists("msgpack_pack") && function_exists("zstd_compress") && function_exists("brotli_compress") && class_exists("Memcached") ? 0 : 1);' || fail "extension smoke test"
 
-find /usr/local/php/lib/php/extensions -name '*.so' -exec strip --strip-unneeded {} +
-echo "pecl gates: OK"
+find "$EXTDIR" -name '*.so' -exec strip --strip-unneeded {} +
+echo "ext gates: OK"
 SCRIPT
 
 RUN wget -O /tmp/composer.phar --tries=3 "https://getcomposer.org/download/${COMPOSER_VERSION}/composer.phar"
 
 # =============================================================================
-# Runtime (unchanged logic; default shell kept so ls|head pipelines stay safe)
+# Runtime
 # =============================================================================
 FROM alpine:${ALPINE_VERSION} AS runtime
 
@@ -663,14 +666,14 @@ LABEL org.opencontainers.image.title="RSS Bridge" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.source="https://github.com/LordArrin/rss-bridge"
 
-# Runtime dependencies + users
+# Runtime deps + users
 RUN set -xe && \
     apk update && \
     apk upgrade --no-cache && \
     apk add --no-cache \
       ca-certificates \
       libxml2 sqlite-libs oniguruma tidyhtml-libs libsodium icu-libs \
-      libpng freetype libjpeg-turbo libwebp libwebpdemux libwebpmux libavif libffi \
+      libpng freetype libjpeg-turbo libwebp libwebpdemux libwebpmux libavif \
       zstd-libs brotli-libs \
       supervisor \
       libgcc libstdc++ libatomic libmemcached \
@@ -682,9 +685,9 @@ RUN set -xe && \
       /var/log/nginx \
       /var/lib/nginx/tmp/client_body /var/lib/nginx/tmp/proxy \
       /var/lib/nginx/tmp/fastcgi /var/lib/nginx/tmp/uwsgi /var/lib/nginx/tmp/scgi \
-      /run/php86 \
+      /run/php \
       /app/cache /app/cache/opcache \
-      /etc/php86/conf.d /etc/php86/php-fpm.d \
+      /etc/php/conf.d /etc/php/php-fpm.d \
       /etc/nginx/http.d /usr/share/nginx/conf \
       /var/log/supervisor /etc/supervisor/conf.d \
       /var/run/memcached \
@@ -693,14 +696,14 @@ RUN set -xe && \
     adduser -D -S -h /var/cache/nginx -s /sbin/nologin -G nginx nginx && \
     addgroup -S memcached && \
     adduser -D -S -h /var/cache/memcached -s /sbin/nologin -G memcached memcached && \
-    chown -R nginx:nginx /var/run /var/log/nginx /var/lib/nginx /run/php86 /app/cache /etc/nginx && \
+    chown -R nginx:nginx /var/run /var/log/nginx /var/lib/nginx /run/php /app/cache /etc/nginx && \
     addgroup nginx memcached && \
     chown memcached:nginx /var/run/memcached && \
     chmod 750 /app/cache/opcache && \
     chmod 770 /var/run/memcached && \
     rm -rf /var/cache/apk/*
 
-# Replace system OpenSSL with the custom build
+# Replace system OpenSSL
 RUN rm -f /usr/lib/libssl.so* /usr/lib/libcrypto.so*
 COPY --from=builder /usr/local/ssl/lib*/libssl.so* /usr/lib/
 COPY --from=builder /usr/local/ssl/lib*/libcrypto.so* /usr/lib/
@@ -745,7 +748,7 @@ COPY --from=builder /etc/nginx/koi-win /etc/nginx/
 # Memcached
 COPY --from=builder /usr/local/memcached/bin/memcached /usr/local/bin/memcached
 
-# Mimalloc: fail on a broken preload instead of silently running without it
+# Mimalloc: fail on broken preload
 COPY --from=builder /tmp/mimalloc-install/lib*/libmimalloc* /usr/lib/
 
 RUN MIMALLOC_LIB=$(find /usr/lib -maxdepth 1 \( -name 'libmimalloc*.so*' -type f -o -type l \) | head -n1) && \
@@ -755,16 +758,15 @@ RUN MIMALLOC_LIB=$(find /usr/lib -maxdepth 1 \( -name 'libmimalloc*.so*' -type f
 
 RUN ln -sf /usr/bin/openssl /usr/sbin/openssl
 
-# PHP
+# PHP (unversioned paths)
 COPY --from=builder /usr/local/php/ /usr/local/php/
-COPY --from=builder /tmp/php-conf/00-extensions.ini /etc/php86/conf.d/00-extensions.ini
+COPY --from=builder /tmp/php-conf/00-extensions.ini /etc/php/conf.d/00-extensions.ini
 COPY --from=builder /tmp/composer.phar /usr/local/bin/composer.phar
 
 RUN ln -sf /usr/local/php/bin/php /usr/bin/php && \
     ln -sf /usr/local/php/bin/phpize /usr/bin/phpize && \
     ln -sf /usr/local/php/bin/php-config /usr/bin/php-config && \
     ln -sf /usr/local/php/sbin/php-fpm /usr/sbin/php-fpm && \
-    ln -sf /usr/local/php/sbin/php-fpm /usr/sbin/php-fpm86 && \
     printf '#!/bin/sh\nexec /usr/bin/php /usr/local/bin/composer.phar "$@"\n' > /usr/local/bin/composer && \
     chmod +x /usr/local/bin/composer && \
     php -v && \
@@ -773,9 +775,9 @@ RUN ln -sf /usr/local/php/bin/php /usr/bin/php && \
     composer --version
 
 # Application configs and source
-COPY ./config/php-fpm.conf /etc/php86/php-fpm.conf
+COPY ./config/php-fpm.conf /etc/php/php-fpm.conf
 COPY ./config/php-fpm-pool.conf.template /app/config/php-fpm-pool.conf.template
-COPY ./config/php.ini /etc/php86/conf.d/rss-bridge.ini
+COPY ./config/php.ini /etc/php/conf.d/rss-bridge.ini
 COPY ./config/nginx-main.conf /etc/nginx/nginx.conf
 COPY ./config/nginx.conf /etc/nginx/http.d/default.conf
 
@@ -790,6 +792,11 @@ COPY --chown=nginx:nginx ./ /app/
 
 WORKDIR /app
 
+# Drift gate: no versioned PHP paths in configs (after COPYs, so dirs exist).
+RUN ! grep -RInE '/etc/php8[0-9]|/run/php8[0-9]|php-fpm8[0-9]' \
+      /app/config /app/supervisor /app/bin /etc/nginx/http.d /etc/php \
+      || { echo "GATE FAILED: versioned PHP path leaked into configs" >&2; exit 1; }
+
 RUN echo -n "${IMAGE_VERSION}" > /app/VERSION && \
     chown nginx:nginx /app/VERSION && \
     chmod 444 /app/VERSION
@@ -803,7 +810,7 @@ RUN sed -i "s/\"version\": \".*\"/\"version\": \"${IMAGE_VERSION}\"/" /app/compo
     chmod +x /app/bin/* && \
     chmod +x /app/docker-entrypoint.sh
 
-# App-level healthcheck: covers nginx + PHP-FPM, not just nginx config
+# App-level healthcheck (nginx + PHP-FPM)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -fsS --compressed "http://localhost/?action=health" || exit 1
 

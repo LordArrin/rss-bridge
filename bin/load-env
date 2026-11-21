@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 /**
  * RSS-Bridge Environment Loader
  *
@@ -27,6 +25,8 @@ declare(strict_types=1);
  *   - exportEnv()       : outputs bash-compatible export statements
  */
 
+declare(strict_types=1);
+
 // ============================================================================
 // Configuration: paths, defaults, mapping rules
 // ============================================================================
@@ -34,8 +34,8 @@ declare(strict_types=1);
 define('DEFAULT_ENV_FILE', '/app/.env.default');
 define('CUSTOM_ENV_FILE', '/config/.env');
 define('FPM_TEMPLATE_FILE', '/app/config/php-fpm-pool.conf.template');
-define('FPM_OUTPUT_FILE', '/etc/php86/php-fpm.d/php-fpm-pool.conf');
-define('PHP_INI_OUTPUT_FILE', '/etc/php86/conf.d/99-user-overrides.ini');
+define('FPM_OUTPUT_FILE', '/etc/php/php-fpm.d/php-fpm-pool.conf');
+define('PHP_INI_OUTPUT_FILE', '/etc/php/conf.d/99-user-overrides.ini');
 
 /**
  * Declarative rules for normalizing environment variables.
@@ -52,16 +52,16 @@ define('PHP_INI_OUTPUT_FILE', '/etc/php86/conf.d/99-user-overrides.ini');
  */
 $normalizationRules = [
     // PHP-FPM pool sizing (integer counts, with optional 's' suffix for timeouts)
-    'PHP_FPM_PM_MAX_CHILDREN'         => ['type' => 'int',      'fallback' => '15',  'min' => 1,    'max' => 500],
-    'PHP_FPM_PM_START_SERVERS'        => ['type' => 'int',      'fallback' => '3',   'min' => 0,    'max' => 100],
-    'PHP_FPM_PM_MIN_SPARE_SERVERS'    => ['type' => 'int',      'fallback' => '2',   'min' => 0,    'max' => 100],
-    'PHP_FPM_PM_MAX_SPARE_SERVERS'    => ['type' => 'int',      'fallback' => '5',   'min' => 0,    'max' => 100],
+    'PHP_FPM_PM_MAX_CHILDREN'         => ['type' => 'int',      'fallback' => '4',   'min' => 1,    'max' => 500],
+    'PHP_FPM_PM_START_SERVERS'        => ['type' => 'int',      'fallback' => '2',   'min' => 0,    'max' => 100],
+    'PHP_FPM_PM_MIN_SPARE_SERVERS'    => ['type' => 'int',      'fallback' => '1',   'min' => 0,    'max' => 100],
+    'PHP_FPM_PM_MAX_SPARE_SERVERS'    => ['type' => 'int',      'fallback' => '3',   'min' => 0,    'max' => 100],
     'PHP_FPM_PM_MAX_REQUESTS'         => ['type' => 'int',      'fallback' => '450', 'min' => 0,    'max' => 100000],
     'PHP_FPM_PM_PROCESS_IDLE_TIMEOUT' => ['type' => 'duration', 'fallback' => '30s', 'min' => 1,    'max' => 3600],
     'PHP_FPM_REQUEST_TERMINATE_TIMEOUT' => ['type' => 'int', 'fallback' => '90', 'min' => 10, 'max' => 3600],
 
     // PHP runtime
-    'PHP_MEMORY_LIMIT'       => ['type' => 'memory', 'fallback' => '-1',    'allowUnlimited' => true],
+    'PHP_MEMORY_LIMIT'       => ['type' => 'memory', 'fallback' => '256M',  'allowUnlimited' => true],
     'PHP_MAX_EXECUTION_TIME' => ['type' => 'int',    'fallback' => '175',   'min' => 10,  'max' => 3600],
     'PHP_DEBUG_MODE'         => ['type' => 'bool',   'fallback' => 'false'],
 
@@ -75,7 +75,7 @@ $normalizationRules = [
     ],
     'PHP_OPCACHE_JIT_BUFFER' => [
         'type' => 'memory',
-        'fallback' => '256M',
+        'fallback' => '0',
         'allowZero' => true,
         'canonicalize' => static function (int $bytes): string {
             return ($bytes <= 0) ? '0' : max(1, (int)ceil($bytes / 1048576)) . 'M';
@@ -928,20 +928,18 @@ function validateSystemMessages(string $value): ?string
                 continue;
             }
 
-            $level = isset($item['level']) && is_string($item['level'])
-                ? validateMessageLevel($item['level'])
-                : 'info';
+            $level = (isset($item['level']) === true && is_string($item['level']) === true) ? validateMessageLevel($item['level']) : 'info';
             if ($level === null) {
                 $level = 'info';
             }
 
             $entry = ['text' => $text, 'level' => $level];
 
-            if (isset($item['title']) && is_string($item['title']) && trim($item['title']) !== '') {
+            if (isset($item['title']) === true && is_string($item['title']) === true && trim($item['title']) !== '') {
                 $entry['title'] = trim($item['title']);
             }
 
-            if (isset($item['url']) && is_string($item['url'])) {
+            if (isset($item['url']) === true && is_string($item['url']) === true) {
                 $url = validateMessageUrl($item['url']);
                 if ($url !== null && $url !== '') {
                     $entry['url'] = $url;
@@ -1037,11 +1035,11 @@ function validateLogLevel(string $value): ?string
 {
     $value = strtoupper(trim($value));
     $validLevels = ['DEBUG', 'INFO', 'NOTICE', 'WARNING', 'ERROR', 'CRITICAL'];
-    
+
     if (in_array($value, $validLevels, true) === true) {
         return $value;
     }
-    
+
     return null;
 }
 
@@ -1184,8 +1182,7 @@ function normalizeEnv(array &$env, array $rules): array
                         if ($maxSafeMb > 0 && $requestedMb > $maxSafeMb) {
                             $parsed = $maxSafeMb * 1048576;
                             $percent = (int)($rule['containerCap'] * 100);
-                            $warnings[] = "{$var}='{$original}' exceeds {$percent}% of container RAM "
-                                . "({$maxSafeMb}MB of {$containerMb}MB), clamping to '{$maxSafeMb}m'";
+                            $warnings[] = "{$var}='{$original}' exceeds {$percent}% of container RAM ({$maxSafeMb}MB of {$containerMb}MB), clamping to '{$maxSafeMb}m'";
                         }
                     }
                 }
@@ -1195,9 +1192,7 @@ function normalizeEnv(array &$env, array $rules): array
                 if (isset($rule['canonicalize']) === true) {
                     $canonical = $rule['canonicalize']($parsed);
                 } else {
-                    $canonical = ($parsed === -1)
-                        ? '-1'
-                        : max(1, (int)round($parsed / 1048576)) . 'M';
+                    $canonical = ($parsed === -1) ? '-1' : max(1, (int)round($parsed / 1048576)) . 'M';
                 }
                 $env[$var] = $canonical;
             }
@@ -1220,7 +1215,7 @@ function normalizeEnv(array &$env, array $rules): array
                 $env[$var] = $fallback;
                 $warnings[] = "{$var}='{$original}': invalid boolean, using '{$fallback}'";
             } else {
-                $env[$var] = $parsed ? 'true' : 'false';
+                $env[$var] = $parsed === true ? 'true' : 'false';
             }
         } elseif ($type === 'duration') {
             $parsed = parseDuration($original);
@@ -1237,7 +1232,7 @@ function normalizeEnv(array &$env, array $rules): array
         } elseif ($type === 'string') {
             $applySanitize = $rule['sanitize'] ?? true;
 
-            if (isset($rule['validate']) === true && is_callable($rule['validate'])) {
+            if (isset($rule['validate']) === true && is_callable($rule['validate']) === true) {
                 $validated = ($rule['validate'])($original);
                 if ($validated === null) {
                     $fallback = $rule['fallback'] ?? '';
@@ -1255,6 +1250,44 @@ function normalizeEnv(array &$env, array $rules): array
     }
 
     return $warnings;
+}
+
+/**
+ * Clamps the FPM pool to the container RAM budget.
+ *
+ * Workers are sized so that max_children * memory_limit stays within ~50% of
+ * container RAM; the rest is reserved for memcached, OPcache, nginx and the OS.
+ * Skipped when memory_limit is unlimited (-1) or RAM cannot be detected.
+ * Modifies $env in-place; start/spare counts are kept <= max_children.
+ */
+function clampFpmPool(array &$env): void
+{
+    $containerMb = getContainerMemoryMb();
+    if ($containerMb === null || $containerMb <= 0) {
+        return;
+    }
+
+    $limitBytes = parseMemorySize((string)($env['PHP_MEMORY_LIMIT'] ?? '256M'));
+    if ($limitBytes === null || $limitBytes <= 0) {
+        return; // -1 (unlimited): cannot size by RAM, leave the operator's choice
+    }
+
+    $limitMb   = max(1, (int)round($limitBytes / 1048576));
+    $budgetMb  = (int)floor($containerMb * 0.5);
+    $maxSafe   = max(1, (int)floor($budgetMb / $limitMb));
+    $requested = (int)($env['PHP_FPM_PM_MAX_CHILDREN'] ?? 4);
+
+    if ($requested > $maxSafe) {
+        $env['PHP_FPM_PM_MAX_CHILDREN'] = (string)$maxSafe;
+        fwrite(STDERR, "PHP-FPM: max_children clamped {$requested}->{$maxSafe} (RAM {$containerMb}MB, memory_limit {$limitMb}M)\n");
+    }
+
+    $children = (int)$env['PHP_FPM_PM_MAX_CHILDREN'];
+    foreach (['PHP_FPM_PM_START_SERVERS', 'PHP_FPM_PM_MIN_SPARE_SERVERS', 'PHP_FPM_PM_MAX_SPARE_SERVERS'] as $key) {
+        if ((int)($env[$key] ?? 0) > $children) {
+            $env[$key] = (string)$children;
+        }
+    }
 }
 
 // ============================================================================
@@ -1313,7 +1346,7 @@ function safeUnlink(string $path): void
 function generatePhpFpmConfig(array $env): int
 {
     if (is_readable(FPM_TEMPLATE_FILE) === false) {
-        fwrite(STDERR, "PHP-FPM: template not found: " . FPM_TEMPLATE_FILE . "\n");
+        fwrite(STDERR, 'PHP-FPM: template not found: ' . FPM_TEMPLATE_FILE . "\n");
         return 0;
     }
 
@@ -1382,8 +1415,8 @@ function generatePhpIniOverrides(array $env): int
     }
 
     if (isset($env['PHP_DEBUG_MODE']) === true && $env['PHP_DEBUG_MODE'] === 'true') {
-        $lines[] = "display_errors = On";
-        $lines[] = "error_reporting = E_ALL";
+        $lines[] = 'display_errors = On';
+        $lines[] = 'error_reporting = E_ALL';
         $count += 2;
     }
 
@@ -1447,6 +1480,9 @@ $warnings = normalizeEnv($finalEnv, $normalizationRules);
 foreach ($warnings as $w) {
     fwrite(STDERR, "Env: WARNING {$w}\n");
 }
+
+// 4.5. Size the FPM pool to the container RAM budget (soft memory_limit only)
+clampFpmPool($finalEnv);
 
 // 5. Apply timezone if TZ was successfully normalized
 if (isset($finalEnv['TZ']) === true && $finalEnv['TZ'] !== '') {

@@ -1,13 +1,36 @@
 parameters:
     level: 8
+    phpVersion: 80600
+
     paths:
-        - .
+        - .github
+        - actions
+        - bin
+        - bridges-v2
+        - caches
+        - config
+        - formats
+        - lib
+        - middlewares
+        - proxies
+        - quirks
+        - rules
+        - index.php
 
     excludePaths:
         analyse:
             - vendor/*
+            - cache/*
 
     scanFiles:
+        - bin/bench-cache
+        - bin/cache-bridge-metadata
+        - bin/cache-clear
+        - bin/cache-prune
+        - bin/check-opcache
+        - bin/load-env
+        - bin/test
+        - bin/test-bridges
         - lib/contents.php
         - lib/dependencies.php
         - lib/exceptions.php
@@ -30,11 +53,8 @@ parameters:
         - quirks/unicode.php
         - quirks/video_embed.php
 
-    # Deliberate: PHPDoc-derived types are treated as uncertain, so redundant
-    # instanceof / null guards are tolerated instead of reported as "always true".
+    # PHPDoc-derived types are uncertain: redundant instanceof/null guards tolerated.
     treatPhpDocTypesAsCertain: false
-
-    ignoreErrors:
 
 rules:
     - RSSBridge\PHPStan\Rules\ForbidOldDomApiRule

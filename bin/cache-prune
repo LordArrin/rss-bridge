@@ -1,14 +1,14 @@
 #!/usr/bin/env php
 <?php
 
+/**
+ * Remove expired items from cache.
+ *
+ */
+
 declare(strict_types=1);
 
 use RSSBridge\Configuration;
-
-/**
- * Remove expired items from cache.
- * 
- */
 
 require __DIR__ . '/../vendor/autoload.php';
 Configuration::loadConfiguration();

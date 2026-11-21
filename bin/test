@@ -1,20 +1,20 @@
 #!/usr/bin/env php
 <?php
 
-declare(strict_types=1);
-
 /**
  * Run PHPUnit tests.
- * 
+ *
  * Usage:
  *   bin/test              # Run all tests
  *   bin/test CacheTest    # Run specific test
  */
 
+declare(strict_types=1);
+
 require __DIR__ . '/../vendor/autoload.php';
 
 // Check if PHPUnit is available
-if (!file_exists(__DIR__ . '/../vendor/bin/phpunit')) {
+if (file_exists(__DIR__ . '/../vendor/bin/phpunit') === false) {
     fprintf(STDERR, "PHPUnit not found. Run 'composer install' first.\n");
     exit(1);
 }
@@ -23,4 +23,11 @@ if (!file_exists(__DIR__ . '/../vendor/bin/phpunit')) {
 $args = array_slice($argv, 1);
 $command = [__DIR__ . '/../vendor/bin/phpunit', ...$args];
 
-exit(passthru(implode(' ', array_map('escapeshellarg', $command)), $exitCode) ?? $exitCode);
+// phpcs:disable Generic.PHP.ForbiddenFunctions
+// This script is a CLI wrapper whose sole purpose is to execute PHPUnit.
+// Process execution functions are forbidden in the main app for security,
+// but are required here to stream test output directly to STDOUT/STDERR.
+passthru(implode(' ', array_map('escapeshellarg', $command)), $exitCode);
+// phpcs:enable Generic.PHP.ForbiddenFunctions
+
+exit($exitCode ?? 1);

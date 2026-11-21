@@ -114,7 +114,7 @@ else
     [ "$MEMCACHED_VERBOSITY" != "0" ] && MEMCACHED_ARGS="$MEMCACHED_ARGS -v"
     [ "$MEMCACHED_MODERN" = "true" ] && MEMCACHED_ARGS="$MEMCACHED_ARGS -o modern"
     [ "$MEMCACHED_PREALLOC" = "true" ] && MEMCACHED_ARGS="$MEMCACHED_ARGS -o slab_reassign -o slab_automove"
-    [ "$MEMCACHED_LOCK_MEMORY" = "true" ] && MEMCACHED_ARGS="$MEMCACHED_ARGS -r"
+    [ "$MEMCACHED_LOCK_MEMORY" = "true" ] && MEMCACHED_ARGS="$MEMCACHED_ARGS -k"
 
     export MEMCACHED_ARGS
 fi
@@ -125,4 +125,5 @@ chmod 700 /var/run/supervisor
 
 # 8. Start supervisord
 echo "Starting web services..."
+ulimit -c 0
 exec supervisord -n -c /etc/supervisord.conf

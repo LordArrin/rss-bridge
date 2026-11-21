@@ -29,8 +29,8 @@ foreach ($bridgeNames as $bridgeClass) {
 
     try {
         $bridge = $safeLoader->createSafely($bridgeClass);
-        
-        if ($safeLoader->isBridgeBroken($bridge)) {
+
+        if ($safeLoader->isBridgeBroken($bridge) === true) {
             echo "Broken stub created\n";
             $failed++;
             $errors[] = "{$shortName}: Bridge is broken (see logs)";
