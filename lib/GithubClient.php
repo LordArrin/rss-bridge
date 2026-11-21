@@ -157,6 +157,63 @@ final class GithubClient
     }
 
     /**
+     * List packages for an organization or user.
+     * package_type "all" iterates the known ecosystems (REST requires a concrete type).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function fetchPackages(string $owner, string $packageType, bool $isOrg = true): array
+    {
+        $scope = $isOrg === true ? 'orgs' : 'users';
+
+        if ($packageType === 'all') {
+            $merged = [];
+            foreach (['container', 'maven', 'npm', 'nuget', 'rubygems'] as $type) {
+                try {
+                    $merged = array_merge($merged, $this->fetchPackages($owner, $type, $isOrg));
+                } catch (\Exception $e) {
+                    $this->logger->info(sprintf('github: packages type %s skipped: %s', $type, $e->getMessage()));
+                }
+            }
+            return $merged;
+        }
+
+        $path = sprintf('/%s/%s/packages?package_type=%s&per_page=100', $scope, rawurlencode($owner), rawurlencode($packageType));
+        return self::filterObjectList($this->fetch($path));
+    }
+
+    /**
+     * List versions of a single package (concrete package_type required).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function fetchPackageVersions(string $owner, string $packageType, string $packageName, bool $isOrg = true): array
+    {
+        $scope = $isOrg === true ? 'orgs' : 'users';
+        $path = sprintf(
+            '/%s/%s/packages/%s/%s/versions?per_page=100',
+            $scope,
+            rawurlencode($owner),
+            rawurlencode($packageType),
+            rawurlencode($packageName)
+        );
+        return self::filterObjectList($this->fetch($path));
+    }
+
+    /**
+     * Fetch a github.com HTML page (e.g. /trending) with the same auth headers.
+     * Trending has no REST API; the token is optional here.
+     */
+    public function fetchHtml(string $url): string
+    {
+        $headers = ['Accept' => 'text/html'];
+        if ($this->token !== null && $this->token !== '') {
+            $headers['Authorization'] = 'Bearer ' . $this->token;
+        }
+        return (string) getContents($url, $headers);
+    }
+
+    /**
      * Keeps only array entries and normalizes their keys to strings.
      * GitHub API objects always use string keys, so nothing is lost.
      *
@@ -243,9 +300,21 @@ final class GithubClient
             }
 
             if (in_array($code, [403, 429], true) === true) {
-                $this->logger->info(sprintf('github: REAL rate limit - %s', $this->token !== null ? 'authenticated' : 'anonymous'));
-                $this->cache->set($cacheKey, true, 60 * 60);
-                throw new \RateLimitException(sprintf('REAL github rate limit - %s', $this->token !== null ? 'authenticated' : 'anonymous'));
+                $remainingRaw = $e->response?->getHeader('x-ratelimit-remaining');
+                $remaining = is_string($remainingRaw) === true ? $remainingRaw : null;
+
+                // Only a primary rate limit (429, or 403 with zero quota left)
+                // arms the shared backoff. A 403 with quota remaining is a
+                // forbidden / missing-scope / secondary-limit response and must
+                // NOT block every other GitHub bridge for an hour.
+                if ($code === 429 || $remaining === '0') {
+                    $this->logger->info(sprintf('github: REAL rate limit - %s', $this->token !== null ? 'authenticated' : 'anonymous'));
+                    $this->cache->set($cacheKey, true, 60 * 60);
+                    throw new \RateLimitException(sprintf('REAL github rate limit - %s', $this->token !== null ? 'authenticated' : 'anonymous'));
+                }
+
+                $this->logger->warning(sprintf('github: forbidden (code %d, remaining=%s), not a primary rate limit', $code, $remaining ?? 'unknown'));
+                throw $e;
             }
 
             throw $e;
