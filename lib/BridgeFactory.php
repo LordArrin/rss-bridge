@@ -317,9 +317,11 @@ final class BridgeFactory
             }
             $code .= "try {\n";
             $code .= "    require '" . addslashes($file) . "';\n";
-            $code .= "    file_put_contents('" . addslashes($resultFile) . "', 'SANDBOX_SUCCESS');\n";
+            $code .= "    \$written = file_put_contents('" . addslashes($resultFile) . "', 'SANDBOX_SUCCESS');\n";
+            $code .= "    exit(\$written === false ? 3 : 0);\n";
             $code .= "} catch (\\Throwable \$e) {\n";
-            $code .= "    file_put_contents('" . addslashes($resultFile) . "', 'SANDBOX_EXCEPTION: ' . \$e->getMessage());\n";
+            $code .= "    \$written = file_put_contents('" . addslashes($resultFile) . "', 'SANDBOX_EXCEPTION: ' . \$e->getMessage());\n";
+            $code .= "    exit(\$written === false ? 3 : 0);\n";
             $code .= "}\n";
 
             if (file_put_contents($testScript, $code) === false) {
@@ -351,6 +353,10 @@ final class BridgeFactory
                 return;
             }
 
+            if ($returnVar === 3) {
+                throw new \Exception('Sandbox verdict write failed: ' . $file);
+            }
+
             $this->rememberSandboxVerdict($cacheKey, $apcuKey, false);
             $detail = $result !== '' ? $result : ($stdout !== '' ? $stdout : 'no result (fatal compile error?)');
             throw new \Exception('Bridge compatibility error: ' . $detail);
@@ -368,9 +374,7 @@ final class BridgeFactory
     {
         $entry = ['ok' => $ok, 'checked' => time()];
         self::$sandboxCache[$cacheKey] = $entry;
-        if (function_exists('apcu_store') === true) {
-            apcu_store($apcuKey, $entry, $ok === true ? self::SANDBOX_POSITIVE_TTL : self::SANDBOX_NEGATIVE_TTL);
-        }
+        apcu_store($apcuKey, $entry, $ok === true ? self::SANDBOX_POSITIVE_TTL : self::SANDBOX_NEGATIVE_TTL);
     }
 
     /**

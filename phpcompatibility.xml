@@ -7,6 +7,8 @@
 
     <config name="testVersion" value="8.6-"/>
 
+    <rule ref="PHPCompatibility"/>
+
     <file>./actions</file>
     <file>./bin</file>
     <file>./bridges-v2</file>

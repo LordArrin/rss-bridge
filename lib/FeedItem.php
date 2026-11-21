@@ -141,7 +141,7 @@ class FeedItem
         if (is_string($uri) === false) {
             return;
         }
-        $uri = trim($uri);
+        $uri = trim($uri, " \f\n\r\t\v\0");
         // Intentionally doing a weak url validation here because FILTER_VALIDATE_URL is too strict
         if (preg_match('#^https?://#i', $uri) !== 1) {
             return;
@@ -160,7 +160,7 @@ class FeedItem
         if (is_string($title) === true) {
             // No truncation here: upstream kept full titles, and display-level
             // shortening belongs to the formats, not the data model.
-            $this->title = trim($title);
+            $this->title = trim($title, " \f\n\r\t\v\0");
         }
     }
 
@@ -267,7 +267,7 @@ class FeedItem
                 // Weak scheme check (same as setURI): FILTER_VALIDATE_URL silently
                 // dropped valid IDN/unicode/space-containing URLs. Relative URLs
                 // are still rejected — formats do not absolutize enclosures.
-                $enclosure = trim($enclosure);
+                $enclosure = trim($enclosure, " \f\n\r\t\v\0");
                 if (preg_match('#^https?://#i', $enclosure) !== 1) {
                     continue;
                 }

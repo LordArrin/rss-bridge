@@ -21,6 +21,8 @@ function get_sitemap(string $url): array
     $previous = libxml_use_internal_errors(true);
     try {
         $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
+    } catch (\Throwable $e) {
+        throwServerException('Failed to parse sitemap: ' . $e->getMessage());
     } finally {
         libxml_clear_errors();
         libxml_use_internal_errors($previous);

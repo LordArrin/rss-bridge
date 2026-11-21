@@ -67,9 +67,8 @@
   <rule ref="Generic.PHP.ForbiddenFunctions">
     <properties>
       <property name="forbiddenFunctions" type="array">
-        <!-- aliases / casts -->
+        <!-- Aliases and casts: canonical spellings only -->
         <element key="sizeof" value="count"/>
-        <element key="delete" value="unset"/>
         <element key="print" value="echo"/>
         <element key="join" value="implode"/>
         <element key="chop" value="rtrim"/>
@@ -81,33 +80,38 @@
         <element key="is_double" value="is_float"/>
         <element key="is_long" value="is_int"/>
         <element key="is_integer" value="is_int"/>
-        <!-- removed in PHP 8.x -->
-        <element key="create_function" value="Closure::fromCallable()"/>
-        <element key="each" value="foreach"/>
-        <element key="__autoload" value="spl_autoload_register"/>
-        <element key="money_format" value="NumberFormatter::formatCurrency"/>
-        <element key="get_magic_quotes_gpc" value=""/>
-        <element key="get_magic_quotes_runtime" value=""/>
-        <element key="utf8_encode" value="mb_convert_encoding"/>
-        <element key="utf8_decode" value="mb_convert_encoding"/>
+        <!-- Deprecated in PHP 8.1 (still callable) -->
         <element key="strftime" value="IntlDateFormatter::format"/>
         <element key="gmstrftime" value="IntlDateFormatter::format"/>
-        <!-- deprecated in PHP 8.6 -->
+        <!-- Deprecated in PHP 8.2 (still callable) -->
+        <element key="utf8_encode" value="mb_convert_encoding"/>
+        <element key="utf8_decode" value="mb_convert_encoding"/>
+        <!-- Deprecated in PHP 8.6: core / SPL -->
         <element key="spl_object_hash" value="spl_object_id"/>
         <element key="spl_classes" value="ReflectionExtension::getClassNames"/>
         <element key="strcoll" value="Collator::compare"/>
         <element key="metaphone" value=""/>
+        <!-- Deprecated in PHP 8.6: the whole mbregex (Oniguruma) family -->
         <element key="mb_ereg" value="preg_match"/>
         <element key="mb_eregi" value="preg_match"/>
+        <element key="mb_ereg_match" value="preg_match"/>
         <element key="mb_ereg_replace" value="preg_replace"/>
         <element key="mb_eregi_replace" value="preg_replace"/>
-        <element key="mb_split" value="preg_split"/>
-        <element key="mb_ereg_match" value="preg_match"/>
+        <element key="mb_ereg_replace_callback" value="preg_replace_callback"/>
         <element key="mb_ereg_search" value="preg_match"/>
-        <!-- fork helpers -->
+        <element key="mb_ereg_search_init" value=""/>
+        <element key="mb_ereg_search_regs" value=""/>
+        <element key="mb_ereg_search_getregs" value=""/>
+        <element key="mb_ereg_search_pos" value=""/>
+        <element key="mb_ereg_search_getpos" value=""/>
+        <element key="mb_ereg_search_setpos" value=""/>
+        <element key="mb_split" value="preg_split"/>
+        <element key="mb_regex_encoding" value=""/>
+        <element key="mb_regex_set_options" value=""/>
+        <!-- Legacy upstream helpers: use the fork exception helpers -->
         <element key="returnClientError" value="throwClientException"/>
         <element key="returnServerError" value="throwServerException"/>
-        <!-- debug / process execution -->
+        <!-- Debug output and process execution -->
         <element key="var_dump" value=""/>
         <element key="print_r" value=""/>
         <element key="var_export" value=""/>

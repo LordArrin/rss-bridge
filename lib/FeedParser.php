@@ -152,7 +152,7 @@ final class FeedParser
 
         $titleNode = $feedItem->querySelector('title');
         if ($titleNode !== null) {
-            $item['title'] = trim(html_entity_decode($this->getNodeText($titleNode)));
+            $item['title'] = trim(html_entity_decode($this->getNodeText($titleNode)), " \f\n\r\t\v\0");
         }
 
         $updatedNode = $feedItem->querySelector('updated');
@@ -253,7 +253,7 @@ final class FeedParser
 
         $titleNode = $feedItem->querySelector('title');
         if ($titleNode !== null) {
-            $item['title'] = trim(html_entity_decode($this->getNodeText($titleNode)));
+            $item['title'] = trim(html_entity_decode($this->getNodeText($titleNode)), " \f\n\r\t\v\0");
         }
 
         $contentEncodedList = $feedItem->getElementsByTagNameNS('http://purl.org/rss/1.0/modules/content/', 'encoded');
@@ -370,7 +370,7 @@ final class FeedParser
 
         $titleNode = $feedItem->querySelector('title');
         if ($titleNode !== null) {
-            $item['title'] = trim(html_entity_decode($this->getNodeText($titleNode)));
+            $item['title'] = trim(html_entity_decode($this->getNodeText($titleNode)), " \f\n\r\t\v\0");
         }
 
         $descNode = $feedItem->querySelector('description');
@@ -424,7 +424,7 @@ final class FeedParser
 
     private function getNodeText(?\Dom\Element $element): string
     {
-        return $element !== null ? trim((string)$element->textContent) : '';
+        return $element !== null ? trim((string)$element->textContent, " \f\n\r\t\v\0") : '';
     }
 
     private function getNodeAttr(?\Dom\Element $element, string $name): ?string

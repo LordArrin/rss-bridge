@@ -1531,7 +1531,7 @@ final class Response
      */
     private static function sniffContentType(string $body): ?array
     {
-        $trimmed = ltrim($body, " \t\r\n\0\x0B");
+        $trimmed = ltrim($body, " \f\n\r\t\v\0");
         if ($trimmed === '') {
             return null;
         }
