@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2a64f6e8c59cc60cd6b5395561f0399d",
+    "content-hash": "b9ca074851762152adc945295947721f",
     "packages": [
         {
             "name": "busybee/urljoin",
@@ -450,12 +450,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/PHPCompatibility/PHPCompatibility.git",
-                "reference": "e426e8096e909163f545753e769f65e1401fbd92"
+                "reference": "dae7dd229b0b2955f5776199497f24985e3c95ad"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/PHPCompatibility/PHPCompatibility/zipball/e426e8096e909163f545753e769f65e1401fbd92",
-                "reference": "e426e8096e909163f545753e769f65e1401fbd92",
+                "url": "https://api.github.com/repos/PHPCompatibility/PHPCompatibility/zipball/dae7dd229b0b2955f5776199497f24985e3c95ad",
+                "reference": "dae7dd229b0b2955f5776199497f24985e3c95ad",
                 "shasum": ""
             },
             "require": {
@@ -533,7 +533,7 @@
                     "type": "thanks_dev"
                 }
             ],
-            "time": "2026-11-17T17:46:27+00:00"
+            "time": "2026-11-20T22:53:04+00:00"
         },
         {
             "name": "phpcsstandards/phpcsutils",

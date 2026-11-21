@@ -3,17 +3,9 @@
     <description>
         PHP cross-version compatibility check for RSS-Bridge.
         Requires phpcompatibility/php-compatibility:^10.0.0@dev (PHPCS 4.x support).
-        NewTrimCharactersDefault is excluded deliberately: the PHP 8.6 form-feed
-        default for trim/ltrim/rtrim is desirable for scraped feed content, and
-        repeating the default mask at every call site adds no value. The sniff
-        self-disables once testVersion no longer spans PHP 8.5 and 8.6.
     </description>
 
-    <config name="testVersion" value="8.5-"/>
-
-    <rule ref="PHPCompatibility">
-        <exclude name="PHPCompatibility.ParameterValues.NewTrimCharactersDefault"/>
-    </rule>
+    <config name="testVersion" value="8.6-"/>
 
     <file>./actions</file>
     <file>./bin</file>

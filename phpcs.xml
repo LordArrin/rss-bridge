@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ruleset name="RSS-Bridge Ruleset">
   <description>
-    Modernized ruleset for RSS-Bridge (PHP 8.6+).
+    Modernized ruleset for RSS-Bridge (PHP 8.5+).
     Based on PSR-12 with strict typing and modern PHP practices.
   </description>
 
@@ -127,5 +127,22 @@
   <rule ref="Squiz.Strings.DoubleQuoteUsage">
     <exclude name="Squiz.Strings.DoubleQuoteUsage.ContainsVar"/>
   </rule>
+
+  <!-- PHP 8.6 compatibility: additional forbidden/deprecated functions -->
+  <rule ref="Generic.PHP.ForbiddenFunctions">
+    <properties>
+      <property name="forbiddenFunctions" type="array">
+        <element key="each" value="foreach"/>
+        <element key="money_format" value="NumberFormatter::formatCurrency"/>
+        <element key="get_magic_quotes_gpc" value=""/>
+        <element key="get_magic_quotes_runtime" value=""/>
+        <element key="__autoload" value="spl_autoload_register"/>
+        <element key="strftime" value="IntlDateFormatter::format"/>
+        <element key="gmstrftime" value="IntlDateFormatter::format"/>
+      </property>
+    </properties>
+  </rule>
+
+  <rule ref="Generic.PHP.DeprecatedFunctions"/>
 
 </ruleset>

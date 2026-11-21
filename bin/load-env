@@ -34,8 +34,8 @@ declare(strict_types=1);
 define('DEFAULT_ENV_FILE', '/app/.env.default');
 define('CUSTOM_ENV_FILE', '/config/.env');
 define('FPM_TEMPLATE_FILE', '/app/config/php-fpm-pool.conf.template');
-define('FPM_OUTPUT_FILE', '/etc/php85/php-fpm.d/php-fpm-pool.conf');
-define('PHP_INI_OUTPUT_FILE', '/etc/php85/conf.d/99-user-overrides.ini');
+define('FPM_OUTPUT_FILE', '/etc/php86/php-fpm.d/php-fpm-pool.conf');
+define('PHP_INI_OUTPUT_FILE', '/etc/php86/conf.d/99-user-overrides.ini');
 
 /**
  * Declarative rules for normalizing environment variables.

@@ -12,6 +12,15 @@ ARG MEMCACHED_VERSION=1.6.45
 ARG IMAGE_VERSION=1.3.0
 ARG VERSION_PLACEHOLDER=__RSSBRIDGE_IMAGE_VERSION__
 
+# PHP
+ARG PHP_VERSION=8.6.0
+ARG APCU_VERSION=5.1.28
+ARG MSGPACK_VERSION=3.0.1
+ARG ZSTD_EXT_VERSION=0.18.0
+ARG BROTLI_EXT_VERSION=0.21.1
+ARG MEMCACHED_EXT_VERSION=3.4.0
+ARG COMPOSER_VERSION=2.11.2
+
 # URLs
 ARG BROTLI_URL=https://github.com/wxx9248/ngx_brotli.git
 ARG HEADERS_MORE_URL=https://github.com/openresty/headers-more-nginx-module.git
@@ -32,6 +41,7 @@ FROM alpine:${ALPINE_VERSION} AS builder
 
 ARG CURL_VERSION NGINX_VERSION OPENSSL_VERSION PCRE_VERSION MIMALLOC_VERSION
 ARG ZLIB_NG_VERSION LIBEVENT_VERSION MEMCACHED_VERSION
+ARG PHP_VERSION APCU_VERSION MSGPACK_VERSION ZSTD_EXT_VERSION BROTLI_EXT_VERSION MEMCACHED_EXT_VERSION COMPOSER_VERSION
 ARG BROTLI_URL HEADERS_MORE_URL
 ARG X86_MARCH X86_MTUNE X86_CFI_FLAGS
 ARG ARM_MARCH ARM_MTUNE ARM_CFI_FLAGS
@@ -413,6 +423,229 @@ ccache -s
 SCRIPT
 
 # =============================================================================
+# PHP
+# =============================================================================
+
+RUN apk add --no-cache \
+        autoconf xz \
+        libxml2-dev sqlite-dev oniguruma-dev tidyhtml-dev \
+        libsodium-dev icu-dev libffi-dev \
+        libpng-dev libjpeg-turbo-dev freetype-dev libwebp-dev libavif-dev \
+        libmemcached-dev cyrus-sasl-dev zstd-dev brotli-dev
+
+RUN --mount=type=cache,target=/ccache <<'SCRIPT'
+set -eu
+. /tmp/env.sh
+
+cd /tmp/curl-install/lib
+ln -sf libcurl-impersonate.so libcurl.so
+ln -sf libcurl-impersonate.so libcurl.so.4
+CURL_BASE_VERSION=$(sed -n 's/^#define LIBCURL_VERSION "\(.*\)"/\1/p' /tmp/curl-install/include/curl/curlver.h)
+test -n "$CURL_BASE_VERSION"
+mkdir -p pkgconfig
+cat > pkgconfig/libcurl.pc <<EOF
+prefix=/tmp/curl-install
+exec_prefix=\${prefix}
+libdir=\${prefix}/lib
+includedir=\${prefix}/include
+
+Name: libcurl
+Description: Library to transfer files with URLs (curl-impersonate)
+Version: ${CURL_BASE_VERSION}
+Libs: -L\${libdir} -lcurl
+Cflags: -I\${includedir}
+supported_features=SSL IPv6 libz brotli zstd AsynchDNS HTTP2 HTTP3 IDN alt-svc
+EOF
+
+cd /tmp
+export PKG_CONFIG_PATH="/usr/local/ssl/lib64/pkgconfig:/usr/local/ssl/lib/pkgconfig:/usr/local/zlib-ng/lib/pkgconfig:/tmp/curl-install/lib/pkgconfig"
+export LD_LIBRARY_PATH="/usr/local/ssl/lib64:/usr/local/ssl/lib:/tmp/curl-install/lib"
+export CFLAGS="$OPT_CFLAGS"
+export CXXFLAGS="$OPT_CFLAGS"
+export LDFLAGS="-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack $CFI_FLAGS $LTO_FLAG -fuse-ld=mold"
+export EXTRA_LDFLAGS_PROGRAM="-Wl,-pie -Wl,-z,defs"
+export EXTENSION_DIR=/usr/local/php/lib/php/extensions
+
+wget -O /tmp/php.tar.xz --tries=3 "https://www.php.net/distributions/php-${PHP_VERSION}.tar.xz"
+tar xJf /tmp/php.tar.xz -C /tmp
+cd "/tmp/php-${PHP_VERSION}"
+
+./configure \
+    --prefix=/usr/local/php \
+    --with-libdir=lib \
+    --with-config-file-path=/etc/php86 \
+    --with-config-file-scan-dir=/etc/php86/conf.d \
+    --enable-option-checking=fatal \
+    --enable-cli \
+    --enable-fpm \
+    --with-fpm-user=nginx \
+    --with-fpm-group=nginx \
+    --disable-cgi \
+    --disable-phpdbg \
+    --without-pear \
+    --enable-ctype \
+    --enable-tokenizer \
+    --enable-phar \
+    --enable-fileinfo \
+    --enable-dom \
+    --enable-xml \
+    --enable-xmlreader \
+    --enable-xmlwriter \
+    --enable-simplexml \
+    --enable-mbstring \
+    --enable-intl \
+    --with-iconv \
+    --with-curl \
+    --with-openssl \
+    --with-sodium \
+    --with-zlib \
+    --with-pcre-jit \
+    --with-sqlite3 \
+    --with-pdo-sqlite \
+    --with-tidy \
+    --enable-gd \
+    --with-jpeg \
+    --with-freetype \
+    --with-webp \
+    --with-avif \
+    --enable-calendar \
+    --enable-pcntl \
+    --enable-shmop \
+    --with-ffi
+
+make -j "$NB_PROC"
+make install
+
+PHP_BIN=/usr/local/php/bin/php
+FPM_BIN=/usr/local/php/sbin/php-fpm
+fail() { echo "PHP GATE FAILED: $*" >&2; exit 1; }
+
+"$PHP_BIN" -v | grep "PHP ${PHP_VERSION} " >/dev/null || fail "version mismatch"
+"$PHP_BIN" -v | grep 'Zend OPcache' >/dev/null || fail "opcache missing"
+"$FPM_BIN" -v >/dev/null || fail "php-fpm not runnable"
+
+for ext in ctype tokenizer Phar fileinfo dom xml xmlreader xmlwriter SimpleXML mbstring intl iconv curl openssl sodium zlib pcre sqlite3 pdo_sqlite tidy gd calendar pcntl shmop FFI session posix filter; do
+    "$PHP_BIN" -m | grep -ix "$ext" >/dev/null || fail "extension missing: $ext"
+done
+
+"$PHP_BIN" -r 'exit(str_contains(curl_version()["ssl_version"], "BoringSSL") ? 0 : 1);' || fail "curl is not impersonate/BoringSSL"
+"$PHP_BIN" -r 'exit(str_contains(OPENSSL_VERSION_TEXT, getenv("OPENSSL_VERSION")) ? 0 : 1);' || fail "OpenSSL version mismatch"
+"$PHP_BIN" -r 'exit(str_contains(ZLIB_VERSION, "zlib-ng") ? 0 : 1);' || fail "zlib-ng not linked"
+"$PHP_BIN" -r 'exit((int) ini_get("pcre.jit") === 1 ? 0 : 1);' || fail "PCRE JIT disabled"
+readelf -sW "$PHP_BIN" | grep 'pcre2_jit_compile' >/dev/null || fail "PCRE2 JIT symbol missing"
+
+for BIN in "$PHP_BIN" "$FPM_BIN"; do
+    file "$BIN" | grep 'pie executable' >/dev/null || fail "binary is not PIE: $BIN"
+    readelf -lW "$BIN" | grep 'GNU_RELRO' >/dev/null || fail "no GNU_RELRO: $BIN"
+    readelf -dW "$BIN" | grep 'NOW' >/dev/null || fail "no BIND_NOW: $BIN"
+    readelf -lW "$BIN" | grep 'GNU_STACK' >/dev/null || fail "no GNU_STACK: $BIN"
+    if readelf -lW "$BIN" | grep 'GNU_STACK' | grep 'RWE' >/dev/null; then
+        fail "executable stack: $BIN"
+    fi
+    readelf -sW "$BIN" | grep '__stack_chk_fail' >/dev/null || fail "stack protector dropped: $BIN"
+done
+
+if [ -n "$LTO_FLAG" ]; then
+    readelf -SW main/main.o | grep '\.gnu\.lto_' >/dev/null || fail "no LTO bytecode in main.o"
+fi
+
+if [ -n "$CFI_FLAGS" ]; then
+    case "$(uname -m)" in
+        x86_64)
+            readelf -n main/main.o | grep 'IBT' >/dev/null || fail "IBT missing in main.o"
+            readelf -n main/main.o | grep 'SHSTK' >/dev/null || fail "SHSTK missing in main.o"
+            ;;
+        aarch64)
+            readelf -n main/main.o | grep 'BTI' >/dev/null || fail "BTI missing in main.o"
+            readelf -n main/main.o | grep 'PAC' >/dev/null || fail "PAC missing in main.o"
+            ;;
+    esac
+fi
+
+cat > /tmp/php-fortify-probe.c <<'EOF'
+#include <stdlib.h>
+#include <string.h>
+int main(void) {
+    char *b = malloc(4);
+    volatile char sink;
+    if (!b) return 2;
+    memcpy(b, "aaaaaaaa", 8);
+    sink = b[0];
+    (void)sink;
+    return 0;
+}
+EOF
+cc $OPT_CFLAGS -o /tmp/php-fortify-probe /tmp/php-fortify-probe.c
+if /tmp/php-fortify-probe; then
+    fail "FORTIFY probe survived an out-of-bounds copy"
+fi
+
+"$PHP_BIN" -r '$dom = \Dom\HTMLDocument::createFromString("<html><body><p>ok</p></body></html>", LIBXML_NOERROR); exit($dom->querySelector("p")->textContent === "ok" ? 0 : 1);' || fail "DOM smoke test failed"
+"$PHP_BIN" -r 'exit(class_exists("SQLite3") && class_exists("NumberFormatter") && function_exists("imagecreatetruecolor") && function_exists("sodium_crypto_sign_keypair") && function_exists("tidy_parse_string") && function_exists("mb_convert_encoding") ? 0 : 1);' || fail "extension smoke test failed"
+
+strip --strip-unneeded "$PHP_BIN" "$FPM_BIN"
+echo "php gates: OK"
+SCRIPT
+
+RUN --mount=type=cache,target=/ccache <<'SCRIPT'
+set -eu
+. /tmp/env.sh
+export PATH=/usr/local/php/bin:$PATH
+export PKG_CONFIG_PATH="/usr/local/ssl/lib64/pkgconfig:/usr/local/ssl/lib/pkgconfig:/usr/local/zlib-ng/lib/pkgconfig:/tmp/curl-install/lib/pkgconfig"
+export LD_LIBRARY_PATH="/usr/local/ssl/lib64:/usr/local/ssl/lib:/tmp/curl-install/lib"
+export CFLAGS="$OPT_CFLAGS"
+export LDFLAGS="-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack $CFI_FLAGS $LTO_FLAG -fuse-ld=mold"
+
+build_ext() {
+    name="$1"
+    version="$2"
+    shift 2
+    wget -O "/tmp/${name}.tgz" --tries=3 "https://pecl.php.net/get/${name}-${version}.tgz"
+    mkdir -p "/tmp/ext-${name}"
+    tar xzf "/tmp/${name}.tgz" -C "/tmp/ext-${name}" --strip-components=1
+    cd "/tmp/ext-${name}"
+    find . -name '*.[ch]' -exec sed -i -e 's/XtOffsetOf(/offsetof(/g' -e 's/EMPTY_SWITCH_DEFAULT_CASE()/default: ZEND_UNREACHABLE();/g' -e 's/zval_dtor(/zval_ptr_dtor_nogc(/g' -e 's/php_verror(NULL, "", /php_verror(NULL, /g' -e 's#PG(unserialize_callback_func)\[0\] == .\\0.#ZSTR_LEN(PG(unserialize_callback_func)) == 0#g' -e 's#ZVAL_STRING(&user_func, PG(unserialize_callback_func));#ZVAL_STR(\&user_func, zend_string_dup(PG(unserialize_callback_func), false));#g' {} +
+    phpize
+    ./configure "$@"
+    make -j "$NB_PROC"
+    make install
+    cd /tmp
+}
+
+build_ext apcu "$APCU_VERSION" --enable-apcu
+build_ext msgpack "$MSGPACK_VERSION" --with-msgpack
+build_ext zstd "$ZSTD_EXT_VERSION" --enable-zstd --with-libzstd
+build_ext brotli "$BROTLI_EXT_VERSION" --enable-brotli --with-libbrotli
+build_ext memcached "$MEMCACHED_EXT_VERSION" \
+    --enable-memcached \
+    --disable-memcached-session \
+    --disable-memcached-sasl \
+    --with-libmemcached-dir=/usr
+
+mkdir -p /etc/php86/conf.d /tmp/php-conf
+cat > /tmp/php-conf/00-extensions.ini <<'EOF'
+extension_dir = /usr/local/php/lib/php/extensions
+extension = apcu.so
+extension = msgpack.so
+extension = zstd.so
+extension = brotli.so
+extension = memcached.so
+apc.enable_cli = 1
+EOF
+cp /tmp/php-conf/00-extensions.ini /etc/php86/conf.d/00-extensions.ini
+
+for ext in apcu msgpack zstd brotli memcached; do
+    php -m | grep -ix "$ext" >/dev/null || { echo "PECL GATE FAILED: $ext not loaded" >&2; exit 1; }
+done
+php -r 'exit(function_exists("apcu_store") && function_exists("msgpack_pack") && function_exists("zstd_compress") && function_exists("brotli_compress") && class_exists("Memcached") ? 0 : 1);' || { echo "PECL GATE FAILED: smoke test" >&2; exit 1; }
+
+find /usr/local/php/lib/php/extensions -name '*.so' -exec strip --strip-unneeded {} +
+echo "pecl gates: OK"
+SCRIPT
+
+RUN wget -O /tmp/composer.phar --tries=3 "https://getcomposer.org/download/${COMPOSER_VERSION}/composer.phar"
+
+# =============================================================================
 # Runtime (unchanged logic; default shell kept so ls|head pipelines stay safe)
 # =============================================================================
 FROM alpine:${ALPINE_VERSION} AS runtime
@@ -436,61 +669,22 @@ RUN set -xe && \
     apk upgrade --no-cache && \
     apk add --no-cache \
       ca-certificates \
-      # Core
-      php85 \
-      php85-fpm \
-      php85-ctype \
-      php85-tokenizer \
-      php85-phar \
-      # XML/HTML parsing
-      php85-dom \
-      php85-xml \
-      php85-xmlreader \
-      php85-xmlwriter \
-      php85-simplexml \
-      php85-tidy \
-      # Strings & encoding
-      php85-mbstring \
-      php85-intl \
-      php85-iconv \
-      # Network & security
-      php85-curl \
-      php85-openssl \
-      php85-sodium \
-      # Cache & performance
-      php85-pecl-memcached \
-      php85-pecl-apcu \
-      # Serialization & compression
-      php85-pecl-igbinary \
-      php85-pecl-msgpack \
-      php85-pecl-zstd \
-      php85-pecl-brotli \
-      # Files & databases
-      php85-fileinfo \
-      php85-sqlite3 \
-      php85-pdo_sqlite \
-      # Images
-      php85-gd \
-      # System & processes
-      php85-calendar \
-      php85-pcntl \
-      php85-shmop \
-      php85-ffi \
-      #
-      composer \
+      libxml2 sqlite-libs oniguruma tidyhtml-libs libsodium icu-libs \
+      libpng freetype libjpeg-turbo libwebp libwebpdemux libwebpmux libavif libffi \
+      zstd-libs brotli-libs \
       supervisor \
       libgcc libstdc++ libatomic libmemcached \
       tzdata \
     && \
     update-ca-certificates && \
-    rm -f /etc/php85/php-fpm.d/www.conf && \
     mkdir -p \
       /var/run \
       /var/log/nginx \
       /var/lib/nginx/tmp/client_body /var/lib/nginx/tmp/proxy \
       /var/lib/nginx/tmp/fastcgi /var/lib/nginx/tmp/uwsgi /var/lib/nginx/tmp/scgi \
-      /run/php85 \
+      /run/php86 \
       /app/cache /app/cache/opcache \
+      /etc/php86/conf.d /etc/php86/php-fpm.d \
       /etc/nginx/http.d /usr/share/nginx/conf \
       /var/log/supervisor /etc/supervisor/conf.d \
       /var/run/memcached \
@@ -499,7 +693,7 @@ RUN set -xe && \
     adduser -D -S -h /var/cache/nginx -s /sbin/nologin -G nginx nginx && \
     addgroup -S memcached && \
     adduser -D -S -h /var/cache/memcached -s /sbin/nologin -G memcached memcached && \
-    chown -R nginx:nginx /var/run /var/log/nginx /var/lib/nginx /run/php85 /app/cache /etc/nginx && \
+    chown -R nginx:nginx /var/run /var/log/nginx /var/lib/nginx /run/php86 /app/cache /etc/nginx && \
     addgroup nginx memcached && \
     chown memcached:nginx /var/run/memcached && \
     chmod 750 /app/cache/opcache && \
@@ -561,10 +755,27 @@ RUN MIMALLOC_LIB=$(find /usr/lib -maxdepth 1 \( -name 'libmimalloc*.so*' -type f
 
 RUN ln -sf /usr/bin/openssl /usr/sbin/openssl
 
+# PHP
+COPY --from=builder /usr/local/php/ /usr/local/php/
+COPY --from=builder /tmp/php-conf/00-extensions.ini /etc/php86/conf.d/00-extensions.ini
+COPY --from=builder /tmp/composer.phar /usr/local/bin/composer.phar
+
+RUN ln -sf /usr/local/php/bin/php /usr/bin/php && \
+    ln -sf /usr/local/php/bin/phpize /usr/bin/phpize && \
+    ln -sf /usr/local/php/bin/php-config /usr/bin/php-config && \
+    ln -sf /usr/local/php/sbin/php-fpm /usr/sbin/php-fpm && \
+    ln -sf /usr/local/php/sbin/php-fpm /usr/sbin/php-fpm86 && \
+    printf '#!/bin/sh\nexec /usr/bin/php /usr/local/bin/composer.phar "$@"\n' > /usr/local/bin/composer && \
+    chmod +x /usr/local/bin/composer && \
+    php -v && \
+    php-fpm -v && \
+    php -m | grep -ix memcached >/dev/null && \
+    composer --version
+
 # Application configs and source
-COPY ./config/php-fpm.conf /etc/php85/php-fpm.conf
+COPY ./config/php-fpm.conf /etc/php86/php-fpm.conf
 COPY ./config/php-fpm-pool.conf.template /app/config/php-fpm-pool.conf.template
-COPY ./config/php.ini /etc/php85/conf.d/rss-bridge.ini
+COPY ./config/php.ini /etc/php86/conf.d/rss-bridge.ini
 COPY ./config/nginx-main.conf /etc/nginx/nginx.conf
 COPY ./config/nginx.conf /etc/nginx/http.d/default.conf
 

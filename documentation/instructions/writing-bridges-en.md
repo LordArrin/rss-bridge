@@ -1188,10 +1188,10 @@ vendor/bin/phpstan analyse bridges-v2/YourBridge.php
 
 Or use the Composer shortcuts: `composer lint`, `composer lint:fix`, `composer stan`.
 
-From inside the Docker container (the Alpine image exposes PHP as `php85`; dev dependencies are installed in the image):
+From inside the Docker container (the Alpine image exposes PHP as `php86`; dev dependencies are installed in the image):
 
 ```bash
-docker exec rss-bridge php85 /app/vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php
+docker exec rss-bridge php86 /app/vendor/bin/phpcs --standard=phpcs.xml bridges-v2/YourBridge.php
 ```
 
 ## Testing Your Bridge
