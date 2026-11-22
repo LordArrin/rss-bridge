@@ -492,17 +492,8 @@ CSS,
             try {
                 return $this->withRetry(
                     function () use ($url): \Dom\HTMLDocument {
-                        $html = getProtectedSimpleHTMLDOM($url, self::PROXY_PROFILE);
-                        $htmlString = $html->saveHtml();
-
-                        if ($htmlString === '') {
-                            throw new \RuntimeException('saveHtml returned empty result');
-                        }
-
-                        return \Dom\HTMLDocument::createFromString(
-                            source: $htmlString,
-                            options: LIBXML_NOERROR
-                        );
+                        $html = getProtectedContents($url, self::PROXY_PROFILE);
+                        return parseHtmlDocument($html);
                     },
                     'TgWSProxy page fetch',
                     $url
@@ -526,17 +517,8 @@ CSS,
         try {
             return $this->withRetry(
                 function () use ($url): \Dom\HTMLDocument {
-                    $html = getSimpleHTMLDOM($url);
-                    $htmlString = $html->saveHtml();
-
-                    if ($htmlString === '') {
-                        throw new \RuntimeException('saveHtml returned empty result');
-                    }
-
-                    return \Dom\HTMLDocument::createFromString(
-                        source: $htmlString,
-                        options: LIBXML_NOERROR
-                    );
+                    $html = getContents($url);
+                    return parseHtmlDocument($html);
                 },
                 'Direct page fetch',
                 $url
@@ -551,7 +533,6 @@ CSS,
      */
     private function parseMessage(\Dom\Element $message): array
     {
-        /** @var array<string, mixed> $context */
         $context = ['title' => '', 'author' => '', 'hashtags' => []];
 
         $uri = $this->extractUri($message);
@@ -572,13 +553,13 @@ CSS,
         }
 
         $item['content'] = $item['content']
-            |> $this->removeViewInTelegram(...)
-            |> $this->normalizeText(...)
-            |> $this->embedMediaInHtml(...)
-            |> $this->sanitizeContent(...);
+        |> $this->removeViewInTelegram(...)
+        |> $this->normalizeText(...)
+        |> $this->embedMediaInHtml(...)
+        |> $this->sanitizeContent(...);
 
-        if ($this->getInput('hide_hashtags') === false && $context['hashtags'] !== []) {
-            $item['categories'] = $context['hashtags'];
+        if ($this->getInput('hide_hashtags') === false && $contentResult['hashtags'] !== []) {
+            $item['categories'] = $contentResult['hashtags'];
         }
 
         return $item;
@@ -600,11 +581,11 @@ CSS,
         return ($dt !== null && $dt !== '') ? $dt : null;
     }
 
-    /**
-     * @param array<string, mixed> $context
-     * @return array<string, mixed>
-     */
-    private function processContent(\Dom\Element $messageDiv, array &$context): array
+/**
+ * @param array{title: string, author: string, hashtags: list<string>} $context
+ * @return array{html: string, title: string, author: string, hashtags: list<string>}
+ */
+    private function processContent(\Dom\Element $messageDiv, array $context): array
     {
         foreach ($messageDiv->querySelectorAll(self::SELECTORS['UNSUPPORTED_CONT']) as $fake) {
             $fake->outerHTML = '';
@@ -666,7 +647,7 @@ CSS,
             $method = $piece[1];
             $element = $piece[2];
 
-            $partHtml = match ($method) {
+            $partResult = match ($method) {
                 'processText'        => $this->processText($element, $context),
                 'processVideo'       => $this->processVideo($element, $context),
                 'processPhoto'       => $this->processPhoto($element, $context),
@@ -675,8 +656,11 @@ CSS,
                 'processLinkPreview' => $this->processLinkPreview($element, $context),
                 'processLocation'    => $this->processLocation($element, $context),
                 'processSticker'     => $this->processSticker($element, $context),
-                default              => '',
+                default              => ['html' => '', 'context' => $context],
             };
+
+            $partHtml = $partResult['html'];
+            $context = $partResult['context'];
 
             if ($partHtml === '') {
                 continue;
@@ -689,17 +673,18 @@ CSS,
         }
 
         return [
-            'html' => $html,
-            'title' => $context['title'],
-            'author' => $context['author'],
-            'hashtags' => $context['hashtags'],
+        'html' => $html,
+        'title' => $context['title'],
+        'author' => $context['author'],
+        'hashtags' => $context['hashtags'],
         ];
     }
 
-    /**
-     * @param array<string, mixed> $context
-     */
-    private function processText(\Dom\Element $textDiv, array &$context): string
+/**
+ * @param array{title: string, author: string, hashtags: list<string>} $context
+ * @return array{html: string, context: array{title: string, author: string, hashtags: list<string>}}
+ */
+    private function processText(\Dom\Element $textDiv, array $context): array
     {
         $nested = $textDiv->querySelector(self::SELECTORS['MESSAGE_TEXT']);
         if ($nested !== null) {
@@ -716,24 +701,27 @@ CSS,
 
         if (mb_strlen($plain, 'UTF-8') <= self::MAX_TITLE_LENGTH) {
             $context['title'] = $plain;
-            return '';
+            return ['html' => '', 'context' => $context];
         }
 
         $split = $this->splitTitleAndContent($inner);
         $context['title'] = $split['title'];
 
         if ($split['html'] === '') {
-            return '';
+            return ['html' => '', 'context' => $context];
         }
 
         $dir = $textDiv->getAttribute('dir') ?? '';
         $attr = $dir !== '' ? ' dir="' . $dir . '"' : '';
 
-        return sprintf(
+        return [
+        'html' => sprintf(
             '<div class="tgme_widget_message_text js-message_text"%s>%s</div>',
             $attr,
             $split['html']
-        );
+        ),
+        'context' => $context,
+        ];
     }
 
     /**
@@ -897,10 +885,11 @@ CSS,
         );
     }
 
-    /**
-     * @param array<string, mixed> $context
-     */
-    private function processPhoto(\Dom\Element $messageDiv, array &$context): string
+/**
+ * @param array{title: string, author: string, hashtags: list<string>} $context
+ * @return array{html: string, context: array{title: string, author: string, hashtags: list<string>}}
+ */
+    private function processPhoto(\Dom\Element $messageDiv, array $context): array
     {
         if ($context['title'] === '') {
             $context['title'] = '@' . $this->getNormalizedUsername() . ' posted a photo';
@@ -916,13 +905,14 @@ CSS,
             }
         }
 
-        return $out;
+        return ['html' => $out, 'context' => $context];
     }
 
-    /**
-     * @param array<string, mixed> $context
-     */
-    private function processVideo(\Dom\Element $messageDiv, array &$context): string
+/**
+ * @param array{title: string, author: string, hashtags: list<string>} $context
+ * @return array{html: string, context: array{title: string, author: string, hashtags: list<string>}}
+ */
+    private function processVideo(\Dom\Element $messageDiv, array $context): array
     {
         if ($context['title'] === '') {
             $context['title'] = '@' . $this->getNormalizedUsername() . ' posted a video';
@@ -930,9 +920,9 @@ CSS,
 
         $poster = '';
         $thumbs = [
-            self::SELECTORS['VIDEO_THUMB'],
-            self::SELECTORS['VIDEO_PREVIEW_THUMB'],
-            self::SELECTORS['ROUNDVIDEO_THUMB'],
+        self::SELECTORS['VIDEO_THUMB'],
+        self::SELECTORS['VIDEO_PREVIEW_THUMB'],
+        self::SELECTORS['ROUNDVIDEO_THUMB'],
         ];
 
         foreach ($thumbs as $sel) {
@@ -968,7 +958,7 @@ CSS,
         $src = $videoEl !== null ? ($videoEl->getAttribute('src') ?? '') : '';
 
         if ($poster === '' && $src === '' && $postHref === '') {
-            return '';
+            return ['html' => '', 'context' => $context];
         }
 
         $href = $postHref !== '' ? $postHref : '#';
@@ -991,13 +981,14 @@ CSS,
 
         $html .= sprintf('<a href="%s">Video: %s%s</a>', $href, $channel, $duration !== '' ? ' (' . $duration . ')' : '');
 
-        return $html;
+        return ['html' => $html, 'context' => $context];
     }
 
-    /**
-     * @param array<string, mixed> $context
-     */
-    private function processSticker(\Dom\Element $messageDiv, array &$context): string
+/**
+ * @param array{title: string, author: string, hashtags: list<string>} $context
+ * @return array{html: string, context: array{title: string, author: string, hashtags: list<string>}}
+ */
+    private function processSticker(\Dom\Element $messageDiv, array $context): array
     {
         if ($context['title'] === '') {
             $context['title'] = '@' . $this->getNormalizedUsername() . ' posted a sticker';
@@ -1005,7 +996,7 @@ CSS,
 
         $div = $messageDiv->querySelector(self::SELECTORS['STICKER_WRAP']);
         if ($div === null) {
-            return '';
+            return ['html' => '', 'context' => $context];
         }
 
         $pic = $div->querySelector('picture');
@@ -1015,7 +1006,7 @@ CSS,
                 $innerDiv->setAttribute('style', '');
             }
             $pic->setAttribute('style', '');
-            return $div->outerHTML;
+            return ['html' => $div->outerHTML, 'context' => $context];
         }
 
         $el = $div->querySelector('i');
@@ -1023,21 +1014,22 @@ CSS,
             $style = $el->getAttribute('style') ?? '';
             $bg = extract_css_background_image($style);
             if ($bg !== null) {
-                return sprintf('<img src="%s" />', $bg);
+                return ['html' => sprintf('<img src="%s" />', $bg), 'context' => $context];
             }
         }
 
-        return '';
+        return ['html' => '', 'context' => $context];
     }
 
-    /**
-     * @param array<string, mixed> $context
-     */
-    private function processPoll(\Dom\Element $messageDiv, array &$context): string
+/**
+ * @param array{title: string, author: string, hashtags: list<string>} $context
+ * @return array{html: string, context: array{title: string, author: string, hashtags: list<string>}}
+ */
+    private function processPoll(\Dom\Element $messageDiv, array $context): array
     {
         $poll = $messageDiv->querySelector(self::SELECTORS['POLL']);
         if ($poll === null) {
-            return '';
+            return ['html' => '', 'context' => $context];
         }
 
         $title = $this->getPlaintext($poll, self::SELECTORS['POLL_QUESTION']);
@@ -1087,17 +1079,18 @@ CSS,
 
         $html .= '</div>';
 
-        return $html;
+        return ['html' => $html, 'context' => $context];
     }
 
-    /**
-     * @param array<string, mixed> $context
-     */
-    private function processLinkPreview(\Dom\Element $messageDiv, array &$context): string
+/**
+ * @param array{title: string, author: string, hashtags: list<string>} $context
+ * @return array{html: string, context: array{title: string, author: string, hashtags: list<string>}}
+ */
+    private function processLinkPreview(\Dom\Element $messageDiv, array $context): array
     {
         $preview = $messageDiv->querySelector(self::SELECTORS['LINK_PREVIEW']);
         if ($preview === null || trim($preview->innerHTML) === '') {
-            return '';
+            return ['html' => '', 'context' => $context];
         }
 
         $img = '';
@@ -1115,7 +1108,8 @@ CSS,
         $desc = htmlspecialchars($this->getPlaintext($preview, self::SELECTORS['LINK_PREVIEW_DESC']), ENT_QUOTES);
         $previewHref = $preview->getAttribute('href') ?? '';
 
-        return sprintf(
+        return [
+        'html' => sprintf(
             '<blockquote><a href="%s">%s</a><br /><a href="%s">%s - %s</a><br />%s</blockquote>',
             $previewHref,
             $img,
@@ -1123,13 +1117,16 @@ CSS,
             $title,
             $site,
             $desc
-        );
+        ),
+        'context' => $context,
+        ];
     }
 
-    /**
-     * @param array<string, mixed> $context
-     */
-    private function processAttachment(\Dom\Element $messageDiv, array &$context): string
+/**
+ * @param array{title: string, author: string, hashtags: list<string>} $context
+ * @return array{html: string, context: array{title: string, author: string, hashtags: list<string>}}
+ */
+    private function processAttachment(\Dom\Element $messageDiv, array $context): array
     {
         if ($context['title'] === '') {
             $context['title'] = '@' . $this->getNormalizedUsername() . ' posted an attachment';
@@ -1142,13 +1139,14 @@ CSS,
             $out .= sprintf('%s - %s<br />', $docTitle, $docExtra);
         }
 
-        return $out;
+        return ['html' => $out, 'context' => $context];
     }
 
-    /**
-     * @param array<string, mixed> $context
-     */
-    private function processLocation(\Dom\Element $messageDiv, array &$context): string
+/**
+ * @param array{title: string, author: string, hashtags: list<string>} $context
+ * @return array{html: string, context: array{title: string, author: string, hashtags: list<string>}}
+ */
+    private function processLocation(\Dom\Element $messageDiv, array $context): array
     {
         if ($context['title'] === '') {
             $context['title'] = '@' . $this->getNormalizedUsername() . ' posted a location';
@@ -1158,14 +1156,14 @@ CSS,
         $link = $messageDiv->querySelector(self::SELECTORS['LOCATION_WRAP']);
 
         if ($el === null || $link === null) {
-            return '';
+            return ['html' => '', 'context' => $context];
         }
 
         $style = $el->getAttribute('style') ?? '';
         $linkHref = $link->getAttribute('href') ?? '';
         $imgSrc = extract_css_background_image($style) ?? '';
 
-        return sprintf('<a href="%s"><img src="%s" /></a>', $linkHref, $imgSrc);
+        return ['html' => sprintf('<a href="%s"><img src="%s" /></a>', $linkHref, $imgSrc), 'context' => $context];
     }
 
     /**
@@ -1175,20 +1173,12 @@ CSS,
     {
         $tags = [];
 
-        if (preg_match_all('/<a\s[^>]*href="\?q=%23[^"]*"[^>]*>(.*?)<\/a>/is', $html, $matches, PREG_SET_ORDER) > 0) {
-            foreach ($matches as $m) {
+        $html = preg_replace_callback(
+            '/<a\s[^>]*href="\?q=%23[^"]*"[^>]*>(.*?)<\/a>/is',
+            function (array $m) use (&$tags): string {
                 $text = trim(strip_tags($m[1]));
                 if ($text !== '' && $text[0] === '#') {
                     $tags[] = mb_substr($text, 1, encoding: 'UTF-8');
-                }
-            }
-        }
-
-        $html = preg_replace_callback(
-            '/<a\s[^>]*href="\?q=%23[^"]*"[^>]*>(.*?)<\/a>/is',
-            function (array $m): string {
-                $text = trim(strip_tags($m[1]));
-                if ($text !== '' && $text[0] === '#') {
                     return '';
                 }
                 return $m[0];
@@ -1202,8 +1192,8 @@ CSS,
         $html = preg_replace('/\s*(?:<br\s*\/?>)+\s*$/i', '', $html) ?? $html;
 
         return [
-            'html' => $html,
-            'tags' => array_values(array_unique($tags))
+        'html' => $html,
+        'tags' => array_values(array_unique($tags))
         ];
     }
 
@@ -1503,10 +1493,12 @@ CSS,
 
     private function isAd(\Dom\Element $message): bool
     {
-        return array_any(
-            iterator_to_array($message->querySelectorAll(self::SELECTORS['ANY_WITH_CLASS'])),
-            fn($el) => str_contains($el->getAttribute('class') ?? '', 'sponsored')
-        );
+        foreach ($message->querySelectorAll(self::SELECTORS['ANY_WITH_CLASS']) as $el) {
+            if (str_contains($el->getAttribute('class') ?? '', 'sponsored') === true) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1555,14 +1547,12 @@ CSS,
 
     private function extractChannelIcon(\Dom\HTMLDocument $dom): string
     {
-        $meta = array_find(
-            iterator_to_array($dom->querySelectorAll(self::SELECTORS['META_TAGS'])),
-            fn($m) => $m->getAttribute('property') === 'og:image'
-        );
-        if ($meta !== null) {
-            $content = trim($meta->getAttribute('content') ?? '');
-            if ($content !== '') {
-                return $content;
+        foreach ($dom->querySelectorAll(self::SELECTORS['META_TAGS']) as $meta) {
+            if ($meta->getAttribute('property') === 'og:image') {
+                $content = trim($meta->getAttribute('content') ?? '');
+                if ($content !== '') {
+                    return $content;
+                }
             }
         }
 

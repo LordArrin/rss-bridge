@@ -113,7 +113,6 @@ abstract class HoyoBase extends BridgeAbstract
             try {
                 $dom = parseHtmlDocument('<div>' . $sContent . '</div>');
             } catch (\Throwable) {
-                libxml_use_internal_errors(false);
                 continue;
             }
 
@@ -285,7 +284,6 @@ abstract class HoyoBase extends BridgeAbstract
         try {
             $tempDoc = parseHtmlDocument('<div id="rss-bridge-temp-wrapper">' . $replacement . '</div>');
         } catch (\Throwable) {
-            libxml_use_internal_errors(false);
             return;
         }
 

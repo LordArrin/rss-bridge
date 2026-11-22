@@ -45,7 +45,6 @@ final class TheHackerNewsBridge extends BridgeAbstract
         try {
             $dom = parseHtmlDocument($html);
         } catch (\Throwable) {
-            libxml_use_internal_errors(false);
             throwServerException('Failed to parse The Hacker News homepage');
         }
 
@@ -187,7 +186,6 @@ final class TheHackerNewsBridge extends BridgeAbstract
         try {
             $articleDom = parseHtmlDocument($articleHtml);
         } catch (\Throwable) {
-            libxml_use_internal_errors(false);
             return '';
         }
 

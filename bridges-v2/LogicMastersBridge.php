@@ -21,28 +21,24 @@ final class LogicMastersBridge extends BridgeAbstract
         $html = $this->fetchHtml(self::URI);
         $items = $html->querySelectorAll('div.aktuelles_eintrag');
 
-        foreach ($items as $item) {
-            $titleNode = $item->querySelector('div.aktuelles_titel');
-            $dateNode = $item->querySelector('div.aktuelles_datum');
-            $contentNodes = $item->querySelectorAll('p');
+        foreach ($items as $node) {
+            $titleNode = $node->querySelector('div.aktuelles_titel');
+            $dateNode = $node->querySelector('div.aktuelles_datum');
+            $contentNodes = $node->querySelectorAll('p');
 
-            $title = 'Untitled';
-            if ($titleNode !== null) {
-                $title = trim($titleNode->textContent ?? '');
+            $title = $titleNode !== null ? trim($titleNode->textContent ?? '') : '';
+            if ($title === '') {
+                $title = 'Untitled';
             }
 
-            $timestamp = time();
-            if ($dateNode !== null) {
-                $timestamp = $this->parseDate(trim($dateNode->textContent ?? ''));
-            }
+            $dateText = $dateNode !== null ? trim($dateNode->textContent ?? '') : '';
+            $timestamp = $dateText !== '' ? $this->parseDate($dateText) : null;
 
             $content = '';
-
             foreach ($contentNodes as $p) {
                 $htmlContent = $p->innerHTML;
                 if ($htmlContent !== '') {
-                    $processedHtml = $this->makeUrlsAbsolute($htmlContent);
-                    $content .= '<p>' . $processedHtml . '</p>';
+                    $content .= '<p>' . $this->makeUrlsAbsolute($htmlContent) . '</p>';
                 }
             }
 
@@ -50,13 +46,18 @@ final class LogicMastersBridge extends BridgeAbstract
                 $content = '<p>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</p>';
             }
 
-            $this->items[] = [
+            $feedItem = [
                 'title' => $title,
                 'uri' => self::URI,
                 'content' => $content,
-                'timestamp' => $timestamp,
-                'uid' => md5($title . (string) $timestamp),
+                'uid' => md5($title . '|' . $dateText),
             ];
+
+            if ($timestamp !== null) {
+                $feedItem['timestamp'] = $timestamp;
+            }
+
+            $this->items[] = $feedItem;
         }
 
         if ($this->items === []) {
@@ -85,22 +86,44 @@ final class LogicMastersBridge extends BridgeAbstract
         ) ?? $html;
     }
 
-    private function parseDate(string $dateString): int
+    private function parseDate(string $dateString): ?int
     {
-        $cleanDate = str_replace(['\\.', '\\'], ['.', ''], $dateString);
-
-        $formatter = new \IntlDateFormatter(
-            'de',
-            \IntlDateFormatter::LONG,
-            \IntlDateFormatter::NONE
-        );
-        $result = $formatter->parse($cleanDate);
-
-        if ($result === false) {
-            return time();
+        $clean = preg_replace('/\s+/u', ' ', trim($dateString));
+        if (is_string($clean) === false) {
+            return null;
         }
 
-        return (int) $result;
+        if (preg_match('/^(\d{1,2})\.\s*(\p{L}+)\s+(\d{4})$/u', $clean, $m) !== 1) {
+            return null;
+        }
+
+        $month = match (mb_strtolower($m[2])) {
+            'januar', 'jänner' => 1,
+            'februar', 'feber' => 2,
+            'märz', 'maerz' => 3,
+            'april' => 4,
+            'mai' => 5,
+            'juni' => 6,
+            'juli' => 7,
+            'august' => 8,
+            'september' => 9,
+            'oktober' => 10,
+            'november' => 11,
+            'dezember' => 12,
+            default => 0,
+        };
+
+        if ($month === 0) {
+            return null;
+        }
+
+        $date = \DateTimeImmutable::createFromFormat(
+            'Y-n-j H:i:s',
+            sprintf('%04d-%d-%d 00:00:00', (int) $m[3], $month, (int) $m[1]),
+            new \DateTimeZone('Europe/Berlin')
+        );
+
+        return $date === false ? null : $date->getTimestamp();
     }
 
     private function fetchHtml(string $url): \Dom\HTMLDocument

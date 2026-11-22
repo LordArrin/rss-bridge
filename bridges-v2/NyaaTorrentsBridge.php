@@ -122,7 +122,6 @@ final class NyaaTorrentsBridge extends BridgeAbstract
                     try {
                         $dom = parseHtmlDocument($html);
                     } catch (\Throwable) {
-                        libxml_use_internal_errors(false);
                         $dom = null;
                     }
 
@@ -171,7 +170,6 @@ final class NyaaTorrentsBridge extends BridgeAbstract
         try {
             $dom = parseHtmlDocument('<div id="rss-bridge-content">' . $content . '</div>');
         } catch (\Throwable) {
-            libxml_use_internal_errors(false);
             return $content;
         }
 

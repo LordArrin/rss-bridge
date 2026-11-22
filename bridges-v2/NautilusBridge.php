@@ -118,14 +118,12 @@ final class NautilusBridge extends FeedExpander
             try {
                 $dom = parseHtmlDocument($html);
             } catch (\Throwable) {
-                libxml_use_internal_errors(false);
                 return $item;
             }
         } else {
             try {
                 $dom = parseHtmlDocument($cachedHtml);
             } catch (\Throwable) {
-                libxml_use_internal_errors(false);
                 return $item;
             }
         }
@@ -224,7 +222,6 @@ final class NautilusBridge extends FeedExpander
         try {
             $tempDom = parseHtmlDocument('<div>' . $articleHtml . '</div>');
         } catch (\Throwable) {
-            libxml_use_internal_errors(false);
             return $content . $this->fixRelativeLinksInString($articleHtml);
         }
 
@@ -353,7 +350,6 @@ final class NautilusBridge extends FeedExpander
         try {
             $tempDom = parseHtmlDocument('<div>' . $html . '</div>');
         } catch (\Throwable) {
-            libxml_use_internal_errors(false);
             return $html;
         }
 

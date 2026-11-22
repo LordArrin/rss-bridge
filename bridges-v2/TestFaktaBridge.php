@@ -50,7 +50,6 @@ final class TestFaktaBridge extends BridgeAbstract
         try {
             $dom = parseHtmlDocument($html);
         } catch (\Throwable) {
-            libxml_use_internal_errors(false);
             throwServerException('Failed to parse Testfakta homepage');
         }
 
@@ -96,7 +95,6 @@ final class TestFaktaBridge extends BridgeAbstract
             try {
                 $articleDom = parseHtmlDocument($articleHtml);
             } catch (\Throwable) {
-                libxml_use_internal_errors(false);
                 continue;
             }
 

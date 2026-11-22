@@ -113,7 +113,6 @@ final class ScmbBridge extends BridgeAbstract
         try {
             $dom = parseHtmlDocument($html);
         } catch (\Throwable $e) {
-            libxml_use_internal_errors(false);
             throwServerException('Failed to parse HTML from ' . $url . ': ' . $e->getMessage());
         }
 

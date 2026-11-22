@@ -109,7 +109,6 @@ final class PinterestBridge extends FeedExpander
         try {
             $dom = parseHtmlDocument('<div id="pin-wrap">' . $content . '</div>');
         } catch (\Throwable) {
-            libxml_use_internal_errors(false);
             return $content;
         }
 

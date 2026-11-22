@@ -570,6 +570,8 @@ if /tmp/php-fortify-probe; then
     fail "FORTIFY probe survived an out-of-bounds copy"
 fi
 
+"$PHP_BIN" -r '$x = \Dom\XMLDocument::createFromString("<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><item><title>ok</title></item></channel></rss>", LIBXML_NOERROR | LIBXML_NOWARNING); exit($x->querySelector("item > title")->textContent === "ok" ? 0 : 1);' || fail "XML DOM smoke test failed"
+"$PHP_BIN" -r 'fwrite(STDERR, "libxml2 " . LIBXML_DOTTED_VERSION . "\n");'
 "$PHP_BIN" -r '$dom = \Dom\HTMLDocument::createFromString("<html><body><p>ok</p></body></html>", LIBXML_NOERROR); exit($dom->querySelector("p")->textContent === "ok" ? 0 : 1);' || fail "DOM smoke test failed"
 "$PHP_BIN" -r 'exit(class_exists("SQLite3") && class_exists("NumberFormatter") && function_exists("imagecreatetruecolor") && function_exists("sodium_crypto_sign_keypair") && function_exists("tidy_parse_string") && function_exists("mb_convert_encoding") ? 0 : 1);' || fail "extension smoke test failed"
 
