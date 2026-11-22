@@ -59,9 +59,7 @@ final class TheGuardianBridge extends FeedExpander
             return $item;
         }
 
-        libxml_use_internal_errors(true);
-        $articlePage = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $articlePage = parseHtmlDocument($html);
 
         $content = '';
 
@@ -165,9 +163,7 @@ final class TheGuardianBridge extends FeedExpander
 
     private function removeJunkFromContent(string $content): string
     {
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($content);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($content);
 
         foreach (self::JUNK_SELECTORS as $selector) {
             $elements = $dom->querySelectorAll($selector);

@@ -74,7 +74,7 @@ final class SkyArteBridge extends BridgeAbstract
             return null;
         }
 
-        $dom = \Dom\HTMLDocument::createFromString($html);
+        $dom = parseHtmlDocument($html);
         $script = $dom->querySelector('script#__NEXT_DATA__');
 
         if ($script === null) {

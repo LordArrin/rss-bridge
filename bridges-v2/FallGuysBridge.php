@@ -216,7 +216,7 @@ final class FallGuysBridge extends BridgeAbstract
             $cachedHtml = $html;
         }
 
-        $dom = \Dom\HTMLDocument::createFromString($cachedHtml);
+        $dom = parseHtmlDocument($cachedHtml);
         $element = $dom->querySelector('#__NEXT_DATA__');
 
         if ($element instanceof \Dom\Element === false) {

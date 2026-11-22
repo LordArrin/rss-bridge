@@ -72,9 +72,7 @@ CSS;
                 continue;
             }
 
-            libxml_use_internal_errors(true);
-            $dom = \Dom\HTMLDocument::createFromString($fullArticleHtml);
-            libxml_use_internal_errors(false);
+            $dom = parseHtmlDocument($fullArticleHtml);
 
             $contentNode = $dom->querySelector('.article-content');
             if ($contentNode === null) {

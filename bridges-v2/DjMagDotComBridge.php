@@ -66,9 +66,7 @@ final class DjMagDotComBridge extends BridgeAbstract
 
         $html = (string) getContents($url);
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $featuredItem = $dom->querySelector('div.attachment-before div.view-content');
         if ($featuredItem !== null) {
@@ -204,9 +202,7 @@ final class DjMagDotComBridge extends BridgeAbstract
             return null;
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $standfirst = $dom->querySelector('article div.article--standfirst p');
         $standfirstText = '';

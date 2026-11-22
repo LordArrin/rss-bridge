@@ -43,9 +43,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
         }
 
         try {
-            libxml_use_internal_errors(true);
-            $dom = \Dom\HTMLDocument::createFromString($html);
-            libxml_use_internal_errors(false);
+            $dom = parseHtmlDocument($html);
         } catch (\Throwable) {
             libxml_use_internal_errors(false);
             throwServerException('Failed to parse The Hacker News homepage');
@@ -187,9 +185,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
         }
 
         try {
-            libxml_use_internal_errors(true);
-            $articleDom = \Dom\HTMLDocument::createFromString($articleHtml);
-            libxml_use_internal_errors(false);
+            $articleDom = parseHtmlDocument($articleHtml);
         } catch (\Throwable) {
             libxml_use_internal_errors(false);
             return '';

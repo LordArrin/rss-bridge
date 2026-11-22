@@ -23,9 +23,15 @@ final class AlpineReleasesBridge extends BridgeAbstract
             throwServerException('Failed to fetch Atom feed');
         }
 
-        libxml_use_internal_errors(true);
-        $xml = \Dom\XMLDocument::createFromString($feedXml);
-        libxml_use_internal_errors(false);
+        $previous = libxml_use_internal_errors(true);
+        try {
+            $xml = \Dom\XMLDocument::createFromString($feedXml, LIBXML_NOERROR | LIBXML_NOWARNING);
+        } catch (\Throwable $e) {
+            throwServerException('Failed to parse Atom feed: ' . $e->getMessage());
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+        }
 
         foreach ($xml->querySelectorAll('entry') as $entry) {
             $titleEl = $entry->querySelector('title');
@@ -108,9 +114,7 @@ final class AlpineReleasesBridge extends BridgeAbstract
             return [];
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $branches = [];
 

@@ -335,9 +335,7 @@ final class IXBTGamesBridge extends BridgeAbstract
 
     private function processImages(string $html): string
     {
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString('<div>' . $html . '</div>');
-        libxml_clear_errors();
+        $dom = parseHtmlDocument('<div>' . $html . '</div>');
         $wrapper = $dom->querySelector('div');
 
         if ($wrapper === null) {

@@ -62,9 +62,7 @@ final class DevToBridge extends BridgeAbstract
         }
 
         try {
-            libxml_use_internal_errors(true);
-            $dom = \Dom\HTMLDocument::createFromString($html);
-            libxml_use_internal_errors(false);
+            $dom = parseHtmlDocument($html);
         } catch (\Throwable) {
             return $html;
         }
@@ -201,9 +199,7 @@ final class DevToBridge extends BridgeAbstract
             }
 
             try {
-                libxml_use_internal_errors(true);
-                $articleDom = \Dom\HTMLDocument::createFromString($articleHtml);
-                libxml_use_internal_errors(false);
+                $articleDom = parseHtmlDocument($articleHtml);
             } catch (\Throwable) {
                 continue;
             }
@@ -240,9 +236,7 @@ final class DevToBridge extends BridgeAbstract
         }
 
         try {
-            libxml_use_internal_errors(true);
-            $dom = \Dom\HTMLDocument::createFromString($indexHtml);
-            libxml_use_internal_errors(false);
+            $dom = parseHtmlDocument($indexHtml);
         } catch (\Throwable) {
             throwServerException('Failed to parse DEV.to homepage');
         }
@@ -282,9 +276,7 @@ final class DevToBridge extends BridgeAbstract
             }
 
             try {
-                libxml_use_internal_errors(true);
-                $guideDom = \Dom\HTMLDocument::createFromString($guideHtml);
-                libxml_use_internal_errors(false);
+                $guideDom = parseHtmlDocument($guideHtml);
             } catch (\Throwable) {
                 continue;
             }

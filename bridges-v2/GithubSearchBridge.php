@@ -39,9 +39,7 @@ final class GithubSearchBridge extends BridgeAbstract
             throwServerException('Empty response from GitHub search');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $resultElement = $dom->querySelector('[data-testid="results-list"]');
         if ($resultElement === null) {

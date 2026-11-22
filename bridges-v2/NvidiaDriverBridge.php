@@ -104,9 +104,7 @@ final class NvidiaDriverBridge extends BridgeAbstract
             throwServerException('Failed to fetch NVIDIA driver page');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         foreach ($dom->querySelectorAll('tr#driverList') as $element) {
             $img = $element->querySelector('img');

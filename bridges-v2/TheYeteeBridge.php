@@ -73,7 +73,7 @@ final class TheYeteeBridge extends BridgeAbstract
                 'author' => $author,
                 'uri' => $uri,
                 'content' => $content,
-                'uid' => md5($title . $author . (string) time()),
+                'uid' => $handle !== '' ? $uri : md5($title . $author),
             ];
         }
 

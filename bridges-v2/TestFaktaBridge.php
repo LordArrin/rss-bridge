@@ -48,9 +48,7 @@ final class TestFaktaBridge extends BridgeAbstract
         }
 
         try {
-            libxml_use_internal_errors(true);
-            $dom = \Dom\HTMLDocument::createFromString($html);
-            libxml_use_internal_errors(false);
+            $dom = parseHtmlDocument($html);
         } catch (\Throwable) {
             libxml_use_internal_errors(false);
             throwServerException('Failed to parse Testfakta homepage');
@@ -96,9 +94,7 @@ final class TestFaktaBridge extends BridgeAbstract
             }
 
             try {
-                libxml_use_internal_errors(true);
-                $articleDom = \Dom\HTMLDocument::createFromString($articleHtml);
-                libxml_use_internal_errors(false);
+                $articleDom = parseHtmlDocument($articleHtml);
             } catch (\Throwable) {
                 libxml_use_internal_errors(false);
                 continue;

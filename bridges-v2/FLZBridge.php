@@ -475,7 +475,7 @@ final class FLZBridge extends BridgeAbstract
 
             try {
                 $html = $this->fetch($url);
-                $dom = \Dom\HTMLDocument::createFromString($html);
+                $dom = parseHtmlDocument($html);
             } catch (\Exception $e) {
                 $this->logger?->info(sprintf('FLZ: overview %s not available: %s', $url, $e->getMessage()));
                 continue;
@@ -528,7 +528,7 @@ final class FLZBridge extends BridgeAbstract
 
         try {
             $html = $this->fetch($item['uri']);
-            $dom = \Dom\HTMLDocument::createFromString($html);
+            $dom = parseHtmlDocument($html);
             $body = $this->extractBody($dom);
         } catch (\Exception $e) {
             $this->logger?->info(sprintf('FLZ: article %s not available: %s', $item['uri'], $e->getMessage()));

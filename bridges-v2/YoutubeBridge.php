@@ -332,10 +332,7 @@ final class YoutubeBridge extends BridgeAbstract
 
     private function extractPageTitle(string $htmlString): string
     {
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($htmlString);
-        libxml_clear_errors();
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($htmlString);
 
         $titleNode = $dom->querySelector('title');
         if ($titleNode === null) {
@@ -351,10 +348,7 @@ final class YoutubeBridge extends BridgeAbstract
         $url = self::URI . '/watch?v=' . $videoId;
         $htmlString = $this->fetch($url, true);
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($htmlString);
-        libxml_clear_errors();
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($htmlString);
 
         $bodyHtml = '';
         if ($dom->documentElement !== null) {
@@ -629,11 +623,16 @@ final class YoutubeBridge extends BridgeAbstract
 
     private function extractItemsFromXmlFeed(string $xmlString): void
     {
-        libxml_use_internal_errors(true);
-        $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
-        $xmlErrors = libxml_get_errors();
-        libxml_clear_errors();
-        libxml_use_internal_errors(false);
+        $previous = libxml_use_internal_errors(true);
+        try {
+            $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
+            $xmlErrors = libxml_get_errors();
+        } catch (\Throwable $e) {
+            throwServerException('Failed to parse XML feed: ' . $e->getMessage());
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+        }
 
         if ($doc->documentElement === null) {
             $firstXmlErrorMessage = $xmlErrors !== [] ? $xmlErrors[0]->message : 'Unknown parsing error';

@@ -30,9 +30,7 @@ final class HytaleBridge extends BridgeAbstract
             throwServerException('Empty response from Hytale news page');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $articlesContainer = $dom->querySelector('div.' . self::ARTICLES_CONTAINER_CLASS);
 

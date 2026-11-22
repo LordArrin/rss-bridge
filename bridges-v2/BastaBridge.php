@@ -41,18 +41,15 @@ final class BastaBridge extends BridgeAbstract
         $feedUrl = self::URI . 'spip.php?page=backend';
         $feedHtml = $this->fetchWithAntiBotCookie($feedUrl);
 
-        libxml_use_internal_errors(true);
+        $previous = libxml_use_internal_errors(true);
         try {
-            $xml = \Dom\XMLDocument::createFromString($feedHtml);
+            $xml = \Dom\XMLDocument::createFromString($feedHtml, LIBXML_NOERROR | LIBXML_NOWARNING);
         } catch (\Throwable $e) {
+            throwServerException("Upstream feed is not well-formed XML: {$e->getMessage()}");
+        } finally {
             libxml_clear_errors();
-            libxml_use_internal_errors(false);
-            throwServerException(
-                "Upstream feed is not well-formed XML: {$e->getMessage()}"
-            );
+            libxml_use_internal_errors($previous);
         }
-        libxml_clear_errors();
-        libxml_use_internal_errors(false);
 
         $items = $xml->querySelectorAll('item');
         $count = 0;
@@ -109,9 +106,7 @@ final class BastaBridge extends BridgeAbstract
     {
         $html = $this->fetchWithAntiBotCookie($uri);
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $author = '';
         $authorBlock = $dom->querySelector('.mb-1.c-cartouche-authors');

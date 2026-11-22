@@ -48,9 +48,7 @@ final class FirefoxAddonsBridge extends BridgeAbstract
             throwServerException('Empty response from add-on page');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $titleNode = $dom->querySelector('h1[class="AddonTitle"] > a');
         if ($titleNode !== null) {
@@ -191,9 +189,7 @@ EOD;
             return '';
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString('<div>' . $html . '</div>');
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument('<div>' . $html . '</div>');
 
         $wrapper = $dom->querySelector('div');
         if ($wrapper === null) {

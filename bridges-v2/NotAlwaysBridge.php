@@ -48,9 +48,7 @@ final class NotAlwaysBridge extends BridgeAbstract
             throwServerException('Empty response from NotAlways page');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $posts = $dom->querySelectorAll('.post');
 

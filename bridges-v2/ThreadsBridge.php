@@ -79,9 +79,7 @@ final class ThreadsBridge extends BridgeAbstract
     {
         $html = getContents($this->getURI());
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $jsonBlobs = iterator_to_array($dom->querySelectorAll('script[type="application/json"]'));
 
@@ -149,9 +147,7 @@ final class ThreadsBridge extends BridgeAbstract
 
             $articleHtml = getContents($postUrl);
 
-            libxml_use_internal_errors(true);
-            $articleDom = \Dom\HTMLDocument::createFromString($articleHtml);
-            libxml_use_internal_errors(false);
+            $articleDom = parseHtmlDocument($articleHtml);
 
             $ogType = $articleDom->querySelector('meta[property="og:type"]');
             if ($ogType === null) {

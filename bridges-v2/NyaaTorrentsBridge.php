@@ -120,9 +120,7 @@ final class NyaaTorrentsBridge extends BridgeAbstract
 
                 if (is_string($html) === true && $html !== '') {
                     try {
-                        libxml_use_internal_errors(true);
-                        $dom = \Dom\HTMLDocument::createFromString($html);
-                        libxml_use_internal_errors(false);
+                        $dom = parseHtmlDocument($html);
                     } catch (\Throwable) {
                         libxml_use_internal_errors(false);
                         $dom = null;
@@ -171,9 +169,7 @@ final class NyaaTorrentsBridge extends BridgeAbstract
         }
 
         try {
-            libxml_use_internal_errors(true);
-            $dom = \Dom\HTMLDocument::createFromString('<div id="rss-bridge-content">' . $content . '</div>');
-            libxml_use_internal_errors(false);
+            $dom = parseHtmlDocument('<div id="rss-bridge-content">' . $content . '</div>');
         } catch (\Throwable) {
             libxml_use_internal_errors(false);
             return $content;

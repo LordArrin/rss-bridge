@@ -78,9 +78,7 @@ final class PanoramaBridge extends BridgeAbstract
             throw new \Exception("Failed to fetch {$url}");
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         return $dom;
     }
@@ -106,9 +104,7 @@ final class PanoramaBridge extends BridgeAbstract
             return null;
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($cachedHtml);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($cachedHtml);
 
         return $dom;
     }

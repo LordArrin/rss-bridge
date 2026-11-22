@@ -100,9 +100,7 @@ final class HuntShowdownNewsBridge extends BridgeAbstract
             throwServerException('Failed to fetch ' . $url);
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         return $dom;
     }

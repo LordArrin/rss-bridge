@@ -54,9 +54,7 @@ final class MediapartBlogsBridge extends BridgeAbstract
             throwServerException('Failed to fetch blog page');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($htmlString);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($htmlString);
 
         $posts = $dom->querySelectorAll('ul.post-list li');
 

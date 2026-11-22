@@ -145,9 +145,7 @@ final class AO3Bridge extends BridgeAbstract
             throwServerException(sprintf('Failed to fetch %s', $url));
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($response);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($response);
 
         $this->resolveRelativeUrls($dom->documentElement);
 
@@ -244,9 +242,7 @@ final class AO3Bridge extends BridgeAbstract
                         $workUrl .= '/navigate';
                         $navResponse = $this->getContentsWithFallback($workUrl, $headers);
                         if ($navResponse !== '') {
-                            libxml_use_internal_errors(true);
-                            $navDom = \Dom\HTMLDocument::createFromString($navResponse);
-                            libxml_use_internal_errors(false);
+                            $navDom = parseHtmlDocument($navResponse);
                             $this->resolveRelativeUrls($navDom->documentElement);
                             $links = $navDom->querySelectorAll('ol.index.group > li > a');
                             $linksArray = iterator_to_array($links);
@@ -265,9 +261,7 @@ final class AO3Bridge extends BridgeAbstract
 
                 $workResponse = $this->getContentsWithFallback($workUrl, $headers);
                 if ($workResponse !== '') {
-                    libxml_use_internal_errors(true);
-                    $workDom = \Dom\HTMLDocument::createFromString($workResponse);
-                    libxml_use_internal_errors(false);
+                    $workDom = parseHtmlDocument($workResponse);
                     $this->resolveRelativeUrls($workDom->documentElement);
 
                     $ficsum = $workDom->querySelector('#workskin > .preface > .summary');
@@ -305,9 +299,7 @@ final class AO3Bridge extends BridgeAbstract
             throwServerException(sprintf('Failed to fetch %s', $url . '/navigate'));
         }
 
-        libxml_use_internal_errors(true);
-        $navDom = \Dom\HTMLDocument::createFromString($navResponse);
-        libxml_use_internal_errors(false);
+        $navDom = parseHtmlDocument($navResponse);
         $this->resolveRelativeUrls($navDom->documentElement);
 
         $workResponse = $this->getContentsWithFallback($url . '?view_full_work=true', $headers);
@@ -315,9 +307,7 @@ final class AO3Bridge extends BridgeAbstract
             throwServerException(sprintf('Failed to fetch %s', $url . '?view_full_work=true'));
         }
 
-        libxml_use_internal_errors(true);
-        $workDom = \Dom\HTMLDocument::createFromString($workResponse);
-        libxml_use_internal_errors(false);
+        $workDom = parseHtmlDocument($workResponse);
         $this->resolveRelativeUrls($workDom->documentElement);
 
         $titleLink = $navDom->querySelector('h2 a');
@@ -380,9 +370,7 @@ final class AO3Bridge extends BridgeAbstract
             return null;
         }
 
-        libxml_use_internal_errors(true);
-        $newDom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $newDom = parseHtmlDocument($html);
 
         return $newDom;
     }

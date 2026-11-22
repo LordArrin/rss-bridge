@@ -108,9 +108,7 @@ final class FlickrBridge extends BridgeAbstract
 
                 $this->username = (string)$this->getInput('u');
 
-                libxml_use_internal_errors(true);
-                $dom = \Dom\HTMLDocument::createFromString($html);
-                libxml_use_internal_errors(false);
+                $dom = parseHtmlDocument($html);
 
                 $searchPill = $dom->querySelector('span.search-pill-name');
                 if ($searchPill !== null) {

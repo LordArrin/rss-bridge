@@ -363,9 +363,7 @@ final class ThreeDNewsBridge extends BridgeAbstract
                 return '';
             }
 
-            libxml_use_internal_errors(true);
-            $dom = \Dom\HTMLDocument::createFromString($html);
-            libxml_clear_errors();
+            $dom = parseHtmlDocument($html);
 
             $articleBody = $dom->querySelector('.news-full-item-main-pub.news-full-item.article-entry');
 

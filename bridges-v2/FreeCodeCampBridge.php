@@ -50,9 +50,7 @@ final class FreeCodeCampBridge extends FeedExpander
         }
 
         try {
-            libxml_use_internal_errors(true);
-            $dom = \Dom\HTMLDocument::createFromString($html);
-            libxml_use_internal_errors(false);
+            $dom = parseHtmlDocument($html);
         } catch (\Throwable) {
             return $item;
         }

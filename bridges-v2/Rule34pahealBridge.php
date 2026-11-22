@@ -54,9 +54,7 @@ final class Rule34pahealBridge extends BridgeAbstract
             throwServerException(sprintf('Failed to fetch %s', $url));
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $limit = (int)($this->getInput('limit') ?? 10);
         if ($limit <= 0) {

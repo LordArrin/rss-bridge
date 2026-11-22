@@ -54,9 +54,7 @@ final class MagicTheGatheringBridge extends BridgeAbstract
             throwServerException('Empty response from Magic: The Gathering page');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $articles = $dom->querySelectorAll('article');
 
@@ -114,9 +112,7 @@ final class MagicTheGatheringBridge extends BridgeAbstract
             return null;
         }
 
-        libxml_use_internal_errors(true);
-        $fullArticleDom = \Dom\HTMLDocument::createFromString($fullArticleHtml);
-        libxml_use_internal_errors(false);
+        $fullArticleDom = parseHtmlDocument($fullArticleHtml);
 
         $articleBody = $fullArticleDom->querySelector('article');
         if ($articleBody === null) {

@@ -48,9 +48,7 @@ final class OglafBridge extends FeedExpander
             return $item;
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $comicImage = $dom->querySelector('img#strip');
         if ($comicImage instanceof \Dom\Element === false) {

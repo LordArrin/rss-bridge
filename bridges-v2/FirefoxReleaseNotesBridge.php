@@ -82,9 +82,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
             throwClientException('Failed to load Firefox releases page.');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $links = $dom->querySelectorAll('a[href*="/firefox/"][href*="/releasenotes/"]');
 
@@ -152,9 +150,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
             return $item;
         }
 
-        libxml_use_internal_errors(true);
-        $notesHtml = \Dom\HTMLDocument::createFromString($cachedHtml);
-        libxml_use_internal_errors(false);
+        $notesHtml = parseHtmlDocument($cachedHtml);
 
         $timestamp = $this->extractReleaseDate($notesHtml);
         if ($timestamp !== null) {
@@ -282,9 +278,7 @@ final class FirefoxReleaseNotesBridge extends BridgeAbstract
             return '';
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString('<div>' . $html . '</div>');
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument('<div>' . $html . '</div>');
 
         $wrapper = $dom->querySelector('div');
         if ($wrapper === null) {

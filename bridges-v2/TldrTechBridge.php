@@ -77,7 +77,7 @@ final class TldrTechBridge extends BridgeAbstract
             throwServerException('Failed to fetch archives');
         }
 
-        $archivesDom = \Dom\HTMLDocument::createFromString($archivesHtml);
+        $archivesDom = parseHtmlDocument($archivesHtml);
         $archivesContentDiv = $archivesDom->querySelector('div.content-center');
 
         if ($archivesContentDiv === null) {
@@ -138,7 +138,7 @@ final class TldrTechBridge extends BridgeAbstract
             }
         }
 
-        $dom = \Dom\HTMLDocument::createFromString($html);
+        $dom = parseHtmlDocument($html);
         $editionContentDiv = $dom->querySelector('div.content-center');
 
         if ($editionContentDiv === null) {

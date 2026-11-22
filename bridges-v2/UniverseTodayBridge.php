@@ -54,9 +54,9 @@ final class UniverseTodayBridge extends FeedExpander
                 return $item;
             }
             $this->saveCacheValue($cacheKey, $html, 7 * 24 * 60 * 60);
-            $dom = \Dom\HTMLDocument::createFromString($html);
+            $dom = parseHtmlDocument($html);
         } else {
-            $dom = \Dom\HTMLDocument::createFromString($cachedHtml);
+            $dom = parseHtmlDocument($cachedHtml);
         }
 
         $articleMain = $dom->querySelector('main > article');

@@ -47,9 +47,7 @@ final class ScarletComicBridge extends FeedExpander
             return $item;
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $comicImage = $dom->querySelector('div#spliced-comic');
 

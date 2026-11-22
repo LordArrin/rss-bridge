@@ -89,9 +89,7 @@ final class GolemBridge extends FeedExpander
 
             $html = getContents($uri, static::HEADERS);
             try {
-                libxml_use_internal_errors(true);
-                $articlePage = \Dom\HTMLDocument::createFromString($html);
-                libxml_use_internal_errors(false);
+                $articlePage = parseHtmlDocument($html);
             } catch (\Throwable) {
                 break;
             }
@@ -139,9 +137,7 @@ final class GolemBridge extends FeedExpander
         $articleHtml = $articleNode->outerHTML;
 
         try {
-            libxml_use_internal_errors(true);
-            $dom = \Dom\HTMLDocument::createFromString('<div>' . $articleHtml . '</div>');
-            libxml_use_internal_errors(false);
+            $dom = parseHtmlDocument('<div>' . $articleHtml . '</div>');
         } catch (\Throwable) {
             return '';
         }

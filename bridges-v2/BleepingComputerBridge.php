@@ -84,9 +84,7 @@ final class BleepingComputerBridge extends FeedExpander
             return $item;
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $articleBody = $dom->querySelector('div.articleBody');
         if ($articleBody === null) {

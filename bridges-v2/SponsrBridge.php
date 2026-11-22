@@ -191,9 +191,7 @@ final class SponsrBridge extends BridgeAbstract
             throwServerException("Failed to fetch {$url}");
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString((string) $html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument((string) $html);
 
         return $dom;
     }

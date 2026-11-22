@@ -230,7 +230,7 @@ final class SubstackProfileBridge extends BridgeAbstract
 
         // Use native DOM to ensure valid HTML structure and auto-close open tags from the API
         try {
-            $dom = \Dom\HTMLDocument::createFromString('<html><body><div id="content-wrapper">' . $bodyHtml . '</div></body></html>');
+            $dom = parseHtmlDocument('<html><body><div id="content-wrapper">' . $bodyHtml . '</div></body></html>');
             $node = $dom->getElementById('content-wrapper');
             $cleanHtml = ($node instanceof \Dom\Element === true) ? $node->innerHTML : $bodyHtml;
         } catch (\Throwable $e) {

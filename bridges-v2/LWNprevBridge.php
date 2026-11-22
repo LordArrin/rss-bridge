@@ -64,10 +64,7 @@ EOD;
                 $contentPart = $contentPart . '</body></html>';
             }
 
-            libxml_use_internal_errors(true);
-            $html = \Dom\HTMLDocument::createFromString($contentPart);
-            libxml_clear_errors();
-            libxml_use_internal_errors(false);
+            $html = parseHtmlDocument($contentPart);
 
             $firstH1 = $html->querySelector('h1');
             if ($firstH1 !== null) {
@@ -204,12 +201,9 @@ EOD;
 
     private function cleanArticleContent(string $content): string
     {
-        libxml_use_internal_errors(true);
-        $doc = \Dom\HTMLDocument::createFromString(
+        $doc = parseHtmlDocument(
             '<!DOCTYPE html><html><body>' . $content . '</body></html>'
         );
-        libxml_clear_errors();
-        libxml_use_internal_errors(false);
 
         $this->fixImages($doc);
         $this->removeCommentsBlock($doc);

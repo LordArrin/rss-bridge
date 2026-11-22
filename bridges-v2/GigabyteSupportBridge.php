@@ -174,11 +174,8 @@ final class GigabyteSupportBridge extends BridgeAbstract
             }
 
             try {
-                libxml_use_internal_errors(true);
-                $this->pageDom = \Dom\HTMLDocument::createFromString($html, LIBXML_NOERROR | LIBXML_NOWARNING);
-                libxml_use_internal_errors(false);
+                $this->pageDom = parseHtmlDocument($html);
             } catch (\Throwable) {
-                libxml_use_internal_errors(false);
                 return null;
             }
 

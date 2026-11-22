@@ -43,9 +43,7 @@ final class DagensNyheterDirektBridge extends BridgeAbstract
             throwServerException('Could not fetch: ' . $newsUrl);
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $this->resolveRelativeUrls($dom->documentElement, $baseUrl);
 

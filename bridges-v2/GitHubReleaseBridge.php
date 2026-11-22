@@ -354,10 +354,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
 
     private function processHtml(string $html, string $owner, string $repo): string
     {
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString('<div id="w">' . $html . '</div>');
-        libxml_clear_errors();
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument('<div id="w">' . $html . '</div>');
 
         $xpath = new \Dom\XPath($dom);
 

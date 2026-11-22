@@ -59,9 +59,7 @@ final class AsahiShimbunAJWBridge extends BridgeAbstract
             throwServerException(sprintf('Failed to fetch %s', $url));
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $baseDomain = parse_url(self::URI, PHP_URL_SCHEME) . '://' . parse_url(self::URI, PHP_URL_HOST);
 

@@ -268,9 +268,7 @@ final class ItchBridge extends BridgeAbstract
             return '';
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString('<div>' . $html . '</div>');
-        libxml_clear_errors();
+        $dom = parseHtmlDocument('<div>' . $html . '</div>');
 
         $wrapper = $dom->querySelector('div');
         if ($wrapper === null) {
@@ -339,9 +337,7 @@ final class ItchBridge extends BridgeAbstract
                 return '';
             }
 
-            libxml_use_internal_errors(true);
-            $dom = \Dom\HTMLDocument::createFromString($html);
-            libxml_clear_errors();
+            $dom = parseHtmlDocument($html);
 
             $selectors = [
                 '.post_body.user_formatted.base_widget.object_text_widget_widget',

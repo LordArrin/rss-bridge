@@ -111,9 +111,7 @@ abstract class HoyoBase extends BridgeAbstract
             }
 
             try {
-                libxml_use_internal_errors(true);
-                $dom = \Dom\HTMLDocument::createFromString('<div>' . $sContent . '</div>');
-                libxml_use_internal_errors(false);
+                $dom = parseHtmlDocument('<div>' . $sContent . '</div>');
             } catch (\Throwable) {
                 libxml_use_internal_errors(false);
                 continue;
@@ -285,9 +283,7 @@ abstract class HoyoBase extends BridgeAbstract
         }
 
         try {
-            libxml_use_internal_errors(true);
-            $tempDoc = \Dom\HTMLDocument::createFromString('<div id="rss-bridge-temp-wrapper">' . $replacement . '</div>');
-            libxml_use_internal_errors(false);
+            $tempDoc = parseHtmlDocument('<div id="rss-bridge-temp-wrapper">' . $replacement . '</div>');
         } catch (\Throwable) {
             libxml_use_internal_errors(false);
             return;

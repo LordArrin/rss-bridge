@@ -33,9 +33,7 @@ TMPL;
             throwServerException('Could not fetch main page: ' . self::URI);
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $this->resolveRelativeUrls($dom->documentElement, $this->getURI());
 
@@ -54,9 +52,7 @@ TMPL;
             throwServerException('Could not fetch donations page: ' . $url);
         }
 
-        libxml_use_internal_errors(true);
-        $pageDom = \Dom\HTMLDocument::createFromString($pageHtml);
-        libxml_use_internal_errors(false);
+        $pageDom = parseHtmlDocument($pageHtml);
 
         $this->resolveRelativeUrls($pageDom->documentElement, $url);
 

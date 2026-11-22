@@ -122,9 +122,7 @@ final class CrewbayBridge extends BridgeAbstract
             throwServerException('Could not fetch: ' . $url);
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $this->resolveRelativeUrls($dom->documentElement, $url);
 
@@ -147,9 +145,7 @@ final class CrewbayBridge extends BridgeAbstract
                 continue;
             }
 
-            libxml_use_internal_errors(true);
-            $htmlDetail = \Dom\HTMLDocument::createFromString($detailHtml);
-            libxml_use_internal_errors(false);
+            $htmlDetail = parseHtmlDocument($detailHtml);
 
             $this->resolveRelativeUrls($htmlDetail->documentElement, $detailHref);
 

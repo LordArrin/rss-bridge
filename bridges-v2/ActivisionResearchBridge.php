@@ -36,9 +36,7 @@ final class ActivisionResearchBridge extends BridgeAbstract
             throwServerException(sprintf('Failed to fetch %s', self::URI));
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $container = $dom->querySelector('div[id="home-blog-feed"]');
         if ($container === null) {
@@ -98,9 +96,7 @@ final class ActivisionResearchBridge extends BridgeAbstract
                 continue;
             }
 
-            libxml_use_internal_errors(true);
-            $entryDom = \Dom\HTMLDocument::createFromString($entryHtml);
-            libxml_use_internal_errors(false);
+            $entryDom = parseHtmlDocument($entryHtml);
 
             $this->resolveRelativeUrls($entryDom->documentElement);
 

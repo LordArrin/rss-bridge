@@ -21,9 +21,7 @@ final class TheWhiteboardBridge extends BridgeAbstract
             throwServerException('Failed to fetch page content.');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $centers = iterator_to_array($dom->querySelectorAll('center'));
         if (count($centers) < 2) {

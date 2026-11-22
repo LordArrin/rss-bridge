@@ -57,9 +57,7 @@ final class GoodreadsBridge extends BridgeAbstract
             throwServerException('Empty response from Goodreads author page');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $rows = $dom->querySelectorAll('tr[itemtype="http://schema.org/Book"]');
 

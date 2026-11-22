@@ -22,9 +22,7 @@ final class TomsToucheBridge extends BridgeAbstract
             throwServerException('Failed to fetch page content.');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $dateNodes = iterator_to_array($dom->querySelectorAll('p[x-ref]'));
         if (count($dateNodes) === 0) {

@@ -101,9 +101,7 @@ final class PikabuBridge extends BridgeAbstract
         $link = $this->getURI();
         $rawHtml = (string) getContents($link);
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($rawHtml);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($rawHtml);
 
         $titleEl = $dom->querySelector('title');
         if ($titleEl !== null) {

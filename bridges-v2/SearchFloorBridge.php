@@ -377,9 +377,7 @@ final class SearchFloorBridge extends BridgeAbstract
             throw new \Exception($errorMessage);
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         return $dom;
     }
@@ -516,9 +514,7 @@ final class SearchFloorBridge extends BridgeAbstract
                 return ['description' => '', 'chapter' => ''];
             }
 
-            libxml_use_internal_errors(true);
-            $html = \Dom\HTMLDocument::createFromString($htmlContent);
-            libxml_use_internal_errors(false);
+            $html = parseHtmlDocument($htmlContent);
         } catch (\Throwable) {
             return ['description' => '', 'chapter' => ''];
         }

@@ -41,9 +41,7 @@ final class BrotFuerDieWeltBridge extends BridgeAbstract
             throwServerException('Could not fetch: ' . $pageURI);
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $articles = $dom->querySelectorAll('body div.news div.news-list-view div.article');
         if ($articles->length === 0) {
@@ -113,9 +111,7 @@ final class BrotFuerDieWeltBridge extends BridgeAbstract
             $description = '';
 
             if ($articleHTML !== '') {
-                libxml_use_internal_errors(true);
-                $articleDom = \Dom\HTMLDocument::createFromString($articleHTML);
-                libxml_use_internal_errors(false);
+                $articleDom = parseHtmlDocument($articleHTML);
 
                 $introBox = $articleDom->querySelector('body div.intro-box p');
                 if ($introBox !== null) {
@@ -201,9 +197,7 @@ final class BrotFuerDieWeltBridge extends BridgeAbstract
                 $description = '';
 
                 if ($articleHTML !== '') {
-                    libxml_use_internal_errors(true);
-                    $articleDom = \Dom\HTMLDocument::createFromString($articleHTML);
-                    libxml_use_internal_errors(false);
+                    $articleDom = parseHtmlDocument($articleHTML);
 
                     $newsTextWrap = $articleDom->querySelector('body article.article-section div.news-text-wrap');
                     if ($newsTextWrap !== null) {

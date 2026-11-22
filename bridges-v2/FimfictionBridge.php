@@ -138,9 +138,7 @@ final class FimfictionBridge extends BridgeAbstract
                     throw new \Exception('Received empty HTML response');
                 }
 
-                libxml_use_internal_errors(true);
-                $dom = \Dom\HTMLDocument::createFromString($html);
-                libxml_use_internal_errors(false);
+                $dom = parseHtmlDocument($html);
 
                 if ($attempt > 1 && $this->logger !== null) {
                     $this->logger->info(sprintf(

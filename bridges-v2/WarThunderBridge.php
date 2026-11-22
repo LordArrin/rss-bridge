@@ -363,9 +363,7 @@ final class WarThunderBridge extends BridgeAbstract
                 break;
             }
 
-            libxml_use_internal_errors(true);
-            $dom = \Dom\HTMLDocument::createFromString($html);
-            libxml_clear_errors();
+            $dom = parseHtmlDocument($html);
 
             $items = $dom->querySelectorAll('.showcase__item.widget');
 
@@ -431,9 +429,7 @@ final class WarThunderBridge extends BridgeAbstract
                 return '';
             }
 
-            libxml_use_internal_errors(true);
-            $dom = \Dom\HTMLDocument::createFromString($html);
-            libxml_clear_errors();
+            $dom = parseHtmlDocument($html);
 
             $article = $dom->querySelector('.section--narrow.article');
 

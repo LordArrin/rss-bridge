@@ -81,7 +81,7 @@ final class AnisearchBridge extends BridgeAbstract
         $categoryUrl = $baseUrl . '/anime/index/page-1?char=all&dubbed=' . $dubLang . '&sort=newest&order=desc&view=4';
 
         $html = (string) getContents($categoryUrl);
-        $dom = \Dom\HTMLDocument::createFromString($html);
+        $dom = parseHtmlDocument($html);
 
         $listItems = $dom->querySelectorAll('li.btype0');
         $count = 0;
@@ -109,7 +109,7 @@ final class AnisearchBridge extends BridgeAbstract
             $url = urljoin($baseUrl, $href);
 
             $articleHtml = (string) getContents($url);
-            $articleDom = \Dom\HTMLDocument::createFromString($articleHtml);
+            $articleDom = parseHtmlDocument($articleHtml);
 
             $contentDiv = $articleDom->querySelector('div.details-text');
             $headerImage = $articleDom->querySelector('img#details-cover');
@@ -150,7 +150,7 @@ final class AnisearchBridge extends BridgeAbstract
                     if (is_string($trailerHref) === true && $trailerHref !== '') {
                         $trailerUrl = urljoin($baseUrl, $trailerHref);
                         $trailerHtml = (string) getContents($trailerUrl);
-                        $trailerDom = \Dom\HTMLDocument::createFromString($trailerHtml);
+                        $trailerDom = parseHtmlDocument($trailerHtml);
 
                         $iframe = $trailerDom->querySelector('div#video > iframe');
 

@@ -26,9 +26,7 @@ final class WirecutterDealsBridge extends BridgeAbstract
     {
         $html = (string) getContents($this->getURI());
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $nextData = $dom->querySelector('#__NEXT_DATA__');
         if ($nextData === null) {

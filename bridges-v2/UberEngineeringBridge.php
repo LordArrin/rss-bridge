@@ -143,7 +143,7 @@ final class UberEngineeringBridge extends BridgeAbstract
             return '';
         }
 
-        $dom = \Dom\HTMLDocument::createFromString($html);
+        $dom = parseHtmlDocument($html);
 
         $description = $dom->querySelector('meta[name="description"], meta[property="og:description"]');
         if ($description === null) {

@@ -24,9 +24,7 @@ final class VieDeMerdeBridge extends BridgeAbstract
             throwServerException('Failed to fetch content from VieDeMerde');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($htmlString);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($htmlString);
 
         $quotes = $dom->querySelectorAll('article.bg-white');
 

@@ -97,9 +97,7 @@ final class AuthorTodayBridge extends BridgeAbstract
             throwServerException("Unable to load page: {$url}");
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         return $dom;
     }

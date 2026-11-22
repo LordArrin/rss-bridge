@@ -53,11 +53,9 @@ final class TheDriveBridge extends FeedExpander
 
     private function processContent(string $html): string
     {
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString(
+        $dom = parseHtmlDocument(
             '<!DOCTYPE html><html><body>' . $html . '</body></html>'
         );
-        libxml_use_internal_errors(false);
 
         $this->removeInstagramEmbeds($dom);
         $this->replaceYoutubeEmbeds($dom);

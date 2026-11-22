@@ -116,18 +116,14 @@ final class NautilusBridge extends FeedExpander
             }
             $this->saveCacheValue($cacheKey, $html, 7 * 24 * 60 * 60);
             try {
-                libxml_use_internal_errors(true);
-                $dom = \Dom\HTMLDocument::createFromString($html);
-                libxml_use_internal_errors(false);
+                $dom = parseHtmlDocument($html);
             } catch (\Throwable) {
                 libxml_use_internal_errors(false);
                 return $item;
             }
         } else {
             try {
-                libxml_use_internal_errors(true);
-                $dom = \Dom\HTMLDocument::createFromString($cachedHtml);
-                libxml_use_internal_errors(false);
+                $dom = parseHtmlDocument($cachedHtml);
             } catch (\Throwable) {
                 libxml_use_internal_errors(false);
                 return $item;
@@ -226,9 +222,7 @@ final class NautilusBridge extends FeedExpander
         }
 
         try {
-            libxml_use_internal_errors(true);
-            $tempDom = \Dom\HTMLDocument::createFromString('<div>' . $articleHtml . '</div>');
-            libxml_use_internal_errors(false);
+            $tempDom = parseHtmlDocument('<div>' . $articleHtml . '</div>');
         } catch (\Throwable) {
             libxml_use_internal_errors(false);
             return $content . $this->fixRelativeLinksInString($articleHtml);
@@ -357,9 +351,7 @@ final class NautilusBridge extends FeedExpander
     private function fixRelativeLinksInString(string $html): string
     {
         try {
-            libxml_use_internal_errors(true);
-            $tempDom = \Dom\HTMLDocument::createFromString('<div>' . $html . '</div>');
-            libxml_use_internal_errors(false);
+            $tempDom = parseHtmlDocument('<div>' . $html . '</div>');
         } catch (\Throwable) {
             libxml_use_internal_errors(false);
             return $html;

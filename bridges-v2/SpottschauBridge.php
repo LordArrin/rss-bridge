@@ -24,9 +24,7 @@ final class SpottschauBridge extends BridgeAbstract
             throwServerException('Failed to fetch content from spottschau.com');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($htmlString);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($htmlString);
 
         $src = $dom->querySelector('div.strip > a')?->querySelector('img')?->getAttribute('src');
 

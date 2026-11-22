@@ -386,9 +386,7 @@ final class PawchiveBridge extends BridgeAbstract
 
         $html = $this->cleanUnicodeCharacters($html);
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString('<div>' . $html . '</div>');
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument('<div>' . $html . '</div>');
 
         $wrapper = $dom->querySelector('div');
         if ($wrapper === null) {

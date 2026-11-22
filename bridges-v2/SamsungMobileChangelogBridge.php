@@ -49,9 +49,7 @@ final class SamsungMobileChangelogBridge extends BridgeAbstract
             throwServerException('Could not request changelog page: ' . $url);
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $dfltPageInput = $dom->querySelector('input#dflt_page');
         if ($dfltPageInput !== null) {
@@ -80,9 +78,7 @@ final class SamsungMobileChangelogBridge extends BridgeAbstract
             throwServerException('Could not request changelog: ' . $urlLanguage);
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $container = $dom->querySelector('div.container');
         if ($container === null) {

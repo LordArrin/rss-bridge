@@ -230,9 +230,7 @@ abstract class NginxBase extends BridgeAbstract
             throw new \Exception('Failed to load news page');
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $newsTable = $dom->querySelector('table');
         if ($newsTable === null) {
@@ -252,9 +250,7 @@ abstract class NginxBase extends BridgeAbstract
                 continue;
             }
 
-            libxml_use_internal_errors(true);
-            $contentDom = \Dom\HTMLDocument::createFromString('<div>' . $content . '</div>');
-            libxml_use_internal_errors(false);
+            $contentDom = parseHtmlDocument('<div>' . $content . '</div>');
 
             $wrapper = $contentDom->querySelector('div');
             if ($wrapper !== null) {

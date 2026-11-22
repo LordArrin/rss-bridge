@@ -45,9 +45,7 @@ final class ABCNewsBridge extends BridgeAbstract
             throwServerException(sprintf('Failed to fetch %s', $url));
         }
 
-        libxml_use_internal_errors(true);
-        $dom = \Dom\HTMLDocument::createFromString($html);
-        libxml_use_internal_errors(false);
+        $dom = parseHtmlDocument($html);
 
         $container = $dom->querySelector('div[data-component="PaginationList"]');
         if ($container === null) {
