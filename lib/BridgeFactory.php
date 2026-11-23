@@ -261,7 +261,8 @@ final class BridgeFactory
         $size = @filesize($file);
         $cacheKey = ($real !== false ? $real : $file)
         . '|' . ($mtime === false ? 0 : $mtime)
-        . '|' . ($size === false ? 0 : $size);
+        . '|' . ($size === false ? 0 : $size)
+        . '|' . PHP_VERSION_ID;
 
         if (isset(self::$sandboxCache[$cacheKey]) === true) {
             $entry = self::$sandboxCache[$cacheKey];
@@ -278,6 +279,7 @@ final class BridgeFactory
         // gets a fresh key and a container restart (new image) clears it.
         $apcuKey = 'rssbridge_sandbox_' . md5($cacheKey);
         if (function_exists('apcu_fetch') === true) {
+            $stored = apcu_fetch($apcuKey, $success);
             $stored = apcu_fetch($apcuKey, $success);
             if (
                 $success === true && is_array($stored) === true
@@ -399,23 +401,21 @@ final class BridgeFactory
             return $binary;
         }
 
-        $candidates = [];
-
         $cliName = str_replace(['fpm-', '-fpm'], '', $basename);
         $dir = dirname($binary);
-        $candidates[] = $dir . DIRECTORY_SEPARATOR . $cliName;
+        $prefixBin = dirname($binary, 2) . '/bin';
 
-        $candidates[] = '/usr/bin/' . $cliName;
-        $candidates[] = '/usr/local/bin/' . $cliName;
-
-        $genericCliName = preg_replace('/[\d.]+/', '', $cliName);
-        if ($genericCliName !== $cliName) {
-            $candidates[] = $dir . DIRECTORY_SEPARATOR . $genericCliName;
-            $candidates[] = '/usr/bin/' . $genericCliName;
-        }
-
-        $candidates[] = '/usr/bin/php';
-        $candidates[] = '/usr/local/bin/php';
+        $candidates = [
+        $prefixBin . '/' . $cliName,
+        $prefixBin . '/php',
+        PHP_BINDIR . '/' . $cliName,
+        PHP_BINDIR . '/php',
+        $dir . '/' . $cliName,
+        '/usr/bin/' . $cliName,
+        '/usr/local/bin/' . $cliName,
+        '/usr/bin/php',
+        '/usr/local/bin/php',
+        ];
 
         foreach ($candidates as $candidate) {
             if (is_executable($candidate) === true) {

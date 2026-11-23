@@ -346,7 +346,7 @@ final class NintendoBridge extends BridgeAbstract
         }
 
         $value = trim(substr($value, $start));
-        $value = rtrim($value, "]) \t\n\r\0\x0B");
+        $value = rtrim($value, "]) \f\n\r\t\v\0");
 
         if (preg_match('/[A-Za-z]/', $value) === 1) {
             $timestamp = strtotime($value);

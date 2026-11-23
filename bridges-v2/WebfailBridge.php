@@ -162,11 +162,7 @@ final class WebfailBridge extends BridgeAbstract
                         $videoId = $this->getVideoId($onclick);
                         if ($videoId !== '') {
                             $item['uri'] = 'https://www.youtube.com/watch?v=' . $videoId;
-                            if (function_exists('handleYoutube') === true) {
-                                $item['content'] = handleYoutube($videoId);
-                            } else {
-                                $item['content'] = '<a href="' . htmlspecialchars($item['uri'], ENT_QUOTES, 'UTF-8') . '">Watch on YouTube</a>';
-                            }
+                            $item['content'] = handleYoutube($videoId);
                             $this->items[] = $item;
                         }
                     }

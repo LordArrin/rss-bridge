@@ -429,14 +429,10 @@ final class YoutubeBridge extends BridgeAbstract
 
     private function extractItemsFromXmlFeed(string $xmlString): void
     {
-        $previous = libxml_use_internal_errors(true);
         try {
             $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
         } catch (\Throwable $e) {
             throwServerException('Failed to parse XML feed: ' . $e->getMessage());
-        } finally {
-            libxml_clear_errors();
-            libxml_use_internal_errors($previous);
         }
 
         $root = $doc->documentElement;

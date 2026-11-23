@@ -81,7 +81,7 @@ final class BridgeMetadataCache
     {
         $cacheKey = $this->buildCacheKey();
         $lockKey = $cacheKey . self::BUILD_LOCK_SUFFIX;
-        $apcuAvailable = function_exists('apcu_enabled') === true && apcu_enabled() === true;
+        $apcuAvailable = apcu_enabled();
         $apcuKey = 'rssbridge_metadata_' . $cacheKey;
 
         if ($apcuAvailable === true) {
@@ -197,7 +197,7 @@ final class BridgeMetadataCache
     public function rebuild(BridgeFactory $factory, SafeBridgeLoader $loader): array
     {
         $cacheKey = $this->buildCacheKey();
-        $apcuAvailable = function_exists('apcu_enabled') === true && apcu_enabled() === true;
+        $apcuAvailable = apcu_enabled();
         return $this->buildAndStore($cacheKey, 'rssbridge_metadata_' . $cacheKey, $apcuAvailable, $factory, $loader);
     }
 
@@ -357,7 +357,7 @@ final class BridgeMetadataCache
         $enabled = $enabled === false ? '' : $enabled;
         $disabled = $disabled === false ? '' : $disabled;
 
-        $apcuAvailable = function_exists('apcu_enabled') === true && apcu_enabled() === true;
+        $apcuAvailable = apcu_enabled();
         $apcuKey = 'rssbridge_bridge_fingerprint_' . md5(implode('|', $this->bridgesDirs) . '|' . $enabled . '|' . $disabled);
 
         if ($apcuAvailable === true) {

@@ -73,14 +73,6 @@ $normalizationRules = [
             return (string)max(8, (int)round($bytes / 1048576));
         },
     ],
-    'PHP_OPCACHE_JIT_BUFFER' => [
-        'type' => 'memory',
-        'fallback' => '0',
-        'allowZero' => true,
-        'canonicalize' => static function (int $bytes): string {
-            return ($bytes <= 0) ? '0' : max(1, (int)ceil($bytes / 1048576)) . 'M';
-        },
-    ],
 
     // Memcached (server tuning, not client settings)
     'MEMCACHED_MEMORY' => [
@@ -1423,12 +1415,6 @@ function generatePhpIniOverrides(array $env): int
     if (isset($env['PHP_OPCACHE_MEMORY']) === true && $env['PHP_OPCACHE_MEMORY'] !== '') {
         $value = (int)$env['PHP_OPCACHE_MEMORY'];
         $lines[] = "opcache.memory_consumption = {$value}";
-        $count++;
-    }
-
-    if (isset($env['PHP_OPCACHE_JIT_BUFFER']) === true && $env['PHP_OPCACHE_JIT_BUFFER'] !== '') {
-        $value = preg_replace('/[^0-9MGKm]/i', '', $env['PHP_OPCACHE_JIT_BUFFER']);
-        $lines[] = "opcache.jit_buffer_size = {$value}";
         $count++;
     }
 

@@ -23,14 +23,10 @@ final class AlpineReleasesBridge extends BridgeAbstract
             throwServerException('Failed to fetch Atom feed');
         }
 
-        $previous = libxml_use_internal_errors(true);
         try {
             $xml = \Dom\XMLDocument::createFromString($feedXml, LIBXML_NOERROR | LIBXML_NOWARNING);
         } catch (\Throwable $e) {
             throwServerException('Failed to parse Atom feed: ' . $e->getMessage());
-        } finally {
-            libxml_clear_errors();
-            libxml_use_internal_errors($previous);
         }
 
         foreach ($xml->querySelectorAll('entry') as $entry) {

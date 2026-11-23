@@ -210,10 +210,6 @@ abstract class HoyoBase extends BridgeAbstract
 
     protected function processYoutubeEmbeds(\Dom\Element $node): void
     {
-        if (function_exists('handleYoutube') === false) {
-            return;
-        }
-
         $elementsToReplace = [];
 
         $youtubeFrames = $node->querySelectorAll('div.ttr-video-frame');
@@ -257,10 +253,6 @@ abstract class HoyoBase extends BridgeAbstract
 
     protected function replaceYoutubeEmbed(\Dom\Element $embed): void
     {
-        if (function_exists('handleYoutube') === false) {
-            return;
-        }
-
         $doc = $embed->ownerDocument;
         if ($doc instanceof \Dom\HTMLDocument === false) {
             return;

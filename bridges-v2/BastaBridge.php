@@ -41,14 +41,10 @@ final class BastaBridge extends BridgeAbstract
         $feedUrl = self::URI . 'spip.php?page=backend';
         $feedHtml = $this->fetchWithAntiBotCookie($feedUrl);
 
-        $previous = libxml_use_internal_errors(true);
         try {
             $xml = \Dom\XMLDocument::createFromString($feedHtml, LIBXML_NOERROR | LIBXML_NOWARNING);
         } catch (\Throwable $e) {
             throwServerException("Upstream feed is not well-formed XML: {$e->getMessage()}");
-        } finally {
-            libxml_clear_errors();
-            libxml_use_internal_errors($previous);
         }
 
         $items = $xml->querySelectorAll('item');

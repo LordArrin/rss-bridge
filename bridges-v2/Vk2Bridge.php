@@ -482,10 +482,7 @@ final class Vk2Bridge extends BridgeAbstract
         $this->processLists($articleBlock);
 
         $content = $articleBlock->innerHTML ?? '';
-
-        if (function_exists('break_annoying_html_tags') === true) {
-            $content = break_annoying_html_tags($content);
-        }
+        $content = break_annoying_html_tags($content);
 
         return trim($content);
     }
@@ -1559,12 +1556,6 @@ final class Vk2Bridge extends BridgeAbstract
 
     private function proxyImage(string $url): string
     {
-        if ($url === '') {
-            return '';
-        }
-        if (function_exists('getProxiedUri') === true) {
-            return getProxiedUri($url);
-        }
         return $url;
     }
 

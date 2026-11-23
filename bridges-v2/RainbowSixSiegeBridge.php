@@ -80,11 +80,7 @@ final class RainbowSixSiegeBridge extends BridgeAbstract
             }
 
             if ($contentRaw !== '') {
-                if (function_exists('markdownToHtml') === true) {
-                    $content .= \markdownToHtml($contentRaw);
-                } else {
-                    $content .= nl2br(htmlspecialchars($contentRaw));
-                }
+                $content .= \markdownToHtml($contentRaw);
             }
 
             $timestamp = null;

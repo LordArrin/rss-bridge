@@ -161,17 +161,15 @@ final class GigabyteSupportBridge extends BridgeAbstract
                 return null;
             }
 
-            if (class_exists('\tidy') === true) {
-                $tidy = new \tidy();
-                $tidy->parseString($html, [
-                    'clean' => true,
-                    'output-xhtml' => true,
-                    'wrap' => 0,
-                    'drop-empty-elements' => false,
-                ], 'utf8');
-                $tidy->cleanRepair();
-                $html = (string) $tidy->value;
-            }
+            $tidy = new \tidy();
+            $tidy->parseString($html, [
+                'clean' => true,
+                'output-xhtml' => true,
+                'wrap' => 0,
+                'drop-empty-elements' => false,
+            ], 'utf8');
+            $tidy->cleanRepair();
+            $html = (string) $tidy->value;
 
             try {
                 $this->pageDom = parseHtmlDocument($html);

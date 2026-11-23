@@ -19,7 +19,6 @@ final class FeedParser
     {
         $xmlString = self::prepareXml($xmlString);
 
-        $previousLibxmlState = libxml_use_internal_errors(true);
         try {
             $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
         } catch (\Throwable $e) {
@@ -27,11 +26,6 @@ final class FeedParser
             // libxml error buffer (the exact class varies by build). Catch broadly
             // at this boundary and normalize to a plain Exception for FeedExpander.
             throw new \Exception(sprintf('Unable to parse xml: %s', $e->getMessage()), 0, $e);
-        } finally {
-            // Always clear the buffer and restore the previous state so stale errors
-            // cannot leak into later simplexml/libxml calls (esp. in CLI loops).
-            libxml_clear_errors();
-            libxml_use_internal_errors($previousLibxmlState);
         }
 
         if ($doc->documentElement === null) {
@@ -424,7 +418,7 @@ final class FeedParser
 
     private function getNodeText(?\Dom\Element $element): string
     {
-        return $element !== null ? trim((string)$element->textContent, " \f\n\r\t\v\0") : '';
+        return $element !== null ? trim((string)$element->textContent) : '';
     }
 
     private function getNodeAttr(?\Dom\Element $element, string $name): ?string

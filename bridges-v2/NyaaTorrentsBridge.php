@@ -86,8 +86,6 @@ final class NyaaTorrentsBridge extends BridgeAbstract
             throwServerException('Invalid feed format');
         }
 
-        $parsedown = new \Parsedown();
-
         foreach ($feed['items'] as $feedItem) {
             if (is_array($feedItem) === false) {
                 continue;
@@ -130,11 +128,7 @@ final class NyaaTorrentsBridge extends BridgeAbstract
                         $description = $descriptionNode !== null ? $descriptionNode->innerHTML : '';
 
                         $decodedDescription = html_entity_decode($description);
-                        if (function_exists('markdownToHtml') === true) {
-                            $content = \markdownToHtml($decodedDescription);
-                        } else {
-                            $content = $parsedown->text($decodedDescription);
-                        }
+                        $content = \markdownToHtml($decodedDescription);
 
                         $links = $dom->querySelectorAll('div.panel-footer.clearfix > a');
                         if ($links->length > 1) {

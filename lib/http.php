@@ -293,23 +293,11 @@ final class IpResolver
 
 final class CurlHttpClient implements HttpClient
 {
-    private const RESOLVE_OPT = 10203;
     private const IMPERSONATE_OPT = 10240;
-    private const TIMEVALUE_CRITICAL_OPT = 307;
 
     private static function impersonateOption(): int
     {
         return defined('CURLOPT_IMPERSONATE') === true ? (int)constant('CURLOPT_IMPERSONATE') : self::IMPERSONATE_OPT;
-    }
-
-    private static function resolveOption(): int
-    {
-        return defined('CURLOPT_RESOLVE') === true ? constant('CURLOPT_RESOLVE') : self::RESOLVE_OPT;
-    }
-
-    private static function timevalueCriticalOption(): int
-    {
-        return defined('CURLOPT_TIMEVALUE_CRITICAL') === true ? (int)constant('CURLOPT_TIMEVALUE_CRITICAL') : self::TIMEVALUE_CRITICAL_OPT;
     }
 
     /**
@@ -1015,9 +1003,6 @@ final class CurlHttpClient implements HttpClient
 
         if ($config['if_not_modified_since'] !== null) {
             $curlOptions[CURLOPT_TIMEVALUE] = self::toInt($config['if_not_modified_since'], 0);
-            if (defined('CURLOPT_TIMEVALUE_CRITICAL') === true) {
-                $curlOptions[self::timevalueCriticalOption()] = 1;
-            }
             $curlOptions[CURLOPT_TIMECONDITION] = CURL_TIMECOND_IFMODSINCE;
         } elseif (($config['if_modified_since'] ?? null) !== null) {
             $curlOptions[CURLOPT_TIMEVALUE] = self::toInt($config['if_modified_since'], 0);
@@ -1057,7 +1042,7 @@ final class CurlHttpClient implements HttpClient
         $curlOptions[CURLOPT_MAXREDIRS] = 0;
 
         if ($resolveEntries !== []) {
-            $curlOptions[self::resolveOption()] = $resolveEntries;
+            $curlOptions[CURLOPT_RESOLVE] = $resolveEntries;
         }
 
         /** @var array<string, list<string>> $responseHeaders */
@@ -1100,14 +1085,10 @@ final class CurlHttpClient implements HttpClient
 
         if (defined('CURLE_HTTP2') === true) {
             $transientErrnos[] = (int) constant('CURLE_HTTP2');
-        } else {
-            $transientErrnos[] = 16;
         }
 
         if (defined('CURLE_HTTP2_STREAM') === true) {
             $transientErrnos[] = (int) constant('CURLE_HTTP2_STREAM');
-        } else {
-            $transientErrnos[] = 96;
         }
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
@@ -1540,7 +1521,7 @@ final class Response
      */
     private static function sniffContentType(string $body): ?array
     {
-        $trimmed = ltrim($body, " \f\n\r\t\v\0");
+        $trimmed = ltrim($body);
         if ($trimmed === '') {
             return null;
         }

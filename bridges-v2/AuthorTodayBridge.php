@@ -471,11 +471,11 @@ final class AuthorTodayBridge extends BridgeAbstract
         $sizeText = $this->plainText($statusNode);
 
         if ($sizeText !== '' && $labelText !== '') {
-            $sizeText = trim(str_replace($labelText, '', $sizeText), " \t\n\r\0\x0B|");
+            $sizeText = trim(str_replace($labelText, '', $sizeText), " \f\n\r\t\v\0|");
         }
 
         if ($sizeText !== '' && $adultText !== '') {
-            $sizeText = trim(str_replace($adultText, '', $sizeText), " \t\n\r\0\x0B|");
+            $sizeText = trim(str_replace($adultText, '', $sizeText), " \f\n\r\t\v\0|");
         }
 
         return $sizeText;

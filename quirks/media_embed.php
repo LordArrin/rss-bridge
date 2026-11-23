@@ -222,7 +222,7 @@ function media_embed_fetch_binary(
     for ($attempt = 1; $attempt <= $retries; $attempt++) {
         try {
             // Protected fetch via proxy if a profile is specified.
-            if ($proxyProfile !== null && $proxyProfile !== '' && function_exists('getProtectedBinary') === true) {
+            if ($proxyProfile !== null && $proxyProfile !== '') {
                 $fetchOptions = $options;
                 if ($maxSize > 0) {
                     $fetchOptions['max_size'] = $maxSize;

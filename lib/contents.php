@@ -18,18 +18,10 @@ function get_sitemap(string $url): array
         return [];
     }
 
-    $previous = libxml_use_internal_errors(true);
     try {
         $doc = \Dom\XMLDocument::createFromString($xmlString, LIBXML_NOERROR | LIBXML_NOWARNING);
     } catch (\Throwable $e) {
         throwServerException('Failed to parse sitemap: ' . $e->getMessage());
-    } finally {
-        libxml_clear_errors();
-        libxml_use_internal_errors($previous);
-    }
-
-    if ($doc->documentElement === null) {
-        return [];
     }
 
     $urls = [];
@@ -398,21 +390,15 @@ function parseHtmlDocument(string $html, ?string $encoding = null): \Dom\HTMLDoc
     if ($encoding === '') {
         $encoding = null;
     }
-    $previous = libxml_use_internal_errors(true);
     try {
-        try {
-            return \Dom\HTMLDocument::createFromString($html, LIBXML_NOERROR, $encoding);
-        } catch (\Throwable) {
-            $clean = preg_replace('/[\x00-\x08\x0B\x0E-\x1F\x7F]/', '', $html);
-            $clean = is_string($clean) === true ? $clean : '';
-            if (preg_match('//u', $clean) === 1) {
-                return \Dom\HTMLDocument::createFromString($clean, LIBXML_NOERROR, 'UTF-8');
-            }
-            return \Dom\HTMLDocument::createFromString($clean, LIBXML_NOERROR);
+        return \Dom\HTMLDocument::createFromString($html, LIBXML_NOERROR, $encoding);
+    } catch (\Throwable) {
+        $clean = preg_replace('/[\x00-\x08\x0B\x0E-\x1F\x7F]/', '', $html);
+        $clean = is_string($clean) === true ? $clean : '';
+        if (preg_match('//u', $clean) === 1) {
+            return \Dom\HTMLDocument::createFromString($clean, LIBXML_NOERROR, 'UTF-8');
         }
-    } finally {
-        libxml_clear_errors();
-        libxml_use_internal_errors($previous);
+        return \Dom\HTMLDocument::createFromString($clean, LIBXML_NOERROR);
     }
 }
 

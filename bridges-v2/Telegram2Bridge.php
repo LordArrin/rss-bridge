@@ -1315,11 +1315,9 @@ CSS,
         $html = preg_replace('/[\x{00A0}\x{1680}\x{2000}-\x{200A}\x{202F}\x{205F}\x{3000}]/u', ' ', $html) ?? $html;
         $html = strip_invisible_unicode($html);
 
-        if (class_exists(\Normalizer::class) === true) {
-            $normalized = \Normalizer::normalize($html, \Normalizer::FORM_KD);
-            if ($normalized !== false) {
-                $html = $normalized;
-            }
+        $normalized = \Normalizer::normalize($html, \Normalizer::FORM_KD);
+        if ($normalized !== false) {
+            $html = $normalized;
         }
 
         $html = preg_replace_callback(

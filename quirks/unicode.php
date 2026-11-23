@@ -18,11 +18,11 @@ declare(strict_types=1);
  *
  * @param string $text The input text.
  * @param string $form Normalization form: NFC (default), NFD, NFKC, NFKD.
- * @return string Normalized text, or original if intl extension is missing.
+ * @return string Normalized text.
  */
 function normalize_unicode(string $text, string $form = 'NFC'): string
 {
-    if ($text === '' || extension_loaded('intl') === false) {
+    if ($text === '') {
         return $text;
     }
 
