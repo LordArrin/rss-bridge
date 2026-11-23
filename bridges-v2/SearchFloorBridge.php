@@ -18,6 +18,9 @@ final class SearchFloorBridge extends BridgeAbstract
 
     private const BOOSTY_CACHE_TTL = 86400;
     private const COVER_CACHE_TTL = 604800;
+    private const MAX_BOOSTY_PAGES = 10;
+    private const MAX_BOOSTY_LIMIT = 50;
+    private const MIN_FRAGMENT_LENGTH = 10;
 
     public const PARAMETERS = [
         'Author' => [
@@ -172,69 +175,16 @@ final class SearchFloorBridge extends BridgeAbstract
             throwClientException('Invalid Boosty author: use a nickname or a https://searchfloor.org/boosty/... link.');
         }
 
-        $limit = $this->getInputInt('limit', 10);
-        $limit = min(50, max(1, $limit));
+        $limit = min(self::MAX_BOOSTY_LIMIT, max(1, $this->getInputInt('limit', 10)));
         $fullContent = (bool) $this->getInput('full_content');
         $filter = trim((string) $this->getInput('filter'));
 
         $baseUri = self::URI . '/boosty/' . rawurlencode($slug);
-        $dom = getSimpleHTMLDOM($baseUri);
+        $dom = $this->loadHtml($baseUri, 'Failed to load Boosty author page.');
 
-        $authorName = trim($dom->querySelector('h1')->textContent ?? '');
-        if ($authorName !== '') {
-            $this->saveCacheValue('boosty_name_' . $slug, $authorName, self::BOOSTY_CACHE_TTL);
-        }
+        $authorName = $this->extractBoostyAuthorName($dom, $slug);
 
-        $posts = [];
-        $seen = [];
-        $page = 1;
-
-        while (true) {
-            $batch = $this->extractBoostyPosts($dom);
-            if ($batch === []) {
-                break;
-            }
-
-            $added = 0;
-            foreach ($batch as $post) {
-                if (in_array($post['id'], $seen, true) === true) {
-                    continue;
-                }
-
-                $seen[] = $post['id'];
-                $added++;
-                if ($filter === '' || matches_keyword_rules($post['title'], $filter) === true) {
-                    $posts[] = $post;
-                }
-            }
-
-            if ($added === 0 || count($posts) >= $limit || $page >= 10) {
-                break;
-            }
-
-            $nextAttr = $dom->querySelector('#btn-next-page')?->getAttribute('data-page');
-            if ($nextAttr === null || preg_match('/^\d+$/', $nextAttr) !== 1) {
-                break;
-            }
-
-            $next = (int) $nextAttr;
-            if ($next <= $page) {
-                break;
-            }
-
-            try {
-                $fragment = (string) getContents($baseUri . '?page=' . $next);
-            } catch (\Throwable) {
-                break;
-            }
-
-            if (strlen(trim($fragment)) <= 10) {
-                break;
-            }
-
-            $dom = parseHtmlDocument($fragment);
-            $page = $next;
-        }
+        $posts = $this->paginateBoostyPosts($dom, $baseUri, $limit, $filter);
 
         if ($posts === []) {
             throwServerException('No Boosty posts found for this author. Check the nickname and the title filter.');
@@ -256,12 +206,97 @@ final class SearchFloorBridge extends BridgeAbstract
                 'uri' => $post['uri'],
                 'title' => $post['title'],
                 'timestamp' => $post['date'] ?? time(),
-                'author' => $authorName !== '' ? $authorName : $slug,
+                'author' => $authorName,
                 'uid' => 'boosty-' . $post['id'],
                 'categories' => $post['tags'],
                 'content' => $content,
             ];
         }
+    }
+
+    private function extractBoostyAuthorName(\Dom\HTMLDocument $dom, string $slug): string
+    {
+        $authorName = trim($dom->querySelector('h1')->textContent ?? '');
+        if ($authorName !== '') {
+            $this->saveCacheValue('boosty_name_' . $slug, $authorName, self::BOOSTY_CACHE_TTL);
+        }
+        return $authorName !== '' ? $authorName : $slug;
+    }
+
+    /**
+     * @return list<array{id: int, title: string, uri: string, date: int|null, tags: list<string>}>
+     */
+    private function paginateBoostyPosts(\Dom\HTMLDocument $initialDom, string $baseUri, int $limit, string $filter): array
+    {
+        $posts = [];
+        $seen = [];
+        $dom = $initialDom;
+        $page = 1;
+
+        for ($i = 0; $i < self::MAX_BOOSTY_PAGES; $i++) {
+            $batch = $this->extractBoostyPosts($dom);
+            if ($batch === []) {
+                break;
+            }
+
+            $added = 0;
+            foreach ($batch as $post) {
+                if (in_array($post['id'], $seen, true) === true) {
+                    continue;
+                }
+
+                $seen[] = $post['id'];
+                $added++;
+                if ($filter === '' || matches_keyword_rules($post['title'], $filter) === true) {
+                    $posts[] = $post;
+                }
+            }
+
+            if ($added === 0 || count($posts) >= $limit) {
+                break;
+            }
+
+            $nextPage = $this->getNextBoostyPage($dom, $page);
+            if ($nextPage === null) {
+                break;
+            }
+
+            $fragment = $this->fetchBoostyPageFragment($baseUri, $nextPage);
+            if ($fragment === null) {
+                break;
+            }
+
+            $dom = $fragment;
+            $page = $nextPage;
+        }
+
+        return $posts;
+    }
+
+    private function getNextBoostyPage(\Dom\HTMLDocument $dom, int $currentPage): ?int
+    {
+        $nextAttr = $dom->querySelector('#btn-next-page')?->getAttribute('data-page');
+        if ($nextAttr === null || preg_match('/^\d+$/', $nextAttr) !== 1) {
+            return null;
+        }
+
+        $next = (int) $nextAttr;
+        return $next > $currentPage ? $next : null;
+    }
+
+    private function fetchBoostyPageFragment(string $baseUri, int $page): ?\Dom\HTMLDocument
+    {
+        try {
+            $fragment = (string) getContents($baseUri . '?page=' . $page);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (strlen(trim($fragment)) <= self::MIN_FRAGMENT_LENGTH) {
+            return null;
+        }
+
+        return parseHtmlDocument($fragment);
     }
 
     private function getBoostySlug(): string
@@ -300,14 +335,7 @@ final class SearchFloorBridge extends BridgeAbstract
                 continue;
             }
 
-            $date = null;
-            $dateAttr = $card->querySelector('p.date[data-date]')?->getAttribute('data-date');
-            if ($dateAttr !== null && $dateAttr !== '') {
-                $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d H:i', $dateAttr, new \DateTimeZone('Europe/Moscow'));
-                if ($parsed !== false) {
-                    $date = $parsed->getTimestamp();
-                }
-            }
+            $date = $this->parseBoostyDate($card);
 
             $tags = [];
             foreach ($card->querySelectorAll('#post_tags a') as $tagNode) {
@@ -329,6 +357,17 @@ final class SearchFloorBridge extends BridgeAbstract
         return $posts;
     }
 
+    private function parseBoostyDate(\Dom\Element $card): ?int
+    {
+        $dateAttr = $card->querySelector('p.date[data-date]')?->getAttribute('data-date');
+        if ($dateAttr === null || $dateAttr === '') {
+            return null;
+        }
+
+        $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d H:i', $dateAttr, new \DateTimeZone('Europe/Moscow'));
+        return $parsed !== false ? $parsed->getTimestamp() : null;
+    }
+
     private function fetchBoostyPostContent(string $postUri): string
     {
         $cacheKey = 'boosty_post_' . md5($postUri);
@@ -338,7 +377,12 @@ final class SearchFloorBridge extends BridgeAbstract
         }
 
         try {
-            $dom = getSimpleHTMLDOM($postUri);
+            $html = getContents($postUri);
+            if ($html === '') {
+                return '';
+            }
+
+            $dom = parseHtmlDocument($html);
         } catch (\Throwable) {
             return '';
         }
@@ -348,19 +392,7 @@ final class SearchFloorBridge extends BridgeAbstract
             return '';
         }
 
-        foreach ($node->querySelectorAll('img[src]') as $img) {
-            $src = $img->getAttribute('src') ?? '';
-            if ($src !== '' && str_starts_with($src, 'http') === false && str_starts_with($src, 'data:') === false) {
-                $img->setAttribute('src', urljoin($postUri, $src));
-            }
-        }
-
-        foreach ($node->querySelectorAll('a[href]') as $anchor) {
-            $href = $anchor->getAttribute('href') ?? '';
-            if ($href !== '' && str_starts_with($href, 'http') === false && str_starts_with($href, '#') === false && str_starts_with($href, 'mailto:') === false) {
-                $anchor->setAttribute('href', urljoin($postUri, $href));
-            }
-        }
+        $this->makeUrlsAbsolute($node, $postUri);
 
         $content = break_annoying_html_tags($node->innerHTML);
         if ($content !== '') {
@@ -368,6 +400,23 @@ final class SearchFloorBridge extends BridgeAbstract
         }
 
         return $content;
+    }
+
+    private function makeUrlsAbsolute(\Dom\Element $node, string $baseUrl): void
+    {
+        foreach ($node->querySelectorAll('img[src]') as $img) {
+            $src = $img->getAttribute('src') ?? '';
+            if ($src !== '' && str_starts_with($src, 'http') === false && str_starts_with($src, 'data:') === false) {
+                $img->setAttribute('src', urljoin($baseUrl, $src));
+            }
+        }
+
+        foreach ($node->querySelectorAll('a[href]') as $anchor) {
+            $href = $anchor->getAttribute('href') ?? '';
+            if ($href !== '' && str_starts_with($href, 'http') === false && str_starts_with($href, '#') === false && str_starts_with($href, 'mailto:') === false) {
+                $anchor->setAttribute('href', urljoin($baseUrl, $href));
+            }
+        }
     }
 
     private function loadHtml(string $url, string $errorMessage): \Dom\HTMLDocument

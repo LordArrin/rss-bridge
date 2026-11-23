@@ -46,7 +46,7 @@ final class PawchiveBridge extends BridgeAbstract
             'name' => 'Hide posts without media',
             'type' => 'checkbox',
             'title' => 'Skip posts without media (text-only posts will be hidden)',
-            'defaultValue' => false
+            'defaultValue' => false,
         ],
     ]];
 
@@ -178,6 +178,68 @@ final class PawchiveBridge extends BridgeAbstract
 
     private ?string $activeDomainHost = null;
 
+    public function getIcon(): string
+    {
+        $icon = $this->authorAvatarUrl ?? parent::getIcon();
+
+        return $this->normalizeUrls($icon);
+    }
+
+    public function getURI(): string
+    {
+        $service = $this->getInput('service');
+        $user = $this->getInput('user');
+        $uri = $this->baseURI() . $service . '/user/' . $user;
+
+        return $this->normalizeUrls($uri);
+    }
+
+    public function getName(): string
+    {
+        return $this->author ?? parent::getName();
+    }
+
+    public function collectData(): void
+    {
+        $service = $this->getInput('service');
+        $userId = (string)$this->getInput('user');
+        $userPath = '/user/' . $userId;
+
+        $profile = $this->getJson("{$userPath}/profile");
+        $this->author = $profile['name'] ?? 'Unknown';
+        $this->authorAvatarUrl = $this->getAvatarUrl($service, $userId);
+
+        $queryParams = [];
+        $q = $this->getInput('q');
+
+        if ($q !== null && $q !== '') {
+            $queryParams['q'] = $q;
+        }
+
+        $queryString = $queryParams !== [] ? '?' . http_build_query($queryParams) : '';
+
+        $json = $this->getJson("{$userPath}{$queryString}");
+
+        $hideAttachments = (bool)$this->getInput('hide_videos');
+        $hideEmpty = (bool)$this->getInput('hide_empty');
+        $limit = $this->getInput('limit');
+
+        $count = 0;
+
+        foreach ($json as $post) {
+            if ($hideEmpty === true && $this->hasMedia($post) === false) {
+                continue;
+            }
+
+            $this->items[] = $this->createItem($post, $hideAttachments);
+            $count++;
+
+            if ($limit !== null && $count >= $limit) {
+                break;
+            }
+        }
+    }
+
     private function getActiveDomainHost(): string
     {
         if ($this->activeDomainHost === null) {
@@ -257,6 +319,21 @@ final class PawchiveBridge extends BridgeAbstract
         $html = (string)preg_replace('/\b(src|href)="(\/(?!\/)[^"]+)"/i', '$1="' . $base . '$2"', $html);
 
         return $html;
+    }
+
+    private function cleanFilename(?string $filename): ?string
+    {
+        if ($filename === null) {
+            return null;
+        }
+
+        $clean = (string)preg_replace('/[^\x20-\x7E]/', '', $filename);
+        return trim($clean);
+    }
+
+    private function cleanPath(string $path): string
+    {
+        return trim((string)preg_replace('/[^\x20-\x7E]/', '', $path));
     }
 
     private function getMimeType(string $filename): string
@@ -393,14 +470,12 @@ final class PawchiveBridge extends BridgeAbstract
             return $this->fallbackSanitize($html);
         }
 
-        // Remove dangerous tags
         foreach (self::SANITIZE_TAGS_TO_REMOVE as $tag) {
             foreach ($wrapper->querySelectorAll($tag) as $el) {
                 $el->remove();
             }
         }
 
-        // Remove disallowed attributes from all elements
         foreach ($wrapper->querySelectorAll('*') as $el) {
             $attributesToRemove = [];
             foreach ($el->attributes as $attr) {
@@ -697,8 +772,8 @@ final class PawchiveBridge extends BridgeAbstract
 
         if (isset($post['file']['path']) === true && $post['file']['path'] !== '') {
             $file = $post['file'];
-            $file['name'] = isset($file['name']) === true ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
-            $file['path'] = trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
+            $file['name'] = $this->cleanFilename($file['name'] ?? null);
+            $file['path'] = $this->cleanPath($file['path']);
             $seenPaths[$file['path']] = true;
             $files[] = $file;
         }
@@ -706,8 +781,8 @@ final class PawchiveBridge extends BridgeAbstract
         if (isset($post['attachments']) === true && is_array($post['attachments']) === true && $post['attachments'] !== []) {
             foreach ($post['attachments'] as $file) {
                 if (isset($file['path']) === true && $file['path'] !== '') {
-                    $file['name'] = isset($file['name']) === true ? trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['name'])) : null;
-                    $file['path'] = trim((string)preg_replace('/[^\x20-\x7E]/', '', (string)$file['path']));
+                    $file['name'] = $this->cleanFilename($file['name'] ?? null);
+                    $file['path'] = $this->cleanPath($file['path']);
 
                     if (isset($seenPaths[$file['path']]) === true) {
                         continue;
@@ -748,9 +823,9 @@ final class PawchiveBridge extends BridgeAbstract
 
             try {
                 $curlOptions = [
-                CURLOPT_RANGE => 'bytes=0-0',
-                CURLOPT_TIMEOUT => 5,
-                CURLOPT_CONNECTTIMEOUT => 3,
+                    CURLOPT_RANGE => 'bytes=0-0',
+                    CURLOPT_TIMEOUT => 5,
+                    CURLOPT_CONNECTTIMEOUT => 3,
                 ];
 
                 $response = getContents($thumbnailUrl, [], $curlOptions, true);
@@ -779,10 +854,12 @@ final class PawchiveBridge extends BridgeAbstract
 
     /**
      * @param list<array<string, mixed>> $files
-     * @param list<array{url: string, name: string}> $downloadLinks
+     * @return array{html: string, links: list<array{url: string, name: string}>}
      */
-    private function processFiles(array $files, bool $hideAttachments, string &$contentHtml, array &$downloadLinks): void
+    private function processFiles(array $files, bool $hideAttachments): array
     {
+        $contentHtml = '';
+        $downloadLinks = [];
         $containerStyle = self::CSS['file-container'];
         $useThumbnails = $this->thumbnailsAvailable($files);
 
@@ -836,6 +913,8 @@ final class PawchiveBridge extends BridgeAbstract
                 $downloadLinks[] = ['url' => $fullUrl, 'name' => $fileName];
             }
         }
+
+        return ['html' => $contentHtml, 'links' => $downloadLinks];
     }
 
     /**
@@ -868,68 +947,6 @@ final class PawchiveBridge extends BridgeAbstract
             self::CSS['attachments-list'],
             $itemsHtml
         );
-    }
-
-    public function getIcon(): string
-    {
-        $icon = $this->authorAvatarUrl ?? parent::getIcon();
-
-        return $this->normalizeUrls($icon);
-    }
-
-    public function getURI(): string
-    {
-        $service = $this->getInput('service');
-        $user = $this->getInput('user');
-        $uri = $this->baseURI() . $service . '/user/' . $user;
-
-        return $this->normalizeUrls($uri);
-    }
-
-    public function getName(): string
-    {
-        return $this->author ?? parent::getName();
-    }
-
-    public function collectData(): void
-    {
-        $service = $this->getInput('service');
-        $userId = (string)$this->getInput('user');
-        $userPath = '/user/' . $userId;
-
-        $profile = $this->getJson("{$userPath}/profile");
-        $this->author = $profile['name'] ?? 'Unknown';
-        $this->authorAvatarUrl = $this->getAvatarUrl($service, $userId);
-
-        $queryParams = [];
-        $q = $this->getInput('q');
-
-        if ($q !== null && $q !== '') {
-            $queryParams['q'] = $q;
-        }
-
-        $queryString = $queryParams !== [] ? '?' . http_build_query($queryParams) : '';
-
-        $json = $this->getJson("{$userPath}{$queryString}");
-
-        $hideAttachments = (bool)$this->getInput('hide_videos');
-        $hideEmpty = (bool)$this->getInput('hide_empty');
-        $limit = $this->getInput('limit');
-
-        $count = 0;
-
-        foreach ($json as $post) {
-            if ($hideEmpty === true && $this->hasMedia($post) === false) {
-                continue;
-            }
-
-            $this->items[] = $this->createItem($post, $hideAttachments);
-            $count++;
-
-            if ($limit !== null && $count >= $limit) {
-                break;
-            }
-        }
     }
 
     /**
@@ -977,7 +994,7 @@ final class PawchiveBridge extends BridgeAbstract
             'timestamp' => $timestamp,
             'title' => $this->sanitizeText($post['title'] ?? 'Post ' . ($post['id'] ?? '?')),
             'uid' => (string)($post['id'] ?? uniqid('pawchive_', true)),
-            'uri' => $this->getURI() . '/post/' . ($post['id'] ?? ''),
+            'uri' => $this->normalizeUrls($this->getURI() . '/post/' . ($post['id'] ?? '')),
         ];
 
         $contentHtml = $item['content'];
@@ -986,9 +1003,9 @@ final class PawchiveBridge extends BridgeAbstract
             $contentHtml .= $this->renderExternalLink($this->normalizeUrls((string)$post['embed']['url']));
         }
 
-        $downloadLinks = [];
-        $this->processFiles($files, $hideAttachments, $contentHtml, $downloadLinks);
-        $contentHtml .= $this->renderAttachmentsBlock($downloadLinks);
+        $processed = $this->processFiles($files, $hideAttachments);
+        $contentHtml .= $processed['html'];
+        $contentHtml .= $this->renderAttachmentsBlock($processed['links']);
 
         if (isset($post['poll']) === true && is_array($post['poll']) === true && $post['poll'] !== []) {
             $contentHtml .= $this->renderPoll($post['poll']);
@@ -997,24 +1014,5 @@ final class PawchiveBridge extends BridgeAbstract
         $item['content'] = $contentHtml;
 
         return $item;
-    }
-
-    public function getItems(): array
-    {
-        $items = parent::getItems();
-
-        foreach ($items as &$item) {
-            if (isset($item['content']) === true) {
-                $item['content'] = $this->normalizeUrls($item['content']);
-            }
-
-            if (isset($item['uri']) === true) {
-                $item['uri'] = $this->normalizeUrls($item['uri']);
-            }
-        }
-
-        unset($item);
-
-        return $items;
     }
 }

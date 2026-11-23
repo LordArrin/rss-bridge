@@ -812,6 +812,9 @@ RUN sed -i "s/\"version\": \".*\"/\"version\": \"${IMAGE_VERSION}\"/" /app/compo
     chmod +x /app/bin/* && \
     chmod +x /app/docker-entrypoint.sh
 
+# Security
+RUN rm -rf /sbin/apk /usr/bin/apk /usr/sbin/apk /lib/libapk.so* /usr/lib/libapk* /etc/apk /lib/apk /var/cache/apk
+
 # App-level healthcheck (nginx + PHP-FPM)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -fsS --compressed "http://localhost/?action=health" || exit 1

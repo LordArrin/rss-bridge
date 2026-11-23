@@ -89,7 +89,7 @@ final class BoostyBridge extends BridgeAbstract
         if (isset($data['data'][0]['user']['avatarUrl']) === true && $data['data'][0]['user']['avatarUrl'] !== '') {
             $this->blogAvatar = (string) $data['data'][0]['user']['avatarUrl'];
         }
-        return array_values(array_filter($data['data'], fn($v) => is_array($v)));
+        return $this->filterArrays($data['data']);
     }
 
     /**
@@ -200,8 +200,7 @@ final class BoostyBridge extends BridgeAbstract
                 return array_values($blocks);
             }
 
-            $newText = mb_substr($text, $sentenceEnd, null, 'UTF-8');
-            $newText = ltrim($newText);
+            $newText = ltrim(mb_substr($text, $sentenceEnd, null, 'UTF-8'));
 
             if ($newText === '') {
                 unset($blocks[$index]);
@@ -359,10 +358,8 @@ final class BoostyBridge extends BridgeAbstract
             $type = $b['type'] ?? '';
             $mod = $b['modificator'] ?? '';
             if ($type === 'text' && $mod === 'BLOCK_END') {
-                if ($buf !== []) {
-                    $out .= '<p>' . implode('', $buf) . '</p>';
-                    $buf = [];
-                }
+                $out .= $this->flushBuffer($buf);
+                $buf = [];
                 continue;
             }
             if ($type === 'text') {
@@ -376,28 +373,30 @@ final class BoostyBridge extends BridgeAbstract
                     $buf[] = $r;
                 }
             } elseif ($type === 'list') {
-                if ($buf !== []) {
-                    $out .= '<p>' . implode('', $buf) . '</p>';
-                    $buf = [];
-                }
+                $out .= $this->flushBuffer($buf);
+                $buf = [];
                 $out .= $this->renderList($b);
             } else {
-                if ($buf !== []) {
-                    $out .= '<p>' . implode('', $buf) . '</p>';
-                    $buf = [];
-                }
+                $out .= $this->flushBuffer($buf);
+                $buf = [];
                 if ($this->isMediaType($type) === true) {
                     $out .= $this->renderMedia($b);
                 }
             }
         }
-        if ($buf !== []) {
-            $out .= '<p>' . implode('', $buf) . '</p>';
-        }
+        $out .= $this->flushBuffer($buf);
         if (isset($p['poll']) === true && is_array($p['poll']) === true && $p['poll'] !== []) {
             $out .= $this->renderPoll($p['poll']);
         }
         return $out;
+    }
+
+    /**
+     * @param list<string> $buf
+     */
+    private function flushBuffer(array $buf): string
+    {
+        return $buf !== [] ? '<p>' . implode('', $buf) . '</p>' : '';
     }
 
     /**
@@ -408,13 +407,11 @@ final class BoostyBridge extends BridgeAbstract
         $style = $b['style'] ?? 'unordered';
         $tag = ($style === 'ordered') ? 'ol' : 'ul';
         $cssKey = ($style === 'ordered') ? 'ol' : 'ul';
-        $items = $b['items'] ?? [];
+        $items = $this->filterArrays($b['items'] ?? []);
 
         if ($items === []) {
             return '';
         }
-
-        $items = array_values(array_filter($items, fn($v) => is_array($v)));
 
         $inner = $this->renderListItems($items, $tag, $cssKey);
         if ($inner === '') {
@@ -434,7 +431,7 @@ final class BoostyBridge extends BridgeAbstract
             $content = $this->listItemContent($item);
             $nested = '';
             if (isset($item['items']) === true && is_array($item['items']) === true && $item['items'] !== []) {
-                $nestedItems = array_values(array_filter($item['items'], fn($v) => is_array($v)));
+                $nestedItems = $this->filterArrays($item['items']);
                 $nested = $this->renderListItems($nestedItems, $tag, $cssKey);
             }
             if ($content === '' && $nested === '') {
@@ -592,6 +589,18 @@ final class BoostyBridge extends BridgeAbstract
             $css = ($css !== '' ? $css . ';' : '') . $extra;
         }
         return $css !== '' ? ' style="' . $css . '"' : '';
+    }
+
+    /**
+     * @param mixed $arr
+     * @return list<array<string, mixed>>
+     */
+    private function filterArrays(mixed $arr): array
+    {
+        if (is_array($arr) === false) {
+            return [];
+        }
+        return array_values(array_filter($arr, fn($v) => is_array($v)));
     }
 
     public function getName(): string

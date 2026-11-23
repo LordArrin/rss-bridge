@@ -393,17 +393,20 @@ function getContents(
     return $response->getBody();
 }
 
-function parseHtmlDocument(string $html): \Dom\HTMLDocument
+function parseHtmlDocument(string $html, ?string $encoding = null): \Dom\HTMLDocument
 {
+    if ($encoding === '') {
+        $encoding = null;
+    }
     $previous = libxml_use_internal_errors(true);
     try {
         try {
-            return \Dom\HTMLDocument::createFromString($html, LIBXML_NOERROR);
+            return \Dom\HTMLDocument::createFromString($html, LIBXML_NOERROR, $encoding);
         } catch (\Throwable) {
-            $clean = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $html);
+            $clean = preg_replace('/[\x00-\x08\x0B\x0E-\x1F\x7F]/', '', $html);
             $clean = is_string($clean) === true ? $clean : '';
-            if (preg_match('//u', $clean) !== 1) {
-                $clean = mb_convert_encoding($clean, 'UTF-8', 'UTF-8');
+            if (preg_match('//u', $clean) === 1) {
+                return \Dom\HTMLDocument::createFromString($clean, LIBXML_NOERROR, 'UTF-8');
             }
             return \Dom\HTMLDocument::createFromString($clean, LIBXML_NOERROR);
         }
@@ -411,6 +414,32 @@ function parseHtmlDocument(string $html): \Dom\HTMLDocument
         libxml_clear_errors();
         libxml_use_internal_errors($previous);
     }
+}
+
+function responseCharset(Response $response): ?string
+{
+    $contentType = $response->getHeader('content-type');
+    if (is_string($contentType) === false || $contentType === '') {
+        return null;
+    }
+    if (preg_match('/charset\s*=\s*"?([a-z0-9_\-:.]+)"?/i', $contentType, $matches) !== 1) {
+        return null;
+    }
+    return strtolower($matches[1]);
+}
+
+function parseHtmlBody(string $html, ?string $charset = null): \Dom\HTMLDocument
+{
+    if (preg_match('//u', $html) === 1) {
+        return parseHtmlDocument($html, 'UTF-8');
+    }
+    if (str_starts_with($html, "\xFF\xFE") === true || str_starts_with($html, "\xFE\xFF") === true) {
+        return parseHtmlDocument($html);
+    }
+    if ($charset !== null && $charset !== '') {
+        return parseHtmlDocument($html, $charset);
+    }
+    return parseHtmlDocument($html);
 }
 
 function parseHtmlFragment(string $html, string $wrapperId = 'rss-bridge-temp-wrapper'): ?\Dom\HTMLDocument
@@ -438,12 +467,13 @@ function getSimpleHTMLDOM(
     array $header = [],
     array $opts = []
 ): \Dom\HTMLDocument {
-    $html = getContents($url, $header, $opts);
+    $response = getContents($url, $header, $opts, true);
+    $html = $response->getBody();
     if ($html === '') {
         throw new \Exception('Unable to parse dom because the http response was the empty string');
     }
 
-    return parseHtmlDocument($html);
+    return parseHtmlBody($html, responseCharset($response));
 }
 
 /**
@@ -508,7 +538,7 @@ function getProtectedSimpleHTMLDOM(string $url, string $profileName, array $opti
         throwServiceUnavailableException(sprintf("Proxy profile '%s' returned empty HTML for: %s", $profileName, $url), 60);
     }
 
-    return parseHtmlDocument($html);
+    return parseHtmlBody($html);
 }
 
 /**

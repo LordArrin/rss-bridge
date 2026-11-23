@@ -45,6 +45,9 @@ final class MSISupportBridge extends BridgeAbstract
     /** @var array{product: string, category: string, fragment: string, sub_product: string}|null */
     private ?array $productInfo = null;
 
+    /** @var array<string, array<string, list<array<string, mixed>>>|null> */
+    private array $apiCache = [];
+
     public function getIcon(): string
     {
         return self::URI . 'favicon.ico';
@@ -147,8 +150,13 @@ final class MSISupportBridge extends BridgeAbstract
      */
     private function fetchApiData(string $type): ?array
     {
+        if (array_key_exists($type, $this->apiCache) === true) {
+            return $this->apiCache[$type];
+        }
+
         $info = $this->getProductInfo();
         if ($info === null) {
+            $this->apiCache[$type] = null;
             return null;
         }
 
@@ -158,14 +166,19 @@ final class MSISupportBridge extends BridgeAbstract
         try {
             $json = getContents($url, self::HEADERS);
             if (json_validate($json) === false) {
+                $this->apiCache[$type] = null;
                 return null;
             }
             $data = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
             if (is_array($data) === false || isset($data['result']['downloads']) === false) {
+                $this->apiCache[$type] = null;
                 return null;
             }
-            return $data['result']['downloads'];
+            $result = $data['result']['downloads'];
+            $this->apiCache[$type] = $result;
+            return $result;
         } catch (\Exception) {
+            $this->apiCache[$type] = null;
             return null;
         }
     }
@@ -184,28 +197,30 @@ final class MSISupportBridge extends BridgeAbstract
             return '';
         }
 
-        $linkStyle = self::CSS['link'];
-        $callback = function (array $m) use ($linkStyle): string {
-            $attrs = $m[1];
-            if (stripos($attrs, 'target=') === false) {
-                $attrs .= ' target="_blank"';
-            }
-            if (stripos($attrs, 'rel=') === false) {
-                $attrs .= ' rel="noopener noreferrer"';
-            }
-            if (stripos($attrs, 'style=') === false) {
-                $attrs .= ' style="' . $linkStyle . '"';
-            }
-            return '<a ' . trim($attrs) . '>';
-        };
-
         $text = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $text = (string) preg_replace('/\s*(?:style|on\w+)\s*=\s*(["\']).*?\1/i', '', $text);
         $text = strip_tags($text, '<a><br><p>');
-        $text = (string) preg_replace_callback('/<a\s+([^>]*?)>/is', $callback, $text);
-        $text = nl2br($text);
+        $text = (string) preg_replace_callback('/<a\s+([^>]*?)>/is', [$this, 'enhanceAnchorTag'], $text);
 
-        return $text;
+        return nl2br($text);
+    }
+
+    /**
+     * @param array<int, string> $m
+     */
+    private function enhanceAnchorTag(array $m): string
+    {
+        $attrs = $m[1];
+        if (stripos($attrs, 'target=') === false) {
+            $attrs .= ' target="_blank"';
+        }
+        if (stripos($attrs, 'rel=') === false) {
+            $attrs .= ' rel="noopener noreferrer"';
+        }
+        if (stripos($attrs, 'style=') === false) {
+            $attrs .= ' style="' . self::CSS['link'] . '"';
+        }
+        return '<a ' . trim($attrs) . '>';
     }
 
     /**
@@ -216,16 +231,42 @@ final class MSISupportBridge extends BridgeAbstract
     private function buildFeedItem(array $file, string $subCategory, array $info, bool $hideAttachments): array
     {
         $rawTitle = $file['download_title'] ?? $subCategory;
-        $title = $this->decodeHtml((is_scalar($rawTitle) === true) ? (string) $rawTitle : $subCategory);
+        $title = $this->decodeHtml(is_scalar($rawTitle) === true ? (string) $rawTitle : $subCategory);
 
         $rawVersion = $file['download_version'] ?? '';
-        $version = $this->decodeHtml((is_scalar($rawVersion) === true) ? (string) $rawVersion : '');
+        $version = $this->decodeHtml(is_scalar($rawVersion) === true ? (string) $rawVersion : '');
 
         $itemTitle = "[{$subCategory}] {$title}";
         if ($version !== '') {
             $itemTitle .= " - {$version}";
         }
 
+        $uri = $this->buildSupportUri($info);
+        $content = $this->buildItemContent($file, $hideAttachments);
+
+        $rawId = $file['download_id'] ?? null;
+        $item = [
+            'title'   => $itemTitle,
+            'uri'     => $uri,
+            'content' => $content,
+            'uid'     => (is_scalar($rawId) === true && (string) $rawId !== '') ? (string) $rawId : md5($itemTitle)
+        ];
+
+        if (isset($file['download_release']) === true && is_string($file['download_release']) === true && $file['download_release'] !== '') {
+            $timestamp = strtotime($file['download_release']);
+            if ($timestamp !== false) {
+                $item['timestamp'] = $timestamp;
+            }
+        }
+
+        return $item;
+    }
+
+    /**
+     * @param array{product: string, category: string, fragment: string, sub_product: string} $info
+     */
+    private function buildSupportUri(array $info): string
+    {
         $uri = "https://www.msi.com/{$info['category']}/{$info['product']}/support";
         if ($info['sub_product'] !== '') {
             $uri .= '?sub_product=' . urlencode($info['sub_product']);
@@ -233,7 +274,14 @@ final class MSISupportBridge extends BridgeAbstract
         if ($info['fragment'] !== '') {
             $uri .= '#' . $info['fragment'];
         }
+        return $uri;
+    }
 
+    /**
+     * @param array<string, mixed> $file
+     */
+    private function buildItemContent(array $file, bool $hideAttachments): string
+    {
         $content = '<div style="' . self::CSS['item'] . '">';
 
         if (isset($file['download_description']) === true && is_scalar($file['download_description']) === true) {
@@ -259,31 +307,15 @@ final class MSISupportBridge extends BridgeAbstract
 
         if ($hideAttachments === false && isset($file['download_url']) === true && is_string($file['download_url']) === true && $file['download_url'] !== '') {
             $downloadUrl = htmlspecialchars($file['download_url'], ENT_QUOTES, 'UTF-8');
-            $downloadStyle = self::CSS['download'];
             $content .= sprintf(
                 '<p style="%s"><a href="%s" style="%s" target="_blank" rel="noopener noreferrer">Download</a></p>',
                 self::CSS['p'],
                 $downloadUrl,
-                $downloadStyle
+                self::CSS['download']
             );
         }
 
-        $content .= '</div>';
-
-        $rawId = $file['download_id'] ?? null;
-        $item = [
-            'title'   => $itemTitle,
-            'uri'     => $uri,
-            'content' => $content,
-            'uid'     => (is_scalar($rawId) === true && (string) $rawId !== '') ? (string) $rawId : md5($itemTitle)
-        ];
-
-        if (isset($file['download_release']) === true && is_string($file['download_release']) === true && $file['download_release'] !== '') {
-            $timestamp = strtotime($file['download_release']);
-            $item['timestamp'] = $timestamp === false ? null : $timestamp;
-        }
-
-        return $item;
+        return $content . '</div>';
     }
 
     public function collectData(): void
@@ -318,10 +350,10 @@ final class MSISupportBridge extends BridgeAbstract
                         continue;
                     }
 
-                    $fileUrl = (isset($file['download_url']) === true && is_scalar($file['download_url']) === true) ? (string) $file['download_url'] : '';
-                    $fileTitle = (isset($file['download_title']) === true && is_scalar($file['download_title']) === true) ? (string) $file['download_title'] : '';
+                    $hasUrl = isset($file['download_url']) === true && is_scalar($file['download_url']) === true && (string) $file['download_url'] !== '';
+                    $hasTitle = isset($file['download_title']) === true && is_scalar($file['download_title']) === true && (string) $file['download_title'] !== '';
 
-                    if ($fileUrl === '' && $fileTitle === '') {
+                    if ($hasUrl === false && $hasTitle === false) {
                         continue;
                     }
 

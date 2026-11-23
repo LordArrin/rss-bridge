@@ -161,7 +161,7 @@ final class GigabyteSupportBridge extends BridgeAbstract
                 return null;
             }
 
-            if (class_exists('\\tidy') === true) {
+            if (class_exists('\tidy') === true) {
                 $tidy = new \tidy();
                 $tidy->parseString($html, [
                     'clean' => true,
@@ -313,19 +313,25 @@ final class GigabyteSupportBridge extends BridgeAbstract
 
             $rows = $table->querySelectorAll('tr');
 
-            $hasOs = null;
+            // Detect table structure
+            $columnCount = 0;
+            $hasOsColumn = false;
             foreach ($rows as $row) {
                 if ($row->querySelector('th') !== null) {
                     continue;
                 }
                 $cells = $row->querySelectorAll('td');
                 if ($cells->length >= 4) {
-                    $hasOs = $cells->length >= 6;
+                    $columnCount = $cells->length;
+                    // BIOS tables: 4 cols (Desc, Version, Size, Date) or 5 cols (Desc, Version, Size, Date, Download)
+                    // Driver tables: 5 cols (Desc, Version, OS, Size, Date) or 6 cols (Desc, Version, OS, Size, Date, Download)
+                    // Key difference: Driver tables have OS column between Version and Size
+                    $hasOsColumn = $cells->length === 5 || $cells->length === 6;
                     break;
                 }
             }
 
-            if ($hasOs === null) {
+            if ($columnCount === 0) {
                 continue;
             }
 
@@ -339,11 +345,22 @@ final class GigabyteSupportBridge extends BridgeAbstract
                     continue;
                 }
 
-                $descriptionNode = $cells->item(0);
-                $versionNode = $cells->item(1);
-                $osNode = $hasOs === true ? $cells->item(2) : null;
-                $sizeNode = $cells->item($hasOs === true ? 3 : 2);
-                $dateNode = $cells->item($hasOs === true ? 4 : 3);
+                // Extract based on detected structure
+                if ($hasOsColumn === true && $cells->length >= 5) {
+                    // Driver format with OS column
+                    $descriptionNode = $cells->item(0);
+                    $versionNode = $cells->item(1);
+                    $osNode = $cells->item(2);
+                    $sizeNode = $cells->item(3);
+                    $dateNode = $cells->item(4);
+                } else {
+                    // BIOS format without OS column
+                    $descriptionNode = $cells->item(0);
+                    $versionNode = $cells->item(1);
+                    $osNode = null;
+                    $sizeNode = $cells->item(2);
+                    $dateNode = $cells->item(3);
+                }
 
                 $downloadUrl = '';
                 $links = $row->querySelectorAll('a');

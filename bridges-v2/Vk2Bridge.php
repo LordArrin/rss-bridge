@@ -178,179 +178,6 @@ final class Vk2Bridge extends BridgeAbstract
     }
 
     /**
-     * @param array<string, mixed> $post
-     */
-    protected function getPostURI(array $post): string
-    {
-        $uri = sprintf(
-            'https://vk.ru/wall%d_%d',
-            $post['owner_id'] ?? 0,
-            $post['id'] ?? 0
-        );
-        if (isset($post['reply_post_id']) === false) {
-            return $uri;
-        }
-        $threadId = $post['parents_stack'][0] ?? $post['reply_post_id'];
-        return sprintf('%s?reply=%d&thread=%d', $uri, $post['id'] ?? 0, $threadId);
-    }
-
-    /**
-     * @param array<string, mixed> $post
-     */
-    protected function generateContentFromPost(array $post, bool $extractTitle = true): string
-    {
-        $text = $post['text'] ?? '';
-        if ($extractTitle === true) {
-            [, $text] = $this->splitFirstLine($text);
-        }
-
-        $text = trim((string) $text);
-        $ret = '';
-
-        if ($text !== '') {
-            $placeholders = [];
-            $counter = 0;
-
-            $text = $this->applyPlaceholders(
-                $text,
-                $placeholders,
-                $counter,
-                '/\[([^\]|]+)\|([^\]]+)\]/u',
-                fn(array $m): string => $this->resolveVkLink(trim((string) $m[1]), $m[2])
-            );
-
-            $text = $this->applyPlaceholders(
-                $text,
-                $placeholders,
-                $counter,
-                '/#([\p{L}0-9_]+(?:@[\p{L}0-9_.]+)?)/u',
-                fn(array $m): string => $this->safeLink('https://vk.ru/feed?q=%23' . urlencode($m[1]), '#' . $m[1])
-            );
-
-            $text = $this->applyPlaceholders(
-                $text,
-                $placeholders,
-                $counter,
-                '~(https?://[^\s<|]+)|((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:/[^\s<|]*)?)~i',
-                function (array $m): ?string {
-                    if (($m[1] ?? '') !== '') {
-                        return $this->safeLink($m[1], $m[1]);
-                    }
-                    if (($m[2] ?? '') !== '') {
-                        return $this->safeLink('https://' . $m[2], $m[2]);
-                    }
-                    return null;
-                }
-            );
-
-            $ret = $this->e($text);
-            if ($placeholders !== []) {
-                $ret = str_replace(array_keys($placeholders), array_values($placeholders), $ret);
-            }
-            $ret = '<p>' . nl2br($ret) . '</p>';
-        }
-
-        foreach ($post['attachments'] ?? [] as $attachment) {
-            $ret .= $this->renderAttachment($attachment);
-        }
-
-        return $ret;
-    }
-
-    /**
-     * @param array<string, mixed> $attachment
-     */
-    protected function renderAttachment(array $attachment): string
-    {
-        $type = $attachment['type'] ?? '';
-        $d = $attachment[$type] ?? [];
-
-        return match ($type) {
-            'photo' => (function () use ($d): string {
-                $key = ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0);
-                $alt = $d['text'] ?? ($this->photoDescriptions[$key] ?? '');
-                return "<p>{$this->image($this->getLargestImageUrl($d['sizes'] ?? []), $alt)}</p>";
-            })(),
-            'video' => $this->renderVideo($d),
-            'clip' => $this->renderClip($d),
-            'audio' => $this->renderAudio($d),
-            'doc' => $this->renderDocAttachment($d),
-            'link' => (function () use ($d): string {
-                $url = str_replace('https://m.vk.ru', 'https://vk.ru', $d['url'] ?? '#');
-                $normalized = $this->normalizePlaylistUrl($url);
-                $isPlaylist = $normalized !== $url;
-                $url = $normalized;
-                $img = ($isPlaylist === false && isset($d['photo']['sizes']) === true) ? $this->getLargestImageUrl($d['photo']['sizes']) : '';
-                $title = $isPlaylist === true ? 'Playlist: ' . ($d['title'] ?? $url) : ($d['title'] ?? $url);
-                return $this->renderLinkCard($url, $title, $img);
-            })(),
-            'note' => $this->renderLinkCard($d['view_url'] ?? '#', $d['title'] ?? 'Note'),
-            'poll' => $this->renderPoll($d),
-            'album' => $this->renderLinkCard(
-                'https://vk.ru/album' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0),
-                'Album: ' . ($d['title'] ?? ''),
-                $this->getLargestImageUrl($d['thumb']['sizes'] ?? [])
-            ),
-            'article' => $this->renderLinkCard(
-                $d['view_url'] ?? '#',
-                $d['title'] ?? 'Article',
-                $this->getLargestImageUrl($d['photo']['sizes'] ?? [])
-            ),
-            'wall' => $this->renderWall($d),
-            'market' => (function () use ($d): string {
-                $price = $d['price']['text'] ?? '';
-                $display = $price !== '' ? ($d['title'] ?? 'Product') . ' - ' . $price : ($d['title'] ?? 'Product');
-                $img = ($d['thumb_photo'] ?? '') !== '' ? $this->proxyImage($d['thumb_photo']) : '';
-                return $this->renderLinkCard($d['url'] ?? '#', $display, $img);
-            })(),
-            'audio_playlist' => $this->renderLinkCard(
-                'https://vk.ru/music/playlist/' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0),
-                'Playlist: ' . ($d['title'] ?? '') . ' (' . ($d['count'] ?? 0) . ' tracks)'
-            ),
-            'video_playlist' => $this->renderLinkCard(
-                'https://vk.ru/video/playlist/' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0),
-                'Video playlist: ' . ($d['title'] ?? '') . ' (' . ($d['count'] ?? 0) . ')',
-                $this->getLargestImageUrl($d['photo'] ?? [])
-            ),
-            'podcast' => $this->renderPodcast($d),
-            'event' => $this->renderEvent($d),
-            'graffiti' => (($url = $d['photo_586'] ?? $d['photo_200'] ?? '') !== '') ? "<p>{$this->image($this->proxyImage($url), 'Graffiti')}</p>" : '',
-            'group' => $this->renderLinkCard(
-                ($d['screen_name'] ?? '') !== '' ? 'https://vk.ru/' . $d['screen_name'] : '#',
-                $d['name'] ?? 'Group',
-                ($img = $d['photo_200'] ?? $d['photo_100'] ?? $d['photo_50'] ?? '') !== '' ? $this->proxyImage($img) : ''
-            ),
-            'donut_link' => $this->renderLinkCard($d['url'] ?? '#', $d['text'] ?? 'VK Donut'),
-            'textlive', 'textpost', 'textpost_publish' => (function () use ($d): string {
-                $preview = mb_substr((string) ($d['text'] ?? ''), 0, self::MAX_PREVIEW_LENGTH);
-                $extra = $preview !== '' ? "<p><small>{$this->e($preview)}</small></p>" : '';
-                return $this->renderLinkCard($d['url'] ?? '#', $d['title'] ?? 'Text broadcast', '', $extra);
-            })(),
-            'situational_theme' => $this->renderLinkCard($d['url'] ?? '#', $d['title'] ?? ''),
-            'sticker' => $this->renderSticker($d),
-            default => "<p>Unknown attachment type: {$this->e($type)}</p>",
-        };
-    }
-
-    /**
-     * @param array<string, mixed> $post
-     */
-    protected function getTitle(array $post): string
-    {
-        [$title] = $this->splitFirstLine($post['text'] ?? '');
-        if ($title !== '') {
-            return $title;
-        }
-        foreach ($post['attachments'] ?? [] as $attachment) {
-            $t = $this->getAttachmentTitle($attachment);
-            if ($t !== '') {
-                return $t;
-            }
-        }
-        return 'untitled';
-    }
-
-    /**
      * @param list<array<string, mixed>> $posts
      */
     private function generateFeed(array $posts, int $ownerId): void
@@ -401,79 +228,6 @@ final class Vk2Bridge extends BridgeAbstract
     /**
      * @param list<array<string, mixed>> $posts
      */
-    private function fetchPhotoDescriptions(array $posts): void
-    {
-        $photoKeys = [];
-
-        foreach ($posts as $post) {
-            foreach ($post['attachments'] ?? [] as $attachment) {
-                if (($attachment['type'] ?? '') !== 'photo') {
-                    continue;
-                }
-                $p = $attachment['photo'] ?? [];
-                $oid = $p['owner_id'] ?? null;
-                $pid = $p['id'] ?? null;
-                if (is_int($oid) === true && is_int($pid) === true && $oid !== 0 && $pid !== 0) {
-                    $photoKeys[] = $oid . '_' . $pid;
-                }
-            }
-        }
-
-        if ($photoKeys === []) {
-            return;
-        }
-
-        foreach ($this->vk()->fetchPhotoTexts($photoKeys) as $key => $text) {
-            $this->photoDescriptions[$key] = $text;
-        }
-    }
-
-    /**
-     * @param array{items: list<array<string, mixed>>, profiles: list<array<string, mixed>>, groups: list<array<string, mixed>>} $wall
-     */
-    private function cacheOwnerData(array $wall, int $ownerId): void
-    {
-        foreach ($wall['profiles'] as $profile) {
-            $id = $profile['id'] ?? null;
-            if (is_int($id) === false) {
-                continue;
-            }
-            $this->ownerNames[$id] = trim((string) ($profile['first_name'] ?? '') . ' ' . (string) ($profile['last_name'] ?? ''));
-            if ($id === $ownerId) {
-                $photo = $profile['photo_100'] ?? $profile['photo_50'] ?? null;
-                if (is_string($photo) === true && $photo !== '') {
-                    $this->iconUrl = $photo;
-                }
-            }
-        }
-
-        foreach ($wall['groups'] as $group) {
-            $gid = $group['id'] ?? null;
-            if (is_int($gid) === false) {
-                continue;
-            }
-            $id = -$gid;
-            $this->ownerNames[$id] = (string) ($group['name'] ?? 'Unknown');
-            if ($id === $ownerId) {
-                $photo = $group['photo_200'] ?? $group['photo_100'] ?? $group['photo_50'] ?? null;
-                if (is_string($photo) === true && $photo !== '') {
-                    $this->iconUrl = $photo;
-                }
-            }
-        }
-    }
-
-    /**
-     * @param array<string, mixed> $post
-     */
-    private function isRepost(array $post): bool
-    {
-        return isset($post['copy_history'][0]) === true;
-    }
-
-    /**
-     * @param list<array<string, mixed>> $posts
-     */
     private function processArticlesFromPosts(array $posts, string $groupName): void
     {
         /** @var array<string, array{url: string, timestamp: int, author: string}> $articles */
@@ -486,99 +240,10 @@ final class Vk2Bridge extends BridgeAbstract
             $fromId = (int) ($displayPost['from_id'] ?? $displayPost['owner_id'] ?? 0);
             $postAuthor = $fromId !== 0 ? ($this->ownerNames[$fromId] ?? 'Unknown') : '';
 
-            $text = $post['text'] ?? '';
-            foreach ($this->findArticleLinks($text, $groupLower) as $url) {
-                $norm = $this->normalizeArticleUrl($url);
-                if (isset($articles[$norm]) === false) {
-                    $articles[$norm] = [
-                        'url' => $url,
-                        'timestamp' => $postTimestamp,
-                        'author' => $postAuthor,
-                    ];
-                }
-            }
+            $this->extractArticlesFromPost($displayPost, $postTimestamp, $postAuthor, $groupLower, $articles);
 
-            foreach ($post['attachments'] ?? [] as $attachment) {
-                $type = $attachment['type'] ?? '';
-
-                if ($type === 'article') {
-                    $viewUrl = $attachment['article']['view_url'] ?? '';
-                    if ($viewUrl !== '' && $this->isArticleUrl($viewUrl, $groupLower) === true) {
-                        $norm = $this->normalizeArticleUrl($viewUrl);
-                        if (isset($articles[$norm]) === false) {
-                            $articles[$norm] = [
-                                'url' => $viewUrl,
-                                'timestamp' => $postTimestamp,
-                                'author' => $postAuthor,
-                            ];
-                        }
-                    }
-                }
-
-                if ($type === 'link') {
-                    $linkUrl = $attachment['link']['url'] ?? '';
-                    if ($this->isArticleUrl($linkUrl, $groupLower) === true) {
-                        $norm = $this->normalizeArticleUrl($linkUrl);
-                        if (isset($articles[$norm]) === false) {
-                            $articles[$norm] = [
-                                'url' => $linkUrl,
-                                'timestamp' => $postTimestamp,
-                                'author' => $postAuthor,
-                            ];
-                        }
-                    }
-                }
-            }
-
-            $copyHistory = $post['copy_history'] ?? [];
-            foreach ($copyHistory as $repost) {
-                $repostTimestamp = (int) ($repost['date'] ?? $postTimestamp);
-                $repostFromId = (int) ($repost['from_id'] ?? $repost['owner_id'] ?? 0);
-                $repostAuthor = $repostFromId !== 0 ? ($this->ownerNames[$repostFromId] ?? $postAuthor) : $postAuthor;
-
-                $repostText = $repost['text'] ?? '';
-                foreach ($this->findArticleLinks($repostText, $groupLower) as $url) {
-                    $norm = $this->normalizeArticleUrl($url);
-                    if (isset($articles[$norm]) === false) {
-                        $articles[$norm] = [
-                            'url' => $url,
-                            'timestamp' => $repostTimestamp,
-                            'author' => $repostAuthor,
-                        ];
-                    }
-                }
-
-                foreach ($repost['attachments'] ?? [] as $attachment) {
-                    $type = $attachment['type'] ?? '';
-
-                    if ($type === 'article') {
-                        $viewUrl = $attachment['article']['view_url'] ?? '';
-                        if ($viewUrl !== '' && $this->isArticleUrl($viewUrl, $groupLower) === true) {
-                            $norm = $this->normalizeArticleUrl($viewUrl);
-                            if (isset($articles[$norm]) === false) {
-                                $articles[$norm] = [
-                                    'url' => $viewUrl,
-                                    'timestamp' => $repostTimestamp,
-                                    'author' => $repostAuthor,
-                                ];
-                            }
-                        }
-                    }
-
-                    if ($type === 'link') {
-                        $linkUrl = $attachment['link']['url'] ?? '';
-                        if ($this->isArticleUrl($linkUrl, $groupLower) === true) {
-                            $norm = $this->normalizeArticleUrl($linkUrl);
-                            if (isset($articles[$norm]) === false) {
-                                $articles[$norm] = [
-                                    'url' => $linkUrl,
-                                    'timestamp' => $repostTimestamp,
-                                    'author' => $repostAuthor,
-                                ];
-                            }
-                        }
-                    }
-                }
+            foreach ($post['copy_history'] ?? [] as $repost) {
+                $this->extractArticlesFromPost($repost, $postTimestamp, $postAuthor, $groupLower, $articles);
             }
         }
 
@@ -586,6 +251,62 @@ final class Vk2Bridge extends BridgeAbstract
             $article = $this->parseArticle($a['url'], $a['timestamp'], $a['author']);
             if ($article !== null) {
                 $this->items[] = $article;
+            }
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $post
+     * @param array<string, array{url: string, timestamp: int, author: string}> $articles
+     * @param-out array<string, array{url: string, timestamp: int, author: string}> $articles
+     */
+    private function extractArticlesFromPost(array $post, int $defaultTimestamp, string $defaultAuthor, string $groupLower, array &$articles): void
+    {
+        $postTimestamp = (int) ($post['date'] ?? $defaultTimestamp);
+        $fromId = (int) ($post['from_id'] ?? $post['owner_id'] ?? 0);
+        $postAuthor = $fromId !== 0 ? ($this->ownerNames[$fromId] ?? $defaultAuthor) : $defaultAuthor;
+
+        $text = $post['text'] ?? '';
+        foreach ($this->findArticleLinks($text, $groupLower) as $url) {
+            $norm = $this->normalizeArticleUrl($url);
+            if (isset($articles[$norm]) === false) {
+                $articles[$norm] = [
+                    'url' => (string) $url,
+                    'timestamp' => $postTimestamp,
+                    'author' => $postAuthor,
+                ];
+            }
+        }
+
+        foreach ($post['attachments'] ?? [] as $attachment) {
+            $type = $attachment['type'] ?? '';
+
+            if ($type === 'article') {
+                $viewUrl = $attachment['article']['view_url'] ?? '';
+                if ($viewUrl !== '' && $this->isArticleUrl($viewUrl, $groupLower) === true) {
+                    $norm = $this->normalizeArticleUrl($viewUrl);
+                    if (isset($articles[$norm]) === false) {
+                        $articles[$norm] = [
+                            'url' => (string) $viewUrl,
+                            'timestamp' => $postTimestamp,
+                            'author' => $postAuthor,
+                        ];
+                    }
+                }
+            }
+
+            if ($type === 'link') {
+                $linkUrl = $attachment['link']['url'] ?? '';
+                if ($this->isArticleUrl($linkUrl, $groupLower) === true) {
+                    $norm = $this->normalizeArticleUrl($linkUrl);
+                    if (isset($articles[$norm]) === false) {
+                        $articles[$norm] = [
+                            'url' => (string) $linkUrl,
+                            'timestamp' => $postTimestamp,
+                            'author' => $postAuthor,
+                        ];
+                    }
+                }
             }
         }
     }
@@ -755,123 +476,159 @@ final class Vk2Bridge extends BridgeAbstract
 
     private function cleanArticleContent(\Dom\Element $articleBlock): string
     {
-        foreach ($articleBlock->querySelectorAll('.article__info_line') as $el) {
-            $el->remove();
-        }
-        foreach ($articleBlock->querySelectorAll('h1') as $el) {
-            $el->remove();
-        }
-        foreach ($articleBlock->querySelectorAll('script, style, noscript, iframe') as $el) {
-            $el->remove();
+        $this->removeJunkElements($articleBlock);
+        $this->processFigures($articleBlock);
+        $this->processImages($articleBlock);
+        $this->processLists($articleBlock);
+
+        $content = $articleBlock->innerHTML ?? '';
+
+        if (function_exists('break_annoying_html_tags') === true) {
+            $content = break_annoying_html_tags($content);
         }
 
+        return trim($content);
+    }
+
+    private function removeJunkElements(\Dom\Element $articleBlock): void
+    {
+        foreach ($articleBlock->querySelectorAll('.article__info_line, h1, script, style, noscript, iframe') as $el) {
+            $el->remove();
+        }
+    }
+
+    private function processFigures(\Dom\Element $articleBlock): void
+    {
         foreach ($articleBlock->querySelectorAll('figure') as $figure) {
             $parent = $figure->parentNode;
             if ($parent === null) {
                 continue;
             }
 
-            $img = $figure->querySelector('img');
-            if ($img !== null) {
-                $sizesJson = null;
-                $sizerWrap = $figure->querySelector('.article_object_sizer_wrap');
-                if ($sizerWrap !== null) {
-                    $sizesAttr = $sizerWrap->getAttribute('data-sizes');
-                    if ($sizesAttr !== null && $sizesAttr !== '') {
-                        $decoded = html_entity_decode($sizesAttr, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-                        $parsed = json_decode($decoded, true);
-                        if (is_array($parsed) === true) {
-                            $sizesJson = $parsed;
-                        }
-                    }
-                }
-
-                $bestUrl = null;
-                if (is_array($sizesJson) === true) {
-                    $maxWidth = 0;
-                    foreach ($sizesJson as $sizeData) {
-                        if (is_array($sizeData) === true && isset($sizeData[0], $sizeData[1]) === true) {
-                            $url = $sizeData[0];
-                            $width = (int) $sizeData[1];
-                            if ($width > $maxWidth) {
-                                $maxWidth = $width;
-                                $bestUrl = $url;
-                            }
-                        }
-                    }
-                }
-
-                if ($bestUrl === null) {
-                    $src = $img->getAttribute('src');
-                    $dataSrc = $img->getAttribute('data-src');
-                    $dataFull = $img->getAttribute('data-full');
-                    $dataOriginal = $img->getAttribute('data-original');
-
-                    foreach ([$dataFull, $dataOriginal, $dataSrc, $src] as $candidate) {
-                        if ($candidate !== null && $candidate !== '' && preg_match('/^(?:data:|javascript:)/i', (string) $candidate) === 0) {
-                            $bestUrl = $candidate;
-                            break;
-                        }
-                    }
-                }
-
-                if ($bestUrl !== null) {
-                    $ownerDoc = $articleBlock->ownerDocument;
-                    if ($ownerDoc !== null) {
-                        $newImg = $ownerDoc->createElement('img');
-                        $newImg->setAttribute('src', $this->fixVkArticleImageUrl($bestUrl));
-                        $alt = $img->getAttribute('alt');
-                        if ($alt !== null) {
-                            $newImg->setAttribute('alt', $alt);
-                        }
-                        $newImg->setAttribute('style', 'display: block; max-width: 1400px; width: auto; height: auto;');
-                        $parent->insertBefore($newImg, $figure);
-                    }
-                }
-            }
-
-            $caption = $figure->querySelector('figcaption');
-            if ($caption !== null) {
-                $captionsJson = $caption->getAttribute('data-captions');
-                $captionText = '';
-                if ($captionsJson !== null && $captionsJson !== '') {
-                    $decoded = html_entity_decode($captionsJson, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-                    $parsed = json_decode($decoded, true);
-                    if (is_array($parsed) === true && isset($parsed[0]) === true && $parsed[0] !== '') {
-                        $captionText = $parsed[0];
-                    }
-                }
-                if ($captionText === '') {
-                    $captionText = trim((string) $caption->textContent);
-                }
-                if ($captionText !== '') {
-                    $ownerDoc = $articleBlock->ownerDocument;
-                    if ($ownerDoc !== null) {
-                        $wrapper = $ownerDoc->createElement('p');
-                        $wrapper->textContent = $captionText;
-                        $wrapper->setAttribute('style', 'font-style: italic; font-size: 0.9em; color: #666; text-align: center;');
-                        $parent->insertBefore($wrapper, $figure);
-                    }
-                }
-            }
+            $this->extractImageFromFigure($figure, $parent);
+            $this->extractCaptionFromFigure($figure, $parent);
 
             $figure->remove();
         }
+    }
 
-        foreach ($articleBlock->querySelectorAll('img') as $img) {
-            $src = $img->getAttribute('src');
-            $dataSrc = $img->getAttribute('data-src');
-            $dataFull = $img->getAttribute('data-full');
-            $dataOriginal = $img->getAttribute('data-original');
+    private function extractImageFromFigure(\Dom\Element $figure, \Dom\Node $parent): void
+    {
+        $img = $figure->querySelector('img');
+        if ($img === null) {
+            return;
+        }
 
-            $bestSrc = null;
-            foreach ([$dataFull, $dataOriginal, $dataSrc, $src] as $candidate) {
-                if ($candidate !== null && $candidate !== '' && preg_match('/^(?:data:|javascript:)/i', (string) $candidate) === 0) {
-                    $bestSrc = $candidate;
-                    break;
+        $bestUrl = $this->getBestImageFromFigure($figure, $img);
+        if ($bestUrl === null) {
+            return;
+        }
+
+        $ownerDoc = $figure->ownerDocument;
+        if ($ownerDoc === null) {
+            return;
+        }
+
+        $newImg = $ownerDoc->createElement('img');
+        $newImg->setAttribute('src', $this->fixVkArticleImageUrl($bestUrl));
+        $alt = $img->getAttribute('alt');
+        if ($alt !== null) {
+            $newImg->setAttribute('alt', $alt);
+        }
+        $newImg->setAttribute('style', 'display: block; max-width: 1400px; width: auto; height: auto;');
+        $parent->insertBefore($newImg, $figure);
+    }
+
+    private function getBestImageFromFigure(\Dom\Element $figure, \Dom\Element $img): ?string
+    {
+        $sizesJson = null;
+        $sizerWrap = $figure->querySelector('.article_object_sizer_wrap');
+        if ($sizerWrap !== null) {
+            $sizesAttr = $sizerWrap->getAttribute('data-sizes');
+            if ($sizesAttr !== null && $sizesAttr !== '') {
+                $decoded = html_entity_decode($sizesAttr, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $parsed = json_decode($decoded, true);
+                if (is_array($parsed) === true) {
+                    $sizesJson = $parsed;
                 }
             }
+        }
 
+        if (is_array($sizesJson) === true) {
+            $maxWidth = 0;
+            $bestUrl = null;
+            foreach ($sizesJson as $sizeData) {
+                if (is_array($sizeData) === true && isset($sizeData[0], $sizeData[1]) === true) {
+                    $url = $sizeData[0];
+                    $width = (int) $sizeData[1];
+                    if ($width > $maxWidth) {
+                        $maxWidth = $width;
+                        $bestUrl = $url;
+                    }
+                }
+            }
+            if ($bestUrl !== null) {
+                return $bestUrl;
+            }
+        }
+
+        $src = $img->getAttribute('src');
+        $dataSrc = $img->getAttribute('data-src');
+        $dataFull = $img->getAttribute('data-full');
+        $dataOriginal = $img->getAttribute('data-original');
+
+        foreach ([$dataFull, $dataOriginal, $dataSrc, $src] as $candidate) {
+            if ($candidate !== null && $candidate !== '' && preg_match('/^(?:data:|javascript:)/i', $candidate) === 0) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function extractCaptionFromFigure(\Dom\Element $figure, \Dom\Node $parent): void
+    {
+        $caption = $figure->querySelector('figcaption');
+        if ($caption === null) {
+            return;
+        }
+
+        $captionText = '';
+        $captionsJson = $caption->getAttribute('data-captions');
+        if ($captionsJson !== null && $captionsJson !== '') {
+            $decoded = html_entity_decode($captionsJson, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $parsed = json_decode($decoded, true);
+            if (is_array($parsed) === true && isset($parsed[0]) === true && $parsed[0] !== '') {
+                $captionText = $parsed[0];
+            }
+        }
+        if ($captionText === '') {
+            $captionText = trim((string) $caption->textContent);
+        }
+
+        if ($captionText === '') {
+            return;
+        }
+
+        $ownerDoc = $figure->ownerDocument;
+        if ($ownerDoc === null) {
+            return;
+        }
+
+        $wrapper = $ownerDoc->createElement('p');
+        $wrapper->textContent = $captionText;
+        $wrapper->setAttribute('style', 'font-style: italic; font-size: 0.9em; color: #666; text-align: center;');
+        $parent->insertBefore($wrapper, $figure);
+    }
+
+    private function processImages(\Dom\Element $articleBlock): void
+    {
+        foreach ($articleBlock->querySelectorAll('img') as $img) {
+            if ($img instanceof \Dom\Element === false) {
+                continue;
+            }
+
+            $bestSrc = $this->getBestImageSrc($img);
             if ($bestSrc !== null) {
                 $img->setAttribute('src', $this->fixVkArticleImageUrl($bestSrc));
             }
@@ -888,7 +645,26 @@ final class Vk2Bridge extends BridgeAbstract
             $img->removeAttribute('height');
             $img->setAttribute('style', 'display: block; max-width: 1400px; width: auto; height: auto;');
         }
+    }
 
+    private function getBestImageSrc(\Dom\Element $img): ?string
+    {
+        $src = $img->getAttribute('src');
+        $dataSrc = $img->getAttribute('data-src');
+        $dataFull = $img->getAttribute('data-full');
+        $dataOriginal = $img->getAttribute('data-original');
+
+        foreach ([$dataFull, $dataOriginal, $dataSrc, $src] as $candidate) {
+            if ($candidate !== null && $candidate !== '' && preg_match('/^(?:data:|javascript:)/i', $candidate) === 0) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function processLists(\Dom\Element $articleBlock): void
+    {
         foreach ($articleBlock->querySelectorAll('ol, ul') as $list) {
             if ($list instanceof \Dom\Element === false) {
                 continue;
@@ -936,14 +712,6 @@ final class Vk2Bridge extends BridgeAbstract
 
             $li->setAttribute('style', $style);
         }
-
-        $content = $articleBlock->innerHTML ?? '';
-
-        if (function_exists('break_annoying_html_tags') === true) {
-            $content = break_annoying_html_tags($content);
-        }
-
-        return trim($content);
     }
 
     private function fixVkArticleImageUrl(string $url): string
@@ -1044,19 +812,48 @@ final class Vk2Bridge extends BridgeAbstract
     }
 
     /**
+     * @param array<string, mixed> $attachment
+     */
+    protected function renderAttachment(array $attachment): string
+    {
+        $type = $attachment['type'] ?? '';
+        $d = $attachment[$type] ?? [];
+
+        return match ($type) {
+            'photo' => $this->renderPhoto($d),
+            'video' => $this->renderVideo($d),
+            'clip' => $this->renderClip($d),
+            'audio' => $this->renderAudio($d),
+            'doc' => $this->renderDocAttachment($d),
+            'link' => $this->renderLinkAttachment($d),
+            'note' => $this->renderNote($d),
+            'poll' => $this->renderPoll($d),
+            'album' => $this->renderAlbum($d),
+            'article' => $this->renderArticle($d),
+            'wall' => $this->renderWall($d),
+            'market' => $this->renderMarket($d),
+            'audio_playlist' => $this->renderAudioPlaylist($d),
+            'video_playlist' => $this->renderVideoPlaylist($d),
+            'podcast' => $this->renderPodcast($d),
+            'event' => $this->renderEvent($d),
+            'graffiti' => $this->renderGraffiti($d),
+            'group' => $this->renderGroup($d),
+            'donut_link' => $this->renderDonutLink($d),
+            'textlive', 'textpost', 'textpost_publish' => $this->renderTextBroadcast($d),
+            'situational_theme' => $this->renderSituationalTheme($d),
+            'sticker' => $this->renderSticker($d),
+            default => "<p>Unknown attachment type: {$this->e($type)}</p>",
+        };
+    }
+
+    /**
      * @param array<string, mixed> $d
      */
-    private function renderDocAttachment(array $d): string
+    private function renderPhoto(array $d): string
     {
-        if (($d['ext'] ?? '') === 'gif') {
-            $imgUrl = $this->proxyImage($d['url'] ?? '');
-            $alt = $d['title'] ?? 'Document';
-            return "<p>{$this->image($imgUrl, $alt)}</p>";
-        }
-
-        $url = $d['url'] ?? '#';
-        $title = 'Document: ' . ($d['title'] ?? 'Document');
-        return "<p>{$this->link($url, $title)}</p>";
+        $key = ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0);
+        $alt = $d['text'] ?? ($this->photoDescriptions[$key] ?? '');
+        return "<p>{$this->image($this->getLargestImageUrl($d['sizes'] ?? []), $alt)}</p>";
     }
 
     /**
@@ -1117,12 +914,90 @@ final class Vk2Bridge extends BridgeAbstract
         return $this->renderLinkCard($url, 'Music: ' . ($d['artist'] ?? '') . ' - ' . ($d['title'] ?? '') . $dur);
     }
 
-    private function renderLinkCard(string $url, string $title, string $img = '', string $extra = ''): string
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderDocAttachment(array $d): string
     {
-        $eTitle = $this->e($title);
-        $inner = $img !== '' ? $this->image($img, $title) . "<br>{$eTitle}" : $eTitle;
-        $html = "<p>{$this->linkHtml($url, $inner)}</p>";
-        return $extra !== '' ? $html . $extra : $html;
+        if (($d['ext'] ?? '') === 'gif') {
+            $imgUrl = $this->proxyImage($d['url'] ?? '');
+            $alt = $d['title'] ?? 'Document';
+            return "<p>{$this->image($imgUrl, $alt)}</p>";
+        }
+
+        $url = $d['url'] ?? '#';
+        $title = 'Document: ' . ($d['title'] ?? 'Document');
+        return "<p>{$this->link($url, $title)}</p>";
+    }
+
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderLinkAttachment(array $d): string
+    {
+        $url = str_replace('https://m.vk.ru', 'https://vk.ru', $d['url'] ?? '#');
+        $normalized = $this->normalizePlaylistUrl($url);
+        $isPlaylist = $normalized !== $url;
+        $url = $normalized;
+        $img = ($isPlaylist === false && isset($d['photo']['sizes']) === true) ? $this->getLargestImageUrl($d['photo']['sizes']) : '';
+        $title = $isPlaylist === true ? 'Playlist: ' . ($d['title'] ?? $url) : ($d['title'] ?? $url);
+        return $this->renderLinkCard($url, $title, $img);
+    }
+
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderNote(array $d): string
+    {
+        return $this->renderLinkCard($d['view_url'] ?? '#', $d['title'] ?? 'Note');
+    }
+
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderAlbum(array $d): string
+    {
+        return $this->renderLinkCard(
+            'https://vk.ru/album' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0),
+            'Album: ' . ($d['title'] ?? ''),
+            $this->getLargestImageUrl($d['thumb']['sizes'] ?? [])
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderArticle(array $d): string
+    {
+        return $this->renderLinkCard(
+            $d['view_url'] ?? '#',
+            $d['title'] ?? 'Article',
+            $this->getLargestImageUrl($d['photo']['sizes'] ?? [])
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderMarket(array $d): string
+    {
+        $price = $d['price']['text'] ?? '';
+        $display = $price !== '' ? ($d['title'] ?? 'Product') . ' - ' . $price : ($d['title'] ?? 'Product');
+        $img = ($d['thumb_photo'] ?? '') !== '' ? $this->proxyImage($d['thumb_photo']) : '';
+        return $this->renderLinkCard($d['url'] ?? '#', $display, $img);
+    }
+
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderWall(array $d): string
+    {
+        $text = $d['text'] ?? '';
+        $preview = mb_substr($text, 0, self::MAX_PREVIEW_LENGTH);
+        if (mb_strlen($text) > self::MAX_PREVIEW_LENGTH) {
+            $preview .= '...';
+        }
+        return '<p><strong>Attached post:</strong><br>' . $this->linkHtml($this->getPostURI($d), $this->e($preview)) . '</p>';
     }
 
     /**
@@ -1175,46 +1050,24 @@ final class Vk2Bridge extends BridgeAbstract
     /**
      * @param array<string, mixed> $d
      */
-    private function renderWall(array $d): string
+    private function renderAudioPlaylist(array $d): string
     {
-        $text = $d['text'] ?? '';
-        $preview = mb_substr((string) $text, 0, self::MAX_PREVIEW_LENGTH);
-        if (mb_strlen((string) $text) > self::MAX_PREVIEW_LENGTH) {
-            $preview .= '...';
-        }
-        return '<p><strong>Attached post:</strong><br>' . $this->linkHtml($this->getPostURI($d), $this->e($preview)) . '</p>';
+        return $this->renderLinkCard(
+            'https://vk.ru/music/playlist/' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0),
+            'Playlist: ' . ($d['title'] ?? '') . ' (' . ($d['count'] ?? 0) . ' tracks)'
+        );
     }
 
     /**
      * @param array<string, mixed> $d
      */
-    private function renderSticker(array $d): string
+    private function renderVideoPlaylist(array $d): string
     {
-        $images = $d['images'] ?? [];
-        if ($images === []) {
-            return '';
-        }
-        usort($images, fn($a, $b) => ($b['width'] ?? 0) <=> ($a['width'] ?? 0));
-        $url = $images[0]['url'] ?? '';
-        return $url !== '' ? "<p>{$this->image($this->proxyImage($url), 'Sticker')}</p>" : '';
-    }
-
-    /**
-     * @param array<string, mixed> $d
-     */
-    private function renderEvent(array $d): string
-    {
-        $time = $d['time'] ?? 0;
-        $date = $d['date'] ?? 0;
-        $timeStr = $time > 0 ? date('Y-m-d H:i', $time) : ($date > 0 ? date('Y-m-d', $date) : '');
-        $html = '<p>Event: ' . $this->e($d['text'] ?? 'Event');
-        if ($timeStr !== '') {
-            $html .= "<br><small>{$this->e($timeStr)}</small>";
-        }
-        if (($d['address'] ?? '') !== '') {
-            $html .= '<br><small>Location: ' . $this->e($d['address']) . '</small>';
-        }
-        return $html . '</p>';
+        return $this->renderLinkCard(
+            'https://vk.ru/video/playlist/' . ($d['owner_id'] ?? 0) . '_' . ($d['id'] ?? 0),
+            'Video playlist: ' . ($d['title'] ?? '') . ' (' . ($d['count'] ?? 0) . ')',
+            $this->getLargestImageUrl($d['photo'] ?? [])
+        );
     }
 
     /**
@@ -1242,10 +1095,98 @@ final class Vk2Bridge extends BridgeAbstract
         $html .= "<p>{$this->link($url, $display)}</p>";
 
         if (($d['podcast_description'] ?? '') !== '') {
-            $html .= '<p><small>' . $this->e(mb_substr((string) $d['podcast_description'], 0, self::MAX_PREVIEW_LENGTH)) . '</small></p>';
+            $html .= '<p><small>' . $this->e(mb_substr($d['podcast_description'], 0, self::MAX_PREVIEW_LENGTH)) . '</small></p>';
         }
 
         return $html;
+    }
+
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderEvent(array $d): string
+    {
+        $time = $d['time'] ?? 0;
+        $date = $d['date'] ?? 0;
+        $timeStr = $time > 0 ? date('Y-m-d H:i', $time) : ($date > 0 ? date('Y-m-d', $date) : '');
+        $html = '<p>Event: ' . $this->e($d['text'] ?? 'Event');
+        if ($timeStr !== '') {
+            $html .= "<br><small>{$this->e($timeStr)}</small>";
+        }
+        if (($d['address'] ?? '') !== '') {
+            $html .= '<br><small>Location: ' . $this->e($d['address']) . '</small>';
+        }
+        return $html . '</p>';
+    }
+
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderGraffiti(array $d): string
+    {
+        $url = $d['photo_586'] ?? $d['photo_200'] ?? '';
+        return $url !== '' ? "<p>{$this->image($this->proxyImage($url), 'Graffiti')}</p>" : '';
+    }
+
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderGroup(array $d): string
+    {
+        $img = $d['photo_200'] ?? $d['photo_100'] ?? $d['photo_50'] ?? '';
+        return $this->renderLinkCard(
+            ($d['screen_name'] ?? '') !== '' ? 'https://vk.ru/' . $d['screen_name'] : '#',
+            $d['name'] ?? 'Group',
+            $img !== '' ? $this->proxyImage($img) : ''
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderDonutLink(array $d): string
+    {
+        return $this->renderLinkCard($d['url'] ?? '#', $d['text'] ?? 'VK Donut');
+    }
+
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderTextBroadcast(array $d): string
+    {
+        $preview = mb_substr($d['text'] ?? '', 0, self::MAX_PREVIEW_LENGTH);
+        $extra = $preview !== '' ? "<p><small>{$this->e($preview)}</small></p>" : '';
+        return $this->renderLinkCard($d['url'] ?? '#', $d['title'] ?? 'Text broadcast', '', $extra);
+    }
+
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderSituationalTheme(array $d): string
+    {
+        return $this->renderLinkCard($d['url'] ?? '#', $d['title'] ?? '');
+    }
+
+    /**
+     * @param array<string, mixed> $d
+     */
+    private function renderSticker(array $d): string
+    {
+        $images = $d['images'] ?? [];
+        if ($images === []) {
+            return '';
+        }
+        usort($images, fn($a, $b) => ($b['width'] ?? 0) <=> ($a['width'] ?? 0));
+        $url = $images[0]['url'] ?? '';
+        return $url !== '' ? "<p>{$this->image($this->proxyImage($url), 'Sticker')}</p>" : '';
+    }
+
+    private function renderLinkCard(string $url, string $title, string $img = '', string $extra = ''): string
+    {
+        $eTitle = $this->e($title);
+        $inner = $img !== '' ? $this->image($img, $title) . "<br>{$eTitle}" : $eTitle;
+        $html = "<p>{$this->linkHtml($url, $inner)}</p>";
+        return $extra !== '' ? $html . $extra : $html;
     }
 
     /**
@@ -1280,6 +1221,69 @@ final class Vk2Bridge extends BridgeAbstract
             'sticker' => 'Sticker',
             default => '',
         };
+    }
+
+    /**
+     * @param array<string, mixed> $post
+     */
+    protected function generateContentFromPost(array $post, bool $extractTitle = true): string
+    {
+        $text = $post['text'] ?? '';
+        if ($extractTitle === true) {
+            [, $text] = $this->splitFirstLine($text);
+        }
+
+        $text = trim((string) $text);
+        $ret = '';
+
+        if ($text !== '') {
+            $placeholders = [];
+            $counter = 0;
+
+            $text = $this->applyPlaceholders(
+                $text,
+                $placeholders,
+                $counter,
+                '/\[([^\]|]+)\|([^\]]+)\]/u',
+                fn(array $m): string => $this->resolveVkLink(trim((string) $m[1]), $m[2])
+            );
+
+            $text = $this->applyPlaceholders(
+                $text,
+                $placeholders,
+                $counter,
+                '/#([\p{L}0-9_]+(?:@[\p{L}0-9_.]+)?)/u',
+                fn(array $m): string => $this->safeLink('https://vk.ru/feed?q=%23' . urlencode($m[1]), '#' . $m[1])
+            );
+
+            $text = $this->applyPlaceholders(
+                $text,
+                $placeholders,
+                $counter,
+                '~(https?://[^\s<|]+)|((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:/[^\s<|]*)?)~i',
+                function (array $m): ?string {
+                    if (($m[1] ?? '') !== '') {
+                        return $this->safeLink($m[1], $m[1]);
+                    }
+                    if (($m[2] ?? '') !== '') {
+                        return $this->safeLink('https://' . $m[2], $m[2]);
+                    }
+                    return null;
+                }
+            );
+
+            $ret = $this->e($text);
+            if ($placeholders !== []) {
+                $ret = str_replace(array_keys($placeholders), array_values($placeholders), $ret);
+            }
+            $ret = '<p>' . nl2br($ret) . '</p>';
+        }
+
+        foreach ($post['attachments'] ?? [] as $attachment) {
+            $ret .= $this->renderAttachment($attachment);
+        }
+
+        return $ret;
     }
 
     /**
@@ -1361,31 +1365,6 @@ final class Vk2Bridge extends BridgeAbstract
         return [trim($text), ''];
     }
 
-    private function normalizePlaylistUrl(string $url): string
-    {
-        if (preg_match('/act=audio_playlist(-?\d+)_(\d+)/', $url, $m) === 1) {
-            return "https://vk.ru/music/playlist/{$m[1]}_{$m[2]}";
-        }
-        return $url;
-    }
-
-    private function cleanClipTitle(string $title): string
-    {
-        if (mb_stripos($title, 'Клип ') === 0) {
-            return trim(mb_substr($title, mb_strlen('Клип ')));
-        }
-        return $title;
-    }
-
-    private function isLinkOnly(string $line): bool
-    {
-        $line = trim($line);
-        if ($line === '') {
-            return false;
-        }
-        return preg_match('~^(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?)$~i', $line) === 1;
-    }
-
     /**
      * @param array<string, string> $placeholders
      */
@@ -1416,20 +1395,137 @@ final class Vk2Bridge extends BridgeAbstract
         return $this->safeLink('https://vk.ru/' . $target, $linkText);
     }
 
-    /**
-     * @param list<array<string, mixed>> $sizes
-     */
-    private function getLargestImageUrl(array $sizes): string
+    private function isLinkOnly(string $line): bool
     {
-        if ($sizes === []) {
-            return '';
+        $line = trim($line);
+        if ($line === '') {
+            return false;
         }
-        $largest = array_reduce(
-            $sizes,
-            static fn(array $carry, array $item): array => ((($item['width'] ?? 0) > ($carry['width'] ?? 0)) === true) ? $item : $carry,
-            []
+        return preg_match('~^(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?)$~i', $line) === 1;
+    }
+
+    private function cleanClipTitle(string $title): string
+    {
+        if (mb_stripos($title, 'Клип ') === 0) {
+            return trim(mb_substr($title, mb_strlen('Клип ')));
+        }
+        return $title;
+    }
+
+    private function normalizePlaylistUrl(string $url): string
+    {
+        if (preg_match('/act=audio_playlist(-?\d+)_(\d+)/', $url, $m) === 1) {
+            return "https://vk.ru/music/playlist/{$m[1]}_{$m[2]}";
+        }
+        return $url;
+    }
+
+    /**
+     * @param array{items: list<array<string, mixed>>, profiles: list<array<string, mixed>>, groups: list<array<string, mixed>>} $wall
+     */
+    private function cacheOwnerData(array $wall, int $ownerId): void
+    {
+        foreach ($wall['profiles'] as $profile) {
+            $id = $profile['id'] ?? null;
+            if (is_int($id) === false) {
+                continue;
+            }
+            $this->ownerNames[$id] = trim((string) ($profile['first_name'] ?? '') . ' ' . (string) ($profile['last_name'] ?? ''));
+            if ($id === $ownerId) {
+                $photo = $profile['photo_100'] ?? $profile['photo_50'] ?? null;
+                if (is_string($photo) === true && $photo !== '') {
+                    $this->iconUrl = $photo;
+                }
+            }
+        }
+
+        foreach ($wall['groups'] as $group) {
+            $gid = $group['id'] ?? null;
+            if (is_int($gid) === false) {
+                continue;
+            }
+            $id = -$gid;
+            $this->ownerNames[$id] = (string) ($group['name'] ?? 'Unknown');
+            if ($id === $ownerId) {
+                $photo = $group['photo_200'] ?? $group['photo_100'] ?? $group['photo_50'] ?? null;
+                if (is_string($photo) === true && $photo !== '') {
+                    $this->iconUrl = $photo;
+                }
+            }
+        }
+    }
+
+    /**
+     * @param list<array<string, mixed>> $posts
+     */
+    private function fetchPhotoDescriptions(array $posts): void
+    {
+        $photoKeys = [];
+
+        foreach ($posts as $post) {
+            foreach ($post['attachments'] ?? [] as $attachment) {
+                if (($attachment['type'] ?? '') !== 'photo') {
+                    continue;
+                }
+                $p = $attachment['photo'] ?? [];
+                $oid = $p['owner_id'] ?? null;
+                $pid = $p['id'] ?? null;
+                if (is_int($oid) === true && is_int($pid) === true && $oid !== 0 && $pid !== 0) {
+                    $photoKeys[] = $oid . '_' . $pid;
+                }
+            }
+        }
+
+        if ($photoKeys === []) {
+            return;
+        }
+
+        foreach ($this->vk()->fetchPhotoTexts($photoKeys) as $key => $text) {
+            $this->photoDescriptions[$key] = $text;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $post
+     */
+    private function isRepost(array $post): bool
+    {
+        return isset($post['copy_history'][0]) === true;
+    }
+
+    /**
+     * @param array<string, mixed> $post
+     */
+    protected function getPostURI(array $post): string
+    {
+        $uri = sprintf(
+            'https://vk.ru/wall%d_%d',
+            $post['owner_id'] ?? 0,
+            $post['id'] ?? 0
         );
-        return $this->proxyImage($largest['url'] ?? '');
+        if (isset($post['reply_post_id']) === false) {
+            return $uri;
+        }
+        $threadId = $post['parents_stack'][0] ?? $post['reply_post_id'];
+        return sprintf('%s?reply=%d&thread=%d', $uri, $post['id'] ?? 0, $threadId);
+    }
+
+    /**
+     * @param array<string, mixed> $post
+     */
+    protected function getTitle(array $post): string
+    {
+        [$title] = $this->splitFirstLine($post['text'] ?? '');
+        if ($title !== '') {
+            return $title;
+        }
+        foreach ($post['attachments'] ?? [] as $attachment) {
+            $t = $this->getAttachmentTitle($attachment);
+            if ($t !== '') {
+                return $t;
+            }
+        }
+        return 'untitled';
     }
 
     private function e(?string $value): string
@@ -1470,5 +1566,21 @@ final class Vk2Bridge extends BridgeAbstract
             return getProxiedUri($url);
         }
         return $url;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $sizes
+     */
+    private function getLargestImageUrl(array $sizes): string
+    {
+        if ($sizes === []) {
+            return '';
+        }
+        $largest = array_reduce(
+            $sizes,
+            static fn(array $carry, array $item): array => ((($item['width'] ?? 0) > ($carry['width'] ?? 0)) === true) ? $item : $carry,
+            []
+        );
+        return $this->proxyImage($largest['url'] ?? '');
     }
 }

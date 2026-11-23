@@ -99,7 +99,7 @@ echo '  Validate timestamps: ' . ($validateTs !== '' && $validateTs !== '0' ? 'Y
 
 $jit = ini_get('opcache.jit');
 echo '  JIT: ' . ($jit !== '' ? $jit : 'Disabled') . "\n";
-echo '  JIT buffer size: ' . ini_get('opcache.jit_buffer_size') . " MB\n\n";
+echo '  JIT buffer size: ' . ini_get('opcache.jit_buffer_size') . "\n\n";
 
 if ($preloadFile !== '' && file_exists($preloadFile) === false) {
     echo "WARNING: Preload file does not exist: $preloadFile\n\n";
@@ -125,9 +125,9 @@ $status = opcache_get_status(false);
 
 if ($status === false) {
     echo "OPcache status: Not available (CLI mode)\n";
-    echo "\nNote: opcache.enable_cli is disabled. Preload status can only be checked via HTTP.\n";
-    echo "To check preload via HTTP, create a temporary PHP file with:\n";
-    echo "  <?php echo json_encode(opcache_get_status(), JSON_PRETTY_PRINT);\n\n";
+    echo "\nNote: opcache.enable_cli is disabled, so this CLI process has no OPcache SHM.\n";
+    echo "Preload runs in the PHP-FPM master. To validate the preload file itself, run:\n";
+    echo '  php -d opcache.enable_cli=1 -d opcache.preload=' . ($preloadFile !== '' ? $preloadFile : '/app/config/preload.php') . " bin/check-opcache --preload-only --verbose\n\n";
 
     $result['status'] = 'not_available_cli';
     $result['recommendation'] = 'Use HTTP endpoint to check preload status';
@@ -145,49 +145,82 @@ if ($status === false) {
 
     echo "OPcache status: Available\n\n";
 
-    if (isset($status['memory_usage']) === true) {
-        $mem = $status['memory_usage'];
+    $asInt = static function (mixed $value): int {
+        return is_int($value) === true ? $value : 0;
+    };
+    $asList = static function (mixed $value): array {
+        return is_array($value) === true ? $value : [];
+    };
+
+    $mem = $status['memory_usage'] ?? null;
+    if ($isPreloadOnly === false && is_array($mem) === true) {
+        $used = $asInt($mem['used_memory'] ?? null);
+        $free = $asInt($mem['free_memory'] ?? null);
+        $wasted = $asInt($mem['wasted_memory'] ?? null);
+        $total = $used + $free + $wasted;
         echo "Memory Usage:\n";
-        echo '  Used: ' . round($mem['used_memory'] / 1024 / 1024, 2) . " MB\n";
-        echo '  Free: ' . round($mem['free_memory'] / 1024 / 1024, 2) . " MB\n";
-        echo '  Wasted: ' . round($mem['wasted_memory'] / 1024 / 1024, 2) . " MB\n";
-        echo '  Current usage: ' . round($mem['used_memory'] / $mem['total_memory'] * 100, 2) . "%\n\n";
+        echo '  Used: ' . round($used / 1048576, 2) . " MB\n";
+        echo '  Free: ' . round($free / 1048576, 2) . " MB\n";
+        echo '  Wasted: ' . round($wasted / 1048576, 2) . " MB\n";
+        if ($total > 0) {
+            echo '  Current usage: ' . round($used / $total * 100, 2) . "%\n";
+        }
+        echo "\n";
     }
 
-    if (isset($status['opcache_statistics']) === true) {
-        $stats = $status['opcache_statistics'];
+    $stats = $status['opcache_statistics'] ?? null;
+    if ($isPreloadOnly === false && is_array($stats) === true) {
+        $hitRate = $stats['opcache_hit_rate'] ?? 0.0;
+        $hitRate = is_float($hitRate) === true || is_int($hitRate) === true ? (float)$hitRate : 0.0;
         echo "Cache Statistics:\n";
-        echo '  Number of cached scripts: ' . ($stats['num_cached_scripts'] ?? 0) . "\n";
-        echo '  Number of cached keys: ' . ($stats['num_cached_keys'] ?? 0) . "\n";
-        echo '  Max cached keys: ' . ($stats['max_cached_keys'] ?? 0) . "\n";
-        echo '  Hit rate: ' . round($stats['opcache_hit_rate'] ?? 0, 2) . "%\n\n";
+        echo '  Number of cached scripts: ' . $asInt($stats['num_cached_scripts'] ?? null) . "\n";
+        echo '  Number of cached keys: ' . $asInt($stats['num_cached_keys'] ?? null) . "\n";
+        echo '  Max cached keys: ' . $asInt($stats['max_cached_keys'] ?? null) . "\n";
+        echo '  Hit rate: ' . round($hitRate, 2) . "%\n\n";
     }
 
-    if (isset($status['preload_statistics']) === true) {
-        $preload = $status['preload_statistics'];
+    $preload = $status['preload_statistics'] ?? null;
+    if (is_array($preload) === true) {
+        $scripts = $asList($preload['scripts'] ?? null);
+        $functions = $asList($preload['functions'] ?? null);
+        $classes = $asList($preload['classes'] ?? null);
         echo "Preload Statistics:\n";
-        echo '  Preloaded scripts: ' . count($preload['scripts'] ?? []) . "\n";
-        echo '  Memory consumption: ' . round(($preload['memory_consumption'] ?? 0) / 1024 / 1024, 2) . " MB\n";
-        echo '  Preloaded functions: ' . count($preload['functions'] ?? []) . "\n";
-        echo '  Preloaded classes: ' . count($preload['classes'] ?? []) . "\n\n";
+        echo '  Preloaded scripts: ' . count($scripts) . "\n";
+        echo '  Memory consumption: ' . round($asInt($preload['memory_consumption'] ?? null) / 1048576, 2) . " MB\n";
+        echo '  Preloaded functions: ' . count($functions) . "\n";
+        echo '  Preloaded classes: ' . count($classes) . "\n\n";
 
-        if ($isVerbose === true && empty($preload['scripts']) === false) {
+        if ($isVerbose === true && $scripts !== []) {
             echo "Preloaded scripts:\n";
-            foreach ($preload['scripts'] as $script) {
-                echo "  - $script\n";
+            foreach ($scripts as $script) {
+                if (is_string($script) === true) {
+                    echo '  - ' . $script . "\n";
+                }
+            }
+            echo "\n";
+        }
+        if ($isVerbose === true && $classes !== []) {
+            echo "Preloaded classes:\n";
+            foreach ($classes as $class) {
+                if (is_string($class) === true) {
+                    echo '  - ' . $class . "\n";
+                }
             }
             echo "\n";
         }
     } else {
-        echo "Preload Statistics: Not available\n\n";
+        echo "Preload Statistics: Not available (nothing preloaded in this SAPI)\n\n";
     }
 
-    if (isset($status['jit']) === true) {
-        $jit = $status['jit'];
+    $jitStatus = $status['jit'] ?? null;
+    if ($isPreloadOnly === false && is_array($jitStatus) === true) {
         echo "JIT Status:\n";
-        echo '  Enabled: ' . (($jit['enabled'] ?? false) === true ? 'Yes' : 'No') . "\n";
-        echo '  Buffer size: ' . round(($jit['buffer_size'] ?? 0) / 1024 / 1024, 2) . " MB\n";
-        echo '  Optimizer: ' . ($jit['optimizer'] ?? 'N/A') . "\n\n";
+        echo '  Enabled: ' . (($jitStatus['enabled'] ?? false) === true ? 'Yes' : 'No') . "\n";
+        echo '  Active: ' . (($jitStatus['on'] ?? false) === true ? 'Yes' : 'No') . "\n";
+        echo '  Buffer size: ' . round($asInt($jitStatus['buffer_size'] ?? null) / 1048576, 2) . " MB\n";
+        echo '  Buffer free: ' . round($asInt($jitStatus['buffer_free'] ?? null) / 1048576, 2) . " MB\n";
+        echo '  Kind: ' . $asInt($jitStatus['kind'] ?? null) . "\n";
+        echo '  Optimization level: ' . $asInt($jitStatus['opt_level'] ?? null) . "\n\n";
     }
 }
 

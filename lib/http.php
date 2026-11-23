@@ -861,21 +861,44 @@ final class CurlHttpClient implements HttpClient
             putenv('CURL_IMPERSONATE');
         }
 
-        $ch = curl_init($url);
-        if ($ch === false) {
-            if ($savedEnv !== null) {
-                putenv('CURL_IMPERSONATE=' . $savedEnv);
-            }
-            throw new \HttpException('Failed to initialize cURL');
-        }
-
         try {
-            return $this->doRequest($ch, $url, $config, $resolveEntries, $optOutRequested, $savedEnv);
+            return $this->doRequest($url, $config, $resolveEntries, $optOutRequested);
         } finally {
             if ($savedEnv !== null) {
                 putenv('CURL_IMPERSONATE=' . $savedEnv);
             }
         }
+    }
+
+    /**
+     * Creates a fresh cURL handle with all options applied atomically.
+     *
+     * A new handle per attempt is required: curl-impersonate reads the
+     * CURL_IMPERSONATE environment variable only inside curl_easy_init(),
+     * so a recycled handle would silently lose the browser fingerprint.
+     * The handle is released by dropping its last reference; the callbacks
+     * registered below must never capture the handle itself, otherwise a
+     * reference cycle would defer the close until the cycle collector runs.
+     *
+     * @param array<int, mixed> $options
+     */
+    private function createHandle(string $url, array $options): \CurlHandle
+    {
+        $ch = curl_init($url);
+        if ($ch === false) {
+            throw new \HttpException('Failed to initialize cURL');
+        }
+        try {
+            $optionsApplied = curl_setopt_array($ch, $options);
+        } catch (\ValueError $e) {
+            unset($ch);
+            throw new \HttpException(sprintf('Invalid cURL option for %s: %s', $url, $e->getMessage()), 500);
+        }
+        if ($optionsApplied === false) {
+            unset($ch);
+            throw new \HttpException('Failed to set cURL options: tried to set an illegal curl option');
+        }
+        return $ch;
     }
 
     /**
@@ -906,20 +929,12 @@ final class CurlHttpClient implements HttpClient
      * @param list<string> $resolveEntries
      */
     private function doRequest(
-        \CurlHandle $ch,
         string $url,
         array $config,
         array $resolveEntries,
-        bool $optOutRequested,
-        ?string $savedEnv
+        bool $optOutRequested
     ): Response {
         $callerOptions = self::normalizeCurlOptions($config['curl_options'] ?? []);
-        $impersonateOpt = self::impersonateOption();
-        if (defined('CURLOPT_IMPERSONATE') === false) {
-            unset($callerOptions[$impersonateOpt]);
-        } elseif ($optOutRequested === true) {
-            $callerOptions[$impersonateOpt] = '';
-        }
         $config['curl_options'] = $callerOptions;
 
         $defaultConfig = [
@@ -1026,8 +1041,16 @@ final class CurlHttpClient implements HttpClient
             }
         }
 
-        foreach (self::normalizeCurlOptions($config['curl_options'] ?? []) as $option => $value) {
+        $impersonateOpt = self::impersonateOption();
+        $impersonateSupported = defined('CURLOPT_IMPERSONATE') === true;
+        foreach ($callerOptions as $option => $value) {
+            if ($option === $impersonateOpt && $impersonateSupported === false) {
+                continue;
+            }
             $curlOptions[$option] = $value;
+        }
+        if ($impersonateSupported === true && $optOutRequested === true) {
+            $curlOptions[$impersonateOpt] = '';
         }
 
         $curlOptions[CURLOPT_FOLLOWLOCATION] = false;
@@ -1035,15 +1058,6 @@ final class CurlHttpClient implements HttpClient
 
         if ($resolveEntries !== []) {
             $curlOptions[self::resolveOption()] = $resolveEntries;
-        }
-
-        try {
-            $optionsApplied = curl_setopt_array($ch, $curlOptions);
-        } catch (\ValueError $e) {
-            throw new \HttpException(sprintf('Invalid cURL option for %s: %s', $url, $e->getMessage()), 500);
-        }
-        if ($optionsApplied === false) {
-            throw new \HttpException('Failed to set cURL options: tried to set an illegal curl option');
         }
 
         /** @var array<string, list<string>> $responseHeaders */
@@ -1069,12 +1083,11 @@ final class CurlHttpClient implements HttpClient
             return $len;
         };
 
-        curl_setopt($ch, CURLOPT_HEADERFUNCTION, $headerCallback);
-
         $maxAttempts = 1 + $retryCount;
         $lastError = '';
         $lastErrno = 0;
         $body = false;
+        $statusCode = 0;
 
         $transientErrnos = [
             CURLE_COULDNT_CONNECT,
@@ -1116,21 +1129,25 @@ final class CurlHttpClient implements HttpClient
                 $effectiveConnectTimeout,
                 max(1, $attemptTimeout - 1)
             );
-            curl_setopt($ch, CURLOPT_TIMEOUT, $attemptTimeout);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $attemptConnectTimeout);
-            curl_setopt($ch, CURLOPT_TIMEOUT_MS, max(500, (int)round(min($remaining, $attemptTimeout) * 1000)));
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, max(500, $attemptConnectTimeout * 1000));
+
+            $attemptOptions = $curlOptions;
+            $attemptOptions[CURLOPT_TIMEOUT] = $attemptTimeout;
+            $attemptOptions[CURLOPT_CONNECTTIMEOUT] = $attemptConnectTimeout;
+            $attemptOptions[CURLOPT_TIMEOUT_MS] = max(500, (int)round(min($remaining, $attemptTimeout) * 1000));
+            $attemptOptions[CURLOPT_CONNECTTIMEOUT_MS] = max(500, $attemptConnectTimeout * 1000);
+            $attemptOptions[CURLOPT_HEADERFUNCTION] = $headerCallback;
 
             $responseHeaders = [];
-            curl_setopt($ch, CURLOPT_HEADERFUNCTION, $headerCallback);
-
+            $ch = $this->createHandle($url, $attemptOptions);
             $body = curl_exec($ch);
+            $statusCode = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+            $lastError = curl_error($ch);
+            $lastErrno = curl_errno($ch);
+            unset($ch);
+
             if ($body !== false) {
                 break;
             }
-
-            $lastError = curl_error($ch);
-            $lastErrno = curl_errno($ch);
 
             if (
                 in_array($lastErrno, [
@@ -1172,29 +1189,6 @@ final class CurlHttpClient implements HttpClient
                 }
             }
             usleep($delayUs);
-
-            curl_reset($ch);
-            assert($url !== '');
-            curl_setopt($ch, CURLOPT_URL, $url);
-            try {
-                $optionsApplied = curl_setopt_array($ch, $curlOptions);
-            } catch (\ValueError $e) {
-                throw new \HttpException(sprintf('Invalid cURL option for %s: %s', $url, $e->getMessage()), 500);
-            }
-            if ($optionsApplied === false) {
-                throw new \HttpException('Failed to set cURL options: tried to set an illegal curl option');
-            }
-            if ($resolveEntries !== []) {
-                curl_setopt($ch, self::resolveOption(), $resolveEntries);
-            }
-            curl_setopt($ch, CURLOPT_HEADERFUNCTION, $headerCallback);
-        }
-
-        $statusCode = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-
-        if ($savedEnv !== null) {
-            putenv('CURL_IMPERSONATE=' . $savedEnv);
-            $savedEnv = null;
         }
 
         if ($body === false) {
