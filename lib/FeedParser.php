@@ -328,7 +328,7 @@ final class FeedParser
                     $modules[$prefix] = [];
                 }
 
-                if ($child->hasChildNodes() === true && $child->childNodes->count() > 0) {
+                if ($child->childNodes->count() > 0) {
                     $modules[$prefix][$localName] = $this->parseDomModule($child);
                 } else {
                     $modules[$prefix][$localName] = $this->getNodeText($child);
@@ -401,7 +401,7 @@ final class FeedParser
                 $hasElements = true;
                 $localName = $child->localName;
 
-                if ($child->hasChildNodes() === true && $child->childNodes->count() > 0) {
+                if ($child->childNodes->count() > 0) {
                     $result[$localName] = $this->parseDomModule($child);
                 } else {
                     $result[$localName] = $this->getNodeText($child);

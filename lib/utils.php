@@ -6,6 +6,9 @@ namespace RSSBridge\Utils;
 
 final class Url
 {
+    /** @var array<string, string>|null */
+    private static ?array $mimeMap = null;
+
     private const MIME_TYPES = [
         'jpg'   => 'image/jpeg',
         'jpeg'  => 'image/jpeg',
@@ -203,14 +206,41 @@ final class Url
             return 'text/plain';
         }
 
-        $mime = self::MIME_TYPES;
+        $mime = self::mimeMap();
 
+        $cleanUrl = $url;
+        if (($qpos = strpos($cleanUrl, '?')) !== false) {
+            $cleanUrl = substr($cleanUrl, 0, $qpos);
+        }
+        if (($hpos = strpos($cleanUrl, '#')) !== false) {
+            $cleanUrl = substr($cleanUrl, 0, $hpos);
+        }
+
+        $ext = strtolower(pathinfo($cleanUrl, PATHINFO_EXTENSION));
+        if ($ext !== '' && isset($mime[$ext]) === true) {
+            return $mime[$ext];
+        }
+
+        return 'application/octet-stream';
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function mimeMap(): array
+    {
+        if (self::$mimeMap !== null) {
+            return self::$mimeMap;
+        }
+
+        $mime = self::MIME_TYPES;
         $openBasedir = ini_get('open_basedir');
+
         if (($openBasedir === '' || $openBasedir === false) && is_readable('/etc/mime.types') === true) {
             $file = fopen('/etc/mime.types', 'r');
             if ($file !== false) {
                 while (($line = fgets($file)) !== false) {
-                    $line = trim((string)preg_replace('/#.*/', '', $line));
+                    $line = trim((string) preg_replace('/#.*/', '', $line));
                     if ($line === '') {
                         continue;
                     }
@@ -227,20 +257,8 @@ final class Url
             }
         }
 
-        $cleanUrl = $url;
-        if (($qpos = strpos($cleanUrl, '?')) !== false) {
-            $cleanUrl = substr($cleanUrl, 0, $qpos);
-        }
-        if (($hpos = strpos($cleanUrl, '#')) !== false) {
-            $cleanUrl = substr($cleanUrl, 0, $hpos);
-        }
-
-        $ext = strtolower(pathinfo($cleanUrl, PATHINFO_EXTENSION));
-        if ($ext !== '' && isset($mime[$ext]) === true) {
-            return $mime[$ext];
-        }
-
-        return 'application/octet-stream';
+        self::$mimeMap = $mime;
+        return self::$mimeMap;
     }
 
     public static function formatBytes(int $bytes, int $precision = 2): string

@@ -45,13 +45,6 @@ final class DisplayAction implements ActionInterface
     private BridgeFactory $bridgeFactory;
     private SafeBridgeLoader $safeLoader;
 
-    /**
-     * Lease for data regeneration. Must stay above the hard FPM budget
-     * (PHP_FPM_REQUEST_TERMINATE_TIMEOUT minus its reserve), otherwise a slow
-     * generation outlives its own lease and a second worker starts a duplicate
-     * upstream fetch.
-     */
-    private const DATA_LOCK_TTL = 180;
     private const DATA_WAIT_MS = 10000;
     private const DATA_POLL_MS = 200;
     private const BACKOFF_FLOOR = 120;
@@ -70,6 +63,17 @@ final class DisplayAction implements ActionInterface
         $this->logger = $logger;
         $this->bridgeFactory = $bridgeFactory;
         $this->safeLoader = $safeLoader;
+    }
+
+    /**
+     * Lease for data regeneration. Must stay above the hard FPM budget
+     * (PHP_FPM_REQUEST_TERMINATE_TIMEOUT minus its reserve), otherwise a slow
+     * generation outlives its own lease and a second worker starts a duplicate
+     * upstream fetch.
+     */
+    private static function dataLockTtl(): int
+    {
+        return FeedDeadline::hardBudgetSeconds() + 30;
     }
 
     /**
@@ -201,7 +205,7 @@ final class DisplayAction implements ActionInterface
             $stalePayload = $this->normalizeDataPayload($entry['stale'] ?? null);
 
             if ($payload === null) {
-                if ($this->cache->acquireLock($dataKey, self::DATA_LOCK_TTL) === true) {
+                if ($this->cache->acquireLock($dataKey, self::dataLockTtl()) === true) {
                     $dataLockAcquired = true;
                 } else {
                     $waited = $this->waitForFreshData($dataKey);
@@ -435,7 +439,7 @@ final class DisplayAction implements ActionInterface
                 return ['payload' => $payload, 'lock' => false];
             }
 
-            if ($this->cache->acquireLock($dataKey, self::DATA_LOCK_TTL) === true) {
+            if ($this->cache->acquireLock($dataKey, self::dataLockTtl()) === true) {
                 return ['payload' => null, 'lock' => true];
             }
         }

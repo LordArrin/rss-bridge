@@ -212,7 +212,7 @@ function break_annoying_html_tags(string $html, bool $allowVideoEmbeds = false):
  */
 function sanitize_dom_element_attributes(\Dom\Element $element, array $allowedAttributes = []): void
 {
-    $tagName = strtolower($element->tagName);
+    $tagName = $element->localName;
     $allowed = $allowedAttributes[$tagName] ?? [];
 
     // Default safe attributes for common tags if not explicitly defined

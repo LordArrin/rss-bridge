@@ -5,17 +5,70 @@ on:
     - cron: '0 3 * * 0'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: lordarrin/rss-bridge
 
 jobs:
-  build-amd64:
+  prepare:
     runs-on: ubuntu-26.04
+    outputs:
+      date: ${{ steps.date.outputs.date }}
+    steps:
+      - name: Set build date (UTC, single source of truth)
+        id: date
+        run: echo "date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
     permissions:
       contents: read
       packages: write
-
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-26.04
+            suffix: modern-amd64
+            cache: amd64-modern
+            build_args: |
+              X86_MARCH=x86-64-v3
+              X86_CFI_FLAGS=-fcf-protection=full
+              BUILD_JOBS=2
+              ENABLE_LTO=ON
+          - arch: amd64
+            runner: ubuntu-26.04
+            suffix: amd64
+            cache: amd64-base
+            build_args: |
+              X86_MARCH=x86-64
+              X86_CFI_FLAGS=
+              BUILD_JOBS=2
+              ENABLE_LTO=ON
+          - arch: arm64
+            runner: ubuntu-26.04-arm
+            suffix: modern-arm64
+            cache: arm64-modern
+            build_args: |
+              ARM_MARCH=armv8.2-a+crypto+crc+lse+rdma
+              ARM_CFI_FLAGS=-mbranch-protection=standard
+              BUILD_JOBS=2
+              ENABLE_LTO=ON
+          - arch: arm64
+            runner: ubuntu-26.04-arm
+            suffix: arm64
+            cache: arm64-base
+            build_args: |
+              ARM_MARCH=armv8-a
+              ARM_CFI_FLAGS=-mbranch-protection=standard
+              BUILD_JOBS=2
+              ENABLE_LTO=ON
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -30,113 +83,43 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_TOKEN }}
 
-      - name: Set date tag
-        id: date
-        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+      - name: Restore ccache (persists the /ccache BuildKit mount across runs)
+        uses: actions/cache@v4
+        id: ccache
+        with:
+          path: ccache-mount
+          key: ccache-${{ matrix.cache }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ matrix.cache }}-
 
-      - name: Build and push latest-modern (amd64)
+      - name: Inject ccache into BuildKit
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          cache-map: |
+            { "ccache-mount": "/ccache" }
+          skip-extraction: ${{ steps.ccache.outputs.cache-hit }}
+
+      - name: Build and push ${{ matrix.suffix }}
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/${{ matrix.arch }}
+          pull: true
           push: true
+          provenance: false
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-amd64
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-modern-amd64
-          build-args: |
-            X86_MARCH=x86-64-v3
-            X86_MTUNE=generic
-            X86_CFI_FLAGS=-fcf-protection=full
-            BUILD_JOBS=2
-            ENABLE_LTO=ON
-          cache-from: type=gha,scope=amd64-modern
-          cache-to: type=gha,mode=max,scope=amd64-modern
-
-      - name: Build and push latest (amd64)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-amd64
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-amd64
-          build-args: |
-            X86_MARCH=x86-64
-            X86_MTUNE=generic
-            X86_CFI_FLAGS=
-            BUILD_JOBS=2
-            ENABLE_LTO=ON
-          cache-from: type=gha,scope=amd64-base
-          cache-to: type=gha,mode=max,scope=amd64-base
-
-  build-arm64:
-    runs-on: ubuntu-26.04-arm
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GHCR_TOKEN }}
-
-      - name: Set date tag
-        id: date
-        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-
-      - name: Build and push latest-modern (arm64)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/arm64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-arm64
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-modern-arm64
-          build-args: |
-            ARM_MARCH=armv8.2-a+crypto+crc+lse+rdma
-            ARM_MTUNE=generic
-            ARM_CFI_FLAGS=-mbranch-protection=standard
-            BUILD_JOBS=2
-            ENABLE_LTO=ON
-          cache-from: type=gha,scope=arm64-modern
-          cache-to: type=gha,mode=max,scope=arm64-modern
-
-      - name: Build and push latest (arm64)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/arm64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-arm64
-          build-args: |
-            ARM_MARCH=armv8-a
-            ARM_MTUNE=generic
-            ARM_CFI_FLAGS=-mbranch-protection=standard
-            BUILD_JOBS=2
-            ENABLE_LTO=ON
-          cache-from: type=gha,scope=arm64-base
-          cache-to: type=gha,mode=max,scope=arm64-base
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-${{ matrix.suffix }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.date }}-${{ matrix.suffix }}
+          build-args: ${{ matrix.build_args }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.cache }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.cache }},mode=max,image-manifest=true
 
   create-manifests:
-    needs: [build-amd64, build-arm64]
+    needs: [prepare, build]
     runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -148,88 +131,47 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_TOKEN }}
 
-      - name: Set date tag
-        id: date
-        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-
-      - name: Create and push latest-modern manifest
+      - name: Create and push manifests
+        env:
+          DATE: ${{ needs.prepare.outputs.date }}
         run: |
-          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-modern-arm64
-
-      - name: Create and push date-modern manifest
-        run: |
-          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-modern \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-modern-amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-modern-arm64
-
-      - name: Create and push latest manifest
-        run: |
-          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64
-
-      - name: Create and push date manifest
-        run: |
-          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }} \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.date.outputs.date }}-arm64
+          set -eu
+          IMG="${REGISTRY}/${IMAGE_NAME}"
+          docker buildx imagetools create -t "$IMG:latest-modern" \
+            "$IMG:latest-modern-amd64" "$IMG:latest-modern-arm64"
+          docker buildx imagetools create -t "$IMG:${DATE}-modern" \
+            "$IMG:${DATE}-modern-amd64" "$IMG:${DATE}-modern-arm64"
+          docker buildx imagetools create -t "$IMG:latest" \
+            "$IMG:latest-amd64" "$IMG:latest-arm64"
+          docker buildx imagetools create -t "$IMG:${DATE}" \
+            "$IMG:${DATE}-amd64" "$IMG:${DATE}-arm64"
 
   sync-to-dockerhub:
-    needs: create-manifests
+    needs: [prepare, create-manifests]
     runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: read
-
     steps:
-      - name: Set date tag
-        id: date
-        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-
       - name: Install skopeo
         run: |
           sudo apt-get update
           sudo apt-get install -y skopeo
 
       - name: Log in to GHCR
-        run: |
-          skopeo login ghcr.io \
-            --username ${{ github.repository_owner }} \
-            --password ${{ secrets.GHCR_TOKEN }}
+        run: skopeo login ghcr.io --username "${{ github.repository_owner }}" --password "${{ secrets.GHCR_TOKEN }}"
 
       - name: Log in to Docker Hub
-        run: |
-          skopeo login docker.io \
-            --username ${{ secrets.DOCKERHUB_USERNAME }} \
-            --password ${{ secrets.DOCKERHUB_TOKEN }}
+        run: skopeo login docker.io --username "${{ secrets.DOCKERHUB_USERNAME }}" --password "${{ secrets.DOCKERHUB_TOKEN }}"
 
       - name: Sync images to Docker Hub
+        env:
+          DATE: ${{ needs.prepare.outputs.date }}
         run: |
-          IMAGE="${{ env.IMAGE_NAME }}"
-          DATE="${{ steps.date.outputs.date }}"
-          
-          echo "Syncing multi-architecture images to Docker Hub..."
-          
-          echo "Syncing $IMAGE:latest ..."
-          skopeo copy --all \
-            "docker://ghcr.io/$IMAGE:latest" \
-            "docker://docker.io/$IMAGE:latest"
-          
-          echo "Syncing $IMAGE:latest-modern ..."
-          skopeo copy --all \
-            "docker://ghcr.io/$IMAGE:latest-modern" \
-            "docker://docker.io/$IMAGE:latest-modern"
-          
-          echo "Syncing $IMAGE:$DATE ..."
-          skopeo copy --all \
-            "docker://ghcr.io/$IMAGE:$DATE" \
-            "docker://docker.io/$IMAGE:$DATE"
-          
-          echo "Syncing $IMAGE:$DATE-modern ..."
-          skopeo copy --all \
-            "docker://ghcr.io/$IMAGE:$DATE-modern" \
-            "docker://docker.io/$IMAGE:$DATE-modern"
-          
-          echo "All images synced successfully to Docker Hub"
+          set -eu
+          IMG="${IMAGE_NAME}"
+          for TAG in latest latest-modern "${DATE}" "${DATE}-modern"; do
+            echo "Syncing ${IMG}:${TAG} ..."
+            skopeo copy --all "docker://ghcr.io/${IMG}:${TAG}" "docker://docker.io/${IMG}:${TAG}"
+          done
+          echo "All images synced to Docker Hub"

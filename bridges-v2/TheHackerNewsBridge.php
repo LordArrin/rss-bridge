@@ -142,15 +142,12 @@ final class TheHackerNewsBridge extends BridgeAbstract
         $author = null;
         $timestamp = time();
 
-        // Ищем контейнер .postmeta. Если его нет, ищем прямо в элементе.
         $postmeta = $element->querySelector('.postmeta');
         $searchRoot = $postmeta !== null ? $postmeta : $element;
 
-        // Находим все span.author внутри этого блока
         $spans = $searchRoot->querySelectorAll('span.author');
 
         if ($spans->length >= 2) {
-            // Первый span - это автор, второй - дата
             $author = trim($spans->item(0)->textContent ?? '');
             $dateStr = trim($spans->item(1)->textContent ?? '');
 
@@ -189,7 +186,6 @@ final class TheHackerNewsBridge extends BridgeAbstract
             return '';
         }
 
-        // Если автор не был найден на главной, пытаемся найти его на странице статьи
         if ($author === null || $author === '') {
             $authorSpans = $articleDom->querySelectorAll('span.author');
             $spanCount = count($authorSpans);
@@ -253,7 +249,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
 
             $current = $img->parentElement;
             while ($current !== null) {
-                $tagName = strtolower($current->tagName);
+                $tagName = $current->localName;
 
                 if ($tagName === 'div' || $tagName === 'p' || $tagName === 'article' || $tagName === 'section') {
                     break;
@@ -268,7 +264,7 @@ final class TheHackerNewsBridge extends BridgeAbstract
 
             $parent = $img->parentElement;
             if ($parent !== null) {
-                $parentTag = strtolower($parent->tagName);
+                $parentTag = $parent->localName;
                 if ($parentTag !== 'p' && $parentTag !== 'div' && $parentTag !== 'figure') {
                     $wrapper = $node->ownerDocument?->createElement('div');
                     if ($wrapper !== null) {

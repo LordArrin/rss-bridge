@@ -165,6 +165,7 @@ class ParameterValidator
             && $value !== false
             && $value !== ''
             && $value !== 0
+            && $value !== 0.0
             && $value !== '0'
             && $value !== [];
     }

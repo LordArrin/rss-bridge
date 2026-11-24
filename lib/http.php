@@ -294,11 +294,8 @@ final class IpResolver
 final class CurlHttpClient implements HttpClient
 {
     private const IMPERSONATE_OPT = 10240;
-
-    private static function impersonateOption(): int
-    {
-        return defined('CURLOPT_IMPERSONATE') === true ? (int)constant('CURLOPT_IMPERSONATE') : self::IMPERSONATE_OPT;
-    }
+    private const CURLE_HTTP2 = 16;
+    private const CURLE_HTTP2_STREAM = 92;
 
     /**
      * Reads a mixed config value as int.
@@ -397,11 +394,10 @@ final class CurlHttpClient implements HttpClient
      */
     private static function isOptOut(array $curlOptions): bool
     {
-        $opt = self::impersonateOption();
-        if (array_key_exists($opt, $curlOptions) === false) {
+        if (array_key_exists(self::IMPERSONATE_OPT, $curlOptions) === false) {
             return false;
         }
-        $explicit = strtolower(trim(self::scalarToString($curlOptions[$opt])));
+        $explicit = strtolower(trim(self::scalarToString($curlOptions[self::IMPERSONATE_OPT])));
         return $explicit === '' || $explicit === 'none';
     }
 
@@ -496,7 +492,10 @@ final class CurlHttpClient implements HttpClient
         $port = $parsed['port'];
 
         if (str_starts_with($host, '.') === true) {
-            return [];
+            throw new \HttpException(sprintf(
+                'Access to %s is blocked: invalid hostname with a leading dot (SSRF protection)',
+                $host
+            ));
         }
 
         if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
@@ -533,7 +532,16 @@ final class CurlHttpClient implements HttpClient
             ));
         }
 
-        return [sprintf('+%s:%d:%s', $host, $port, implode(',', $allowedIps))];
+        $addresses = [];
+        foreach ($allowedIps as $ip) {
+            $addresses[] = str_contains($ip, ':') === true ? '[' . $ip . ']' : $ip;
+        }
+        $list = implode(',', $addresses);
+
+        return [
+            sprintf('+%s:%d:%s', $host, $port, $list),
+            sprintf('+%s.:%d:%s', $host, $port, $list),
+        ];
     }
 
     /**
@@ -1026,16 +1034,11 @@ final class CurlHttpClient implements HttpClient
             }
         }
 
-        $impersonateOpt = self::impersonateOption();
-        $impersonateSupported = defined('CURLOPT_IMPERSONATE') === true;
         foreach ($callerOptions as $option => $value) {
-            if ($option === $impersonateOpt && $impersonateSupported === false) {
+            if ($option === self::IMPERSONATE_OPT) {
                 continue;
             }
             $curlOptions[$option] = $value;
-        }
-        if ($impersonateSupported === true && $optOutRequested === true) {
-            $curlOptions[$impersonateOpt] = '';
         }
 
         $curlOptions[CURLOPT_FOLLOWLOCATION] = false;
@@ -1081,15 +1084,9 @@ final class CurlHttpClient implements HttpClient
             CURLE_GOT_NOTHING,
             CURLE_PARTIAL_FILE,
             CURLE_SSL_CONNECT_ERROR,
+            self::CURLE_HTTP2,
+            self::CURLE_HTTP2_STREAM,
         ];
-
-        if (defined('CURLE_HTTP2') === true) {
-            $transientErrnos[] = (int) constant('CURLE_HTTP2');
-        }
-
-        if (defined('CURLE_HTTP2_STREAM') === true) {
-            $transientErrnos[] = (int) constant('CURLE_HTTP2_STREAM');
-        }
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             $remaining = $deadline - microtime(true);

@@ -334,7 +334,7 @@ final class AuthorTodayBridge extends BridgeAbstract
     {
         $current = $node;
         for ($i = 0; $i < self::FOOTER_SEARCH_DEPTH && $current !== null; $i++) {
-            if ($current instanceof \Dom\Element && strtolower($current->tagName) === 'footer') {
+            if ($current instanceof \Dom\Element && $current->localName === 'footer') {
                 return true;
             }
 

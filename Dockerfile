@@ -901,7 +901,7 @@ RUN echo -n "${IMAGE_VERSION}" > /app/VERSION && \
     chown nginx:nginx /app/VERSION && \
     chmod 444 /app/VERSION
 
-RUN find /app -type f \( -name '*.sh' -o -name '*.php' \) -exec sed -i 's/\r$//' {} +
+RUN find /app -type f \( -name '*.sh' -o -name '*.php' -o -path '*/bin/*' \) -exec sed -i 's/\r$//' {} +
 
 RUN sed -i "s/\"version\": \".*\"/\"version\": \"${IMAGE_VERSION}\"/" /app/composer.json && \
     composer install --optimize-autoloader --no-interaction --classmap-authoritative && \

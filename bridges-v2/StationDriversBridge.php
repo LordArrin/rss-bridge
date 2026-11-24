@@ -164,7 +164,7 @@ final class StationDriversBridge extends FeedExpander
             }
             if (trim($dt->textContent ?? '') === 'Submitted By:') {
                 $dd = $dt->nextElementSibling;
-                if ($dd instanceof \Dom\Element === true && strtolower($dd->tagName) === 'dd') {
+                if ($dd instanceof \Dom\Element === true && $dd->localName === 'dd') {
                     $item['author'] = trim($dd->textContent ?? '');
                 }
                 break;
@@ -253,7 +253,7 @@ final class StationDriversBridge extends FeedExpander
             }
 
             $dd = $dt->nextElementSibling;
-            if ($dd instanceof \Dom\Element === false || strtolower($dd->tagName) !== 'dd') {
+            if ($dd instanceof \Dom\Element === false || $dd->localName !== 'dd') {
                 continue;
             }
 

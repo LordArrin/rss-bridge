@@ -278,23 +278,20 @@ final class BridgeFactory
         // bound to the file identity (path + mtime + size), so a changed file
         // gets a fresh key and a container restart (new image) clears it.
         $apcuKey = 'rssbridge_sandbox_' . md5($cacheKey);
-        if (function_exists('apcu_fetch') === true) {
-            $stored = apcu_fetch($apcuKey, $success);
-            $stored = apcu_fetch($apcuKey, $success);
-            if (
+        $stored = apcu_fetch($apcuKey, $success);
+        if (
                 $success === true && is_array($stored) === true
                 && isset($stored['ok'], $stored['checked']) === true
                 && is_bool($stored['ok']) === true && is_int($stored['checked']) === true
-            ) {
-                $ok = $stored['ok'];
-                $checked = $stored['checked'];
-                self::$sandboxCache[$cacheKey] = ['ok' => $ok, 'checked' => $checked];
-                if ($ok === true) {
-                    return;
-                }
-                if ((time() - $checked) < self::SANDBOX_NEGATIVE_TTL) {
-                    throw new \Exception('Bridge compatibility error (cached): ' . $file);
-                }
+        ) {
+            $ok = $stored['ok'];
+            $checked = $stored['checked'];
+            self::$sandboxCache[$cacheKey] = ['ok' => $ok, 'checked' => $checked];
+            if ($ok === true) {
+                return;
+            }
+            if ((time() - $checked) < self::SANDBOX_NEGATIVE_TTL) {
+                throw new \Exception('Bridge compatibility error (cached): ' . $file);
             }
         }
 

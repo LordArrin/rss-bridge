@@ -486,7 +486,7 @@ final class FLZBridge extends BridgeAbstract
                     continue;
                 }
 
-                $tagName = strtolower($node->tagName);
+                $tagName = $node->localName;
                 if (str_ends_with($tagName, '-article-preview') === false) {
                     continue;
                 }
@@ -563,7 +563,7 @@ final class FLZBridge extends BridgeAbstract
             $text = trim((string) preg_replace('~\s+~u', ' ', $text));
 
             if ($text !== '') {
-                $tagName = strtolower($element->tagName);
+                $tagName = $element->localName;
                 $body .= sprintf('<%1$s>%2$s</%1$s>', $tagName, e($text));
             }
         }

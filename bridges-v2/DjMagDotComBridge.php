@@ -270,7 +270,7 @@ final class DjMagDotComBridge extends BridgeAbstract
                 continue;
             }
 
-            $tagName = strtolower($node->tagName ?? '');
+            $tagName = $node->localName;
 
             if (isset(self::ALLOWED_TAGS[$tagName]) === false) {
                 $innerContent = $this->extractNestedContent($node);
@@ -292,7 +292,7 @@ final class DjMagDotComBridge extends BridgeAbstract
 
         foreach ($element->childNodes as $node) {
             if ($node instanceof \Dom\Element === true) {
-                $tagName = strtolower($node->tagName ?? '');
+                $tagName = $node->localName;
 
                 if (isset(self::ALLOWED_TAGS[$tagName]) === true) {
                     $html .= $this->serializeElement($node, $tagName);
@@ -347,7 +347,7 @@ final class DjMagDotComBridge extends BridgeAbstract
 
         foreach ($element->childNodes as $node) {
             if ($node instanceof \Dom\Element === true) {
-                $tagName = strtolower($node->tagName ?? '');
+                $tagName = $node->localName;
 
                 if (isset(self::ALLOWED_TAGS[$tagName]) === true) {
                     $html .= $this->serializeElement($node, $tagName);

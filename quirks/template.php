@@ -264,7 +264,7 @@ function render_template(string $template, array $context = []): string
     // This is the only way to maintain backward compatibility with existing
     // templates that expect local variables (e.g., $bridges, $active_bridges).
     // phpcs:ignore Generic.PHP.ForbiddenFunctions.Found
-    extract($context);
+    extract($context, EXTR_SKIP);
 
     ob_start();
     try {
