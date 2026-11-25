@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\FeedExpander;
 
+use function urljoin;
+
 final class GolemBridge extends FeedExpander
 {
     public const NAME = 'Golem';
@@ -14,70 +16,84 @@ final class GolemBridge extends FeedExpander
     public const MAINTAINER = 'No maintainer';
     public const CACHE_TIMEOUT = 1800;
 
-    public const PARAMETERS = [[
-        'category' => [
-            'name' => 'Category',
-            'type' => 'list',
-            'values' => [
-                'Alle News'
-                => 'https://rss.golem.de/rss.php?feed=ATOM1.0',
-                'Audio/Video'
-                => 'https://rss.golem.de/rss.php?ms=audio-video&feed=ATOM1.0',
-                'Auto'
-                => 'https://rss.golem.de/rss.php?ms=auto&feed=ATOM1.0',
-                'Foto'
-                => 'https://rss.golem.de/rss.php?ms=foto&feed=ATOM1.0',
-                'Games'
-                => 'https://rss.golem.de/rss.php?ms=games&feed=ATOM1.0',
-                'Handy'
-                => 'https://rss.golem.de/rss.php?ms=handy&feed=ATOM1.0',
-                'Internet'
-                => 'https://rss.golem.de/rss.php?ms=internet&feed=ATOM1.0',
-                'Mobil'
-                => 'https://rss.golem.de/rss.php?ms=mobil&feed=ATOM1.0',
-                'Open Source'
-                => 'https://rss.golem.de/rss.php?ms=open-source&feed=ATOM1.0',
-                'Politik/Recht'
-                => 'https://rss.golem.de/rss.php?ms=politik-recht&feed=ATOM1.0',
-                'Security'
-                => 'https://rss.golem.de/rss.php?ms=security&feed=ATOM1.0',
-                'Desktop-Applikationen'
-                => 'https://rss.golem.de/rss.php?ms=desktop-applikationen&feed=ATOM1.0',
-                'Software-Entwicklung'
-                => 'https://rss.golem.de/rss.php?ms=softwareentwicklung&feed=ATOM1.0',
-                'Wirtschaft'
-                => 'https://rss.golem.de/rss.php?ms=wirtschaft&feed=ATOM1.0',
-                'Wissenschaft'
-                => 'https://rss.golem.de/rss.php?ms=wissenschaft&feed=ATOM1.0'
-            ]
+    public const PARAMETERS = [
+        '' => [
+            'category' => [
+                'name' => 'Category',
+                'type' => 'list',
+                'values' => [
+                    'Alle News'
+                    => 'https://rss.golem.de/rss.php?feed=ATOM1.0',
+                    'Audio/Video'
+                    => 'https://rss.golem.de/rss.php?ms=audio-video&feed=ATOM1.0',
+                    'Auto'
+                    => 'https://rss.golem.de/rss.php?ms=auto&feed=ATOM1.0',
+                    'Foto'
+                    => 'https://rss.golem.de/rss.php?ms=foto&feed=ATOM1.0',
+                    'Games'
+                    => 'https://rss.golem.de/rss.php?ms=games&feed=ATOM1.0',
+                    'Handy'
+                    => 'https://rss.golem.de/rss.php?ms=handy&feed=ATOM1.0',
+                    'Internet'
+                    => 'https://rss.golem.de/rss.php?ms=internet&feed=ATOM1.0',
+                    'Mobil'
+                    => 'https://rss.golem.de/rss.php?ms=mobil&feed=ATOM1.0',
+                    'Open Source'
+                    => 'https://rss.golem.de/rss.php?ms=open-source&feed=ATOM1.0',
+                    'Politik/Recht'
+                    => 'https://rss.golem.de/rss.php?ms=politik-recht&feed=ATOM1.0',
+                    'Security'
+                    => 'https://rss.golem.de/rss.php?ms=security&feed=ATOM1.0',
+                    'Desktop-Applikationen'
+                    => 'https://rss.golem.de/rss.php?ms=desktop-applikationen&feed=ATOM1.0',
+                    'Software-Entwicklung'
+                    => 'https://rss.golem.de/rss.php?ms=softwareentwicklung&feed=ATOM1.0',
+                    'Wirtschaft'
+                    => 'https://rss.golem.de/rss.php?ms=wirtschaft&feed=ATOM1.0',
+                    'Wissenschaft'
+                    => 'https://rss.golem.de/rss.php?ms=wissenschaft&feed=ATOM1.0',
+                ],
+            ],
+            'limit' => [
+                'name' => 'Limit',
+                'type' => 'number',
+                'required' => false,
+                'title' => 'Specify number of full articles to return',
+                'defaultValue' => 5,
+            ],
+            'urlfilter' => [
+                'name' => 'Exclude URLs containing',
+                'type' => 'text',
+                'required' => false,
+                'title' => 'String to filter out articles based on their URL (e.g. exclude ads)',
+                'defaultValue' => '/anzeige-',
+            ],
         ],
-        'limit' => [
-            'name' => 'Limit',
-            'type' => 'number',
-            'required' => false,
-            'title' => 'Specify number of full articles to return',
-            'defaultValue' => 5
-        ]
-    ]];
+    ];
+
     public const LIMIT = 5;
     public const HEADERS = ['Cookie: golem_consent20=simple|261101;'];
 
     public function collectData(): void
     {
-        $limit = (int)$this->getInput('limit');
+        $limit = (int) ($this->getInput('limit') ?? static::LIMIT);
         if ($limit === 0) {
             $limit = static::LIMIT;
         }
-        $this->collectExpandableDatas(
-            $this->getInput('category'),
-            $limit
-        );
+
+        $category = (string) $this->getInput('category');
+        if ($category === '') {
+            $category = 'https://rss.golem.de/rss.php?feed=ATOM1.0';
+        }
+
+        $this->collectExpandableDatas($category, $limit);
     }
 
     protected function parseItem(array $item): array
     {
         $item['content'] ??= '';
         $uri = $item['uri'];
+        $urlFilter = (string) $this->getInput('urlfilter');
 
         $urls = [];
 
@@ -85,6 +101,11 @@ final class GolemBridge extends FeedExpander
             if (isset($urls[$uri]) === true) {
                 break;
             }
+
+            if ($urlFilter !== '' && str_contains($uri, $urlFilter) === true) {
+                return [];
+            }
+
             $urls[$uri] = true;
 
             $html = getContents($uri, static::HEADERS);
@@ -103,12 +124,12 @@ final class GolemBridge extends FeedExpander
 
             if (array_key_exists('categories', $item) === false) {
                 $categories = $articlePage->querySelectorAll('div.go-tag-list__tags a.go-tag');
-                $trimmedcategories = [];
+                $trimmedCategories = [];
                 foreach ($categories as $category) {
-                    $trimmedcategories[] = trim(html_entity_decode($category->textContent ?? ''));
+                    $trimmedCategories[] = trim(html_entity_decode($category->textContent ?? ''));
                 }
-                if ($trimmedcategories !== []) {
-                    $item['categories'] = array_unique($trimmedcategories);
+                if ($trimmedCategories !== []) {
+                    $item['categories'] = array_unique($trimmedCategories);
                 }
             }
 
@@ -125,7 +146,7 @@ final class GolemBridge extends FeedExpander
         return $item;
     }
 
-    private function extractContent(\Dom\HTMLDocument $page, string $prevcontent): string
+    private function extractContent(\Dom\HTMLDocument $page, string $prevContent): string
     {
         $item = '';
 
@@ -171,47 +192,47 @@ final class GolemBridge extends FeedExpander
             }
         }
 
-        foreach ($wrapper->querySelectorAll('.gvideofig') as $embedcontent) {
-            $id = $embedcontent->getAttribute('id');
-            if ($id !== null && preg_match('/gvideo_(.*)/', $id, $videoid) === 1) {
+        foreach ($wrapper->querySelectorAll('.gvideofig') as $embedContent) {
+            $id = $embedContent->getAttribute('id');
+            if ($id !== null && preg_match('/gvideo_(.*)/', $id, $videoId) === 1) {
                 $videoHtml = <<<EOT
                     <video class="rmp-object-fit-contain rmp-video" x-webkit-airplay="allow" controlslist="nodownload" tabindex="-1"
-                    preload="metadata" src="https://video.golem.de/download/{$videoid[1]}"></video>
+                    preload="metadata" src="https://video.golem.de/download/{$videoId[1]}"></video>
                 EOT;
-                $embedcontent->innerHTML .= $videoHtml;
+                $embedContent->innerHTML .= $videoHtml;
             }
         }
 
         $badSelectors = [
-        '#job-market',
-        '#seminars',
-        '.gbox_affiliate',
-        '.go-ad-slot',
-        '.go-affiliate-disclosure__trigger',
-        '.go-alink-list',
-        '.go-article-header__kicker',
-        '.go-article-header__series',
-        '.go-article-header__title',
-        '.go-button-bar',
-        '.go-disclaimer',
-        '.go-disclaimer--muted',
-        '.go-gallery [data-active="false"]',
-        '.go-index',
-        '.go-info-box-container',
-        '.go-label--sponsored',
-        '.go-media__affiliate-img',
-        '.go-media__credit',
-        '.go-pagination__list',
-        '.go-paywall',
-        '.go-teaser-block',
-        '.go-vh',
-        'div.toc',
-        'div[id*="adtile"]',
-        'figcaption',
-        'iframe',
-        'svg.lucide-icon',
-        '.go-external-link__icon',
-        '.go-external-link svg',
+            '#job-market',
+            '#seminars',
+            '.gbox_affiliate',
+            '.go-ad-slot',
+            '.go-affiliate-disclosure__trigger',
+            '.go-alink-list',
+            '.go-article-header__kicker',
+            '.go-article-header__series',
+            '.go-article-header__title',
+            '.go-button-bar',
+            '.go-disclaimer',
+            '.go-disclaimer--muted',
+            '.go-gallery [data-active="false"]',
+            '.go-index',
+            '.go-info-box-container',
+            '.go-label--sponsored',
+            '.go-media__affiliate-img',
+            '.go-media__credit',
+            '.go-pagination__list',
+            '.go-paywall',
+            '.go-teaser-block',
+            '.go-vh',
+            'div.toc',
+            'div[id*="adtile"]',
+            'figcaption',
+            'iframe',
+            'svg.lucide-icon',
+            '.go-external-link__icon',
+            '.go-external-link svg',
         ];
 
         foreach ($badSelectors as $selector) {
@@ -254,14 +275,14 @@ final class GolemBridge extends FeedExpander
             'table',
             'iframe',
             'video',
-            'img'
+            'img',
         ];
 
         $selectorString = implode(', ', $contentSelectors);
 
         foreach ($wrapper->querySelectorAll($selectorString) as $element) {
             $elementHtml = $dom->saveHtml($element);
-            if (str_contains($prevcontent, $elementHtml) === false) {
+            if (str_contains($prevContent, $elementHtml) === false) {
                 $item .= $elementHtml;
             }
         }

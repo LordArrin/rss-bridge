@@ -1,7 +1,5 @@
 ![RSS-Bridge](static/not_boring_logo_blank.png)
 
-# RSS-Bridge
-
 A modern fork of [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge) — latest PHP on Alpine, strict types, safe bridge loading, working proxies and hardened networking, with the legacy baggage removed.
 
 [![LICENSE](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
@@ -9,7 +7,7 @@ A modern fork of [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge) — late
 [![Docker Image](https://img.shields.io/badge/docker-lordarrin%2Frss--bridge-blue.svg?logo=docker)](https://github.com/LordArrin/rss-bridge/pkgs/container/rss-bridge)
 ![Build Status](https://github.com/LordArrin/rss-bridge/actions/workflows/build.yml/badge.svg)
 
-**📖 Documentation, configuration and guides: [lordarrin.github.io/rss-bridge](https://lordarrin.github.io/rss-bridge/)**
+**📖 Documentation, configuration and guides: [GitHub Pages](https://lordarrin.github.io/rss-bridge/)**
 
 ## Why this fork
 
@@ -39,7 +37,8 @@ services:
 docker compose up -d
 ```
 
-Open <http://localhost:3000/>. Drop a `*Bridge.php` into `./config/bridges-v2/` and restart to add a custom bridge. See the [documentation](https://lordarrin.github.io/rss-bridge/) for details.
+Open <http://localhost:3000/>. Drop a `*Bridge.php` into `./config/bridges-v2/` and restart to add a custom bridge. 
+See the [documentation](https://lordarrin.github.io/rss-bridge/) for details.
 
 ## Third-party components
 

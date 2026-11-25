@@ -38,6 +38,12 @@ final class GitHubReleaseBridge extends BridgeAbstract
             'type' => 'checkbox',
             'defaultValue' => false,
         ],
+        'downloads_filter' => [
+            'name' => 'Filter downloads',
+            'type' => 'text',
+            'title' => 'Comma-separated patterns (OR). + joins with AND, * is a wildcard, -prefix excludes. Empty shows all.',
+            'exampleValue' => '*.apk, -*.zip',
+        ],
         'limit' => [
             'name' => 'Posts limit',
             'type' => 'number',
@@ -77,6 +83,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
         $repo = (string) $this->getInput('repo');
         $includePrereleases = (bool) $this->getInput('pre_release');
         $hideAssets = (bool) $this->getInput('hide_assets');
+        $downloadsFilter = trim((string) $this->getInput('downloads_filter'));
         $limitInput = $this->getInput('limit');
         $limit = max(1, min(self::MAX_LIMIT, (int) ($limitInput !== null ? $limitInput : 10)));
 
@@ -100,7 +107,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
                 continue;
             }
 
-            $this->items[] = $this->buildReleaseItem($release, $owner, $repo, $hideAssets);
+            $this->items[] = $this->buildReleaseItem($release, $owner, $repo, $hideAssets, $downloadsFilter);
         }
 
         if ($this->items === []) {
@@ -173,7 +180,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
      * @param array<string, mixed> $release
      * @return array{title: string, uri: string, content: string, timestamp: int, author: string, uid: string, categories: list<string>}
      */
-    private function buildReleaseItem(array $release, string $owner, string $repo, bool $hideAssets): array
+    private function buildReleaseItem(array $release, string $owner, string $repo, bool $hideAssets, string $downloadsFilter): array
     {
         $name = $release['name'] ?? '';
         $tagName = $release['tag_name'] ?? '';
@@ -189,7 +196,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
         if ($hideAssets === false && isset($release['assets']) === true && is_array($release['assets']) === true) {
             $assets = array_values(array_filter($release['assets'], fn($v) => is_array($v)));
             if ($assets !== []) {
-                $assetsHtml = $this->buildAssetsBlock($assets);
+                $assetsHtml = $this->buildAssetsBlock($assets, $downloadsFilter);
                 if ($assetsHtml !== '') {
                     $content .= $assetsHtml;
                 }
@@ -216,7 +223,7 @@ final class GitHubReleaseBridge extends BridgeAbstract
     /**
      * @param list<array<string, mixed>> $assets
      */
-    private function buildAssetsBlock(array $assets): string
+    private function buildAssetsBlock(array $assets, string $downloadsFilter): string
     {
         $links = [];
 
@@ -225,6 +232,10 @@ final class GitHubReleaseBridge extends BridgeAbstract
             $name = (string) ($asset['name'] ?? '');
 
             if ($url === '' || $name === '') {
+                continue;
+            }
+
+            if ($this->passesFilter($name, $downloadsFilter) === false) {
                 continue;
             }
 
@@ -241,6 +252,15 @@ final class GitHubReleaseBridge extends BridgeAbstract
         }
 
         return '<h3>Downloads</h3><ul style="' . self::CSS['ul'] . '">' . implode('', $links) . '</ul>';
+    }
+
+    private function passesFilter(string $name, string $rules): bool
+    {
+        if ($rules === '') {
+            return true;
+        }
+
+        return matches_keyword_rules($name, $rules);
     }
 
     private function formatFileSize(int $bytes): string

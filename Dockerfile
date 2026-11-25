@@ -2,10 +2,10 @@ ARG ALPINE_VERSION=3.24
 
 # Versions
 ARG CURL_VERSION=2.3.2
-ARG NGINX_VERSION=1.31.5
+ARG NGINX_VERSION=1.31.6
 ARG OPENSSL_VERSION=4.1.0
 ARG PCRE_VERSION=10.49
-ARG MIMALLOC_VERSION=3.7.0
+ARG MIMALLOC_VERSION=3.7.1
 ARG ZLIB_NG_VERSION=2.3.3
 ARG LIBEVENT_VERSION=2.2.2-alpha
 ARG MEMCACHED_VERSION=1.6.45
@@ -904,7 +904,7 @@ RUN echo -n "${IMAGE_VERSION}" > /app/VERSION && \
 RUN find /app -type f \( -name '*.sh' -o -name '*.php' -o -path '*/bin/*' \) -exec sed -i 's/\r$//' {} +
 
 RUN sed -i "s/\"version\": \".*\"/\"version\": \"${IMAGE_VERSION}\"/" /app/composer.json && \
-    composer install --optimize-autoloader --no-interaction --classmap-authoritative && \
+    composer install --no-dev --optimize-autoloader --no-interaction --classmap-authoritative && \
     grep -q "${VERSION_PLACEHOLDER}" /app/documentation/pages/static/index.html && \
     sed -i "s/${VERSION_PLACEHOLDER}/${IMAGE_VERSION}/g" /app/documentation/pages/static/index.html && \
     chmod +x /app/bin/* && \

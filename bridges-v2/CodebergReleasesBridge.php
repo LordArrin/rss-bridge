@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use RSSBridge\Utils\Json;
 
 final class CodebergReleasesBridge extends BridgeAbstract
 {
@@ -49,7 +50,7 @@ final class CodebergReleasesBridge extends BridgeAbstract
             ],
             'downloads_filter' => [
                 'name' => 'Filter downloads',
-                'title' => 'Space, comma or newline separated patterns. Supports * and ? wildcards. Leave empty to show all.',
+                'title' => 'Comma-separated patterns (OR). + joins with AND, * is a wildcard, -prefix excludes. Empty shows all.',
                 'type' => 'text',
                 'exampleValue' => '*Windows_64*.msi, *i386_trixie_*.deb',
                 'required' => false,
@@ -84,7 +85,7 @@ final class CodebergReleasesBridge extends BridgeAbstract
             default => 'inline',
         };
 
-        $downloadsFilter = $this->parseFilter((string) $this->getInput('downloads_filter'));
+        $downloadsFilter = trim((string) $this->getInput('downloads_filter'));
 
         for ($page = 1; $page <= self::MAX_PAGES && count($this->items) < $limit; ++$page) {
             $url = sprintf(
@@ -160,9 +161,7 @@ final class CodebergReleasesBridge extends BridgeAbstract
     private function validateSlug(string $value): void
     {
         if (preg_match('/^[A-Za-z0-9_.-]+$/', $value) === 0) {
-            throw new \InvalidArgumentException(
-                'Owner and repository may contain letters, digits, dot, dash and underscore only.'
-            );
+            throwClientException('Owner and repository may contain letters, digits, dot, dash and underscore only.');
         }
     }
 
@@ -172,67 +171,33 @@ final class CodebergReleasesBridge extends BridgeAbstract
     private function fetchJson(string $url): array
     {
         $headers = ['Accept: application/json', 'User-Agent: RSS-Bridge CodebergReleasesBridge'];
-        $data = json_decode((string) getContents($url, $headers), true, 512, JSON_THROW_ON_ERROR);
-
-        if (is_array($data) === true && array_is_list($data) === true) {
-            return $data;
+        $body = (string) getContents($url, $headers);
+        $trimmed = ltrim($body);
+        if ($trimmed === '' || (str_starts_with($trimmed, '[') === false && str_starts_with($trimmed, '{') === false)) {
+            throwServerException('Codeberg API returned a non-JSON response (anti-bot challenge or incorrect URL). Verify the repository and that the instance is reachable.');
         }
-
-        throw new \RuntimeException('Codeberg API returned an unexpected response.');
+        $data = Json::decode($body);
+        if (is_array($data) === false || array_is_list($data) === false) {
+            throwServerException('Codeberg API returned an unexpected response.');
+        }
+        /** @var list<array<string, mixed>> $data */
+        return $data;
     }
 
-    /**
-     * @return list<string>
-     */
-    private function parseFilter(string $input): array
+    private function passesFilter(string $name, string $rules): bool
     {
-        if ($input === '') {
-            return [];
-        }
-
-        $parts = preg_split('/[\s,]+/', $input, -1, PREG_SPLIT_NO_EMPTY);
-
-        if ($parts === false) {
-            return [];
-        }
-
-        $result = [];
-
-        foreach ($parts as $part) {
-            $trimmed = trim($part);
-
-            if ($trimmed !== '') {
-                $result[] = $trimmed;
-            }
-        }
-
-        return $result;
-    }
-
-    /**
-     * @param list<string> $filter
-     */
-    private function matchesFilter(string $name, array $filter): bool
-    {
-        if ($filter === []) {
+        if ($rules === '') {
             return true;
         }
 
-        foreach ($filter as $pattern) {
-            if (fnmatch($pattern, $name, FNM_CASEFOLD) === true) {
-                return true;
-            }
-        }
-
-        return false;
+        return matches_keyword_rules($name, $rules);
     }
 
     /**
      * @param array<string, mixed> $release
-     * @param list<string> $downloadsFilter
      * @return array<string, mixed>
      */
-    private function buildItem(array $release, string $owner, string $repo, string $downloadsMode, array $downloadsFilter): array
+    private function buildItem(array $release, string $owner, string $repo, string $downloadsMode, string $downloadsFilter): array
     {
         $tag = (string) ($release['tag_name'] ?? '');
         $name = trim((string) ($release['name'] ?? ''));
@@ -269,7 +234,7 @@ final class CodebergReleasesBridge extends BridgeAbstract
 
         $content = $this->buildContent($release, $downloadsMode, $downloadsFilter);
         if ($content === '') {
-            $content = $this->escape($title);
+            $content = e($title);
         }
 
         $enclosures = [];
@@ -304,10 +269,9 @@ final class CodebergReleasesBridge extends BridgeAbstract
 
     /**
      * @param array<string, mixed> $release
-     * @param list<string> $downloadsFilter
      * @return list<string>
      */
-    private function extractEnclosures(array $release, array $downloadsFilter): array
+    private function extractEnclosures(array $release, string $downloadsFilter): array
     {
         $assets = array_filter((array) ($release['assets'] ?? []), is_array(...));
         $urls = [];
@@ -327,7 +291,7 @@ final class CodebergReleasesBridge extends BridgeAbstract
                 $nameForFilter = is_string($path) === true ? basename($path) : '';
             }
 
-            if ($this->matchesFilter($nameForFilter, $downloadsFilter) === true) {
+            if ($this->passesFilter($nameForFilter, $downloadsFilter) === true) {
                 $urls[] = $assetUrl;
             }
         }
@@ -337,9 +301,8 @@ final class CodebergReleasesBridge extends BridgeAbstract
 
     /**
      * @param array<string, mixed> $release
-     * @param list<string> $downloadsFilter
      */
-    private function buildContent(array $release, string $downloadsMode, array $downloadsFilter): string
+    private function buildContent(array $release, string $downloadsMode, string $downloadsFilter): string
     {
         $content = '';
 
@@ -388,9 +351,8 @@ final class CodebergReleasesBridge extends BridgeAbstract
 
     /**
      * @param array<string, mixed> $release
-     * @param list<string> $downloadsFilter
      */
-    private function buildDownloadsHtml(array $release, array $downloadsFilter): string
+    private function buildDownloadsHtml(array $release, string $downloadsFilter): string
     {
         $items = [];
 
@@ -412,7 +374,7 @@ final class CodebergReleasesBridge extends BridgeAbstract
                 $name = is_string($path) === true ? basename($path) : '';
             }
 
-            if ($this->matchesFilter($name, $downloadsFilter) === false) {
+            if ($this->passesFilter($name, $downloadsFilter) === false) {
                 continue;
             }
 
@@ -428,9 +390,9 @@ final class CodebergReleasesBridge extends BridgeAbstract
 
             $items[] = sprintf(
                 '<li><a href="%s">%s</a>%s</li>',
-                $this->escape($url),
-                $this->escape($name !== '' ? $name : 'download'),
-                $meta !== [] ? ' <small>(' . $this->escape(implode(', ', $meta)) . ')</small>' : ''
+                e($url),
+                e($name !== '' ? $name : 'download'),
+                $meta !== [] ? ' <small>(' . e(implode(', ', $meta)) . ')</small>' : ''
             );
         }
 
@@ -461,10 +423,5 @@ final class CodebergReleasesBridge extends BridgeAbstract
             number_format($value, $decimals, '.', ''),
             $units[$index]
         );
-    }
-
-    private function escape(string $value): string
-    {
-        return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 }

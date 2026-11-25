@@ -10,7 +10,6 @@
             "RSSBridge\\Caches\\": "caches/",
             "RSSBridge\\Formats\\": "formats/",
             "RSSBridge\\Middlewares\\": "middlewares/",
-            "RSSBridge\\PHPStan\\Rules\\": "rules/",
             "RSSBridge\\Proxies\\": "proxies/"
         },
         "classmap": [
@@ -53,6 +52,11 @@
             "quirks/unicode.php",
             "quirks/video_embed.php"
         ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "RSSBridge\\PHPStan\\Rules\\": "rules/"
+        }
     },
     "require": {
         "php": ">=8.5",

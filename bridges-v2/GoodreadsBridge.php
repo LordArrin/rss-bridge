@@ -28,32 +28,32 @@ final class GoodreadsBridge extends BridgeAbstract
                 'required' => true,
                 'title' => 'Should look somewhat like goodreads.com/author/show/',
                 'pattern' => '^(https:\/\/)?(www.)?goodreads\.com\/author\/show\/\d+\..*$',
-                'exampleValue' => 'https://www.goodreads.com/author/show/38550.Brandon_Sanderson'
+                'exampleValue' => 'https://www.goodreads.com/author/show/38550.Brandon_Sanderson',
             ],
             'published_only' => [
                 'name' => 'Show published books only',
                 'type' => 'checkbox',
                 'required' => false,
                 'title' => 'If left unchecked, this will return unpublished books as well',
-                'defaultValue' => 'checked',
+                'defaultValue' => true,
             ],
         ],
     ];
 
     private function collectAuthorBooks(string $url): void
     {
-        $regex = '/goodreads\.com\/author\/show\/(\d+)/';
+        $regex = '/goodreads\.com\/author\/show\/(\d+[^\/?#]*)/';
 
         if (preg_match($regex, $url, $matches) !== 1) {
             throwClientException('Invalid author URL format');
         }
 
-        $authorId = $matches[1];
-        $authorListUrl = 'https://www.goodreads.com/author/list/' . $authorId . '?sort=original_publication_year';
+        $authorSlug = $matches[1];
+        $authorListUrl = 'https://www.goodreads.com/author/list/' . $authorSlug . '?sort=original_publication_year';
 
         $html = getContents($authorListUrl);
 
-        if (is_string($html) === false || $html === '') {
+        if ($html === '') {
             throwServerException('Empty response from Goodreads author page');
         }
 
@@ -61,14 +61,10 @@ final class GoodreadsBridge extends BridgeAbstract
 
         $rows = $dom->querySelectorAll('tr[itemtype="http://schema.org/Book"]');
 
-        $publishedOnly = (bool)$this->getInput('published_only');
+        $publishedOnly = (bool) $this->getInput('published_only');
         $now = time();
 
         foreach ($rows as $row) {
-            if ($row instanceof \Dom\Element === false) {
-                continue;
-            }
-
             $dateSpan = $row->querySelector('.uitext');
             $dateSpanText = ($dateSpan !== null) ? ($dateSpan->textContent ?? '') : '';
             $date = null;
