@@ -6,6 +6,8 @@ namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
 
+use function urljoin;
+
 final class FimfictionBridge extends BridgeAbstract
 {
     public const MAINTAINER = 'LordArrin';
@@ -16,6 +18,9 @@ final class FimfictionBridge extends BridgeAbstract
 
     private const MAX_RETRIES = 5;
     private const RETRY_DELAY_US = 1500000;
+    private const IMAGE_CACHE_TTL = 604800;
+    private const IMAGE_MAX_SIZE = 2097152;
+    private const CAMO_HOST = 'camo.fimfiction.net';
 
     public const CONFIGURATION = [
         'session_token' => ['required' => false],
@@ -261,7 +266,13 @@ final class FimfictionBridge extends BridgeAbstract
         }
 
         $img = $container->querySelector('img');
-        return $img !== null ? $img->getAttribute('src') : null;
+        $src = $img !== null ? $img->getAttribute('src') : null;
+        if ($src === null || $src === '') {
+            return null;
+        }
+
+        $absolute = urljoin(self::URI, $src);
+        return $this->decodeCamoUrl($absolute) ?? $absolute;
     }
 
     /**
@@ -348,6 +359,7 @@ final class FimfictionBridge extends BridgeAbstract
             $bodyHtml = $body->innerHTML;
             $bodyHtml = $this->sanitizeContent($bodyHtml);
             $bodyHtml = $this->styleSceneBreaks($bodyHtml);
+            $bodyHtml = $this->embedImages($bodyHtml, $uri);
             $content .= $bodyHtml;
         } else {
             $content .= '<p style="' . self::CSS['error'] . '">Chapter content could not be loaded.</p>';
@@ -362,6 +374,97 @@ final class FimfictionBridge extends BridgeAbstract
     {
         $safeUri = htmlspecialchars($uri, ENT_QUOTES, 'UTF-8');
         return '<div style="' . self::CSS['wrapper'] . '"><p style="' . self::CSS['chapter-link'] . '">New chapter published - <a href="' . $safeUri . '">read full</a></p></div>';
+    }
+
+    private function embedImages(string $html, string $baseUrl): string
+    {
+        $fragment = parseHtmlFragment($html);
+        if ($fragment === null) {
+            return $html;
+        }
+
+        $wrapper = $fragment->querySelector('#rss-bridge-temp-wrapper');
+        if ($wrapper === null) {
+            return $html;
+        }
+
+        $changed = false;
+
+        foreach ($wrapper->querySelectorAll('img[src]') as $img) {
+            $src = $img->getAttribute('src');
+            if ($src === null || $src === '' || str_starts_with($src, 'data:') === true) {
+                continue;
+            }
+
+            $absolute = urljoin($baseUrl, $src);
+            $resolved = $this->resolveImageUrl($absolute);
+
+            $embedded = media_embed_url_to_data_uri(
+                $resolved['url'],
+                $this->cache,
+                self::IMAGE_CACHE_TTL,
+                self::IMAGE_MAX_SIZE,
+                $resolved['proxy'],
+                $this->logger,
+                2
+            );
+
+            if ($embedded !== '' && $embedded !== $resolved['url']) {
+                $img->setAttribute('src', $embedded);
+                $changed = true;
+            } elseif ($resolved['url'] !== $absolute) {
+                $img->setAttribute('src', $resolved['url']);
+                $changed = true;
+            }
+        }
+
+        return $changed === true ? $wrapper->innerHTML : $html;
+    }
+
+    /**
+     * @return array{url: string, proxy: string|null}
+     */
+    private function resolveImageUrl(string $url): array
+    {
+        $decoded = $this->decodeCamoUrl($url);
+        if ($decoded !== null) {
+            return ['url' => $decoded, 'proxy' => null];
+        }
+
+        $host = parse_url($url, PHP_URL_HOST);
+        if (is_string($host) === true && strtolower($host) === self::CAMO_HOST) {
+            return ['url' => $url, 'proxy' => $this->proxyProfile];
+        }
+
+        return ['url' => $url, 'proxy' => null];
+    }
+
+    private function decodeCamoUrl(string $url): ?string
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+        if (is_string($host) === false || strtolower($host) !== self::CAMO_HOST) {
+            return null;
+        }
+
+        $query = parse_url($url, PHP_URL_QUERY);
+        if (is_string($query) === false || $query === '') {
+            return null;
+        }
+
+        $params = [];
+        parse_str($query, $params);
+        $original = $params['url'] ?? null;
+        if (is_string($original) === false || $original === '') {
+            return null;
+        }
+
+        $scheme = parse_url($original, PHP_URL_SCHEME);
+        $originalHost = parse_url($original, PHP_URL_HOST);
+        if (is_string($originalHost) === false || $originalHost === '' || in_array($scheme, ['http', 'https'], true) === false) {
+            return null;
+        }
+
+        return $original;
     }
 
     private function sanitizeContent(string $content): string

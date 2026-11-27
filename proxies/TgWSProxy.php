@@ -11,32 +11,18 @@ final class TgWSProxy extends ProxyAbstract
 {
     private const MAX_BUDGET_SECONDS = 45;
 
-    /**
-     * Binary downloads may run longer than page fetches; the ceiling is the
-     * hard FPM budget (see feedDeadline()). This lock TTL must stay above the
-     * longest possible single-flight fetch so a slow download does not outlive
-     * its own lease and trigger a duplicate fetch.
-     */
     private const BINARY_LOCK_TTL = 150;
     private const BINARY_FLIGHT_WAIT_MS = 2000;
     private const BINARY_FLIGHT_POLL_MS = 100;
 
-    /**
-     * Stall detection for binary transfers: abort only when the stream is
-     * genuinely dead (below the speed floor for the whole window), not when a
-     * large file is simply slow. A hard CURLOPT_TIMEOUT would kill big media.
-     */
     private const DEFAULT_LOW_SPEED_LIMIT = 16384;
     private const DEFAULT_LOW_SPEED_TIME = 15;
 
-    /**
-     * Options that describe the transport contract, not the identity of the
-     * cached resource. Excluded from the cache key so callers with different
-     * size limits / timeouts / TTLs still share one cached blob.
-     */
     private const NON_IDENTITY_OPTIONS = ['cache_ttl', 'use_cache', 'timeout', 'max_size'];
 
     private const CURL_MAX_ERRNO = 98;
+
+    private const CURLE_PROXY = 97;
 
     private const CONNECTION_ERRNOS = [
         \CURLE_COULDNT_CONNECT,
@@ -52,17 +38,21 @@ final class TgWSProxy extends ProxyAbstract
 
     private const RETRYABLE_HTTP_CODES = [429, 500, 502, 503, 504];
 
+    private const RETRYABLE_SOCKS_REPLIES = [1, 4];
+
     private ?string $proxyUrl = null;
 
     private ?\CurlHandle $handle = null;
 
     private const FATAL_ERROR_PATTERNS = [
-        'port restricted',
-        'port 443',
-        'host unreachable',
-        'command unsupported',
-        'authentication failed',
-        'access denied',
+        'no authentication method was acceptable',
+        'user was rejected by the socks5 server',
+        'socks5 reply has wrong version',
+        'socks5 reply has wrong address type',
+        'undocumented socks5 mode',
+        'the destination hostname is too long',
+        'excessive username length',
+        'excessive password length',
         'size limit exceeded',
     ];
 
@@ -86,6 +76,16 @@ final class TgWSProxy extends ProxyAbstract
     {
         $socksUrl = $this->config['socks_url'] ?? null;
         $this->proxyUrl = is_string($socksUrl) === true && $socksUrl !== '' ? $socksUrl : null;
+
+        if ($this->proxyUrl !== null) {
+            $scheme = strtolower(self::toString(parse_url($this->proxyUrl, PHP_URL_SCHEME)));
+            if (in_array($scheme, ['socks5', 'socks5h'], true) === false) {
+                $this->log('warning', sprintf(
+                    'TgWSProxy socks_url scheme "%s" is not socks5/socks5h; SOCKS5 with remote DNS will be forced',
+                    $scheme
+                ));
+            }
+        }
 
         if (isset($this->config['connect_timeout']) === false) {
             $this->config['connect_timeout'] = 5;
@@ -123,9 +123,6 @@ final class TgWSProxy extends ProxyAbstract
     }
 
     /**
-     * Build a cache key from the resource identity only. Transport options
-     * (size limit, timeout, TTL, cache toggle) must not fragment the cache.
-     *
      * @param array<string, mixed> $options
      */
     protected function buildCacheKey(string $url, array $options): string
@@ -136,11 +133,6 @@ final class TgWSProxy extends ProxyAbstract
         return 'proxy_' . md5($url . serialize($options));
     }
 
-    /**
-     * Clamp a local deadline to the hard FPM budget when a feed budget is
-     * active, so a proxy fetch can never outlive the worker and end in a
-     * SIGTERM 502. Outside a feed request (CLI) the local deadline stands.
-     */
     private function applyFeedDeadline(float $deadline): float
     {
         if (FeedDeadline::started() === true) {
@@ -347,10 +339,6 @@ final class TgWSProxy extends ProxyAbstract
     }
 
     /**
-     * Direct binary fallback through the canonical HTTP client (SSRF checks,
-     * redirects, retries). Used only when fallback_direct is enabled; for a
-     * blocked host this is expected to fail and should be disabled in config.
-     *
      * @param array<string, mixed> $options
      * @return array{body: string, type: string}
      */
@@ -529,9 +517,6 @@ final class TgWSProxy extends ProxyAbstract
     }
 
     /**
-     * Binary fetch with single-flight locking, stale-while-revalidate fallback,
-     * stall-based timeouts and a mid-transfer size guard.
-     *
      * @param array<string, mixed> $options
      * @return array{body: string, type: string}
      */
@@ -612,8 +597,6 @@ final class TgWSProxy extends ProxyAbstract
     }
 
     /**
-     * Wait for a concurrent single-flight fetch to publish a fresh binary.
-     *
      * @return array{body: string, type: string}|null
      */
     private function waitForFreshBinary(string $cacheKey): ?array
@@ -679,8 +662,6 @@ final class TgWSProxy extends ProxyAbstract
                 };
 
                 $effConnect = max(1, min($connectTimeout, (int) floor($remaining)));
-                // Ceiling for the whole transfer; liveness is enforced by the
-                // low-speed watchdog below so slow-but-alive large media survive.
                 $effRequest = max(1, (int) floor($remaining));
 
                 assert($url !== '');
@@ -834,6 +815,11 @@ final class TgWSProxy extends ProxyAbstract
         }
 
         $errno = $e->getCode();
+
+        if ($errno === self::CURLE_PROXY) {
+            return $this->isRetryableProxyError($errorMsg);
+        }
+
         if ($errno > 0 && $errno <= self::CURL_MAX_ERRNO) {
             return in_array($errno, self::CONNECTION_ERRNOS, true) === true;
         }
@@ -849,6 +835,22 @@ final class TgWSProxy extends ProxyAbstract
         }
 
         return false;
+    }
+
+    private function isRetryableProxyError(string $message): bool
+    {
+        if (
+            str_contains($message, 'no authentication method was acceptable') === true
+            || str_contains($message, 'user was rejected by the socks5 server') === true
+        ) {
+            return false;
+        }
+
+        if (preg_match('/socks5 connection to .*\((\d+)\)/', $message, $m) === 1) {
+            return in_array((int) $m[1], self::RETRYABLE_SOCKS_REPLIES, true) === true;
+        }
+
+        return true;
     }
 
     private function isConnectionThrowable(\Throwable $e): bool
