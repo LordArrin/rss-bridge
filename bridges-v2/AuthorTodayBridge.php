@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RSSBridge\Bridges;
 
 use RSSBridge\BridgeAbstract;
+use RSSBridge\Utils\Json;
 
 final class AuthorTodayBridge extends BridgeAbstract
 {
@@ -13,6 +14,13 @@ final class AuthorTodayBridge extends BridgeAbstract
     public const DESCRIPTION = 'Returns updates for stories by chapter';
     public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 900;
+
+    public const CONFIGURATION = [
+        'login_cookie' => ['required' => false],
+        'trusted_token' => ['required' => false],
+        'ng_login_cookie' => ['required' => false],
+        'user_id' => ['required' => false],
+    ];
 
     public const PARAMETERS = [
         '' => [
@@ -28,6 +36,19 @@ final class AuthorTodayBridge extends BridgeAbstract
                 'required' => false,
                 'defaultValue' => 'checked',
             ],
+            'fulltext' => [
+                'name' => 'Fetch full chapters',
+                'type' => 'checkbox',
+                'required' => false,
+                'title' => 'Feed contains only full chapter texts instead of previews. Paid chapters are skipped.',
+            ],
+            'fullcount' => [
+                'name' => 'Chapters with full text (max 3)',
+                'type' => 'number',
+                'required' => false,
+                'defaultValue' => 3,
+                'title' => 'Used only when Fetch full chapters is enabled. Paid ones are remembered for a day.',
+            ],
         ],
     ];
 
@@ -41,12 +62,38 @@ final class AuthorTodayBridge extends BridgeAbstract
         'meta' => 'white-space:nowrap',
         'separator' => 'color:#999999',
         'cover' => 'display:block;max-width:300px;height:auto;border-radius:4px',
+        'text' => 'font-size:16px;line-height:1.7;word-wrap:break-word',
+        'para' => 'margin:0 0 10px 0;text-indent:0',
+        'notice' => 'margin:12px 0 0 0;padding:8px 12px;border-left:3px solid #777777',
+        'figure' => 'text-align:left;margin:12px 0',
+        'img' => 'display:block;float:none;max-width:100%;height:auto;margin:8px 0',
+        'imglink' => 'display:block',
+        'code' => 'white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word;margin:8px 0;padding:8px;font-family:monospace;font-size:13px',
     ];
 
     private const ITEM_LIMIT = 5;
+    private const FULL_TEXT_LIMIT = 3;
+    private const MAX_CHAPTER_REQUESTS = 8;
+    private const CHAPTER_CACHE_TTL = 604800;
+    private const PAID_CACHE_TTL = 86400;
+    private const MIN_DELAY_US = 1000000;
+    private const MAX_DELAY_US = 3000000;
     private const FOOTER_SEARCH_DEPTH = 8;
+    private const ADULT_COOKIE = 'AdultUser=true';
+    private const COLOR_STYLE_PATTERN = '/(?<![-\w])(?:color|background|background-color)\s*:[^;"\']*(?:;|$)/i';
+    private const CHAPTER_TAG_PATTERN = '/<(p|br|div|span|em|strong|i|b|img|hr|pre|ul|ol|li|blockquote|h[1-6])\b/i';
+    private const MOJIBAKE_PATTERN = '/[\x{0460}-\x{04FF}\x{A640}-\x{A69F}]/u';
+
+    private const AUTH_COOKIES = [
+        'login_cookie' => 'LoginCookie',
+        'trusted_token' => 'TrustedToken',
+        'ng_login_cookie' => 'ngLoginCookie',
+    ];
 
     private string $feedTitle = '';
+    private string $userId = '';
+    private bool $hasAuthCookies = false;
+    private int $chapterRequests = 0;
 
     public function getURI(): string
     {
@@ -77,8 +124,12 @@ final class AuthorTodayBridge extends BridgeAbstract
             throwClientException('Story ID must be a number or a URL containing /work/{id}');
         }
 
+        $this->hasAuthCookies = $this->configuredCookieNames() !== [];
+        $this->logAuthState();
+
         $html = $this->loadPage($workId);
         $this->feedTitle = $this->extractFeedTitle($html);
+        $this->userId = $this->extractUserId($html);
         $items = $this->parseChapters($html);
 
         if ($items === []) {
@@ -88,10 +139,104 @@ final class AuthorTodayBridge extends BridgeAbstract
         $this->addSortedItems($items);
     }
 
+    /**
+     * @return list<string>
+     */
+    private function configuredCookieNames(): array
+    {
+        $names = [];
+
+        foreach (self::AUTH_COOKIES as $option => $name) {
+            if ($this->cookieValue($option, $name) !== '') {
+                $names[] = $name;
+            }
+        }
+
+        return $names;
+    }
+
+    private function logAuthState(): void
+    {
+        $names = $this->configuredCookieNames();
+
+        if ($names === []) {
+            $this->logger?->info('AuthorTodayBridge: no auth cookies configured, running anonymously');
+
+            return;
+        }
+
+        $this->logger?->info('AuthorTodayBridge: auth cookies configured: ' . implode(', ', $names));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function requestHeaders(string $referer): array
+    {
+        return ['Referer: ' . $referer, 'Cookie: ' . $this->cookieHeader()];
+    }
+
+    private function cookieHeader(): string
+    {
+        $parts = [];
+
+        foreach (self::AUTH_COOKIES as $option => $name) {
+            $value = $this->cookieValue($option, $name);
+
+            if ($value !== '') {
+                $parts[] = $name . '=' . $value;
+            }
+        }
+
+        $parts[] = self::ADULT_COOKIE;
+
+        return implode('; ', $parts);
+    }
+
+    private function cookieValue(string $option, string $name): string
+    {
+        $value = trim((string)$this->getOption($option));
+
+        if (stripos($value, $name . '=') === 0) {
+            $value = substr($value, strlen($name) + 1);
+        }
+
+        $value = (string)preg_replace(pattern: '/[\r\n;\s]+/', replacement: '', subject: $value);
+
+        return trim($value, '"\'');
+    }
+
+    private function extractUserId(\Dom\HTMLDocument $html): string
+    {
+        $configured = trim((string)$this->getOption('user_id'));
+
+        if ($configured !== '' && ctype_digit($configured) === true) {
+            $this->logger?->info('AuthorTodayBridge: using user_id from configuration: ' . $configured);
+
+            return $configured;
+        }
+
+        $source = $html->saveHtml();
+
+        if (preg_match(pattern: '/userId\s*:\s*(\d+)/', subject: $source, matches: $matches) === 1) {
+            $this->logger?->info('AuthorTodayBridge: user_id detected on the work page: ' . $matches[1]);
+
+            return $matches[1];
+        }
+
+        if ($this->hasAuthCookies === true) {
+            $this->logger?->warning('AuthorTodayBridge: auth cookies are set but the page reports no user_id - the session is probably expired');
+        } else {
+            $this->logger?->info('AuthorTodayBridge: no user_id on the page, anonymous session');
+        }
+
+        return '';
+    }
+
     private function loadPage(string $workId): \Dom\HTMLDocument
     {
         $url = self::URI . '/work/' . $workId;
-        $html = getContents($url);
+        $html = getContents($url, $this->requestHeaders(self::URI . '/'));
 
         if ($html === '') {
             throwServerException("Unable to load page: {$url}");
@@ -205,10 +350,354 @@ final class AuthorTodayBridge extends BridgeAbstract
             return $timeComparison !== 0 ? $timeComparison : $a['_position'] <=> $b['_position'];
         });
 
+        if ($this->getInput('fulltext') === true) {
+            $this->addFullTextItems($items);
+
+            return;
+        }
+
         foreach (array_slice($items, 0, self::ITEM_LIMIT) as $item) {
             unset($item['_position']);
             $this->items[] = $item;
         }
+    }
+
+    /**
+     * @param list<array{uri: string, title: string, uid: string, content: string, _position: int, timestamp?: int, author?: string, categories?: list<string>}> $items
+     */
+    private function addFullTextItems(array $items): void
+    {
+        $count = (int)($this->getInput('fullcount') ?? self::FULL_TEXT_LIMIT);
+
+        if ($count === 0) {
+            $count = self::FULL_TEXT_LIMIT;
+        }
+
+        $count = max(1, min(self::FULL_TEXT_LIMIT, $count));
+
+        foreach ($items as $item) {
+            if (count($this->items) >= $count || $this->chapterRequests >= self::MAX_CHAPTER_REQUESTS) {
+                break;
+            }
+
+            if (preg_match(pattern: '#/reader/(\d+)/(\d+)#', subject: $item['uri'], matches: $matches) !== 1) {
+                continue;
+            }
+
+            $result = $this->chapterText($matches[1], $matches[2]);
+
+            if ($result['full'] !== true) {
+                $this->logger?->info('AuthorTodayBridge: chapter ' . $matches[2] . ' is not readable, skipped');
+
+                continue;
+            }
+
+            unset($item['_position']);
+            $item['content'] = $result['html'];
+            $this->items[] = $item;
+        }
+
+        if ($this->items === []) {
+            throwServerException('No freely readable chapters found. Paid chapters are re-checked once a day.');
+        }
+    }
+
+    /**
+     * @return array{html: string, full: bool}
+     */
+    private function chapterText(string $workId, string $chapterId): array
+    {
+        $identity = $this->userId !== '' ? $this->userId : 'anon';
+        $cacheKey = 'chapter_v2_' . $workId . '_' . $chapterId . '_' . $identity;
+        $cached = $this->cachedChapter($this->loadCacheValue($cacheKey));
+
+        if ($cached !== null) {
+            $this->logger?->debug('AuthorTodayBridge: chapter ' . $chapterId . ' served from cache (' . $identity . ')');
+
+            return $cached;
+        }
+
+        $this->chapterRequests++;
+        usleep(random_int(self::MIN_DELAY_US, self::MAX_DELAY_US));
+
+        $url = self::URI . '/reader/' . $workId . '/chapter?id=' . $chapterId;
+        $referer = self::URI . '/reader/' . $workId . '/' . $chapterId;
+        $response = getContents($url, $this->requestHeaders($referer), [], true);
+        $data = Json::decode($response->getBody());
+
+        if (is_array($data) === false) {
+            throwServerException('Author.Today returned an unexpected chapter response');
+        }
+
+        if (($data['isSuccessful'] ?? false) !== true) {
+            $messages = $data['messages'] ?? [];
+            $reason = is_array($messages) === true && isset($messages[0]) === true && is_string($messages[0]) === true ? $messages[0] : '';
+            $this->logger?->info('AuthorTodayBridge: chapter ' . $chapterId . ' rejected by the site: ' . ($reason !== '' ? $reason : 'unknown reason'));
+
+            return $this->rememberChapter($cacheKey, ['html' => $this->noticeHtml($reason), 'full' => false]);
+        }
+
+        $payload = $data['data'] ?? null;
+        $encoded = is_array($payload) === true ? ($payload['text'] ?? null) : null;
+
+        if (is_string($encoded) === false || $encoded === '') {
+            return $this->rememberChapter($cacheKey, ['html' => $this->noticeHtml('Empty'), 'full' => false]);
+        }
+
+        $secret = $response->getHeader('Reader-Secret');
+
+        if (is_string($secret) === false || $secret === '') {
+            throwServerException('Author.Today did not return the Reader-Secret header');
+        }
+
+        $text = $this->decodeChapter($encoded, $secret, $chapterId);
+        $html = $this->sanitizeChapter($text);
+
+        if ($html === '') {
+            return $this->rememberChapter($cacheKey, ['html' => $this->noticeHtml('Empty'), 'full' => false]);
+        }
+
+        return $this->rememberChapter($cacheKey, ['html' => $html, 'full' => true]);
+    }
+
+    /**
+     * @return array{html: string, full: bool}|null
+     */
+    private function cachedChapter(mixed $cached): ?array
+    {
+        if (is_array($cached) === false) {
+            return null;
+        }
+
+        $html = $cached['html'] ?? null;
+        $full = $cached['full'] ?? null;
+
+        if (is_string($html) === false || $html === '' || is_bool($full) === false) {
+            return null;
+        }
+
+        return ['html' => $html, 'full' => $full];
+    }
+
+    /**
+     * @param array{html: string, full: bool} $result
+     * @return array{html: string, full: bool}
+     */
+    private function rememberChapter(string $cacheKey, array $result): array
+    {
+        $ttl = $result['full'] === true ? self::CHAPTER_CACHE_TTL : self::PAID_CACHE_TTL;
+        $this->saveCacheValue($cacheKey, $result, $ttl);
+
+        return $result;
+    }
+
+    private function noticeHtml(string $reason): string
+    {
+        $label = match ($reason) {
+            'Paid' => 'This chapter is paid and is not available for free reading yet.',
+            'Unauthorized' => 'This chapter requires signing in.',
+            'Suspended' => 'This work is suspended by the site.',
+            'Unadulted' => 'This chapter is marked 18+ and requires age confirmation on the site.',
+            'Empty' => 'The chapter text is empty.',
+            default => 'The chapter is not available for free reading.',
+        };
+
+        $noticeStyle = self::CSS['notice'];
+        $escapedLabel = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
+
+        return "<p style=\"{$noticeStyle}\">{$escapedLabel}</p>";
+    }
+
+    private function decodeChapter(string $encoded, string $secret, string $chapterId): string
+    {
+        $prefix = strrev($secret) . '@_@';
+        $candidates = [[$this->userId !== '' ? 'account' : 'anonymous', $prefix . $this->userId]];
+
+        if ($this->userId !== '') {
+            $candidates[] = ['anonymous', $prefix];
+        }
+
+        foreach ($candidates as $candidate) {
+            $text = $this->xorDecode($encoded, $candidate[1]);
+
+            if ($this->looksLikeChapter($text) === false) {
+                continue;
+            }
+
+            $this->logDecodeMode($candidate[0], $chapterId);
+
+            return $text;
+        }
+
+        $this->logger?->error('AuthorTodayBridge: chapter ' . $chapterId . ' could not be decoded with any key');
+
+        throwServerException('Failed to decode the chapter text. When auth cookies are used, set user_id in the bridge configuration.');
+    }
+
+    private function logDecodeMode(string $mode, string $chapterId): void
+    {
+        if ($mode === 'account') {
+            $this->logger?->info('AuthorTodayBridge: chapter ' . $chapterId . ' decoded with the account key (user_id ' . $this->userId . ')');
+
+            return;
+        }
+
+        if ($this->hasAuthCookies === true) {
+            $this->logger?->warning('AuthorTodayBridge: chapter ' . $chapterId . ' fell back to the anonymous key - auth cookies did not take effect');
+
+            return;
+        }
+
+        $this->logger?->info('AuthorTodayBridge: chapter ' . $chapterId . ' decoded with the anonymous key');
+    }
+
+    private function looksLikeChapter(string $html): bool
+    {
+        if (preg_match(pattern: self::CHAPTER_TAG_PATTERN, subject: $html) !== 1) {
+            return false;
+        }
+
+        if (preg_match('//u', $html) !== 1) {
+            return false;
+        }
+
+        return preg_match(pattern: self::MOJIBAKE_PATTERN, subject: $html) === 0;
+    }
+
+    private function xorDecode(string $text, string $key): string
+    {
+        $units = unpack('v*', mb_convert_encoding($text, 'UTF-16LE', 'UTF-8'));
+        $keyUnits = unpack('v*', mb_convert_encoding($key, 'UTF-16LE', 'UTF-8'));
+
+        if ($units === false || $keyUnits === false) {
+            return '';
+        }
+
+        $keyUnits = array_values($keyUnits);
+        $keyLength = count($keyUnits);
+
+        if ($keyLength === 0) {
+            return '';
+        }
+
+        $decoded = [];
+        $index = 0;
+
+        foreach ($units as $unit) {
+            $decoded[] = $unit ^ $keyUnits[$index % $keyLength];
+            $index++;
+        }
+
+        $result = mb_convert_encoding(pack('v*', ...$decoded), 'UTF-8', 'UTF-16LE');
+
+        return is_string($result) === true ? $result : '';
+    }
+
+    private function sanitizeChapter(string $html): string
+    {
+        $html = (string)preg_replace(pattern: self::COLOR_STYLE_PATTERN, replacement: '', subject: $html);
+
+        $fragment = parseHtmlFragment($html);
+
+        if ($fragment === null) {
+            return break_annoying_html_tags($html);
+        }
+
+        $wrapper = $fragment->querySelector('#rss-bridge-temp-wrapper');
+
+        if ($wrapper === null) {
+            return break_annoying_html_tags($html);
+        }
+
+        foreach ($wrapper->querySelectorAll('font') as $font) {
+            $parent = $font->parentNode;
+
+            if ($parent === null) {
+                continue;
+            }
+
+            while ($font->firstChild !== null) {
+                $parent->insertBefore($font->firstChild, $font);
+            }
+
+            $parent->removeChild($font);
+        }
+
+        foreach ($wrapper->querySelectorAll('[color]') as $node) {
+            $node->removeAttribute('color');
+        }
+
+        foreach ($wrapper->querySelectorAll('[bgcolor]') as $node) {
+            $node->removeAttribute('bgcolor');
+        }
+
+        foreach ($wrapper->querySelectorAll('[text]') as $node) {
+            $node->removeAttribute('text');
+        }
+
+        foreach ($wrapper->querySelectorAll('[style]') as $node) {
+            $style = (string)$node->getAttribute('style');
+            $style = (string)preg_replace(pattern: self::COLOR_STYLE_PATTERN, replacement: '', subject: $style);
+            $style = trim(trim($style), ';');
+
+            if ($style === '') {
+                $node->removeAttribute('style');
+            } else {
+                $node->setAttribute('style', $style);
+            }
+        }
+
+        foreach ($wrapper->querySelectorAll('img') as $img) {
+            $src = (string)$img->getAttribute('src');
+
+            if ($src !== '') {
+                $img->setAttribute('src', $this->absoluteUrl($src));
+            }
+
+            $img->setAttribute('style', self::CSS['img']);
+            $img->setAttribute('loading', 'lazy');
+            $img->removeAttribute('align');
+
+            $parent = $img->parentElement;
+
+            if ($parent !== null && $parent->localName === 'a' && trim($parent->textContent ?? '') === '') {
+                $parent->setAttribute('style', self::CSS['imglink']);
+            }
+        }
+
+        foreach ($wrapper->querySelectorAll('a[href]') as $link) {
+            $href = (string)$link->getAttribute('href');
+
+            if ($href !== '' && str_starts_with($href, '#') === false) {
+                $link->setAttribute('href', $this->absoluteUrl($href));
+            }
+
+            $link->setAttribute('rel', 'noopener');
+        }
+
+        foreach ($wrapper->querySelectorAll('p') as $paragraph) {
+            $paragraph->setAttribute('style', self::CSS['para']);
+        }
+
+        foreach ($wrapper->querySelectorAll('pre') as $pre) {
+            $pre->setAttribute('style', self::CSS['code']);
+        }
+
+        foreach ($wrapper->querySelectorAll('center') as $center) {
+            $block = $fragment->createElement('div');
+            $block->setAttribute('style', self::CSS['figure']);
+
+            while ($center->firstChild !== null) {
+                $block->appendChild($center->firstChild);
+            }
+
+            $center->parentNode?->replaceChild($block, $center);
+        }
+
+        $body = break_annoying_html_tags($wrapper->innerHTML);
+        $textStyle = self::CSS['text'];
+
+        return "<div style=\"{$textStyle}\">{$body}</div>";
     }
 
     private function workId(): ?string
@@ -227,7 +716,23 @@ final class AuthorTodayBridge extends BridgeAbstract
             return $matches[1];
         }
 
-        if (preg_match(pattern: '#/work/(\d+)#', subject: $value, matches: $matches) === 1) {
+        if (str_contains($value, '://') === true || str_starts_with($value, 'www.') === true) {
+            $parts = parse_url($value);
+
+            if (is_array($parts) === false) {
+                return null;
+            }
+
+            $host = strtolower($parts['host'] ?? '');
+
+            if (in_array($host, ['author.today', 'www.author.today'], true) === false) {
+                return null;
+            }
+
+            $value = $parts['path'] ?? '';
+        }
+
+        if (preg_match(pattern: '#/(?:work|reader)/(\d+)#', subject: $value, matches: $matches) === 1) {
             return $matches[1];
         }
 

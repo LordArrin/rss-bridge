@@ -1,0 +1,110 @@
+<!-- meta:uri:https://author.today/ -->
+<p>This bridge follows chapter updates of a work on <a href="https://author.today/" target="_blank" rel="noopener">Author.Today</a>. It reads the same internal reader API that the site's own reader uses, so no browser, proxy or JavaScript engine is required.</p>
+
+<ul>
+    <li><p><strong>Two modes, never mixed.</strong> Either chapter previews (newest chapters with cover and work status) or full chapter text (text only, no cover and no statistics).</p></li>
+    <li><p><strong>Free content only.</strong> Paid, locked and suspended chapters are skipped — the bridge never bypasses the paywall.</p></li>
+    <li><p><strong>Early-access friendly.</strong> Works that open chapters after a delay are handled correctly: paid chapters are skipped and the next readable ones are collected instead.</p></li>
+    <li><p><strong>Polite request budget.</strong> One work page plus at most 8 chapter requests per generation, with a random 1–3 second pause before every chapter fetch.</p></li>
+    <li><p><strong>Adult content handled.</strong> The <code>AdultUser=true</code> cookie is always sent — exactly what the site's "Yes, I am 18" button does.</p></li>
+    <li><p><strong>Reader-friendly markup.</strong> Author-specified text colours are stripped so the text stays readable in dark themes, images become responsive block elements, links are absolutised.</p></li>
+    <li><p><strong>Optional account access.</strong> Three cookies unlock what your account can already read legally. The account ID is detected automatically.</p></li>
+</ul>
+
+<h4>Configuration</h4>
+<p>Anonymous reading works out of the box — no configuration is needed. Account cookies are <strong>optional</strong> and only add content your account already has access to (for example chapters you have purchased).</p>
+<ol>
+    <li>
+        <p>Log in to <a href="https://author.today/" target="_blank" rel="noopener">author.today</a> in your browser.</p>
+    </li>
+    <li>
+        <p>Open developer tools (<strong>F12</strong>) and go to <strong>Storage → Cookies</strong> (Firefox) or <strong>Application → Cookies</strong> (Chrome), then select <code>https://author.today</code>.</p>
+    </li>
+    <li>
+        <p>Copy the values of <code>LoginCookie</code>, <code>TrustedToken</code> and <code>ngLoginCookie</code>. Only the values are needed — the bridge adds the cookie names itself.</p>
+    </li>
+    <li>
+        <p>Add them to your <code>/config/.bridges</code> file in the <code>[AuthorTodayBridge]</code> section:</p>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>[AuthorTodayBridge]
+login_cookie = "your-LoginCookie-value"
+trusted_token = "your-TrustedToken-value"
+ng_login_cookie = "your-ngLoginCookie-value"</code></pre>
+        </div>
+    </li>
+    <li>
+        <p>Restart your RSS-Bridge container to apply the configuration:</p>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>docker restart rss-bridge</code></pre>
+        </div>
+    </li>
+</ol>
+
+<div class="note info">
+    <p>💡 <strong>Note:</strong> The <code>user_id</code> option is optional and normally not needed — the bridge reads your account ID from the work page automatically. Set it only if the log reports <code>Failed to decode the chapter text</code>. A wrong value takes precedence over auto-detection and breaks decoding, so leaving it out is the safest choice.</p>
+</div>
+
+<div class="note warning">
+    <p>⚠️ <strong>Security:</strong> These cookies are effectively keys to your account. Never share them or paste them into public issue reports. They are stored only in your local <code>/config/.bridges</code> file and are sent only to <code>author.today</code>. Cookie values are never written to the log — only cookie names.</p>
+</div>
+
+<h4>How reading works</h4>
+<ol>
+    <li><p>The work page <code>/work/{id}</code> provides the title, author, cover, work status and the chapter list with publication dates.</p></li>
+    <li><p>Each chapter is fetched from <code>/reader/{workId}/chapter?id={chapterId}</code>, which returns JSON with an obfuscated text payload.</p></li>
+    <li><p>The payload is XOR-encoded over UTF-16 code units. The key is the reversed <code>Reader-Secret</code> response header, followed by <code>@_@</code> and the account ID (empty for anonymous sessions).</p></li>
+    <li><p>The account ID is read from <code>app.setOptions({ … userId: … })</code> on the work page, which is requested with the same cookies as the chapter — so both sides always agree on the identity.</p></li>
+    <li><p>If the account key produces no valid HTML, the anonymous key is tried as a fallback. If neither works, the bridge raises an error instead of caching unreadable text.</p></li>
+</ol>
+
+<h4>Bridge parameters</h4>
+<ul>
+    <li><p><strong>Story ID:</strong> Numeric work ID (e.g. <code>230933</code>) or a URL — both <code>https://author.today/work/230933</code> and <code>https://author.today/reader/230933/6583841</code> are accepted. Other hosts are rejected.</p></li>
+    <li><p><strong>Disable tags:</strong> Do not attach the work's tags as item categories (enabled by default).</p></li>
+    <li><p><strong>Fetch full chapters:</strong> Switch the feed from previews to full chapter text. When enabled, the feed contains <em>only</em> readable full texts — no covers, no statistics, no preview padding.</p></li>
+    <li><p><strong>Chapters with full text (max 3):</strong> How many full chapters to deliver (default: 3, hard maximum: 3). Only successfully decoded chapters count towards this limit; paid ones are skipped and the bridge continues down the chapter list.</p></li>
+</ul>
+
+<h4>Caching</h4>
+<ul>
+    <li><p><strong>Feed:</strong> 15 minutes.</p></li>
+    <li><p><strong>Readable chapter text:</strong> 7 days — published chapters do not change, so repeat generations need only the work page request and no pauses.</p></li>
+    <li><p><strong>Paid or otherwise unavailable chapters:</strong> 1 day, so early-access chapters are re-checked once they open for free.</p></li>
+    <li><p>Cache keys include the session identity, so adding or removing account cookies never serves text decoded for a different identity.</p></li>
+</ul>
+
+<h4>Troubleshooting</h4>
+<p>The bridge logs which key actually worked, so you can tell account access from an anonymous fallback:</p>
+<div class="code-block">
+    <button type="button" class="copy-btn" aria-label="Copy code">
+        <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+        <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+        <span class="copy-label-copy">Copy</span>
+        <span class="copy-label-copied">Copied!</span>
+    </button>
+    <pre><code>docker logs rss-bridge | grep AuthorTodayBridge</code></pre>
+</div>
+
+<ul>
+    <li><p><code>decoded with the account key (user_id …)</code> — your cookies work, account access is active.</p></li>
+    <li><p><code>fell back to the anonymous key - auth cookies did not take effect</code> — the session has expired; copy fresh cookies from the browser.</p></li>
+    <li><p><code>auth cookies are set but the page reports no user_id</code> — same cause, detected already on the work page.</p></li>
+    <li><p><code>Failed to decode the chapter text</code> — set <code>user_id</code> in the configuration (take the value from the <code>user_id detected on the work page</code> log line).</p></li>
+    <li><p><code>No freely readable chapters found</code> — all recent chapters are paid; they will be re-checked after a day.</p></li>
+</ul>
+
+<div class="note info">
+    <p>💡 <strong>Tip:</strong> Chapters served from the cache are logged at <code>DEBUG</code> level only, so a repeat generation within the cache window shows no new key check. Restart the container (or wait for the TTL) to see a fresh decode, and set <code>LOG_LEVEL=debug</code> for the full picture.</p>
+</div>
