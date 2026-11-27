@@ -84,7 +84,7 @@ jobs:
           password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Restore ccache (persists the /ccache BuildKit mount across runs)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: ccache
         with:
           path: ccache-mount
