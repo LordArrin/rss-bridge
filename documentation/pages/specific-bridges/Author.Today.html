@@ -1,0 +1,78 @@
+<!-- meta:uri:https://author.today/ -->
+<p>This bridge follows chapter updates of a work on <a href="https://author.today/" target="_blank" rel="noopener">Author.Today</a>. It uses the site's own reader API, so no browser or proxy is required.</p>
+
+<ul>
+    <li><p><strong>Two modes, never mixed.</strong> Either chapter previews (cover and work status) or full chapter text — nothing else.</p></li>
+    <li><p><strong>Access follows your session.</strong> Anonymously you get free chapters. With account cookies you also get everything your account can already read, including purchased chapters. Nothing is bypassed — the site decides what to serve.</p></li>
+    <li><p><strong>Early-access friendly.</strong> Chapters that are still closed are skipped, and the next readable ones are collected instead. They are re-checked once a day.</p></li>
+    <li><p><strong>Readable in any theme.</strong> Author-specified text colours are stripped, images become responsive, links are absolutised.</p></li>
+</ul>
+
+<h4>Configuration</h4>
+<p>Configuration is <strong>optional</strong>. Anonymous reading works out of the box; account cookies only add content your account already has access to.</p>
+<ol>
+    <li>
+        <p>Log in to <a href="https://author.today/" target="_blank" rel="noopener">author.today</a> in your browser.</p>
+    </li>
+    <li>
+        <p>Open developer tools (<strong>F12</strong>) → <strong>Storage → Cookies</strong> (Firefox) or <strong>Application → Cookies</strong> (Chrome) → <code>https://author.today</code>.</p>
+    </li>
+    <li>
+        <p>Copy the values of <code>LoginCookie</code>, <code>TrustedToken</code> and <code>ngLoginCookie</code>, then add them to your <code>/config/.bridges</code> file:</p>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>[AuthorTodayBridge]
+login_cookie = "your-LoginCookie-value"
+trusted_token = "your-TrustedToken-value"
+ng_login_cookie = "your-ngLoginCookie-value"</code></pre>
+        </div>
+    </li>
+    <li>
+        <p>Restart your RSS-Bridge container to apply the configuration:</p>
+        <div class="code-block">
+            <button type="button" class="copy-btn" aria-label="Copy code">
+                <span class="copy-icon-copy"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg></span>
+                <span class="copy-icon-copied"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                <span class="copy-label-copy">Copy</span>
+                <span class="copy-label-copied">Copied!</span>
+            </button>
+            <pre><code>docker restart rss-bridge</code></pre>
+        </div>
+    </li>
+</ol>
+
+<div class="note info">
+    <p>💡 <strong>Note:</strong> Your account ID is detected automatically — you do not need to configure it. The optional <code>user_id</code> setting exists only as a fallback if detection ever fails; a wrong value breaks decoding, so leave it out unless the log asks for it.</p>
+</div>
+
+<div class="note warning">
+    <p>⚠️ <strong>Security:</strong> These cookies are keys to your account. Never share them or paste them into public issue reports. They are stored only in your local <code>/config/.bridges</code> and sent only to <code>author.today</code>. Cookie values are never written to the log.</p>
+</div>
+
+<h4>Bridge parameters</h4>
+<ul>
+    <li><p><strong>Story ID:</strong> Numeric work ID (e.g. <code>230933</code>) or a URL — both <code>/work/230933</code> and <code>/reader/230933/6583841</code> forms are accepted.</p></li>
+    <li><p><strong>Disable tags:</strong> Do not attach the work's tags as item categories (enabled by default).</p></li>
+    <li><p><strong>Fetch full chapters:</strong> Deliver full chapter text instead of previews. The feed then contains only readable chapters — no covers, no statistics, no preview padding.</p></li>
+    <li><p><strong>Chapters with full text:</strong> How many chapters to deliver (default and maximum: 3). Closed chapters do not count towards this limit.</p></li>
+</ul>
+
+<h4>Caching</h4>
+<p>The feed itself is cached for 15 minutes. Chapter text is kept for <strong>7 days</strong>, since published chapters do not change. Chapters that were closed are re-checked after <strong>1 day</strong> — so a chapter you have just bought, or one that opened for free, appears within a day. Restart the container if you want it immediately.</p>
+
+<h4>Troubleshooting</h4>
+<p>Check which access mode actually worked with <code>docker logs rss-bridge | grep AuthorTodayBridge</code>:</p>
+<ul>
+    <li><p><code>decoded with the account key</code> — your cookies work, account access is active.</p></li>
+    <li><p><code>fell back to the anonymous key</code> — the session has expired; copy fresh cookies from the browser.</p></li>
+    <li><p><code>No freely readable chapters found</code> — every recent chapter is closed for your session; they will be re-checked after a day.</p></li>
+</ul>
+
+<div class="note info">
+    <p>💡 <strong>Tip:</strong> Chapters served from the cache are logged at <code>DEBUG</code> level only, so a repeat generation shows no new access check. Set <code>LOG_LEVEL=debug</code> for the full picture.</p>
+</div>
