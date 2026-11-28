@@ -4,457 +4,480 @@ declare(strict_types=1);
 
 namespace RSSBridge\Bridges;
 
-use RSSBridge\BridgeAbstract;
+use RSSBridge\FeedExpander;
 
-final class ThreeDNewsBridge extends BridgeAbstract
+use function urljoin;
+
+final class ThreeDNewsBridge extends FeedExpander
 {
     public const NAME = '3DNews';
     public const URI = 'https://3dnews.ru/';
-    public const DESCRIPTION = 'Latest news from 3DNews.ru with optional full article content';
-    public const MAINTAINER = 'No maintainer';
+    public const DESCRIPTION = 'Latest 3DNews items by category or a single digest of the previous day';
+    public const MAINTAINER = 'LordArrin';
     public const CACHE_TIMEOUT = 3600;
 
-    private const RSS_URLS = [
-        'all' => 'https://3dnews.ru/news/rss/',
+    private const CONTEXT_LATEST = 'Latest news';
+    private const CONTEXT_DIGEST = 'Daily digest';
+
+    private const FEEDS = [
+        'all' => 'https://3dnews.ru/news/rss',
         'hardware' => 'https://3dnews.ru/hardware-news/rss',
         'software' => 'https://3dnews.ru/software-news/rss',
     ];
 
-    private const IMG_STYLE = 'display: block; float: none; clear: both; max-width: 1600px; width: auto; height: auto; margin: 16px 0 16px 0; padding: 0;';
-
-    private const LIMIT_PREVIEW_MAX = 20;
-    private const LIMIT_FULL_MAX = 10;
-    private const REQUEST_DELAY_MS = 1000;
-    private const CACHE_PREFIX_YT_THUMBNAIL = 'yt_thumb_';
-
-    private const REMOVE_SELECTORS = [
-        '.caption',
-        '.comment-warn',
-        '.content-block-header.entry-meta',
-        '.typo-hint',
-        '.footer',
-        '.footer-sub',
-        '.rbxglob.relatedbox.content-block',
-        '.denyOrgsWARN-footer',
-        '.slider-track',
-        '.ps-promo',
-        '.sources_rel',
-        '.button.print',
-        '.related',
-        '.js-related-slider',
-        '.entry-header',
-        '.entry-info',
-        '[href="/competitions"]',
-        '[href="/job"]',
-        '#footer',
-        '#btwLabel',
-        '#currencyTicker',
-        '#stripe',
-        '#projects',
-        '#right-sidebar',
-        'div.strong.mid.menu-item.sidebar-chunk:nth-of-type(29)',
-        'div.strong.mid.menu-item.sidebar-chunk:nth-of-type(32)',
+    private const FEED_LABELS = [
+        'all' => '3DNews: All news',
+        'hardware' => '3DNews: Hardware news',
+        'software' => '3DNews: Software news',
     ];
 
-    private const AD_KEYWORDS = ['adfox', 'advert', 'banner', 'promo', 'commercial', 'sponsor'];
-    private const IMG_ATTRS = ['src', 'data-src', 'data-original', 'data-lazy-src', 'data-lazy', 'data-srcset', 'data-hi-res-src'];
+    private const CATEGORY_PARAMETER = [
+        'name' => 'Category',
+        'type' => 'list',
+        'values' => [
+            'All news' => 'all',
+            'Hardware' => 'hardware',
+            'Software' => 'software',
+        ],
+        'defaultValue' => 'all',
+    ];
 
     public const PARAMETERS = [
-        [
-            'category' => [
-                'name' => 'Category',
-                'type' => 'list',
-                'values' => [
-                    'All' => 'all',
-                    'Hardware' => 'hardware',
-                    'Software' => 'software',
-                ],
-                'defaultValue' => 'all',
-            ],
-            'fetch_full' => [
-                'name' => 'Fetch full content',
-                'type' => 'checkbox',
-                'defaultValue' => false,
-            ],
+        self::CONTEXT_LATEST => [
+            'category' => self::CATEGORY_PARAMETER,
             'limit' => [
-                'name' => 'Limit',
+                'name' => 'Item limit',
                 'type' => 'number',
-                'defaultValue' => 20,
-                'title' => 'Maximum: 20 for previews, 10 for full articles',
-            ]
-        ]
+                'defaultValue' => 10,
+                'title' => 'Maximum 20 items',
+            ],
+        ],
+        self::CONTEXT_DIGEST => [
+            'category' => self::CATEGORY_PARAMETER,
+        ],
     ];
+
+    private const CSS = [
+        'wrapper' => 'font-size:14px; line-height:1.6; word-wrap:break-word;',
+        'item'    => 'margin:0 0 16px 0;',
+        'head'    => 'margin:0 0 6px 0;',
+        'time'    => 'color:#888;',
+        'text'    => 'margin:0 0 8px 0;',
+        'figure'  => 'text-align:left; margin:8px 0;',
+        'img'     => 'display:block; float:none; max-width:1200px; width:auto; height:auto; margin:8px 0;',
+        'imglink' => 'display:block;',
+        'iframe'  => 'max-width:100%;',
+        'code'    => 'white-space:pre-wrap; overflow-wrap:break-word; word-break:break-word; margin:8px 0; padding:8px; font-family:monospace; font-size:13px;',
+        'list'    => 'padding-left:24px; margin:8px 0; list-style-position:outside;',
+        'li'      => 'display:list-item; list-style-type:inherit; margin:4px 0;',
+    ];
+
+    private const LIMIT_MAX = 20;
+    private const DIGEST_CACHE_TIMEOUT = 43200;
+
+    private const COLOR_STYLE_PATTERN = '/(?<![-\w])(?:color|background|background-color)\s*:[^;"\']*(?:;|$)/i';
+
+    private int $dayStart = 0;
+    private int $dayEnd = 0;
+
+    public function getName(): string
+    {
+        return self::FEED_LABELS[$this->category()] ?? parent::getName();
+    }
+
+    public function getCacheTimeout(): int
+    {
+        return $this->isDigest() === true ? self::DIGEST_CACHE_TIMEOUT : self::CACHE_TIMEOUT;
+    }
+
+    public function collectData(): void
+    {
+        $category = $this->category();
+        $digest = $this->isDigest();
+
+        if ($digest === true) {
+            $tz = new \DateTimeZone(date_default_timezone_get());
+            $todayStart = (new \DateTimeImmutable('now', $tz))->setTime(0, 0, 0);
+            $yesterday = $todayStart->modify('-1 day');
+            $this->dayStart = $yesterday->getTimestamp();
+            $this->dayEnd = $todayStart->getTimestamp();
+        }
+
+        $this->collectExpandableDatas(self::FEEDS[$category], $digest === true ? -1 : $this->itemLimit());
+
+        $entries = $this->collectEntries();
+
+        if ($entries === []) {
+            $this->items = [];
+
+            return;
+        }
+
+        if ($digest === true) {
+            $this->items = [$this->buildDigest($entries, $category)];
+
+            return;
+        }
+
+        $this->items = [];
+
+        foreach ($entries as $entry) {
+            $this->items[] = $this->buildItem($entry);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $item
+     * @return array<string, mixed>|false
+     */
+    protected function parseItem(array $item): array|false
+    {
+        if ($this->isDigest() === false) {
+            return $item;
+        }
+
+        $timestamp = $item['timestamp'] ?? null;
+
+        if (is_int($timestamp) === false || $timestamp < $this->dayStart || $timestamp >= $this->dayEnd) {
+            return false;
+        }
+
+        return $item;
+    }
+
+    private function isDigest(): bool
+    {
+        return $this->queriedContext === self::CONTEXT_DIGEST;
+    }
+
+    private function category(): string
+    {
+        $category = (string)$this->getInput('category');
+
+        return isset(self::FEEDS[$category]) === true ? $category : 'all';
+    }
+
+    private function itemLimit(): int
+    {
+        $requested = (int)($this->getInput('limit') ?? 10);
+
+        if ($requested <= 0) {
+            $requested = 10;
+        }
+
+        return min($requested, self::LIMIT_MAX);
+    }
+
+    /**
+     * @return list<array{ts: int, title: string, uri: string, content: string, enclosure: string}>
+     */
+    private function collectEntries(): array
+    {
+        $entries = [];
+
+        foreach ($this->items as $item) {
+            $title = $item['title'] ?? null;
+            $uri = $item['uri'] ?? null;
+            $content = $item['content'] ?? null;
+
+            if (is_string($title) === false || is_string($uri) === false || is_string($content) === false) {
+                continue;
+            }
+
+            $title = trim($title);
+            $uri = trim($uri);
+
+            if ($title === '' || $uri === '') {
+                continue;
+            }
+
+            $ts = $item['timestamp'] ?? null;
+            $enclosure = '';
+            $enclosures = $item['enclosures'] ?? null;
+
+            if (is_array($enclosures) === true && isset($enclosures[0]) === true && is_string($enclosures[0]) === true) {
+                $enclosure = $enclosures[0];
+            }
+
+            $entries[] = [
+                'ts' => is_int($ts) === true ? $ts : time(),
+                'title' => $title,
+                'uri' => $uri,
+                'content' => trim($content),
+                'enclosure' => $enclosure,
+            ];
+        }
+
+        usort($entries, fn(array $a, array $b): int => $a['ts'] <=> $b['ts']);
+
+        if ($this->isDigest() === false) {
+            $entries = array_reverse($entries);
+        }
+
+        return $entries;
+    }
+
+    /**
+     * @param array{ts: int, title: string, uri: string, content: string, enclosure: string} $entry
+     * @return array<string, mixed>
+     */
+    private function buildItem(array $entry): array
+    {
+        return [
+            'title' => $entry['title'],
+            'uri' => $entry['uri'],
+            'content' => sprintf('<div style="%s">%s</div>', self::CSS['wrapper'], $this->entryBody($entry)),
+            'timestamp' => $entry['ts'],
+            'uid' => hash('sha256', $entry['uri']),
+        ];
+    }
+
+    /**
+     * @param list<array{ts: int, title: string, uri: string, content: string, enclosure: string}> $entries
+     * @return array<string, mixed>
+     */
+    private function buildDigest(array $entries, string $category): array
+    {
+        $tz = new \DateTimeZone(date_default_timezone_get());
+        $day = (new \DateTimeImmutable('@' . $this->dayStart))->setTimezone($tz);
+        $content = sprintf('<div style="%s">', self::CSS['wrapper']);
+
+        foreach ($entries as $entry) {
+            $time = (new \DateTimeImmutable('@' . $entry['ts']))->setTimezone($tz)->format('H:i');
+
+            $content .= sprintf('<div style="%s">', self::CSS['item']);
+            $content .= sprintf(
+                '<p style="%s"><span style="%s">%s</span> <a href="%s" rel="noopener"><b>%s</b></a></p>',
+                self::CSS['head'],
+                self::CSS['time'],
+                e($time),
+                e($entry['uri']),
+                e($entry['title'])
+            );
+            $content .= $this->entryBody($entry);
+            $content .= '</div>';
+        }
+
+        return [
+            'title' => self::FEED_LABELS[$category] . ' за ' . $day->format('d.m.Y'),
+            'uri' => $this->getURI(),
+            'content' => $content . '</div>',
+            'timestamp' => $entries[count($entries) - 1]['ts'],
+            'uid' => '3dnews-' . $category . '-' . $day->format('Y-m-d'),
+        ];
+    }
+
+    /**
+     * @param array{ts: int, title: string, uri: string, content: string, enclosure: string} $entry
+     */
+    private function entryBody(array $entry): string
+    {
+        $body = trim($entry['content']);
+        $body = html_entity_decode($body, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        if (preg_match(pattern: '/<(p|div|br|ul|ol|table|blockquote)\b/i', subject: $body) !== 1) {
+            $body = sprintf('<p style="%s">%s</p>', self::CSS['text'], nl2br(e($body), false));
+        }
+
+        if ($entry['enclosure'] !== '' && preg_match(pattern: '/<img\b/i', subject: $body) !== 1) {
+            $body = sprintf('<img src="%s">', e($this->cleanImageUrl($entry['enclosure']))) . $body;
+        }
+
+        return $this->renderHtml($body);
+    }
 
     private function cleanImageUrl(string $url): string
     {
-        $url = trim($url);
-        $url = ltrim($url, '|/');
+        $url = ltrim(trim($url), '|/');
 
         if (str_starts_with($url, '//') === true) {
             $url = 'https:' . $url;
         }
 
-        $url = (string)preg_replace('/\?.*$/', '', $url);
-        $url = (string)preg_replace('/\/sm\./', '/', $url);
-        $url = (string)preg_replace('/\.(800|400|200|100)\./', '.', $url);
+        if ($url !== '' && str_starts_with($url, 'http') === false) {
+            $url = urljoin(self::URI, $url);
+        }
 
-        return $url;
+        $url = (string)preg_replace(pattern: '/\?.*$/', replacement: '', subject: $url);
+        $url = (string)preg_replace(pattern: '#/sm\.#', replacement: '/', subject: $url);
+
+        return (string)preg_replace(pattern: '/\.(800|400|200|100)\./', replacement: '.', subject: $url);
     }
 
-    private function extractImageUrl(\Dom\Element $img): string
+    private function renderHtml(string $html): string
     {
-        foreach (self::IMG_ATTRS as $attr) {
-            $value = $img->getAttribute($attr);
+        $html = (string)preg_replace(pattern: self::COLOR_STYLE_PATTERN, replacement: '', subject: $html);
 
-            if ($value === null || $value === '') {
+        $fragment = parseHtmlFragment($html);
+
+        if ($fragment === null) {
+            return break_annoying_html_tags($html, true);
+        }
+
+        $wrapper = $fragment->querySelector('#rss-bridge-temp-wrapper');
+
+        if ($wrapper === null) {
+            return break_annoying_html_tags($html, true);
+        }
+
+        foreach (iterator_to_array($wrapper->querySelectorAll('[xmlns]')) as $node) {
+            $node->removeAttribute('xmlns');
+        }
+
+        foreach (iterator_to_array($wrapper->querySelectorAll('font')) as $font) {
+            $parent = $font->parentNode;
+
+            if ($parent === null) {
                 continue;
             }
 
-            if ($attr === 'data-srcset') {
-                $bestUrl = $this->parseSrcset($value);
-                if ($bestUrl !== '') {
-                    return $this->cleanImageUrl($bestUrl);
-                }
-            } elseif (str_contains($value, 'cdn.3dnews.ru') === true) {
-                return $this->cleanImageUrl($value);
+            while ($font->firstChild !== null) {
+                $parent->insertBefore($font->firstChild, $font);
+            }
+
+            $parent->removeChild($font);
+        }
+
+        foreach (iterator_to_array($wrapper->querySelectorAll('[color]')) as $node) {
+            $node->removeAttribute('color');
+        }
+
+        foreach (iterator_to_array($wrapper->querySelectorAll('[bgcolor]')) as $node) {
+            $node->removeAttribute('bgcolor');
+        }
+
+        foreach (iterator_to_array($wrapper->querySelectorAll('[style]')) as $node) {
+            $style = (string)$node->getAttribute('style');
+            $style = (string)preg_replace(pattern: self::COLOR_STYLE_PATTERN, replacement: '', subject: $style);
+            $style = trim(trim($style), ';');
+
+            if ($style === '') {
+                $node->removeAttribute('style');
+            } else {
+                $node->setAttribute('style', $style);
             }
         }
 
-        $src = $img->getAttribute('src');
-        if ($src !== null && $src !== '') {
-            return $this->cleanImageUrl($src);
+        foreach (iterator_to_array($wrapper->querySelectorAll('pre')) as $pre) {
+            $pre->setAttribute('style', self::CSS['code']);
         }
 
-        return '';
-    }
-
-    private function parseSrcset(string $srcset): string
-    {
-        $bestUrl = '';
-        $bestSize = 0;
-
-        foreach (explode(',', $srcset) as $part) {
-            $part = trim($part);
-            if (preg_match('/^([^\s]+)\s+(\d+)w$/', $part, $m) === 1) {
-                $size = (int)$m[2];
-                if ($size > $bestSize) {
-                    $bestSize = $size;
-                    $bestUrl = $m[1];
-                }
-            }
+        foreach (iterator_to_array($wrapper->querySelectorAll('ul, ol')) as $list) {
+            $list->setAttribute('style', 'list-style-type:' . $this->listMarker($list, $wrapper) . '; ' . self::CSS['list']);
         }
 
-        return $bestUrl;
-    }
+        foreach (iterator_to_array($wrapper->querySelectorAll('li')) as $li) {
+            $li->setAttribute('style', self::CSS['li']);
+        }
 
-    private function isInAdBlock(\Dom\Element $element): bool
-    {
-        $current = $element;
+        foreach (iterator_to_array($wrapper->querySelectorAll('iframe')) as $iframe) {
+            $src = (string)$iframe->getAttribute('src');
 
-        while ($current !== null) {
-            if ($current instanceof \Dom\Element === false) {
-                $current = $current->parentNode;
+            if ($src !== '' && video_embed_provider($src) !== null) {
+                $iframe->setAttribute('style', $this->mergeStyle($iframe->getAttribute('style'), self::CSS['iframe']));
+                $iframe->setAttribute('loading', 'lazy');
+
                 continue;
             }
 
-            $className = strtolower($current->getAttribute('class') ?? '');
-            $id = strtolower($current->getAttribute('id') ?? '');
-
-            foreach (self::AD_KEYWORDS as $keyword) {
-                if (str_contains($className, $keyword) === true || str_contains($id, $keyword) === true) {
-                    return true;
-                }
-            }
-
-            $current = $current->parentNode;
+            $this->replaceWithLink($fragment, $iframe, $src, 'Watch video');
         }
 
-        return false;
+        foreach (iterator_to_array($wrapper->querySelectorAll('img')) as $img) {
+            $src = (string)$img->getAttribute('src');
+
+            if ($src !== '') {
+                $img->setAttribute('src', $this->cleanImageUrl($src));
+            }
+
+            $img->setAttribute('style', $this->mergeStyle($img->getAttribute('style'), self::CSS['img']));
+            $img->setAttribute('loading', 'lazy');
+            $img->removeAttribute('align');
+            $img->removeAttribute('hspace');
+            $img->removeAttribute('vspace');
+            $img->removeAttribute('width');
+            $img->removeAttribute('height');
+
+            $parent = $img->parentElement;
+
+            if ($parent !== null && $parent->localName === 'a' && trim($parent->textContent ?? '') === '') {
+                $parent->setAttribute('style', self::CSS['imglink']);
+            }
+        }
+
+        foreach (iterator_to_array($wrapper->querySelectorAll('a[href]')) as $link) {
+            $href = (string)$link->getAttribute('href');
+
+            if ($href !== '' && str_starts_with($href, 'http') === false && str_starts_with($href, '#') === false) {
+                $link->setAttribute('href', urljoin(self::URI, $href));
+            }
+
+            $link->setAttribute('rel', 'noopener');
+        }
+
+        foreach (iterator_to_array($wrapper->querySelectorAll('center')) as $center) {
+            $block = $fragment->createElement('div');
+            $block->setAttribute('style', self::CSS['figure']);
+
+            while ($center->firstChild !== null) {
+                $block->appendChild($center->firstChild);
+            }
+
+            $center->parentNode?->replaceChild($block, $center);
+        }
+
+        return break_annoying_html_tags($wrapper->innerHTML, true);
     }
 
-    private function checkYouTubeThumbnail(string $videoId): string
+    private function replaceWithLink(\Dom\HTMLDocument $document, \Dom\Element $node, string $url, string $label): void
     {
-        $cacheKey = self::CACHE_PREFIX_YT_THUMBNAIL . $videoId;
-        $cached = $this->loadCacheValue($cacheKey);
+        $parent = $node->parentNode;
 
-        if (is_string($cached) === true) {
-            return $cached;
+        if ($parent === null || $url === '') {
+            $node->remove();
+
+            return;
         }
 
-        $maxResUrl = "https://img.youtube.com/vi/{$videoId}/maxresdefault.jpg";
-        $fallbackUrl = "https://img.youtube.com/vi/{$videoId}/hqdefault.jpg";
-        $thumbnailUrl = $fallbackUrl;
-
-        try {
-            $curlOptions = [
-                CURLOPT_RANGE => 'bytes=0-0',
-                CURLOPT_TIMEOUT => 5,
-                CURLOPT_CONNECTTIMEOUT => 3,
-            ];
-
-            $response = getContents($maxResUrl, [], $curlOptions, true);
-
-            if ($response instanceof \RSSBridge\Http\Response) {
-                $code = $response->getCode();
-                if ($code >= 200 && $code < 400) {
-                    $thumbnailUrl = $maxResUrl;
-                }
-            }
-        } catch (\Exception $e) {
-            // Fallback to hqdefault on error
-        }
-
-        $this->saveCacheValue($cacheKey, $thumbnailUrl, 604800);
-
-        return $thumbnailUrl;
+        $link = $document->createElement('a');
+        $link->setAttribute('href', $url);
+        $link->setAttribute('rel', 'noopener');
+        $link->appendChild($document->createTextNode($label));
+        $parent->replaceChild($link, $node);
     }
 
-    private function processYouTubeIframes(string $html): string
+    private function listMarker(\Dom\Element $list, \Dom\Element $wrapper): string
     {
-        return (string)preg_replace_callback(
-            '/<iframe[^>]*src=["\'](?:https?:)?\/\/(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]+)[^"\']*["\'][^>]*>/i',
-            function (array $matches): string {
-                $videoId = $matches[1];
-                $thumbnailUrl = $this->checkYouTubeThumbnail($videoId);
-                $videoUrl = "https://www.youtube.com/watch?v={$videoId}";
+        if ($list->localName === 'ol') {
+            return 'decimal';
+        }
 
-                $escapedVideoUrl = htmlspecialchars($videoUrl, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-                $escapedThumbnailUrl = htmlspecialchars($thumbnailUrl, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $depth = 0;
+        $parent = $list->parentElement;
 
-                $linkOpen = '<a href="' . $escapedVideoUrl . '" target="_blank" rel="noopener">';
-                $img = '<img src="' . $escapedThumbnailUrl . '" style="' . self::IMG_STYLE . '" alt="YouTube Video" />';
-                $linkClose = '</a>';
-                $linkStyle = 'display: block; text-align: center; margin: 0 0 16px 0;';
-                $textLink = '<a href="' . $escapedVideoUrl . '" target="_blank" rel="noopener" style="' . $linkStyle . '">Watch on YouTube</a>';
+        while ($parent !== null && $parent->isSameNode($wrapper) === false) {
+            if ($parent->localName === 'ul' || $parent->localName === 'ol') {
+                $depth++;
+            }
 
-                return '<p>' . $linkOpen . $img . $linkClose . $textLink . '</p>';
-            },
-            $html
-        );
+            $parent = $parent->parentElement;
+        }
+
+        return match (true) {
+            $depth === 0 => 'disc',
+            $depth === 1 => 'circle',
+            default => 'square',
+        };
     }
 
-    private function processHtmlContent(string $html): string
+    private function mergeStyle(?string $existing, string $extra): string
     {
-        $html = (string)preg_replace_callback('/<img\s+([^>]*)>/i', function (array $matches): string {
-            $attributes = $matches[1];
-            $attributes = (string)preg_replace('/\s+(width|height|align|style)=["\'][^"\']*["\']/i', '', $attributes);
-            $attributes = trim($attributes);
+        $existing = trim($existing ?? '');
 
-            if ($attributes !== '') {
-                $attributes .= ' ';
-            }
-
-            return '<img ' . $attributes . 'style="' . self::IMG_STYLE . '" align="left" />';
-        }, $html);
-
-        $html = (string)preg_replace_callback('/<(p|div|h[1-6])\s+([^>]*)>/i', function (array $matches): string {
-            $tag = strtolower($matches[1]);
-            $attributes = $matches[2];
-
-            $newAttributes = (string)preg_replace('/\s*style=["\'][^"\']*text-align\s*:\s*center[^"\']*["\']/i', '', $attributes);
-            $newAttributes = trim($newAttributes);
-
-            if ($newAttributes === '') {
-                return '<' . $tag . ' align="left">';
-            }
-
-            return '<' . $tag . ' ' . $newAttributes . ' align="left">';
-        }, $html);
-
-        return $html;
-    }
-
-    private function processArticleImages(\Dom\Element $article): void
-    {
-        $containers = $article->querySelectorAll('.js-mediator-article > div');
-
-        foreach ($containers as $container) {
-            if ($container instanceof \Dom\Element === false || $this->isInAdBlock($container) === true) {
-                continue;
-            }
-
-            $images = $container->querySelectorAll('img');
-            if (count($images) === 0) {
-                continue;
-            }
-
-            $fullImageUrl = '';
-
-            foreach ($images as $img) {
-                if ($img instanceof \Dom\Element === false) {
-                    continue;
-                }
-
-                $url = $this->extractImageUrl($img);
-                if ($url !== '' && str_contains($url, '/sm.') === false) {
-                    $fullImageUrl = $url;
-                    break;
-                }
-            }
-
-            if ($fullImageUrl === '') {
-                $firstImg = $images[0];
-                if ($firstImg instanceof \Dom\Element === true) {
-                    $fullImageUrl = $this->extractImageUrl($firstImg);
-                }
-            }
-
-            $ownerDocument = $container->ownerDocument;
-            if ($fullImageUrl !== '' && $container->parentNode !== null && $ownerDocument !== null) {
-                $newImg = $ownerDocument->createElement('img');
-                $newImg->setAttribute('src', $fullImageUrl);
-                $newImg->setAttribute('style', self::IMG_STYLE);
-                $newImg->setAttribute('align', 'left');
-
-                $container->parentNode->replaceChild($newImg, $container);
-            }
+        if ($existing === '') {
+            return $extra;
         }
 
-        foreach ($article->querySelectorAll('img') as $img) {
-            if ($img instanceof \Dom\Element === false) {
-                continue;
-            }
-
-            if ($this->isInAdBlock($img) === true) {
-                $img->remove();
-                continue;
-            }
-
-            $cleanUrl = $this->extractImageUrl($img);
-            if ($cleanUrl === '') {
-                continue;
-            }
-
-            $img->setAttribute('src', $cleanUrl);
-            $img->setAttribute('style', self::IMG_STYLE);
-            $img->setAttribute('align', 'left');
-
-            foreach (self::IMG_ATTRS as $attr) {
-                if ($attr !== 'src') {
-                    $img->removeAttribute($attr);
-                }
-            }
-        }
-    }
-
-    private function removeGarbage(\Dom\Element $article): void
-    {
-        foreach ($article->querySelectorAll('script, style') as $element) {
-            if ($element instanceof \Dom\Element === true) {
-                $element->remove();
-            }
-        }
-
-        foreach (self::REMOVE_SELECTORS as $selector) {
-            foreach ($article->querySelectorAll($selector) as $element) {
-                if ($element instanceof \Dom\Element === true) {
-                    $element->remove();
-                }
-            }
-        }
-    }
-
-    private function fetchFullArticleContent(string $link): string
-    {
-        try {
-            $html = getContents($link);
-
-            if ($html === '') {
-                return '';
-            }
-
-            $dom = parseHtmlDocument($html);
-
-            $articleBody = $dom->querySelector('.news-full-item-main-pub.news-full-item.article-entry');
-
-            if ($articleBody === null) {
-                return '';
-            }
-
-            $this->removeGarbage($articleBody);
-            $this->processArticleImages($articleBody);
-
-            return $articleBody->innerHTML ?? '';
-        } catch (\Exception $e) {
-            return '';
-        }
-    }
-
-    public function collectData(): void
-    {
-        $categoryInput = $this->getInput('category');
-        $category = $categoryInput !== null && $categoryInput !== '' ? (string)$categoryInput : 'all';
-
-        $fetchFull = (bool)$this->getInput('fetch_full');
-        $maxLimit = $fetchFull === true ? self::LIMIT_FULL_MAX : self::LIMIT_PREVIEW_MAX;
-
-        $limitInput = $this->getInput('limit');
-        $requestedLimit = $limitInput !== null && (int)$limitInput > 0 ? (int)$limitInput : $maxLimit;
-        $limit = min($requestedLimit, $maxLimit);
-
-        $rssUrl = self::RSS_URLS[$category] ?? self::RSS_URLS['all'];
-        $xmlString = getContents($rssUrl);
-
-        if ($xmlString === '') {
-            throwServerException('Failed to fetch RSS feed from 3DNews.');
-        }
-
-        $parser = new \RSSBridge\FeedParser();
-        try {
-            $feed = $parser->parseFeed($xmlString);
-        } catch (\Exception $e) {
-            throwServerException('Failed to parse 3DNews RSS feed: ' . $e->getMessage());
-        }
-
-        if ($feed['items'] === []) {
-            throwServerException('Failed to parse 3DNews RSS feed or feed is empty.');
-        }
-
-        $count = 0;
-
-        foreach ($feed['items'] as $item) {
-            if ($count >= $limit) {
-                break;
-            }
-
-            $title = $item['title'] !== '' ? $item['title'] : 'Untitled';
-            $link = $item['uri'] ?? '';
-            $description = $item['content'] ?? '';
-            $timestamp = $item['timestamp'] !== '' ? (int)$item['timestamp'] : time();
-
-            $content = $description;
-
-            if (isset($item['enclosures']) === true && is_array($item['enclosures']) === true && $item['enclosures'] !== []) {
-                $enclosureUrl = $item['enclosures'][0];
-                if ($enclosureUrl !== '') {
-                    $escapedUrl = htmlspecialchars($enclosureUrl, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-                    $content = '<img src="' . $escapedUrl . '" style="' . self::IMG_STYLE . '" align="left" />' . $content;
-                }
-            }
-
-            if ($fetchFull === true && $link !== '') {
-                if ($count > 0) {
-                    usleep(self::REQUEST_DELAY_MS * 1000);
-                }
-
-                $fullContent = $this->fetchFullArticleContent($link);
-                if ($fullContent !== '') {
-                    $content = $fullContent;
-                }
-            }
-
-            $content = $this->processYouTubeIframes($content);
-            $content = $this->processHtmlContent($content);
-
-            $this->items[] = [
-                'title'     => $title,
-                'uri'       => $link,
-                'content'   => $content,
-                'timestamp' => $timestamp,
-                'uid'       => hash('sha256', $link),
-            ];
-
-            $count++;
-        }
+        return rtrim($existing, ';') . '; ' . $extra;
     }
 }

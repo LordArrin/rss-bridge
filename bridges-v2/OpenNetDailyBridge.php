@@ -14,7 +14,7 @@ final class OpenNetDailyBridge extends FeedExpander
     public const URI = 'https://www.opennet.ru/';
     public const DESCRIPTION = 'Collects all OpenNET news of the previous day into a single digest post';
     public const MAINTAINER = 'LordArrin';
-    public const CACHE_TIMEOUT = 86400;
+    public const CACHE_TIMEOUT = 43200;
 
     private const FEEDS = [
         'full' => 'https://opennet.ru/opennews/opennews_full_utf.rss',
