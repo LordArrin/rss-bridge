@@ -73,6 +73,8 @@ $preloadFile = ini_get('opcache.preload');
 $preloadUser = ini_get('opcache.preload_user');
 $opcacheEnabled = ini_get('opcache.enable') !== '' && ini_get('opcache.enable') !== '0';
 $opcacheCliEnabled = ini_get('opcache.enable_cli') !== '' && ini_get('opcache.enable_cli') !== '0';
+$jitIni = ini_get('opcache.jit');
+$jitBufferIni = ini_get('opcache.jit_buffer_size');
 
 $result['configuration'] = [
     'opcache_enabled' => $opcacheEnabled,
@@ -82,8 +84,8 @@ $result['configuration'] = [
     'memory_consumption' => ini_get('opcache.memory_consumption'),
     'max_accelerated_files' => ini_get('opcache.max_accelerated_files'),
     'validate_timestamps' => ini_get('opcache.validate_timestamps'),
-    'jit' => ini_get('opcache.jit'),
-    'jit_buffer_size' => ini_get('opcache.jit_buffer_size'),
+    'jit' => $jitIni === false ? 'compiled_out' : $jitIni,
+    'jit_buffer_size' => $jitBufferIni === false ? 'compiled_out' : $jitBufferIni,
 ];
 
 echo "Configuration:\n";
@@ -97,9 +99,9 @@ echo '  Max accelerated files: ' . ini_get('opcache.max_accelerated_files') . "\
 $validateTs = ini_get('opcache.validate_timestamps');
 echo '  Validate timestamps: ' . ($validateTs !== '' && $validateTs !== '0' ? 'Yes' : 'No') . "\n";
 
-$jit = ini_get('opcache.jit');
-echo '  JIT: ' . ($jit !== '' ? $jit : 'Disabled') . "\n";
-echo '  JIT buffer size: ' . ini_get('opcache.jit_buffer_size') . "\n\n";
+$jit = $jitIni;
+echo '  JIT: ' . ($jit === false ? 'Compiled out' : ($jit !== '' ? $jit : 'Disabled')) . "\n";
+echo '  JIT buffer size: ' . ($jitBufferIni === false ? 'Compiled out' : $jitBufferIni) . "\n\n";
 
 if ($preloadFile !== '' && file_exists($preloadFile) === false) {
     echo "WARNING: Preload file does not exist: $preloadFile\n\n";

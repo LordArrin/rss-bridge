@@ -68,7 +68,6 @@
         "ext-intl": "*",
         "ext-mbstring": "*",
         "ext-memcached": "*",
-        "ext-simplexml": "*",
         "ext-sqlite3": "*",
         "ext-tidy": "*",
         "ext-xml": "*",

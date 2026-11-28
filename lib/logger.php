@@ -317,7 +317,9 @@ final class StreamHandler
             $context
         );
 
-        file_put_contents($this->stream, $text, FILE_APPEND | LOCK_EX);
+        if (file_put_contents($this->stream, $text, FILE_APPEND | LOCK_EX) === false) {
+            error_log('rss-bridge: log write failed for ' . $this->stream);
+        }
     }
 }
 

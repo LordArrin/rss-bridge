@@ -16,7 +16,7 @@ ARG VERSION_PLACEHOLDER=__RSSBRIDGE_IMAGE_VERSION__
 ARG PHP_VERSION=8.6.0
 ARG APCU_VERSION=5.1.28
 ARG MSGPACK_VERSION=3.0.1
-ARG ZSTD_EXT_VERSION=0.18.0
+ARG ZSTD_EXT_VERSION=0.19.1
 ARG BROTLI_EXT_VERSION=0.21.1
 ARG MEMCACHED_EXT_VERSION=3.4.0
 ARG COMPOSER_VERSION=2.11.2
@@ -695,6 +695,9 @@ build_ext() {
     tar xzf "/tmp/${name}.tgz" -C "/tmp/ext-${name}" --strip-components=1
     cd "/tmp/ext-${name}"
     find . -name '*.[ch]' -exec sed -i -e 's/XtOffsetOf(/offsetof(/g' -e 's/EMPTY_SWITCH_DEFAULT_CASE()/default: ZEND_UNREACHABLE();/g' -e 's/zval_dtor(/zval_ptr_dtor_nogc(/g' -e 's/php_verror(NULL, "", /php_verror(NULL, /g' -e 's#PG(unserialize_callback_func)\[0\] == .\\0.#ZSTR_LEN(PG(unserialize_callback_func)) == 0#g' -e 's#ZVAL_STRING(&user_func, PG(unserialize_callback_func));#ZVAL_STR(\&user_func, zend_string_dup(PG(unserialize_callback_func), false));#g' {} +
+    if find . -name '*.[ch]' -exec grep -En 'XtOffsetOf\(|EMPTY_SWITCH_DEFAULT_CASE\(\)|zval_dtor\(|php_verror\(NULL, "", ' {} +; then
+        fail "${name}-${version}: removed PHP API still present after shims"
+    fi
     phpize
     ./configure "$@"
     make -j "$NB_PROC"
@@ -757,6 +760,10 @@ ARG IMAGE_VERSION
 ARG VERSION_PLACEHOLDER
 
 ENV CURL_IMPERSONATE=firefox155
+
+ENV CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+
 ENV LD_PRELOAD=/usr/lib/libmimalloc-secure.so \
     MIMALLOC_PURGE_DELAY=210 \
     MIMALLOC_ARENA_EAGER_COMMIT=2

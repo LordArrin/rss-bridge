@@ -64,6 +64,7 @@ $normalizationRules = [
     'PHP_MEMORY_LIMIT'       => ['type' => 'memory', 'fallback' => '256M',  'allowUnlimited' => true],
     'PHP_MAX_EXECUTION_TIME' => ['type' => 'int',    'fallback' => '175',   'min' => 10,  'max' => 3600],
     'PHP_DEBUG_MODE'         => ['type' => 'bool',   'fallback' => 'false'],
+    'PHP_CA_BUNDLE'          => ['type' => 'string', 'fallback' => ''],
 
     // OPcache (memory type, but with specific canonical forms)
     'PHP_OPCACHE_MEMORY'     => [
@@ -1416,6 +1417,26 @@ function generatePhpIniOverrides(array $env): int
         $value = (int)$env['PHP_OPCACHE_MEMORY'];
         $lines[] = "opcache.memory_consumption = {$value}";
         $count++;
+    }
+
+    $caBundle = '';
+    if (isset($env['PHP_CA_BUNDLE']) === true && $env['PHP_CA_BUNDLE'] !== '') {
+        $caBundle = $env['PHP_CA_BUNDLE'];
+    } else {
+        foreach (['/etc/ssl/certs/ca-certificates.crt', '/etc/ssl/cert.pem', '/etc/pki/tls/certs/ca-bundle.crt'] as $candidate) {
+            if (is_file($candidate) === true && is_readable($candidate) === true) {
+                $caBundle = $candidate;
+                break;
+            }
+        }
+    }
+
+    if ($caBundle !== '' && is_file($caBundle) === true && is_readable($caBundle) === true) {
+        $lines[] = 'curl.cainfo = ' . $caBundle;
+        $lines[] = 'openssl.cafile = ' . $caBundle;
+        $count += 2;
+    } elseif (isset($env['PHP_CA_BUNDLE']) === true && $env['PHP_CA_BUNDLE'] !== '') {
+        fwrite(STDERR, "PHP_CA_BUNDLE: '{$caBundle}' is not a readable file, CA settings left unset\n");
     }
 
     if (isset($env['TZ']) === true && $env['TZ'] !== '') {
